@@ -19,6 +19,15 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const [userDetailsFetched, setUserDetailsFetched] = useState(false);
   const [fetchInitiated, setFetchInitiated] = useState(false);
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      void loginWithRedirect({
+        appState: { returnTo: window.location.pathname + window.location.search },
+      });
+    }
+  }, [isLoading, isAuthenticated, loginWithRedirect]);
+
   useEffect(() => {
     if (!isAuthenticated || !user?.email || fetchInitiated) return;
 
