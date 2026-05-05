@@ -24,3 +24,5 @@ public/assets/
 # Specific files
 *.min.js
 *.d.ts
+
+src/routeTree.gen.ts

@@ -74,3 +74,6 @@ Dockerfile text eol=lf
 *.graphql text eol=lf
 *.eslintrc text eol=lf
 *.babelrc text eol=lf
+
+# Generated files
+src/routeTree.gen.ts linguist-generated=true

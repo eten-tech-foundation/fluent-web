@@ -3,10 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { config } from '@/lib/config';
 import { type ChapterAssignmentProgress, type UserChapterAssignment } from '@/lib/types';
 
+export interface AssignSelectedItem {
+  chapterAssignmentId: number;
+  drafterId: number | null;
+  peerCheckerId: number | null;
+}
+
 export interface AssignChapterPayload {
-  chapterAssignmentId: number[];
-  userId: number;
-  peerCheckerId?: number;
+  assignments: AssignSelectedItem[];
 }
 
 export interface ChapterAssignmentsByUser {
@@ -47,35 +51,28 @@ const fetchChapterAssignmentsByUserId = async (
   return (await res.json()) as ChapterAssignmentsByUser;
 };
 
-export interface AssignChaptersResponse {
-  success: boolean;
-  message?: string;
-  assignedUser?: string;
-  peerChecker?: string;
-}
-
 const assignChaptersToUser = async (
-  payload: AssignChapterPayload & { email: string }
-): Promise<number[]> => {
-  const { email, userId, chapterAssignmentId, peerCheckerId } = payload;
+  payload: AssignChapterPayload & { email: string; projectId: string }
+): Promise<UserChapterAssignment[]> => {
+  const { email, projectId, assignments } = payload;
 
-  const response = await fetch(`${config.api.url}/users/${userId}/chapter-assignments`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-user-email': email,
-    },
-    body: JSON.stringify({
-      chapterAssignmentIds: chapterAssignmentId,
-      peerCheckerId: peerCheckerId,
-    }),
-  });
+  const response = await fetch(
+    `${config.api.url}/projects/${projectId}/chapter-assignments/assign-selected`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': email,
+      },
+      body: JSON.stringify({ assignments }),
+    }
+  );
 
   if (!response.ok) {
     throw new Error('Failed to assign chapters');
   }
 
-  return (await response.json()) as number[];
+  return (await response.json()) as UserChapterAssignment[];
 };
 
 export const useChapterAssignments = (projectId: string, email: string) => {
@@ -117,21 +114,23 @@ export const useAssignChapters = (
 
       if (previousAssignments) {
         const updatedAssignments = previousAssignments.map(assignment => {
-          if (variables.chapterAssignmentId.includes(assignment.assignmentId)) {
-            return {
-              ...assignment,
-              ...(assignedUserName &&
-                variables.userId && {
-                  assignedUser: { id: variables.userId, displayName: assignedUserName },
-                }),
-              ...(peerCheckerName &&
-                variables.peerCheckerId && {
-                  peerChecker: { id: variables.peerCheckerId, displayName: peerCheckerName },
-                }),
-              status: assignment.status === 'not_started' ? 'draft' : assignment.status,
-            };
-          }
-          return assignment;
+          const item = variables.assignments.find(
+            a => a.chapterAssignmentId === assignment.assignmentId
+          );
+          if (!item) return assignment;
+
+          return {
+            ...assignment,
+            assignedUser:
+              item.drafterId !== null && assignedUserName
+                ? { id: item.drafterId, displayName: assignedUserName }
+                : null,
+            peerChecker:
+              item.peerCheckerId !== null && peerCheckerName
+                ? { id: item.peerCheckerId, displayName: peerCheckerName }
+                : null,
+            status: assignment.status === 'not_started' ? 'draft' : assignment.status,
+          };
         });
 
         queryClient.setQueryData(['chapterAssignments', projectId, email], updatedAssignments);
@@ -140,7 +139,6 @@ export const useAssignChapters = (
       return { previousAssignments };
     },
     onError: (_err, _variables, context) => {
-      // Rollback on error
       if (context?.previousAssignments) {
         queryClient.setQueryData(
           ['chapterAssignments', projectId, email],
@@ -153,8 +151,16 @@ export const useAssignChapters = (
         queryKey: ['chapterAssignments', projectId, email],
       });
 
-      void queryClient.invalidateQueries({
-        queryKey: ['userChapterAssignments', variables.userId],
+      // Invalidate user assignment caches for every unique user touched
+      const affectedUserIds = new Set<number>();
+      variables.assignments.forEach(a => {
+        if (a.drafterId !== null) affectedUserIds.add(a.drafterId);
+        if (a.peerCheckerId !== null) affectedUserIds.add(a.peerCheckerId);
+      });
+      affectedUserIds.forEach(userId => {
+        void queryClient.invalidateQueries({
+          queryKey: ['userChapterAssignments', userId],
+        });
       });
 
       void queryClient.invalidateQueries({

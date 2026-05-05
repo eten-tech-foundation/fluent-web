@@ -1,4 +1,4 @@
-# Scribe Web
+# Fluent Web
 
 A modern web application built with React, TypeScript, and TanStack Router.
 
@@ -34,7 +34,6 @@ This application includes a complete authentication system powered by Auth0:
    ```
 
 2. Configure your Auth0 application:
-
    - Allowed Callback URLs: `http://localhost:5173/callback`
    - Allowed Logout URLs: `http://localhost:5173`
    - Allowed Web Origins: `http://localhost:5173`
@@ -131,8 +130,8 @@ Follow these steps to set up and run the project locally:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/BiblioNexus-Foundation/scribe-web.git
-cd scribe-web
+git clone https://github.com/eten-tech-foundation/fluent-web.git
+cd fluent-web
 ```
 
 ### 2. Set up Node.js version
