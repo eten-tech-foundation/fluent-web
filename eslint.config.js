@@ -88,6 +88,7 @@ export default typescriptEslint.config(
       'vite.config.ts',
       'tailwind.config.js',
       '**/stats.html',
+      '**/routeTree.gen.ts',
     ],
     languageOptions: baseLanguageOptions,
     /* Plugin registration */
@@ -212,7 +213,12 @@ export default typescriptEslint.config(
       ...importSettings,
     },
   },
-
+  {
+    files: ['**/routeTree.gen.ts'],
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+  },
   /* JavaScript-specific config */
   {
     files: ['**/*.{js,jsx,mjs,cjs}'],

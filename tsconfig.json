@@ -30,7 +30,7 @@
     }
   },
   "include": ["src", "scripts"],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "src/routeTree.gen.ts"],
   "references": [
     {
       "path": "./tsconfig.node.json"
