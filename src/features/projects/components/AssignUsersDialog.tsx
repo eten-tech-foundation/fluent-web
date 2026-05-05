@@ -116,21 +116,11 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   const hasCompleteStatus = selectedAssignmentsStatuses.some(
     status => status === ChapterAssignmentStatus.COMPLETE
   );
-  const isFormEmpty = !selectedDrafter && !selectedPeerChecker;
   const hasCompleteSelection = !!selectedDrafter && !!selectedPeerChecker;
   const isDraftingComplete = selectedAssignmentsStatuses.some(
     status =>
       status !== ChapterAssignmentStatus.NOT_STARTED && status !== ChapterAssignmentStatus.DRAFT
   );
-  const isResetDisabled = isFormEmpty || isDraftingComplete || usersLoading || isAssigning;
-
-  const canSubmit = isFormEmpty || hasCompleteSelection;
-  const isSubmitDisabled = !canSubmit || usersLoading || isAssigning;
-
-  const handleReset = () => {
-    onDrafterChange('');
-    onPeerCheckerChange('');
-  };
 
   const isDrafterDisabled =
     hasPeerCheckStatus ||
@@ -145,6 +135,17 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
     hasTheologicalCheckStatus ||
     hasConsultantCheckStatus ||
     hasCompleteStatus;
+
+  const isResetDisabled =
+    (!selectedDrafter && !selectedPeerChecker) || isDraftingComplete || usersLoading || isAssigning;
+
+  const isSubmitDisabled =
+    !hasCompleteSelection || isPeerCheckerDisabled || usersLoading || isAssigning;
+
+  const handleReset = () => {
+    onDrafterChange('');
+    onPeerCheckerChange('');
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -247,18 +248,16 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
 
         <DialogFooter className='flex gap-2'>
           <Button disabled={isResetDisabled} onClick={handleReset}>
-            Reset Users
+            Reset
           </Button>
           <Button disabled={isSubmitDisabled} onClick={onAssign}>
             {isAssigning ? (
               <>
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                {isFormEmpty ? 'Unassigning...' : 'Assigning...'}{' '}
+                saving...
               </>
-            ) : isFormEmpty ? (
-              'Unassign Users'
             ) : (
-              'Assign Users'
+              'Save'
             )}
           </Button>
         </DialogFooter>
