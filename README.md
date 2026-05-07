@@ -12,6 +12,7 @@ A modern web application built with React, TypeScript, and TanStack Router.
 - **State Management**: Zustand for global state
 - **Form Validation**: Zod for schema validation
 - **UI Components**: Radix UI primitives with custom styling
+- **Containerized Development**: Docker/Podman support for consistent environments
 
 ## Authentication
 
@@ -112,6 +113,7 @@ src/
 - **Zod** - Schema validation
 - **i18next** - Internationalization
 - **Vite** - Build tool
+- **Docker/Podman** - Containerized development
 - **ESLint** - Code linting
 - **Prettier** - Code formatting
 
@@ -158,6 +160,107 @@ pnpm dev
 ```
 
 The application will be available at [http://localhost:5173](http://localhost:5173) by default.
+
+## Containerized Development
+
+This project supports containerized development using **Docker** or **Podman**. The container setup provides a consistent, isolated environment with hot-reload support.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/getting-started/installation)
+- No local Node.js installation required
+
+### Quick Start with Containers
+
+**Linux/macOS:**
+
+```bash
+# Initial setup - create .env file
+./fweb.sh setup
+
+# Start the containerized dev server
+./fweb.sh up
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Initial setup - create .env file
+.\fweb.ps1 setup
+
+# Start the containerized dev server
+.\fweb.ps1 up
+```
+
+The application will be available at [http://localhost:5173](http://localhost:5173).
+
+### Container Commands
+
+| Command        | Description                                    |
+| -------------- | ---------------------------------------------- |
+| `up`           | Build image and start container                |
+| `down`         | Stop and remove container                      |
+| `restart`      | Restart the container                          |
+| `logs`         | Tail container logs                            |
+| `status`       | Show container status                          |
+| `shell`        | Open shell inside container                    |
+| `test`         | Run test suite inside container                |
+| `lint`         | Run ESLint inside container                    |
+| `lint:fix`     | Run ESLint with auto-fix                       |
+| `format`       | Format code with Prettier                      |
+| `typecheck`    | Run TypeScript type checking                   |
+| `precheck`     | Run all checks (lint, format, typecheck, test) |
+| `preview`      | Preview production build                       |
+| `clean`        | Remove container and volumes                   |
+| `fresh`        | Complete reset (container, volumes, image)     |
+| `build`        | Rebuild container image                        |
+| `run <script>` | Run any pnpm script inside container           |
+
+### Container Configuration
+
+Configure the container via environment variables:
+
+| Variable         | Default                 | Description           |
+| ---------------- | ----------------------- | --------------------- |
+| `CONTAINER_NAME` | `fluent-web`            | Container name        |
+| `IMAGE_NAME`     | `fluent-web`            | Image name            |
+| `PORT`           | `5173`                  | Host port to bind     |
+| `VITE_API_URL`   | `http://localhost:9999` | API URL for the app   |
+| `WEB_CONTEXT`    | project root            | Path for config files |
+
+Example:
+
+```bash
+PORT=3000 VITE_API_URL=http://api.example.com ./fweb.sh up
+```
+
+### Container Features
+
+- **Rootless execution**: Runs as non-root user (UID 1001)
+- **Read-only filesystem**: Container root is read-only with tmpfs for `/tmp`
+- **Security hardened**: Drops all capabilities, prevents privilege escalation
+- **Volume caching**: `node_modules` and cache directories are persisted in named volumes
+- **Hot reload**: Source code changes are reflected immediately
+
+### Troubleshooting Containers
+
+**Port already in use:**
+
+```bash
+PORT=3000 ./fweb.sh up  # Use a different port
+```
+
+**Container fails to start:**
+
+```bash
+./fweb.sh fresh  # Complete rebuild from scratch
+```
+
+**Check container logs:**
+
+```bash
+./fweb.sh logs
+```
 
 ## Available Scripts
 
