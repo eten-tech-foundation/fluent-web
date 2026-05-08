@@ -47,7 +47,7 @@ function Test-ContainerRunning {
 
 function Build-Image {
     Write-Host "Building image $ImageName..."
-    & $Runtime build -t $ImageName -f Dockerfile.dev .
+    & $Runtime build --no-cache -t $ImageName -f Dockerfile.dev .
 }
 
 function Run-Container {
@@ -79,8 +79,8 @@ function Run-Container {
     # Environment variables
     $envVars = @(
         "-e", "VITE_API_URL=$ViteApiUrl",
-        "-e", "COREPACK_HOME=/app/.cache/corepack",
-        "-e", "COREPACK_ENABLE_AUTO_PIN=0"
+        "-e", "COREPACK_ENABLE_AUTO_PIN=0",
+        "-e", "CI=true"
     )
 
     # Load additional env vars from .env if it exists
@@ -104,7 +104,6 @@ function Run-Container {
         "-p", "${Port}:5173"
     ) + $volumeMounts + $envVars + @(
         "--user", "1001:1001",
-        "--read-only",
         "--tmpfs", "/tmp:nosuid,size=64m",
         "--security-opt", "no-new-privileges:true",
         "--cap-drop", "ALL",
