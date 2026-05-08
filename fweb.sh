@@ -4,13 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── Configuration ─────────────────────────────────────────────────────────────
+# ── Mode derivation (ecosystem vs standalone) ─────────────────────────────────
 
-CONTAINER_NAME="${CONTAINER_NAME:-fluent-web}"
-IMAGE_NAME="${IMAGE_NAME:-fluent-web}"
-PORT="${PORT:-5173}"
-VITE_API_URL="${VITE_API_URL:-http://localhost:9999}"
-WEB_CONTEXT="${WEB_CONTEXT:-$SCRIPT_DIR}"
+if [[ -n "${FLUENT_ECOSYSTEM:-}" ]]; then
+  CONTAINER_NAME="${FLUENT_CONTAINER_PREFIX}web"
+  IMAGE_NAME="fluent-web"
+  PORT="${FLUENT_WEB_PORT:-5173}"
+  VITE_API_URL="http://localhost:${FLUENT_API_PORT:-9999}"
+  POD_FLAGS=(--pod "$FLUENT_POD_NAME")
+  CACHE_MOUNT=(--tmpfs /app/.cache:noexec,nosuid,uid=1001,gid=1001,size=128m)
+else
+  CONTAINER_NAME="${CONTAINER_NAME:-fluent-web}"
+  IMAGE_NAME="${IMAGE_NAME:-fluent-web}"
+  PORT="${PORT:-5173}"
+  VITE_API_URL="${VITE_API_URL:-http://localhost:9999}"
+  POD_FLAGS=()
+  CACHE_MOUNT=(-v "${CONTAINER_NAME:-fluent-web}-cache:/app/.cache")
+fi
 
 # ── Runtime detection (prefer Podman) ────────────────────────────────────────
 
@@ -61,8 +71,8 @@ run_container() {
     -v "$SCRIPT_DIR/components.json:/app/components.json:ro"
     -v "$SCRIPT_DIR/eslint.config.js:/app/eslint.config.js:ro"
     -v "$SCRIPT_DIR/.env:/app/.env:ro"
-    -v "$WEB_CONTEXT/.prettierrc.js:/app/.prettierrc.js:ro"
-    -v "$WEB_CONTEXT/.prettierignore:/app/.prettierignore:ro"
+    -v "$SCRIPT_DIR/.prettierrc.js:/app/.prettierrc.js:ro"
+    -v "$SCRIPT_DIR/.prettierignore:/app/.prettierignore:ro"
     -v "${CONTAINER_NAME}-node-modules:/app/node_modules"
     -v "${CONTAINER_NAME}-cache:/app/.cache"
     -v "${CONTAINER_NAME}-eslintcache:/app/.eslintcache"
@@ -91,9 +101,11 @@ run_container() {
 
   $RUNTIME run -d \
     --name "$CONTAINER_NAME" \
+    "${POD_FLAGS[@]}" \
     -p "${PORT}:5173" \
     "${volume_flags[@]}" \
     "${env_flags[@]}" \
+    "${CACHE_MOUNT[@]}" \
     --user "1001:1001" \
     --tmpfs /tmp:nosuid,size=64m \
     --security-opt no-new-privileges:true \
@@ -103,12 +115,13 @@ run_container() {
   echo "Container started. Access at http://localhost:$PORT"
 }
 
-# ── Commands ─────────────────────────────────────────────────────────────────
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  detect_runtime
 
-cmd="${1:-help}"
-shift || true
+  cmd="${1:-help}"
+  shift || true
 
-case "$cmd" in
+  case "$cmd" in
   up)
     build_image
     run_container
@@ -319,4 +332,5 @@ Environment variables:
   WEB_CONTEXT            Path for prettier config files (default: project root)
 USAGE
     ;;
-esac
+  esac
+fi
