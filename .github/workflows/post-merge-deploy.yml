@@ -39,7 +39,7 @@ jobs:
           action: upload
           app_location: /
           output_location: dist
-          app_build_command: npm install -g pnpm && pnpm install && pnpm build
+          app_build_command: npm install -g pnpm@10 && pnpm install && pnpm build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_APP_INSIGHTS_KEY: ${{ secrets.VITE_APP_INSIGHTS_KEY }}
