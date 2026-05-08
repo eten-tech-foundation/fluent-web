@@ -39,7 +39,7 @@ container_running() {
 
 build_image() {
   echo "Building image $IMAGE_NAME..."
-  $RUNTIME build -t "$IMAGE_NAME" -f Dockerfile.dev .
+  $RUNTIME build --no-cache -t "$IMAGE_NAME" -f Dockerfile.dev .
 }
 
 run_container() {
@@ -71,8 +71,8 @@ run_container() {
   # Environment variables
   local -a env_flags=(
     -e "VITE_API_URL=$VITE_API_URL"
-    -e "COREPACK_HOME=/app/.cache/corepack"
     -e "COREPACK_ENABLE_AUTO_PIN=0"
+    -e "CI=true"
   )
 
   # Load additional env vars from .env if it exists
@@ -95,7 +95,6 @@ run_container() {
     "${volume_flags[@]}" \
     "${env_flags[@]}" \
     --user "1001:1001" \
-    --read-only \
     --tmpfs /tmp:nosuid,size=64m \
     --security-opt no-new-privileges:true \
     --cap-drop ALL \

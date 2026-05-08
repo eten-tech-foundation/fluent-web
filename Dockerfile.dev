@@ -4,7 +4,7 @@ FROM node:24.13.0-alpine
 RUN apk update && \
     apk upgrade && \
     apk add --no-cache dumb-init && \
-    corepack enable && corepack prepare pnpm@9 --activate && \
+    corepack enable && corepack prepare pnpm@10.33.0 --activate && \
     npm cache clean --force && \
     rm -rf /var/cache/apk/* /tmp/*
 
