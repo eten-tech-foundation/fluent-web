@@ -68,6 +68,43 @@ if (config.environment.isDevelopment) {
 const appInsightsKey = config.monitoring.appInsightsKey;
 ```
 
+## Containerized Development
+
+When using containerized development (via `fweb.sh` or `fweb.ps1`), environment variables are handled as follows:
+
+### How Variables Are Passed to Containers
+
+1. **`.env` file**: All variables defined in `.env` are automatically loaded into the container
+2. **Explicit overrides**: The `VITE_API_URL` can be set via environment variable before running the container script
+
+```bash
+# Set API URL for containerized development
+VITE_API_URL=http://localhost:8080 ./fweb.sh up
+```
+
+### Container-Specific Variables
+
+The following variables are pre-configured inside the container:
+
+| Variable                   | Value                  | Purpose                                          |
+| -------------------------- | ---------------------- | ------------------------------------------------ |
+| `COREPACK_HOME`            | `/app/.cache/corepack` | Corepack cache location                          |
+| `COREPACK_ENABLE_AUTO_PIN` | `0`                    | Disable auto-pinning for consistent pnpm version |
+
+### Switching Environments in Containers
+
+To change environments when using containers:
+
+```bash
+# Switch environment locally (affects .env file)
+pnpm set-env development
+
+# Restart container to pick up new .env
+./fweb.sh restart
+```
+
+The container mounts `.env` as a read-only file, so environment changes require a container restart.
+
 ## Adding New Environment Variables
 
 1. Add the variable to the `.env.example` file with a placeholder value
