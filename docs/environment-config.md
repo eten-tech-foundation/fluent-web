@@ -86,10 +86,10 @@ VITE_API_URL=http://localhost:8080 ./fweb.sh up
 
 The following variables are pre-configured inside the container:
 
-| Variable                   | Value                  | Purpose                                          |
-| -------------------------- | ---------------------- | ------------------------------------------------ |
-| `COREPACK_HOME`            | `/app/.cache/corepack` | Corepack cache location                          |
-| `COREPACK_ENABLE_AUTO_PIN` | `0`                    | Disable auto-pinning for consistent pnpm version |
+| Variable                   | Value                  | Purpose                                                  |
+| -------------------------- | ---------------------- | -------------------------------------------------------- |
+| `COREPACK_HOME`            | `/app/.cache/corepack` | Corepack cache location - removed: caused caching issues |
+| `COREPACK_ENABLE_AUTO_PIN` | `0`                    | Disable auto-pinning for consistent pnpm version         |
 
 ### Switching Environments in Containers
 
