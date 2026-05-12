@@ -6,6 +6,7 @@ import { BookText, ChevronLeft, Loader } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAiSuggestions } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
@@ -127,6 +128,24 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     readOnly,
     onSave: saveVerse,
   });
+
+  const verseMapping = React.useMemo(() => {
+    const mapping: Record<number, number> = {};
+    sourceVerses.forEach((v: Source) => {
+      mapping[v.id] = v.verseNumber;
+    });
+    return mapping;
+  }, [sourceVerses]);
+
+  const { suggestions: aiSuggestions } = useAiSuggestions(
+    projectItem.projectUnitId,
+    1, // Defaulting bibleId to 1 for test
+    projectItem.book.toLowerCase(),
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    userdetail.email
+  );
 
   const handleBack = useCallback(() => {
     clearCurrentProjectItem();
@@ -472,25 +491,44 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                             </p>
                           </div>
                         ) : (
-                          <div
-                            className={`flex-1 rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
-                              isActive ? 'border-primary' : ''
-                            } ${currentTargetVerse?.content.trim() !== '' && !isActive ? 'bg-card' : ''}`}
-                            onClick={() => handleActiveVerseChange(verse.verseNumber)}
-                          >
-                            <textarea
-                              ref={el => (textareaRefs.current[verse.verseNumber] = el)}
-                              aria-label={`Translation for verse ${verse.verseNumber}`}
-                              autoCapitalize='sentences'
-                              autoCorrect='on'
-                              className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
-                              placeholder='Enter translation...'
-                              spellCheck={true}
-                              value={currentTargetVerse?.content ?? ''}
-                              onChange={e => handleTextChange(verse.verseNumber, e.target.value)}
-                              onFocus={() => handleActiveVerseChange(verse.verseNumber)}
-                              onKeyDown={handleKeyDown}
-                            />
+                          <div className='flex flex-1 flex-col gap-2'>
+                            <div
+                              className={`rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
+                                isActive ? 'border-primary' : ''
+                              } ${currentTargetVerse?.content.trim() !== '' && !isActive ? 'bg-card' : ''}`}
+                              onClick={() => handleActiveVerseChange(verse.verseNumber)}
+                            >
+                              <textarea
+                                ref={el => (textareaRefs.current[verse.verseNumber] = el)}
+                                aria-label={`Translation for verse ${verse.verseNumber}`}
+                                autoCapitalize='sentences'
+                                autoCorrect='on'
+                                className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+                                placeholder='Enter translation...'
+                                spellCheck={true}
+                                value={currentTargetVerse?.content ?? ''}
+                                onChange={e => handleTextChange(verse.verseNumber, e.target.value)}
+                                onFocus={() => handleActiveVerseChange(verse.verseNumber)}
+                                onKeyDown={handleKeyDown}
+                              />
+                            </div>
+
+                            {isActive && (
+                              <div className='mt-2 rounded-md border border-blue-200 bg-blue-50 p-3'>
+                                <div className='mb-2 flex items-center justify-between'>
+                                  <h4 className='flex items-center gap-2 text-sm font-semibold text-blue-800'>
+                                    <span>🤖 AI Translation Suggestion</span>
+                                  </h4>
+                                </div>
+                                {aiSuggestions[verse.verseNumber] ? (
+                                  <p className='text-sm text-blue-900'>
+                                    {aiSuggestions[verse.verseNumber]}
+                                  </p>
+                                ) : (
+                                  <p className='text-sm text-blue-900 italic'>Thinking...</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
