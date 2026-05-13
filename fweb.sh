@@ -12,14 +12,14 @@ if [[ -n "${FLUENT_ECOSYSTEM:-}" ]]; then
   PORT="${FLUENT_WEB_PORT:-5173}"
   VITE_API_URL="http://localhost:${FLUENT_API_PORT:-9999}"
   POD_FLAGS=(--pod "$FLUENT_POD_NAME")
-  CACHE_MOUNT=(--tmpfs /app/.cache:noexec,nosuid,uid=1001,gid=1001,size=128m)
+  PORT_FLAGS=()
 else
   CONTAINER_NAME="${CONTAINER_NAME:-fluent-web}"
   IMAGE_NAME="${IMAGE_NAME:-fluent-web}"
   PORT="${PORT:-5173}"
   VITE_API_URL="${VITE_API_URL:-http://localhost:9999}"
   POD_FLAGS=()
-  CACHE_MOUNT=(-v "${CONTAINER_NAME:-fluent-web}-cache:/app/.cache")
+  PORT_FLAGS=(-p "${PORT}:5173")
 fi
 
 # ── Runtime detection (prefer Podman) ────────────────────────────────────────
@@ -102,10 +102,9 @@ run_container() {
   $RUNTIME run -d \
     --name "$CONTAINER_NAME" \
     "${POD_FLAGS[@]}" \
-    -p "${PORT}:5173" \
+    "${PORT_FLAGS[@]}" \
     "${volume_flags[@]}" \
     "${env_flags[@]}" \
-    "${CACHE_MOUNT[@]}" \
     --user "1001:1001" \
     --tmpfs /tmp:nosuid,size=64m \
     --security-opt no-new-privileges:true \
