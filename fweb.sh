@@ -101,8 +101,8 @@ run_container() {
 
   $RUNTIME run -d \
     --name "$CONTAINER_NAME" \
-    "${POD_FLAGS[@]}" \
-    "${PORT_FLAGS[@]}" \
+    ${POD_FLAGS[@]+"${POD_FLAGS[@]}"} \
+    ${PORT_FLAGS[@]+"${PORT_FLAGS[@]}"} \
     "${volume_flags[@]}" \
     "${env_flags[@]}" \
     --user "1001:1001" \
