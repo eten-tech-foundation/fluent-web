@@ -1,26 +1,11 @@
 import { useEffect } from 'react';
 
-import { Outlet, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
+import { Outlet } from '@tanstack/react-router';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { SettingsModal } from '@/components/SettingsModal';
-import Header from '@/features/header/components/index';
-import { EditProfile } from '@/features/profile/components/EditProfile';
 import { Logger } from '@/lib/services/logger';
 
 export function RootComponent(): React.JSX.Element {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { modal } = useSearch({ from: '__root__' });
-
-  const handleModalClose = (): void => {
-    void navigate({
-      to: location.pathname,
-      search: { modal: undefined },
-      replace: true,
-    });
-  };
-
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent): void => {
       Logger.logException(new Error(event.message), {
@@ -50,14 +35,7 @@ export function RootComponent(): React.JSX.Element {
 
   return (
     <ErrorBoundary>
-      <div className='flex h-screen flex-col overflow-hidden'>
-        <Header />
-        <main className='flex-1 overflow-hidden p-4'>
-          <Outlet />
-          <SettingsModal isOpen={modal === 'settings'} onClose={handleModalClose} />
-          <EditProfile isOpen={modal === 'profile'} onClose={handleModalClose} />
-        </main>
-      </div>
+      <Outlet />
     </ErrorBoundary>
   );
 }

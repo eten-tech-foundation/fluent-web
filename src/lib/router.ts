@@ -12,7 +12,6 @@ export const router = createRouter({
       isAuthenticated: false,
       isLoading: true,
       role: null,
-      loginWithRedirect: async () => {},
     } satisfies RouterContext['auth'],
   },
 });

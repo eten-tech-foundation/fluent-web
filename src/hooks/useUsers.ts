@@ -4,12 +4,12 @@ import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import { type User } from '@/lib/types';
 
-const fetchUsers = async (email: string): Promise<User[]> => {
+const fetchUsers = async (): Promise<User[]> => {
   const res = await fetch(`${config.api.url}/users`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
   if (!res.ok) throw new Error('Failed to fetch users');
@@ -19,12 +19,12 @@ const fetchUsers = async (email: string): Promise<User[]> => {
 };
 
 const knownErrors = ['A user with this email already exists.', 'Username already exists.'];
-const apiRequest = async <T>(url: string, options: RequestInit, email: string): Promise<T> => {
+const apiRequest = async <T>(url: string, options: RequestInit): Promise<T> => {
   const response = await fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
       ...options.headers,
     },
   });
@@ -51,16 +51,12 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   return 'Generic API error';
 };
 
-const createUser = async (userData: Omit<User, 'id'>, email: string): Promise<User> => {
+const createUser = async (userData: Omit<User, 'id'>): Promise<User> => {
   try {
-    return await apiRequest<User>(
-      `${config.api.url}/users/invite`,
-      {
-        method: 'POST',
-        body: JSON.stringify(userData),
-      },
-      email
-    );
+    return await apiRequest<User>(`${config.api.url}/users/invite`, {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
   } catch (error: unknown) {
     if (error instanceof Error && error.message && error.message !== 'Generic API error') {
       return Promise.reject(error);
@@ -69,16 +65,12 @@ const createUser = async (userData: Omit<User, 'id'>, email: string): Promise<Us
   }
 };
 
-const updateUser = async (userData: User, email: string): Promise<User> => {
+const updateUser = async (userData: User): Promise<User> => {
   try {
-    return await apiRequest<User>(
-      `${config.api.url}/users/${userData.id}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(userData),
-      },
-      email
-    );
+    return await apiRequest<User>(`${config.api.url}/users/${userData.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(userData),
+    });
   } catch (error: unknown) {
     if (error instanceof Error && error.message && error.message !== 'Generic API error') {
       return Promise.reject(error);
@@ -90,9 +82,9 @@ const updateUser = async (userData: User, email: string): Promise<User> => {
 const getUserDetails = async (email: string): Promise<User> => {
   const res = await fetch(`${config.api.url}/users/email/${email}`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
   if (!res.ok) throw new Error('Failed to fetch user details');
@@ -100,11 +92,11 @@ const getUserDetails = async (email: string): Promise<User> => {
   return data;
 };
 
-export const useUsers = (email: string, enabled: boolean = true) => {
+export const useUsers = (enabled: boolean = true) => {
   return useQuery<User[]>({
-    queryKey: ['users', email],
-    queryFn: () => fetchUsers(email),
-    enabled: enabled && !!email,
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+    enabled,
   });
 };
 
@@ -112,8 +104,7 @@ export const useCreateUser = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userData, email }: { userData: Omit<User, 'id'>; email: string }) =>
-      createUser(userData, email),
+    mutationFn: ({ userData }: { userData: Omit<User, 'id'> }) => createUser(userData),
     onSuccess: () => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -128,8 +119,7 @@ export const useUpdateUser = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userData, email }: { userData: User; email: string }) =>
-      updateUser(userData, email),
+    mutationFn: ({ userData }: { userData: User }) => updateUser(userData),
     onSuccess: () => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });

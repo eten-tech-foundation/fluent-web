@@ -23,21 +23,19 @@ interface ResourceState {
 interface SaveResourceStateParams {
   chapterAssignmentId: number;
   resourceState: ResourceState;
-  email: string;
 }
 
 // Fetch resource state
 const fetchResourceState = async (
-  chapterAssignmentId: number,
-  email: string
+  chapterAssignmentId: number
 ): Promise<FetchResourceState | null> => {
   const response = await fetch(
     `${config.api.url}/chapter-assignments/${chapterAssignmentId}/editor-state`,
     {
       method: 'GET',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-email': email,
       },
     }
   );
@@ -54,15 +52,14 @@ const fetchResourceState = async (
 const saveResourceState = async ({
   chapterAssignmentId,
   resourceState,
-  email,
 }: SaveResourceStateParams): Promise<void> => {
   const response = await fetch(
     `${config.api.url}/chapter-assignments/${chapterAssignmentId}/editor-state`,
     {
       method: 'PUT',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-email': email,
       },
       body: JSON.stringify(resourceState),
     }
@@ -74,11 +71,11 @@ const saveResourceState = async ({
 };
 
 // Hook to fetch resource state
-export const useResourceState = (chapterAssignmentId: number, email: string) => {
+export const useResourceState = (chapterAssignmentId: number) => {
   return useQuery<FetchResourceState | null>({
     queryKey: ['resource-state', chapterAssignmentId],
-    queryFn: () => fetchResourceState(chapterAssignmentId, email),
-    enabled: !!chapterAssignmentId && !!email,
+    queryFn: () => fetchResourceState(chapterAssignmentId),
+    enabled: !!chapterAssignmentId,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',

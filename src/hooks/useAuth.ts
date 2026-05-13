@@ -1,54 +1,50 @@
 import { useCallback } from 'react';
 
-import { useAuth0 } from '@auth0/auth0-react';
+import { useNavigate } from '@tanstack/react-router';
 
+import { authClient } from '@/lib/auth-client';
 import { Logger } from '@/lib/services/logger';
 
 export function useAuth() {
-  const auth0 = useAuth0();
+  const { data: session, isPending: isLoading } = authClient.useSession();
+  const navigate = useNavigate();
+
+  const user = session?.user
+    ? {
+        ...session.user,
+        id: session.user.id,
+        image: session.user.image,
+        emailVerified: session.user.emailVerified,
+      }
+    : null;
+
+  const isAuthenticated = !!session;
 
   const login = useCallback(
     async (returnTo?: string) => {
       try {
-        await auth0.loginWithRedirect({
-          appState: { returnTo: returnTo ?? window.location.pathname },
+        await navigate({
+          to: '/login',
+          search: { returnTo: returnTo ?? window.location.pathname },
         });
       } catch (error) {
         Logger.logException(error, {
-          context: 'Login error',
+          context: 'Login redirect error',
           returnTo: returnTo ?? window.location.pathname,
         });
         throw error;
       }
     },
-    [auth0]
-  );
-
-  const signUp = useCallback(
-    async (returnTo?: string) => {
-      try {
-        await auth0.loginWithRedirect({
-          appState: { returnTo: returnTo ?? window.location.pathname },
-          authorizationParams: {
-            screen_hint: 'signup',
-          },
-        });
-      } catch (error) {
-        Logger.logException(error, {
-          context: 'Sign up error',
-          returnTo: returnTo ?? window.location.pathname,
-        });
-        throw error;
-      }
-    },
-    [auth0]
+    [navigate]
   );
 
   const logout = useCallback(async () => {
     try {
-      await auth0.logout({
-        logoutParams: {
-          returnTo: window.location.origin,
+      await authClient.signOut({
+        fetchOptions: {
+          onSuccess: () => {
+            window.location.href = window.location.origin;
+          },
         },
       });
     } catch (error) {
@@ -57,24 +53,13 @@ export function useAuth() {
       });
       throw error;
     }
-  }, [auth0]);
-
-  const getAccessToken = useCallback(async () => {
-    try {
-      return await auth0.getAccessTokenSilently();
-    } catch (error) {
-      Logger.logException(error, {
-        context: 'Get access token error',
-      });
-      throw error;
-    }
-  }, [auth0]);
+  }, []);
 
   return {
-    ...auth0,
+    user,
+    isAuthenticated,
+    isLoading,
     login,
-    signUp,
     logout,
-    getAccessToken,
   };
 }

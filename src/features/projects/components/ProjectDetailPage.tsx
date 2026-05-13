@@ -242,22 +242,19 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     data: chapterAssignments,
     isLoading: assignmentsLoading,
     isFetching: assignmentsFetching,
-  } = useChapterAssignments(projectId ? projectId.toString() : '0', userdetail?.email ?? '');
+  } = useChapterAssignments(projectId ? projectId.toString() : '0');
 
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(
-    projectId ? projectId.toString() : '0',
-    userdetail?.email ?? ''
+    projectId ? projectId.toString() : '0'
   );
 
   const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
 
-  const { data: users, isLoading: usersLoading } = useUsers(userdetail?.email ?? '', isManager);
+  const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
-  const { data: projectUsers, isLoading: projectUsersLoading } = useProjectUsers(
-    projectId ?? 0,
-    userdetail?.email ?? '',
-    { enabled: isManager && !!projectId && !!userdetail.email }
-  );
+  const { data: projectUsers, isLoading: projectUsersLoading } = useProjectUsers(projectId ?? 0, {
+    enabled: isManager && !!projectId,
+  });
 
   const projectTranslators = useMemo(() => {
     if (!projectUsers) return [];
@@ -284,7 +281,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const assignChapterMutation = useAssignChapters(
     projectId ? projectId.toString() : '0',
-    userdetail?.email ?? '',
     getSelectedUserFullName(selectedDrafter),
     getSelectedUserFullName(selectedPeerChecker)
   );
@@ -390,17 +386,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const peerCheckerId = selectedPeerChecker === '' ? null : parseInt(selectedPeerChecker);
     const isUnassigning = drafterId === null && peerCheckerId === null;
     const canProceed =
-      (drafterId !== null || isUnassigning) &&
-      selectedAssignments.length > 0 &&
-      userdetail?.email &&
-      projectId;
+      (drafterId !== null || isUnassigning) && selectedAssignments.length > 0 && projectId;
 
     if (!canProceed) return;
 
     try {
       await assignChapterMutation.mutateAsync({
         projectId: projectId.toString(),
-        email: userdetail.email,
         assignments: selectedAssignments.map(id => ({
           chapterAssignmentId: id,
           drafterId,
@@ -418,14 +410,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       Logger.logException(error, { context: 'Error Assigning/Unassigning Chapters' });
       setIsRefreshingAfterAssignment(false);
     }
-  }, [
-    selectedDrafter,
-    selectedPeerChecker,
-    selectedAssignments,
-    userdetail?.email,
-    projectId,
-    assignChapterMutation,
-  ]);
+  }, [selectedDrafter, selectedPeerChecker, selectedAssignments, projectId, assignChapterMutation]);
 
   const handleCheckboxChange = useCallback((assignmentId: number, checked: boolean) => {
     setSelectedAssignments(prev => {
@@ -506,7 +491,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {/* Project Users Section - Managers only */}
           {isManager && (
             <AssignProjectUsers
-              email={userdetail.email}
               isAddUserOpen={isAddUserOpen}
               projectId={projectId}
               users={users}

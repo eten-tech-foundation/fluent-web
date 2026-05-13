@@ -19,12 +19,12 @@ export interface ProjectDetails {
   workflowConfig: WorkflowStep[];
 }
 
-const fetchProjectDetails = async (projectId: string, email: string): Promise<ProjectDetails> => {
+const fetchProjectDetails = async (projectId: string): Promise<ProjectDetails> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
 
@@ -33,10 +33,10 @@ const fetchProjectDetails = async (projectId: string, email: string): Promise<Pr
   return (await res.json()) as ProjectDetails;
 };
 
-export const useProjectDetails = (projectId: string, email: string) => {
+export const useProjectDetails = (projectId: string) => {
   return useQuery<ProjectDetails>({
-    queryKey: ['projectDetails', projectId, email],
-    queryFn: () => fetchProjectDetails(projectId, email),
-    enabled: !!projectId && !!email,
+    queryKey: ['projectDetails', projectId],
+    queryFn: () => fetchProjectDetails(projectId),
+    enabled: !!projectId,
   });
 };
