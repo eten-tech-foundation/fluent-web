@@ -10,12 +10,12 @@ import {
   type User,
 } from '@/lib/types';
 
-const fetchProjects = async (email: string): Promise<Project[]> => {
+const fetchProjects = async (): Promise<Project[]> => {
   const res = await fetch(`${config.api.url}/projects`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
   if (!res.ok) throw new Error('Failed to fetch projects');
@@ -27,9 +27,9 @@ const fetchProjects = async (email: string): Promise<Project[]> => {
 const fetchUserProjects = async (user: User): Promise<Project[]> => {
   const res = await fetch(`${config.api.url}/users/${user.id}/projects`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': user.email,
     },
   });
   if (!res.ok) throw new Error('Failed to fetch user projects');
@@ -37,14 +37,13 @@ const fetchUserProjects = async (user: User): Promise<Project[]> => {
 };
 
 const createProject = async (
-  projectData: Omit<CreateProject, 'id' | 'createdAt' | 'updatedAt'>,
-  email: string
+  projectData: Omit<CreateProject, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<Project> => {
   const res = await fetch(`${config.api.url}/projects`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
     body: JSON.stringify(projectData),
   });
@@ -53,11 +52,11 @@ const createProject = async (
   return data;
 };
 
-export const useProjects = (email: string) => {
+export const useProjects = (enabled: boolean = true) => {
   return useQuery<Project[]>({
-    queryKey: ['projects', email],
-    queryFn: () => fetchProjects(email),
-    enabled: !!email,
+    queryKey: ['projects'],
+    queryFn: () => fetchProjects(),
+    enabled,
   });
 };
 
@@ -74,7 +73,7 @@ export const useUserProjects = (user: User | null | undefined) => {
 
 export const useProjectsByRole = (user: User | null | undefined) => {
   const isManager = user?.role === UserRole.PROJECT_MANAGER;
-  const managerQuery = useProjects(isManager ? (user as User).email : '');
+  const managerQuery = useProjects(isManager);
   const translatorQuery = useUserProjects(!isManager ? user : null);
   return isManager ? managerQuery : translatorQuery;
 };
@@ -85,11 +84,9 @@ export const useCreateProject = () => {
   return useMutation({
     mutationFn: ({
       projectData,
-      email,
     }: {
       projectData: Omit<CreateProject, 'id' | 'createdAt' | 'updatedAt'>;
-      email: string;
-    }) => createProject(projectData, email),
+    }) => createProject(projectData),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
@@ -102,9 +99,9 @@ export const useCreateProject = () => {
 const fetchChapterAssignments = async (user: User): Promise<ProjectItem[]> => {
   const response = await fetch(`${config.api.url}/users/${user.id}/chapter-assignments/`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': user.email,
     },
   });
   if (!response.ok) {
@@ -115,7 +112,7 @@ const fetchChapterAssignments = async (user: User): Promise<ProjectItem[]> => {
 
 export const useChapterAssignments = (user: User) => {
   return useQuery<ProjectItem[]>({
-    queryKey: ['chapter-assignments', user],
+    queryKey: ['chapter-assignments', user.id],
     queryFn: () => fetchChapterAssignments(user),
     enabled: !!user,
   });

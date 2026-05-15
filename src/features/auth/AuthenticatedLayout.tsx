@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { SettingsModal } from '@/components/SettingsModal';
+import Header from '@/features/header/components/index';
+import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
@@ -10,11 +13,22 @@ import { type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
-  const { user, isAuthenticated, isLoading, loginWithRedirect } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
   const updateUserMutation = useUpdateUser();
   const { setUserDetail } = useAppStore();
+  const location = useLocation();
+  const { modal } = useSearch({ from: '__root__' });
+
+  const handleModalClose = (): void => {
+    void navigate({
+      to: location.pathname,
+      search: { modal: undefined },
+      replace: true,
+    });
+  };
 
   const [userDetailsFetched, setUserDetailsFetched] = useState(false);
   const [fetchInitiated, setFetchInitiated] = useState(false);
@@ -22,17 +36,18 @@ export function AuthenticatedLayout(): React.JSX.Element {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      void loginWithRedirect({
-        appState: { returnTo: window.location.pathname + window.location.search },
+      void navigate({
+        to: '/login',
+        search: { returnTo: window.location.pathname + window.location.search },
       });
     }
-  }, [isLoading, isAuthenticated, loginWithRedirect]);
+  }, [isLoading, isAuthenticated, navigate]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.email || fetchInitiated) return;
 
     Logger.logEvent('UserAuthenticated', {
-      userId: user.sub,
+      userId: user.id,
       userEmail: user.email,
       timestamp: new Date().toISOString(),
     });
@@ -42,11 +57,10 @@ export function AuthenticatedLayout(): React.JSX.Element {
     fetchUserDetails(user.email, {
       onSuccess: userDetails => {
         void (async () => {
-          if (userDetails.status !== 'verified' && user.email_verified) {
+          if (userDetails.status !== 'verified' && user.emailVerified) {
             userDetails.status = 'verified';
             await updateUserMutation.mutateAsync({
               userData: userDetails as User,
-              email: userDetails.email,
             });
           }
           setUserDetail({
@@ -69,8 +83,9 @@ export function AuthenticatedLayout(): React.JSX.Element {
         });
         setFetchInitiated(false);
         setUserDetailsFetched(false);
-        void loginWithRedirect({
-          appState: { returnTo: window.location.pathname + window.location.search },
+        void navigate({
+          to: '/login',
+          search: { returnTo: window.location.pathname + window.location.search },
         });
       },
     });
@@ -81,7 +96,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
     fetchUserDetails,
     setUserDetail,
     updateUserMutation,
-    loginWithRedirect,
+    navigate,
   ]);
 
   if (isLoading) return <LoadingScreen message='Loading...' />;
@@ -91,7 +106,14 @@ export function AuthenticatedLayout(): React.JSX.Element {
 
   return (
     <ErrorBoundary>
-      <Outlet />
+      <div className='flex h-screen flex-col overflow-hidden'>
+        <Header />
+        <main className='flex-1 overflow-hidden p-4'>
+          <Outlet />
+          <SettingsModal isOpen={modal === 'settings'} onClose={handleModalClose} />
+          <EditProfile isOpen={modal === 'profile'} onClose={handleModalClose} />
+        </main>
+      </div>
     </ErrorBoundary>
   );
 }

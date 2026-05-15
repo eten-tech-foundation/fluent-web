@@ -58,7 +58,6 @@ export const ProjectsWrapper: React.FC = () => {
 
       await createProjectMutation.mutateAsync({
         projectData: newProjectData,
-        email: userdetail?.email ?? '',
       });
 
       handleCloseCreate();

@@ -114,8 +114,7 @@ export function UserHomePage() {
   const { userdetail, userDashboardTab, setUserDashboardTab } = useAppStore();
   const navigate = useNavigate();
   const { data: chapterAssignmentsData, isLoading: loading } = useChapterAssignmentsByUserId(
-    (userdetail as User).id,
-    (userdetail as User).email
+    (userdetail as User).id
   );
 
   const myWorkData: UserChapterAssignment[] = useMemo(() => {

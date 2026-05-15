@@ -7,16 +7,15 @@ import { type ProjectItem, type VerseData } from '@/lib/types';
 export const fetchTargetText = async (
   projectUnitId: number,
   bookId: number,
-  chapterNumber: number,
-  email: string
+  chapterNumber: number
 ): Promise<ProjectItem[]> => {
   const res = await fetch(
     `${config.api.url}/translated-verses?projectUnitId=${projectUnitId}&bookId=${bookId}&chapterNumber=${chapterNumber}`,
     {
       method: 'GET',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-email': email,
       },
     }
   );
@@ -27,12 +26,12 @@ export const fetchTargetText = async (
   return data;
 };
 
-const addTranslatedVerse = async (verseData: VerseData, email: string): Promise<ProjectItem> => {
+const addTranslatedVerse = async (verseData: VerseData): Promise<ProjectItem> => {
   const res = await fetch(`${config.api.url}/translated-verses`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
     body: JSON.stringify(verseData),
   });
@@ -45,8 +44,7 @@ export const useAddTranslatedVerse = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ verseData, email }: { verseData: VerseData; email: string }) =>
-      addTranslatedVerse(verseData, email),
+    mutationFn: ({ verseData }: { verseData: VerseData }) => addTranslatedVerse(verseData),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['verse-text'] });
     },
@@ -56,12 +54,12 @@ export const useAddTranslatedVerse = () => {
   });
 };
 
-const submitChapter = async (chapterAssignmentId: number, email: string): Promise<ProjectItem> => {
+const submitChapter = async (chapterAssignmentId: number): Promise<ProjectItem> => {
   const res = await fetch(`${config.api.url}/chapter-assignments/${chapterAssignmentId}/submit`, {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
     body: JSON.stringify(chapterAssignmentId),
   });
@@ -74,8 +72,8 @@ export const useSubmitChapter = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ chapterAssignmentId, email }: { chapterAssignmentId: number; email: string }) =>
-      submitChapter(chapterAssignmentId, email),
+    mutationFn: ({ chapterAssignmentId }: { chapterAssignmentId: number }) =>
+      submitChapter(chapterAssignmentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['chapter-submit'] });
     },

@@ -22,12 +22,12 @@ const parseErrorMessage = async (res: Response, fallback: string): Promise<never
 // --- Fetch functions   ---
 // -------------------------
 
-const fetchProjectUsers = async (projectId: number, email: string): Promise<ProjectUser[]> => {
+const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
 
@@ -35,16 +35,12 @@ const fetchProjectUsers = async (projectId: number, email: string): Promise<Proj
 
   return (await res.json()) as ProjectUser[];
 };
-const addProjectUsers = async (
-  projectId: number,
-  userIds: number[],
-  email: string
-): Promise<ProjectUser[]> => {
+const addProjectUsers = async (projectId: number, userIds: number[]): Promise<ProjectUser[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
     body: JSON.stringify({ userIds }),
   });
@@ -53,16 +49,12 @@ const addProjectUsers = async (
   return (await res.json()) as ProjectUser[];
 };
 
-const removeProjectUser = async (
-  projectId: number,
-  userId: number,
-  email: string
-): Promise<void> => {
+const removeProjectUser = async (projectId: number, userId: number): Promise<void> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/${userId}`, {
     method: 'DELETE',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
 
@@ -75,25 +67,21 @@ const removeProjectUser = async (
 // --- Hooks             ---
 // -------------------------
 
-export const useProjectUsers = (
-  projectId: number,
-  email: string,
-  options?: { enabled?: boolean }
-) => {
+export const useProjectUsers = (projectId: number, options?: { enabled?: boolean }) => {
   return useQuery<ProjectUser[]>({
-    queryKey: ['projectUsers', projectId, email],
-    queryFn: () => fetchProjectUsers(projectId, email),
-    enabled: (options?.enabled ?? true) && !!projectId && !!email,
+    queryKey: ['projectUsers', projectId],
+    queryFn: () => fetchProjectUsers(projectId),
+    enabled: (options?.enabled ?? true) && !!projectId,
   });
 };
 
-export const useAddProjectUsers = (projectId: number, email: string) => {
+export const useAddProjectUsers = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userIds }: { userIds: number[] }) => addProjectUsers(projectId, userIds, email),
+    mutationFn: ({ userIds }: { userIds: number[] }) => addProjectUsers(projectId, userIds),
     onSuccess: newUsers => {
-      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId, email], prev => {
+      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev => {
         const existing = prev ?? [];
         return [...existing, ...newUsers].sort((a, b) =>
           a.displayName.localeCompare(b.displayName)
@@ -101,18 +89,18 @@ export const useAddProjectUsers = (projectId: number, email: string) => {
       });
     },
     onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId, email] });
+      void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId] });
     },
   });
 };
 
-export const useRemoveProjectUser = (projectId: number, email: string) => {
+export const useRemoveProjectUser = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userId }: { userId: number }) => removeProjectUser(projectId, userId, email),
+    mutationFn: ({ userId }: { userId: number }) => removeProjectUser(projectId, userId),
     onSuccess: (_data, { userId }) => {
-      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId, email], prev =>
+      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.filter(u => u.userId !== userId) : []
       );
     },
