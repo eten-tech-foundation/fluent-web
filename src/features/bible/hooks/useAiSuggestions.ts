@@ -8,6 +8,9 @@ interface AiSuggestion {
   modelInfo?: string | null;
 }
 
+// Custom hook that orchestrates the "Stay Ahead" workflow on the frontend.
+// It silently queues upcoming verses in the background when the drafter moves,
+// and periodically polls the API to fetch completed AI translations.
 export function useAiSuggestions(
   projectUnitId: number,
   bibleId: number,
@@ -26,16 +29,26 @@ export function useAiSuggestions(
 
     try {
       const idsStr = bibleTextIds.join(',');
-      const res = await fetch(
-        `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}`,
-        {
-          headers: {
-            'x-user-email': email,
-          },
-        }
-      );
+      const url = `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}`;
+      // eslint-disable-next-line no-console
+      console.debug('[AI Suggestions] GET', {
+        url,
+        projectUnitId,
+        bibleTextIdCount: bibleTextIds.length,
+      });
+      const res = await fetch(url, {
+        headers: {
+          'x-user-email': email,
+        },
+      });
       if (res.ok) {
         const data = (await res.json()) as { data: AiSuggestion[] };
+        // eslint-disable-next-line no-console
+        console.debug('[AI Suggestions] GET response', {
+          status: res.status,
+          suggestionsCount: data.data.length,
+          data: data.data,
+        });
         const newSuggestions: Record<number, string> = {};
 
         data.data.forEach((item: AiSuggestion) => {
@@ -50,6 +63,12 @@ export function useAiSuggestions(
           const isChanged = Object.entries(newSuggestions).some(([k, v]) => prev[Number(k)] !== v);
           if (isChanged) return { ...prev, ...newSuggestions };
           return prev;
+        });
+      } else {
+        // eslint-disable-next-line no-console
+        console.debug('[AI Suggestions] GET failed', {
+          status: res.status,
+          statusText: res.statusText,
         });
       }
     } catch (e) {
@@ -72,24 +91,42 @@ export function useAiSuggestions(
     if (activeVerseNumber > lastQueuedVerseRef.current) {
       lastQueuedVerseRef.current = activeVerseNumber;
 
+      const requestBody = {
+        projectUnitId,
+        bibleId,
+        bookCode,
+        chapterNumber,
+        currentVerse: activeVerseNumber,
+        lookahead: 5,
+      };
+      // eslint-disable-next-line no-console
+      console.debug('[AI Suggestions] POST queue-next', requestBody);
+
       fetch(`${config.api.url}/ai-suggestions/queue-next`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-email': email,
         },
-        body: JSON.stringify({
-          projectUnitId,
-          bibleId,
-          bookCode: bookCode.toLowerCase(),
-          chapterNumber,
-          currentVerse: activeVerseNumber,
-          lookahead: 5,
-        }),
-      }).catch(e => {
-        // eslint-disable-next-line no-console
-        console.error('Failed to queue AI suggestions', e);
-      });
+        body: JSON.stringify(requestBody),
+      })
+        .then(async res => {
+          if (!res.ok) {
+            const errorBody = await res.text().catch(() => 'no body');
+            // eslint-disable-next-line no-console
+            console.debug('[AI Suggestions] POST queue-next FAILED', {
+              status: res.status,
+              body: errorBody,
+            });
+          } else {
+            // eslint-disable-next-line no-console
+            console.debug('[AI Suggestions] POST queue-next OK', { status: res.status });
+          }
+        })
+        .catch(e => {
+          // eslint-disable-next-line no-console
+          console.error('Failed to queue AI suggestions', e);
+        });
     }
   }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber, email]);
 

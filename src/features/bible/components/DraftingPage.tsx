@@ -139,8 +139,8 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const { suggestions: aiSuggestions } = useAiSuggestions(
     projectItem.projectUnitId,
-    1, // Defaulting bibleId to 1 for test
-    projectItem.book.toLowerCase(),
+    projectItem.bibleId,
+    projectItem.bookCode,
     projectItem.chapterNumber,
     verseMapping,
     activeVerseId,
