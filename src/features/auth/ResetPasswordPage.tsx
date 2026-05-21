@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AlertCircle, CheckCircle2, Loader2, Eye, EyeOff, XCircle } from 'lucide-react';
 
 import { authClient } from '@/lib/auth-client';
+import { config } from '@/lib/config';
+import { Logger } from '@/lib/services/logger';
 
 export function ResetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -18,6 +20,40 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const token = (search as { token?: string }).token;
   const urlError = (search as { error?: string }).error;
+
+  const [isValidatingToken, setIsValidatingToken] = useState(!!token);
+  const [tokenValidationError, setTokenValidationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setIsValidatingToken(false);
+      return;
+    }
+
+    const validateToken = async () => {
+      try {
+        const response = await fetch(`${config.api.auth_url}/validate-token?token=${token}`);
+        if (!response.ok) {
+          setTokenValidationError('This password reset link is invalid or has already been used.');
+        } else {
+          const data = (await response.json()) as { isValid: boolean; message?: string };
+          if (!data.isValid) {
+            setTokenValidationError(
+              data.message ?? 'This password reset link is invalid or has already been used.'
+            );
+          }
+        }
+      } catch (err) {
+        Logger.logException(err instanceof Error ? err : new Error(String(err)), {
+          context: 'Validate password reset token error',
+        });
+      } finally {
+        setIsValidatingToken(false);
+      }
+    };
+
+    void validateToken();
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,15 +113,27 @@ export function ResetPasswordPage() {
     );
   }
 
+  if (isValidatingToken) {
+    return (
+      <div className='fixed inset-0 flex items-center justify-center bg-[#0052cc] px-4'>
+        <div className='w-full max-w-[440px] rounded-lg bg-white p-10 text-center shadow-2xl'>
+          <Loader2 className='mx-auto h-16 w-16 animate-spin text-[#0052cc]' />
+          <p className='mt-4 font-medium text-gray-600'>Validating your reset link...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Handle expired/invalid links
-  if (urlError === 'ATTEMPTS_EXCEEDED' || (!token && !error)) {
+  if (urlError === 'ATTEMPTS_EXCEEDED' || (!token && !error) || tokenValidationError) {
     return (
       <div className='fixed inset-0 flex items-center justify-center bg-[#0052cc] px-4'>
         <div className='w-full max-w-[440px] rounded-lg bg-white p-10 text-center shadow-2xl'>
           <XCircle className='mx-auto h-16 w-16 text-red-500' />
           <h2 className='mt-6 text-2xl font-bold text-gray-900'>Link Expired</h2>
           <p className='mt-2 text-gray-600'>
-            This password reset link is no longer valid. Please request a new one.
+            {tokenValidationError ??
+              'This password reset link is no longer valid. Please request a new one.'}
           </p>
           <button
             className='mt-8 w-full rounded-md bg-[#0052cc] py-3 font-semibold text-white hover:bg-[#0047b3]'
