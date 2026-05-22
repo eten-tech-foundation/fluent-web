@@ -32,16 +32,19 @@ export function ResetPasswordPage() {
 
     const validateToken = async () => {
       try {
-        const response = await fetch(`${config.api.auth_url}/validate-token?token=${token}`);
-        if (!response.ok) {
-          setTokenValidationError('This password reset link is invalid or has already been used.');
-        } else {
-          const data = (await response.json()) as { isValid: boolean; message?: string };
-          if (!data.isValid) {
-            setTokenValidationError(
-              data.message ?? 'This password reset link is invalid or has already been used.'
-            );
-          }
+        const response = await fetch(
+          `${config.api.auth_url}/validate-token?token=${encodeURIComponent(token)}`
+        );
+        if (!response.ok && response.status >= 500) {
+          setTokenValidationError('A server error occurred. Please try again later.');
+          return;
+        }
+
+        const data = (await response.json()) as { isValid: boolean; message?: string };
+        if (!response.ok || !data.isValid) {
+          setTokenValidationError(
+            data.message ?? 'This password reset link is invalid or has already been used.'
+          );
         }
       } catch (err) {
         Logger.logException(err instanceof Error ? err : new Error(String(err)), {
