@@ -12,11 +12,7 @@ interface PresenceResponse {
 
 const HEARTBEAT_INTERVAL_MS = 30 * 1000; // 30 seconds
 
-export const useChapterPresence = (
-  chapterAssignmentId: number,
-  isActive: boolean,
-  userEmail: string
-) => {
+export const useChapterPresence = (chapterAssignmentId: number, isActive: boolean) => {
   const [editorName, setEditorName] = useState<string | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -24,22 +20,17 @@ export const useChapterPresence = (
 
   // Assign directly during render — never stale, no useEffect needed.
   const chapterAssignmentIdRef = useRef(chapterAssignmentId);
-  const userEmailRef = useRef(userEmail);
   chapterAssignmentIdRef.current = chapterAssignmentId;
-  userEmailRef.current = userEmail;
 
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
-      const email = userEmailRef.current;
       const assignmentId = chapterAssignmentIdRef.current;
-
-      if (!email) return null;
 
       const res = await fetch(`${config.api.url}/chapter-assignments/${assignmentId}/presence`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': email,
         },
       });
 
@@ -67,10 +58,9 @@ export const useChapterPresence = (
   isPendingRef.current = isPending;
 
   const cleanup = useCallback(() => {
-    const email = userEmailRef.current;
     const assignmentId = chapterAssignmentIdRef.current;
 
-    if (isCleanedUpRef.current || !email || !assignmentId) return;
+    if (isCleanedUpRef.current || !assignmentId) return;
     isCleanedUpRef.current = true;
 
     if (intervalRef.current) {
@@ -80,9 +70,9 @@ export const useChapterPresence = (
 
     void fetch(`${config.api.url}/chapter-assignments/${assignmentId}/presence`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-email': email,
       },
       keepalive: true,
     }).catch(err => {
@@ -96,7 +86,7 @@ export const useChapterPresence = (
       return;
     }
 
-    if (!chapterAssignmentId || !userEmail) return;
+    if (!chapterAssignmentId) return;
 
     isCleanedUpRef.current = false;
 
@@ -114,7 +104,7 @@ export const useChapterPresence = (
       window.removeEventListener('beforeunload', handleBeforeUnload);
       cleanup();
     };
-  }, [chapterAssignmentId, isActive, userEmail, cleanup]);
+  }, [chapterAssignmentId, isActive, cleanup]);
 
   return { editorName };
 };

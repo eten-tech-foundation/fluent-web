@@ -21,7 +21,6 @@ export function EditProfile({ isOpen, onClose }: EditProfileProps) {
       // Updating existing user
       const res = await updateUserMutation.mutateAsync({
         userData: userData as User,
-        email: userdetail ? userdetail.email : '',
       });
       setUserDetail({
         id: res.id,

@@ -1,0 +1,40 @@
+FROM node:24.13.0-alpine
+
+# Install security updates and dumb-init for signal handling
+RUN apk update && \
+    apk upgrade && \
+    apk add --no-cache dumb-init && \
+    corepack enable && corepack prepare pnpm@10.33.0 --activate && \
+    npm cache clean --force && \
+    rm -rf /var/cache/apk/* /tmp/*
+
+# Create non-root user with limited permissions
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /app
+
+# Copy only package files first for better layer caching
+COPY package.json pnpm-lock.yaml .npmrc ./
+
+# Install with frozen lockfile and --ignore-scripts to prevent compromised
+# packages from executing arbitrary code during install
+RUN pnpm install --frozen-lockfile --ignore-scripts && \
+    chown -R nodejs:nodejs /app && \
+    rm -rf /root/.npm /root/.cache
+
+# Rebuild native addons that need compilation (safe — runs node-gyp, not package scripts)
+RUN pnpm rebuild
+
+# Create cache directories with correct ownership for runtime volumes
+RUN mkdir -p /app/.cache /app/.eslintcache && \
+    chown -R nodejs:nodejs /app/.cache /app/.eslintcache
+
+# Switch to non-root user
+USER nodejs
+
+EXPOSE 5173
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["pnpm", "dev", "--host", "0.0.0.0"]

@@ -1,7 +1,9 @@
+import { type UserRole } from '@/lib/types';
+
 export interface AuthContext {
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithRedirect: (options?: { appState?: { returnTo?: string } }) => Promise<void>;
+  role: UserRole | null;
 }
 
 export interface RouterContext {

@@ -5,7 +5,6 @@ import ReactDOM from 'react-dom/client';
 
 import { Logger } from '@/lib/services/logger';
 
-import { Auth0ProviderWrapper } from './features/auth/Auth0Provider';
 import { AppRouter } from './features/root/AppRouter';
 import './i18n';
 import './index.css';
@@ -31,10 +30,8 @@ if (!rootElement) throw new Error('Root element not found');
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <Auth0ProviderWrapper>
-      <QueryClientProvider client={queryClient}>
-        <AppRouter />
-      </QueryClientProvider>
-    </Auth0ProviderWrapper>
+    <QueryClientProvider client={queryClient}>
+      <AppRouter />
+    </QueryClientProvider>
   </React.StrictMode>
 );

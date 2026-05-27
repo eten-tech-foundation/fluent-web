@@ -52,12 +52,7 @@ export const translationLoader = async ({
 
   const [sourceVerseData, targetVerseData] = await Promise.all([
     fetchBibleText(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber),
-    fetchTargetText(
-      projectItem.projectUnitId,
-      projectItem.bookId,
-      projectItem.chapterNumber,
-      userdetail.email
-    ),
+    fetchTargetText(projectItem.projectUnitId, projectItem.bookId, projectItem.chapterNumber),
   ]);
 
   const sourceVerses: Source[] = (sourceVerseData as unknown as SourceVerseData[]).map(

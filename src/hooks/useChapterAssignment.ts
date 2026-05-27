@@ -18,15 +18,12 @@ export interface ChapterAssignmentsByUser {
   peerCheckChapters: UserChapterAssignment[];
 }
 
-const fetchChapterAssignments = async (
-  projectId: string,
-  email: string
-): Promise<ChapterAssignmentProgress[]> => {
+const fetchChapterAssignments = async (projectId: string): Promise<ChapterAssignmentProgress[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/chapter-assignments/progress`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
 
@@ -35,14 +32,13 @@ const fetchChapterAssignments = async (
   return (await res.json()) as ChapterAssignmentProgress[];
 };
 const fetchChapterAssignmentsByUserId = async (
-  userId: number,
-  email: string
+  userId: number
 ): Promise<ChapterAssignmentsByUser> => {
   const res = await fetch(`${config.api.url}/users/${userId}/chapter-assignments`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
 
@@ -52,17 +48,17 @@ const fetchChapterAssignmentsByUserId = async (
 };
 
 const assignChaptersToUser = async (
-  payload: AssignChapterPayload & { email: string; projectId: string }
+  payload: AssignChapterPayload & { projectId: string }
 ): Promise<UserChapterAssignment[]> => {
-  const { email, projectId, assignments } = payload;
+  const { projectId, assignments } = payload;
 
   const response = await fetch(
     `${config.api.url}/projects/${projectId}/chapter-assignments/assign-selected`,
     {
       method: 'PATCH',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-email': email,
       },
       body: JSON.stringify({ assignments }),
     }
@@ -75,25 +71,24 @@ const assignChaptersToUser = async (
   return (await response.json()) as UserChapterAssignment[];
 };
 
-export const useChapterAssignments = (projectId: string, email: string) => {
+export const useChapterAssignments = (projectId: string) => {
   return useQuery<ChapterAssignmentProgress[]>({
-    queryKey: ['chapterAssignments', projectId, email],
-    queryFn: () => fetchChapterAssignments(projectId, email),
-    enabled: !!projectId && !!email,
+    queryKey: ['chapterAssignments', projectId],
+    queryFn: () => fetchChapterAssignments(projectId),
+    enabled: !!projectId,
   });
 };
 
-export const useChapterAssignmentsByUserId = (userId: number, email: string) => {
+export const useChapterAssignmentsByUserId = (userId: number) => {
   return useQuery<ChapterAssignmentsByUser>({
-    queryKey: ['userChapterAssignments', userId, email],
-    queryFn: () => fetchChapterAssignmentsByUserId(userId, email),
-    enabled: !!userId && !!email,
+    queryKey: ['userChapterAssignments', userId],
+    queryFn: () => fetchChapterAssignmentsByUserId(userId),
+    enabled: !!userId,
   });
 };
 
 export const useAssignChapters = (
   projectId: string,
-  email: string,
   assignedUserName?: string,
   peerCheckerName?: string
 ) => {
@@ -103,13 +98,12 @@ export const useAssignChapters = (
     mutationFn: assignChaptersToUser,
     onMutate: async variables => {
       await queryClient.cancelQueries({
-        queryKey: ['chapterAssignments', projectId, email],
+        queryKey: ['chapterAssignments', projectId],
       });
 
       const previousAssignments = queryClient.getQueryData<ChapterAssignmentProgress[]>([
         'chapterAssignments',
         projectId,
-        email,
       ]);
 
       if (previousAssignments) {
@@ -133,22 +127,19 @@ export const useAssignChapters = (
           };
         });
 
-        queryClient.setQueryData(['chapterAssignments', projectId, email], updatedAssignments);
+        queryClient.setQueryData(['chapterAssignments', projectId], updatedAssignments);
       }
 
       return { previousAssignments };
     },
     onError: (_err, _variables, context) => {
       if (context?.previousAssignments) {
-        queryClient.setQueryData(
-          ['chapterAssignments', projectId, email],
-          context.previousAssignments
-        );
+        queryClient.setQueryData(['chapterAssignments', projectId], context.previousAssignments);
       }
     },
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
-        queryKey: ['chapterAssignments', projectId, email],
+        queryKey: ['chapterAssignments', projectId],
       });
 
       // Invalidate user assignment caches for every unique user touched
@@ -164,7 +155,7 @@ export const useAssignChapters = (
       });
 
       void queryClient.invalidateQueries({
-        queryKey: ['projectDetails', projectId, email],
+        queryKey: ['projectDetails', projectId],
       });
     },
   });

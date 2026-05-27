@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { config } from '@/lib/config';
 import { type Book } from '@/lib/types';
 
-const fetchProjectUnitBooks = async (projectUnitId: string, email: string): Promise<Book[]> => {
+const fetchProjectUnitBooks = async (projectUnitId: string): Promise<Book[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectUnitId}/books`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-email': email,
     },
   });
   if (!res.ok) throw new Error('Failed to fetch project unit books');
@@ -17,10 +17,10 @@ const fetchProjectUnitBooks = async (projectUnitId: string, email: string): Prom
   return data;
 };
 
-export const useProjectUnitBooks = (projectUnitId: string, email: string) => {
+export const useProjectUnitBooks = (projectUnitId: string) => {
   return useQuery<Book[]>({
     queryKey: ['project-unit-books', projectUnitId],
-    queryFn: () => fetchProjectUnitBooks(projectUnitId, email),
+    queryFn: () => fetchProjectUnitBooks(projectUnitId),
     enabled: !!projectUnitId,
   });
 };

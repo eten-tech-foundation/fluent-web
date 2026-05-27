@@ -28,14 +28,14 @@ export function UserProfile() {
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
       >
         <div className='flex h-8 w-8 items-center justify-center rounded-full bg-blue-600'>
-          {user.picture ? (
-            <img alt={user.name ?? 'User'} className='h-8 w-8 rounded-full' src={user.picture} />
+          {user.image ? (
+            <img alt={user.name} className='h-8 w-8 rounded-full' src={user.image} />
           ) : (
             <User className='h-4 w-4 text-white' />
           )}
         </div>
         <div className='hidden text-left md:block'>
-          <div className='text-sm font-medium text-gray-900'>{user.name ?? user.email}</div>
+          <div className='text-sm font-medium text-gray-900'>{user.name}</div>
           <div className='text-xs text-gray-500'>{user.email}</div>
         </div>
         <ChevronDown className='h-4 w-4 text-gray-400' />
@@ -44,7 +44,7 @@ export function UserProfile() {
       {isDropdownOpen && (
         <div className='absolute right-0 z-50 mt-2 w-56 rounded-lg border border-gray-200 bg-white py-2 shadow-lg'>
           <div className='border-b border-gray-100 px-4 py-3'>
-            <div className='text-sm font-medium text-gray-900'>{user.name ?? 'User'}</div>
+            <div className='text-sm font-medium text-gray-900'>{user.name}</div>
             <div className='text-sm text-gray-500'>{user.email}</div>
           </div>
 

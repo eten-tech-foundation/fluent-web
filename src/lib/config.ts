@@ -19,6 +19,9 @@ const envSchema = z.object({
   AQUIFER_API_KEY: z.string().min(1, {
     message: 'AQUIFER_API_KEY is required',
   }),
+  BETTER_AUTH_URL: z.string().url({
+    message: 'BETTER_AUTH_URL must be a valid URL',
+  }),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -32,6 +35,7 @@ const processEnv = {
   ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT as string,
   APPINSIGHTS_CONNECTION_STRING: import.meta.env.VITE_APP_INSIGHTS_CONNECTION_STRING as string,
   AQUIFER_API_KEY: import.meta.env.VITE_AQUIFER_API_KEY as string,
+  BETTER_AUTH_URL: import.meta.env.VITE_BETTER_AUTH_URL as string,
 };
 
 /**
@@ -67,6 +71,7 @@ export const config = {
     url: validatedEnv.API_URL,
     aquifer_url: validatedEnv.AQUIFER_API_URL,
     aquifer_key: validatedEnv.AQUIFER_API_KEY,
+    auth_url: validatedEnv.BETTER_AUTH_URL,
   },
   environment: {
     current: validatedEnv.ENVIRONMENT,

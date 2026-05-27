@@ -50,10 +50,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
 
-  const { data: savedResourceState, isFetched } = useResourceState(
-    projectItem.chapterAssignmentId,
-    userdetail.email
-  );
+  const { data: savedResourceState, isFetched } = useResourceState(projectItem.chapterAssignmentId);
 
   const saveResourceStateMutation = useSaveResourceState();
 
@@ -79,8 +76,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const { editorName } = useChapterPresence(
     projectItem.chapterAssignmentId,
-    isCommunityReview || isLinguistCheck || isTheologicalCheck || isConsultantCheck,
-    userdetail.email
+    isCommunityReview || isLinguistCheck || isTheologicalCheck || isConsultantCheck
   );
 
   useEffect(() => {
@@ -100,7 +96,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
           bibleTextId: (sourceVerse as Source).id,
           assignedUserId: userdetail.id,
         },
-        email: userdetail.email,
       });
     },
     [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
@@ -244,7 +239,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
       saveResourceStateMutation.mutate({
         chapterAssignmentId: projectItem.chapterAssignmentId,
         resourceState: { resources: currentState },
-        email: userdetail.email,
       });
       lastSavedStateRef.current = currentState;
     }, 500);
@@ -263,7 +257,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     projectItem.book,
     projectItem.chapterNumber,
     projectItem.sourceLangCode,
-    userdetail.email,
     saveResourceStateMutation,
   ]);
 
@@ -289,7 +282,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
     await submitChapterMutation.mutateAsync({
       chapterAssignmentId: projectItem.chapterAssignmentId,
-      email: userdetail.email,
     });
     clearCurrentProjectItem();
     router.history.back();
@@ -300,7 +292,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     saveImmediately,
     submitChapterMutation,
     projectItem.chapterAssignmentId,
-    userdetail.email,
     clearCurrentProjectItem,
     router,
   ]);

@@ -73,6 +73,25 @@ const importSettings = {
 
 export default typescriptEslint.config(
   {
+    name: 'Global Ignores',
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/public/**',
+      '**/.cache/**',
+      '.eslintcache',
+      '.prettierrc.js',
+      '**/build/**',
+      '**/coverage/**',
+      '**/*.config.js',
+      'eslint.config.js',
+      'vite.config.ts',
+      'tailwind.config.js',
+      '**/stats.html',
+      '**/.eslintrc.cjs',
+    ],
+  },
+  {
     /* Core configuration */
     files: ['**/*.{js,jsx,ts,tsx,mjs,cjs}'],
     ignores: [
@@ -88,6 +107,9 @@ export default typescriptEslint.config(
       'vite.config.ts',
       'tailwind.config.js',
       '**/stats.html',
+      '**/.cache/**',
+      '.eslintcache',
+      '**/.cache/corepack/**',
       '**/routeTree.gen.ts',
     ],
     languageOptions: baseLanguageOptions,

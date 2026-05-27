@@ -9,6 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as LegalRouteImport } from './routes/legal'
+import { Route as AcceptInvitationRouteImport } from './routes/accept-invitation'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
@@ -19,6 +23,26 @@ import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './route
 import { Route as AuthenticatedViewBookIdChapterNumberRouteImport } from './routes/_authenticated/view/$bookId/$chapterNumber'
 import { Route as AuthenticatedTranslationBookIdChapterNumberRouteImport } from './routes/_authenticated/translation/$bookId/$chapterNumber'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRoute = LegalRouteImport.update({
+  id: '/legal',
+  path: '/legal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AcceptInvitationRoute = AcceptInvitationRouteImport.update({
+  id: '/accept-invitation',
+  path: '/accept-invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -29,14 +53,14 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const LegalTermsRoute = LegalTermsRouteImport.update({
-  id: '/legal/terms',
-  path: '/legal/terms',
-  getParentRoute: () => rootRouteImport,
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => LegalRoute,
 } as any)
 const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
-  id: '/legal/privacy',
-  path: '/legal/privacy',
-  getParentRoute: () => rootRouteImport,
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => LegalRoute,
 } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: '/users/',
@@ -70,6 +94,10 @@ const AuthenticatedTranslationBookIdChapterNumberRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/accept-invitation': typeof AcceptInvitationRoute
+  '/legal': typeof LegalRouteWithChildren
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -79,6 +107,10 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId/': typeof AuthenticatedProjectsProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
+  '/accept-invitation': typeof AcceptInvitationRoute
+  '/legal': typeof LegalRouteWithChildren
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -91,6 +123,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/accept-invitation': typeof AcceptInvitationRoute
+  '/legal': typeof LegalRouteWithChildren
+  '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -104,6 +140,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accept-invitation'
+    | '/legal'
+    | '/login'
+    | '/reset-password'
     | '/legal/privacy'
     | '/legal/terms'
     | '/projects/'
@@ -113,6 +153,10 @@ export interface FileRouteTypes {
     | '/projects/$projectId/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/accept-invitation'
+    | '/legal'
+    | '/login'
+    | '/reset-password'
     | '/legal/privacy'
     | '/legal/terms'
     | '/'
@@ -124,6 +168,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/accept-invitation'
+    | '/legal'
+    | '/login'
+    | '/reset-password'
     | '/legal/privacy'
     | '/legal/terms'
     | '/_authenticated/'
@@ -136,12 +184,42 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  LegalPrivacyRoute: typeof LegalPrivacyRoute
-  LegalTermsRoute: typeof LegalTermsRoute
+  AcceptInvitationRoute: typeof AcceptInvitationRoute
+  LegalRoute: typeof LegalRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal': {
+      id: '/legal'
+      path: '/legal'
+      fullPath: '/legal'
+      preLoaderRoute: typeof LegalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accept-invitation': {
+      id: '/accept-invitation'
+      path: '/accept-invitation'
+      fullPath: '/accept-invitation'
+      preLoaderRoute: typeof AcceptInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -158,17 +236,17 @@ declare module '@tanstack/react-router' {
     }
     '/legal/terms': {
       id: '/legal/terms'
-      path: '/legal/terms'
+      path: '/terms'
       fullPath: '/legal/terms'
       preLoaderRoute: typeof LegalTermsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof LegalRoute
     }
     '/legal/privacy': {
       id: '/legal/privacy'
-      path: '/legal/privacy'
+      path: '/privacy'
       fullPath: '/legal/privacy'
       preLoaderRoute: typeof LegalPrivacyRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof LegalRoute
     }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
@@ -233,10 +311,24 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
-const rootRouteChildren: RootRouteChildren = {
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+interface LegalRouteChildren {
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
+  LegalTermsRoute: typeof LegalTermsRoute
+}
+
+const LegalRouteChildren: LegalRouteChildren = {
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalTermsRoute: LegalTermsRoute,
+}
+
+const LegalRouteWithChildren = LegalRoute._addFileChildren(LegalRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AcceptInvitationRoute: AcceptInvitationRoute,
+  LegalRoute: LegalRouteWithChildren,
+  LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

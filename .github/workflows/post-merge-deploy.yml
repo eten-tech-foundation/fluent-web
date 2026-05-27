@@ -23,9 +23,9 @@ jobs:
         with:
           submodules: true
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@v6.0.5
         with:
-          version: 10
+          version: 10.33.0
 
       - uses: actions/setup-node@v6
         with:
@@ -39,14 +39,12 @@ jobs:
           action: upload
           app_location: /
           output_location: dist
-          app_build_command: npm install -g pnpm && pnpm install && pnpm build
+          app_build_command: npm install -g pnpm@10.33.0 && pnpm install && pnpm build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_APP_INSIGHTS_KEY: ${{ secrets.VITE_APP_INSIGHTS_KEY }}
           VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
           VITE_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'development' }}
-          VITE_AUTH0_DOMAIN: ${{ secrets.VITE_AUTH0_DOMAIN }}
-          VITE_AUTH0_CLIENT_ID: ${{ secrets.VITE_AUTH0_CLIENT_ID }}
-          VITE_AUTH0_AUDIENCE: ${{ secrets.VITE_AUTH0_AUDIENCE }}
+          VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
           VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
           VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}

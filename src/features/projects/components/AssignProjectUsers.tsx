@@ -24,7 +24,6 @@ import { type User } from '@/lib/types';
 
 interface AssignProjectUsersProps {
   projectId: number;
-  email: string;
   users: User[] | undefined;
   usersLoading: boolean;
   isAddUserOpen?: boolean;
@@ -34,7 +33,6 @@ interface AssignProjectUsersProps {
 
 export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   projectId,
-  email,
   users,
   usersLoading,
   isAddUserOpen = false,
@@ -49,12 +47,12 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     isLoading: projectUsersLoading,
     isError: projectUsersError,
     refetch: refetchProjectUsers,
-  } = useProjectUsers(projectId, email, {
-    enabled: !!projectId && !!email,
+  } = useProjectUsers(projectId, {
+    enabled: !!projectId,
   });
 
-  const addProjectUsersMutation = useAddProjectUsers(projectId, email);
-  const removeProjectUserMutation = useRemoveProjectUser(projectId, email);
+  const addProjectUsersMutation = useAddProjectUsers(projectId);
+  const removeProjectUserMutation = useRemoveProjectUser(projectId);
 
   const availableUsersToAdd = useMemo(() => {
     if (!users || !projectUsers) return users ?? [];

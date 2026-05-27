@@ -1,21 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 import { AuthenticatedLayout } from '@/features/auth/AuthenticatedLayout';
 
 export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, location }) => {
     // Don't do anything while auth is still loading
     if (context.auth.isLoading) {
       return;
     }
 
-    // If not authenticated, redirect to Auth0 login
+    // If not authenticated, redirect to login
     if (!context.auth.isAuthenticated) {
-      // This triggers a full browser redirect to Auth0
-      void context.auth.loginWithRedirect({
-        appState: {
-          returnTo: window.location.pathname + window.location.search,
-        },
+      throw redirect({
+        to: '/login',
+        search: { returnTo: location.href },
       });
     }
   },

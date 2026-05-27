@@ -6,7 +6,6 @@ import { Loader2 } from 'lucide-react';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { useAppStore } from '@/store/store';
 
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { ProjectDetailPage } from './ProjectDetailPage';
@@ -17,23 +16,17 @@ export const ProjectDetailWrapper: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = routeApi.useParams();
   const { modal } = routeApi.useSearch();
-  const { userdetail } = useAppStore();
 
   const {
     data: project,
     isLoading: projectLoading,
     error: projectError,
-  } = useProjectDetails(projectId, userdetail?.email ?? '');
+  } = useProjectDetails(projectId);
 
-  const { data: chapterAssignments, isLoading: assignmentsLoading } = useChapterAssignments(
-    projectId,
-    userdetail?.email ?? ''
-  );
+  const { data: chapterAssignments, isLoading: assignmentsLoading } =
+    useChapterAssignments(projectId);
 
-  const { data: books, isLoading: booksLoading } = useProjectUnitBooks(
-    projectId,
-    userdetail?.email ?? ''
-  );
+  const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
 
   const handleBack = () => {
     void navigate({ to: '/projects' });
