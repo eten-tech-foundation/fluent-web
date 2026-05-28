@@ -132,14 +132,13 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     return mapping;
   }, [sourceVerses]);
 
-  const { suggestions: aiSuggestions } = useAiSuggestions(
+  const { suggestions: aiSuggestions, isAiThresholdMet } = useAiSuggestions(
     projectItem.projectUnitId,
     projectItem.bibleId,
     projectItem.bookCode,
     projectItem.chapterNumber,
     verseMapping,
-    activeVerseId,
-    userdetail.email
+    activeVerseId
   );
 
   const handleBack = useCallback(() => {
@@ -152,6 +151,16 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
+
+  const [showAiToast, setShowAiToast] = useState(false);
+
+  useEffect(() => {
+    if (isAiThresholdMet) {
+      setShowAiToast(true);
+      const timer = setTimeout(() => setShowAiToast(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAiThresholdMet]);
 
   // Initialize resource state from saved data
   useEffect(() => {
@@ -566,6 +575,26 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
           </div>
         </div>
       </div>
+
+      {showAiToast && (
+        <div className='animate-in slide-in-from-bottom-5 fade-in fixed right-6 bottom-6 z-50 rounded-lg border border-green-200 bg-green-50 px-6 py-4 text-green-900 shadow-lg duration-300'>
+          <div className='flex items-center gap-3'>
+            <div className='flex h-8 w-8 items-center justify-center rounded-full bg-green-100'>
+              <BookText className='h-4 w-4 text-green-600' />
+            </div>
+            <div>
+              <p className='text-sm font-semibold'>AI Suggestions Available!</p>
+              <p className='text-xs text-green-700'>Translation memory threshold reached.</p>
+            </div>
+            <button
+              className='ml-4 text-green-600 hover:text-green-800'
+              onClick={() => setShowAiToast(false)}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

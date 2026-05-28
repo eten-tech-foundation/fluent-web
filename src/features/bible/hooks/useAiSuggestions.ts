@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { config } from '@/lib/config';
 
@@ -17,10 +17,10 @@ export function useAiSuggestions(
   bookCode: string,
   chapterNumber: number,
   verseMapping: Record<number, number>, // bibleTextId -> verseNumber
-  activeVerseNumber: number,
-  email: string
+  activeVerseNumber: number
 ) {
   const [suggestions, setSuggestions] = useState<Record<number, string>>({});
+  const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
   const lastQueuedVerseRef = useRef<number>(-1);
 
   const fetchSuggestions = useCallback(async () => {
@@ -37,8 +37,9 @@ export function useAiSuggestions(
         bibleTextIdCount: bibleTextIds.length,
       });
       const res = await fetch(url, {
+        credentials: 'include',
         headers: {
-          'x-user-email': email,
+          'Content-Type': 'application/json',
         },
       });
       if (res.ok) {
@@ -75,7 +76,7 @@ export function useAiSuggestions(
       // eslint-disable-next-line no-console
       console.error('Failed to fetch AI suggestions', e);
     }
-  }, [projectUnitId, verseMapping, email]);
+  }, [projectUnitId, verseMapping]);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -97,16 +98,15 @@ export function useAiSuggestions(
         bookCode,
         chapterNumber,
         currentVerse: activeVerseNumber,
-        lookahead: 5,
       };
       // eslint-disable-next-line no-console
       console.debug('[AI Suggestions] POST queue-next', requestBody);
 
       fetch(`${config.api.url}/ai-suggestions/queue-next`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': email,
         },
         body: JSON.stringify(requestBody),
       })
@@ -121,6 +121,10 @@ export function useAiSuggestions(
           } else {
             // eslint-disable-next-line no-console
             console.debug('[AI Suggestions] POST queue-next OK', { status: res.status });
+            const data = await res.json().catch(() => null);
+            if (data?.thresholdMet) {
+              setIsAiThresholdMet(true);
+            }
           }
         })
         .catch(e => {
@@ -128,7 +132,7 @@ export function useAiSuggestions(
           console.error('Failed to queue AI suggestions', e);
         });
     }
-  }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber, email]);
+  }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber]);
 
-  return { suggestions };
+  return { suggestions, isAiThresholdMet };
 }
