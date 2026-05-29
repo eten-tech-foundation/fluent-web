@@ -16,7 +16,7 @@ export const UsersWrapper: React.FC = () => {
 
   const { modal, userId } = routeApi.useSearch();
 
-  const { userdetail } = useAppStore();
+  const { userdetail, setUserDetail } = useAppStore();
   const { data: users = [], isLoading } = useUsers();
 
   const createUserMutation = useCreateUser();
@@ -57,8 +57,18 @@ export const UsersWrapper: React.FC = () => {
     setUserError(null);
     try {
       if (mode === 'edit' && selectedUser) {
-        await updateUserMutation.mutateAsync({
+        const res = await updateUserMutation.mutateAsync({
           userData: userData as User,
+        });
+        setUserDetail({
+          id: res.id,
+          email: res.email,
+          username: res.username,
+          role: res.role,
+          organization: res.organization,
+          firstName: res.firstName,
+          lastName: res.lastName,
+          status: res.status,
         });
       } else {
         const newUser: Omit<User, 'id'> = {
