@@ -272,6 +272,17 @@ export const ChapterAssignmentStatusNextAction: Partial<Record<ChapterAssignment
   [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Mark as Complete',
 };
 
+export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
+  ChapterAssignmentStatus.NOT_STARTED,
+  ChapterAssignmentStatus.DRAFT,
+  ChapterAssignmentStatus.PEER_CHECK,
+  ChapterAssignmentStatus.COMMUNITY_REVIEW,
+  ChapterAssignmentStatus.LINGUIST_CHECK,
+  ChapterAssignmentStatus.THEOLOGICAL_CHECK,
+  ChapterAssignmentStatus.CONSULTANT_CHECK,
+  ChapterAssignmentStatus.COMPLETE,
+];
+
 export type SortOption = 'recent' | 'title' | 'targetLanguage';
 
 export type StatusFilter = 'all' | 'potentially_stalled' | 'not_assigned';
