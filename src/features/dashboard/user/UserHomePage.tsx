@@ -155,7 +155,10 @@ export function UserHomePage() {
 
     try {
       await navigate({
-        to: isHistory ? '/view/$bookId/$chapterNumber' : '/translation/$bookId/$chapterNumber',
+        to:
+          isHistory && (item.chapterStatus === 'peer_check' || item.chapterStatus === 'complete')
+            ? '/view/$bookId/$chapterNumber'
+            : '/translation/$bookId/$chapterNumber',
         params: {
           bookId: item.bookId.toString(),
           chapterNumber: item.chapterNumber.toString(),
