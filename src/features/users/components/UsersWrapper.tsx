@@ -60,16 +60,18 @@ export const UsersWrapper: React.FC = () => {
         const res = await updateUserMutation.mutateAsync({
           userData: userData as User,
         });
-        setUserDetail({
-          id: res.id,
-          email: res.email,
-          username: res.username,
-          role: res.role,
-          organization: res.organization,
-          firstName: res.firstName,
-          lastName: res.lastName,
-          status: res.status,
-        });
+        if (selectedUser.email === userdetail?.email) {
+          setUserDetail({
+            id: res.id,
+            email: res.email,
+            username: res.username,
+            role: res.role,
+            organization: res.organization,
+            firstName: res.firstName,
+            lastName: res.lastName,
+            status: res.status,
+          });
+        }
       } else {
         const newUser: Omit<User, 'id'> = {
           ...(userData as Omit<User, 'id'>),
