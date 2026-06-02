@@ -211,13 +211,16 @@ export function UserHomePage() {
       ? 'No completed work found'
       : 'No work assigned';
 
-  const handleRowClick = async (item: UserChapterAssignment, history: boolean) => {
+  const handleRowClick = async (item: UserChapterAssignment) => {
     const projectKey = `${item.projectUnitId}-${item.bookId}-${item.chapterNumber}`;
     setNavigatingToProject(projectKey);
 
     try {
       await navigate({
-        to: history ? '/view/$bookId/$chapterNumber' : '/translation/$bookId/$chapterNumber',
+        to:
+          isHistory && (item.chapterStatus === 'peer_check' || item.chapterStatus === 'complete')
+            ? '/view/$bookId/$chapterNumber'
+            : '/translation/$bookId/$chapterNumber',
         params: {
           bookId: item.bookId.toString(),
           chapterNumber: item.chapterNumber.toString(),
@@ -233,7 +236,7 @@ export function UserHomePage() {
         projectUnitId: item.projectUnitId.toString(),
         bookId: item.bookId.toString(),
         chapterNumber: item.chapterNumber.toString(),
-        isHistory: history.toString(),
+        isHistory: isHistory.toString(),
       });
     } finally {
       setNavigatingToProject(null);
@@ -331,7 +334,7 @@ export function UserHomePage() {
                         <TableRow
                           key={projectKey}
                           className='cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
-                          onClick={() => handleRowClick(item, isHistory)}
+                          onClick={() => handleRowClick(item)}
                         >
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
                             <TruncatedProjectCell
