@@ -28,5 +28,13 @@
   "loadingProjects": "प्रोजेक्ट लोड हो रहे हैं...",
   "loadingUsers": "उपयोगकर्ता लोड हो रहे हैं...",
   "projectName": "प्रोजेक्ट का नाम",
-  "books": "पुस्तक(एं)"
+  "books": "पुस्तक(एं)",
+  "connectivityProfile": "कनेक्टिविटी प्रोफ़ाइल",
+  "connectivityProfilePlaceholder": "प्रोफ़ाइल चुनें",
+  "connectivityUsuallyConnected": "आमतौर पर कनेक्टेड",
+  "connectivitySometimesConnected": "कभी-कभी कनेक्टेड",
+  "connectivityRarelyConnected": "शायद ही कभी कनेक्टेड",
+  "connectivityTooltipUsually": "आमतौर पर कनेक्टेड — अध्याय खुलने पर संसाधन मांग पर लोड होते हैं; किसी डाउनलोड तैयारी की आवश्यकता नहीं है।",
+  "connectivityTooltipSometimes": "कभी-कभी कनेक्टेड — WiFi मिलने पर ऐप पृष्ठभूमि में सौंपे गए अध्यायों को चुपचाप कैश करता है; सौंपे गए अनुवादक कोई कार्रवाई नहीं करते।",
+  "connectivityTooltipRarely": "शायद ही कभी कनेक्टेड — ऑफ़लाइन जाने से पहले हर बार WiFi मिलने पर ऐप अनुवादकों से उनका डिवाइस तैयार करने के लिए कहता है।"
 }
