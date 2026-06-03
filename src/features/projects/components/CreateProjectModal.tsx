@@ -307,7 +307,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      aria-label={t('connectivityProfile')}
+                      aria-label={t('connectivityProfileInfo')}
                       className='text-muted-foreground hover:text-foreground'
                       type='button'
                     >
@@ -326,7 +326,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             </div>
             <Select
               value={formData.connectivityProfile ?? ''}
-              onValueChange={value => updateFormData('connectivityProfile', value)}
+              onValueChange={value =>
+                updateFormData('connectivityProfile', value as ConnectivityProfile)
+              }
             >
               <SelectTrigger className='w-full bg-white' id='connectivityProfile'>
                 <SelectValue placeholder={t('connectivityProfilePlaceholder')} />

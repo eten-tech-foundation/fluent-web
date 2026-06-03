@@ -30,6 +30,7 @@
   "projectName": "Project Name",
   "books": "Book(s)",
   "connectivityProfile": "Connectivity Profile",
+  "connectivityProfileInfo": "More information about Connectivity Profile",
   "connectivityProfilePlaceholder": "Select profile",
   "connectivityUsuallyConnected": "Usually Connected",
   "connectivitySometimesConnected": "Sometimes Connected",

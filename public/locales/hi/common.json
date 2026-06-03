@@ -30,6 +30,7 @@
   "projectName": "प्रोजेक्ट का नाम",
   "books": "पुस्तक(एं)",
   "connectivityProfile": "कनेक्टिविटी प्रोफ़ाइल",
+  "connectivityProfileInfo": "कनेक्टिविटी प्रोफ़ाइल के बारे में अधिक जानकारी",
   "connectivityProfilePlaceholder": "प्रोफ़ाइल चुनें",
   "connectivityUsuallyConnected": "आमतौर पर कनेक्टेड",
   "connectivitySometimesConnected": "कभी-कभी कनेक्टेड",
