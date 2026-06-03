@@ -30,7 +30,7 @@ export interface CreateProjectData {
   sourceLanguage: number;
   sourceBible: number;
   books: number[];
-  connectivityProfile?: ConnectivityProfile | null;
+  connectivityProfile: ConnectivityProfile | null;
 }
 
 interface CreateProjectModalProps {
