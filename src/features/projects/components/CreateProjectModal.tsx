@@ -306,13 +306,15 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <Button
                       aria-label={t('connectivityProfileInfo')}
-                      className='text-muted-foreground hover:text-foreground'
+                      className='text-muted-foreground hover:text-foreground h-6 w-6 p-0'
+                      size='sm'
                       type='button'
+                      variant='ghost'
                     >
                       <Info className='h-4 w-4' />
-                    </button>
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent className='max-w-xs' side='top'>
                     <ul className='space-y-1'>
