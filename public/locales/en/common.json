@@ -32,6 +32,7 @@
   "connectivityProfile": "Connectivity Profile",
   "connectivityProfileInfo": "More information about Connectivity Profile",
   "connectivityProfilePlaceholder": "Select profile",
+  "connectivityProfileNone": "None",
   "connectivityUsuallyConnected": "Usually Connected",
   "connectivitySometimesConnected": "Sometimes Connected",
   "connectivityRarelyConnected": "Rarely Connected",

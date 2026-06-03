@@ -1,5 +1,9 @@
 export type ConnectivityProfile = 'usually_connected' | 'sometimes_connected' | 'rarely_connected';
 
+// Sentinel value for the "unset" Select option. Radix SelectItem cannot use an
+// empty-string value, so this maps back to null (key omitted in metadata).
+export const CONNECTIVITY_PROFILE_NONE = '__none__';
+
 export interface ConnectivityProfileOption {
   value: ConnectivityProfile;
   labelKey: string;

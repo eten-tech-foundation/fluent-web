@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import {
+  CONNECTIVITY_PROFILE_NONE,
   CONNECTIVITY_PROFILE_OPTIONS,
   type ConnectivityProfile,
 } from '@/lib/constants/connectivityProfiles';
@@ -329,13 +330,19 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <Select
               value={formData.connectivityProfile ?? ''}
               onValueChange={value =>
-                updateFormData('connectivityProfile', value as ConnectivityProfile)
+                updateFormData(
+                  'connectivityProfile',
+                  value === CONNECTIVITY_PROFILE_NONE ? null : (value as ConnectivityProfile)
+                )
               }
             >
               <SelectTrigger className='w-full bg-white' id='connectivityProfile'>
                 <SelectValue placeholder={t('connectivityProfilePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={CONNECTIVITY_PROFILE_NONE}>
+                  {t('connectivityProfileNone')}
+                </SelectItem>
                 {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
                   <SelectItem key={option.value} value={option.value}>
                     {t(option.labelKey)}
