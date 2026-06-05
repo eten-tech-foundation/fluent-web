@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Loader2, TriangleAlert } from 'lucide-react';
+import { Info, Loader2, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
@@ -15,8 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
+import {
+  CONNECTIVITY_PROFILE_NONE,
+  CONNECTIVITY_PROFILE_OPTIONS,
+  type ConnectivityProfile,
+} from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
 
 export interface CreateProjectData {
@@ -25,6 +31,7 @@ export interface CreateProjectData {
   sourceLanguage: number;
   sourceBible: number;
   books: number[];
+  connectivityProfile: ConnectivityProfile | null;
 }
 
 interface CreateProjectModalProps {
@@ -41,6 +48,7 @@ interface FormData {
   sourceLanguage: number | null;
   sourceBible: number | null;
   books: number[];
+  connectivityProfile: ConnectivityProfile | null;
 }
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -59,6 +67,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     sourceLanguage: null,
     sourceBible: null,
     books: [],
+    connectivityProfile: null,
   });
 
   const { data: languages, isLoading: languagesLoading, error: languagesError } = useLanguages();
@@ -75,6 +84,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         sourceLanguage: null,
         sourceBible: null,
         books: [],
+        connectivityProfile: null,
       });
     }
     setIsSubmitting(false);
@@ -125,6 +135,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
         books: formData.books,
+        connectivityProfile: formData.connectivityProfile,
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -288,6 +299,57 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 onChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
               />
             )}
+          </div>
+
+          <div className='space-y-2'>
+            <div className='flex items-center gap-1'>
+              <Label htmlFor='connectivityProfile'>{t('connectivityProfile')}</Label>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={t('connectivityProfileInfo')}
+                      className='text-muted-foreground hover:text-foreground h-6 w-6 p-0'
+                      size='sm'
+                      type='button'
+                      variant='ghost'
+                    >
+                      <Info className='h-4 w-4' />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className='max-w-xs' side='top'>
+                    <ul className='space-y-1'>
+                      {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
+                        <li key={option.value}>{t(option.descKey)}</li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Select
+              value={formData.connectivityProfile ?? ''}
+              onValueChange={value =>
+                updateFormData(
+                  'connectivityProfile',
+                  value === CONNECTIVITY_PROFILE_NONE ? null : (value as ConnectivityProfile)
+                )
+              }
+            >
+              <SelectTrigger className='w-full bg-white' id='connectivityProfile'>
+                <SelectValue placeholder={t('connectivityProfilePlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CONNECTIVITY_PROFILE_NONE}>
+                  {t('connectivityProfileNone')}
+                </SelectItem>
+                {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className='flex items-center justify-end pt-4'>
