@@ -29,8 +29,11 @@ import { useAppStore } from '@/store/store';
 type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 
 const RESOURCE_NAMES: ResourceName[] = [
-  { id: 'UWTranslationNotes', name: 'Translation Notes (uW)' },
-  { id: 'Images', name: 'Images' },
+  { id: 'UWTranslationNotes', name: 'TN' },
+  { id: 'Images', name: 'Images & Maps' },
+  // { id: 'TQ', name: 'TQ' }, // Uncomment when TQ resources are available
+  // { id: 'TW', name: 'TW' }, // Uncomment when TW resources are available
+  // { id: 'AOSN', name: 'AOSN' }, // Uncomment when AOSN resources are available
 ];
 
 const DraftingUI: React.FC<DraftingUIProps> = ({
@@ -139,15 +142,10 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     if (!isFetched || isInitializedRef.current) return;
 
     if (savedResourceState) {
-      const { activeResource, languageCode, tabStatus } = savedResourceState;
+      const { languageCode, tabStatus } = savedResourceState;
 
       if (typeof tabStatus === 'boolean') {
         setShowResources(tabStatus);
-      }
-
-      if (activeResource) {
-        const savedResource = RESOURCE_NAMES.find(r => r.id === activeResource);
-        setCurrentResource(savedResource ?? RESOURCE_NAMES[0]);
       }
 
       if (languageCode) {
@@ -160,7 +158,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
         bookCode: projectItem.book,
         chapterNumber: projectItem.chapterNumber,
         verseNumber: activeVerseId,
-        activeResource: activeResource || RESOURCE_NAMES[0].id,
+        activeResource: RESOURCE_NAMES[0].id,
         languageCode: languageCode || projectItem.sourceLangCode,
         tabStatus: typeof tabStatus === 'boolean' ? tabStatus : false,
       };

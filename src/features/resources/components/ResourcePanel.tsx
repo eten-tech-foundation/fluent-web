@@ -12,7 +12,7 @@ import {
 } from '../hooks/hooks';
 
 import { LanguageDropdown } from './LanguageDropdown';
-import { ResourceDropdown } from './ResourceComponents';
+import { ResourceChipRow } from './ResourceChipRow';
 import { ImageDialog, ImageGrid, ResourceDialog } from './ResourceDialog';
 import { TextResourceAccordion } from './TextResourceAccordion';
 
@@ -179,7 +179,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const isInitializing = !isLanguageInitializedRef.current && loadingLanguages;
 
   const isLanguageDropdownEnabled =
-    selectedResource.id === 'UWTranslationNotes' || selectedResource.name === 'Images';
+    selectedResource.id === 'UWTranslationNotes' || selectedResource.id === 'Images';
 
   return (
     <aside className='bg-background flex h-full flex-col'>
@@ -187,7 +187,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
         <div className='flex items-center gap-2'>
           <h3 className='text-foreground text-xl font-semibold'>Resources</h3>
         </div>
-        <ResourceDropdown
+        <ResourceChipRow
           resourceNames={resourceNames}
           selectedResource={selectedResource}
           onSelect={handleResourceSelect}
