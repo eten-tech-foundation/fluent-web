@@ -1,4 +1,13 @@
 {
+  "globalHeaders": {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'sha256-LhJzmYICqk5ADtkqtGjeptKwMX6ABtK3GTrLoP6hM9U='; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com data:; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; upgrade-insecure-requests",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()",
+    "X-XSS-Protection": "0"
+  },
   "navigationFallback": {
     "rewrite": "index.html",
     "exclude": ["/assets/*", "/*.css", "/*.js", "/*.png", "/*.jpg", "/*.ico"]
