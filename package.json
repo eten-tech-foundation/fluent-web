@@ -10,8 +10,9 @@
   "scripts": {
     "start": "vite",
     "dev": "vite",
-    "build": "tsc --ignoreDeprecations 6.0 && vite build",
-    "build:analyze": "tsc --ignoreDeprecations 6.0 && vite build --mode analyze",
+    "generate-csp": "node scripts/generate-csp.ts",
+    "build": "pnpm generate-csp && tsc --ignoreDeprecations 6.0 && vite build",
+    "build:analyze": "pnpm generate-csp && tsc --ignoreDeprecations 6.0 && vite build --mode analyze",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx,js,jsx --cache --no-error-on-unmatched-pattern",
     "lint:fix": "eslint . --ext ts,tsx,js,jsx --fix --cache --no-error-on-unmatched-pattern",
