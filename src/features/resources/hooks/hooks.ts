@@ -43,7 +43,7 @@ export const useResourceLanguages = (
   // Fetch all languages
   const { data: allLanguages = [], isLoading: loadingAllLanguages } = useAllLanguages();
 
-  // Fetch uW resources(tN,tQ,tW) collection form Aquifer
+  // Fetch uW resources(tN,tQ,tW) collection from Aquifer
   const { data: collectionData, isLoading: loadingCollection } = useResourceCollection(
     selectedResource.id,
     isUWResources
