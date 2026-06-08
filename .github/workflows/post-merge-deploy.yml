@@ -19,11 +19,11 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'development' }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           submodules: true
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.0
 
