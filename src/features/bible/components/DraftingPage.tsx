@@ -31,8 +31,8 @@ type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
-  // { id: 'TQ', name: 'TQ' }, // Uncomment when TQ resources are available
-  // { id: 'TW', name: 'TW' }, // Uncomment when TW resources are available
+  { id: 'UWTranslationQuestions', name: 'TQ' },
+  { id: 'UWTranslationWords', name: 'TW' },
   // { id: 'AOSN', name: 'AOSN' }, // Uncomment when AOSN resources are available
 ];
 

@@ -178,9 +178,6 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   // Show loading state while initializing
   const isInitializing = !isLanguageInitializedRef.current && loadingLanguages;
 
-  const isLanguageDropdownEnabled =
-    selectedResource.id === 'UWTranslationNotes' || selectedResource.id === 'Images';
-
   return (
     <aside className='bg-background flex h-full flex-col'>
       <div className='bg-background top-0 py-4'>
@@ -192,15 +189,12 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
           selectedResource={selectedResource}
           onSelect={handleResourceSelect}
         />
-
-        {isLanguageDropdownEnabled && (
-          <LanguageDropdown
-            availableLanguages={availableLanguages}
-            loading={loadingLanguages}
-            selectedLanguage={selectedLanguage}
-            onSelect={handleLanguageSelect}
-          />
-        )}
+        <LanguageDropdown
+          availableLanguages={availableLanguages}
+          loading={loadingLanguages}
+          selectedLanguage={selectedLanguage}
+          onSelect={handleLanguageSelect}
+        />
       </div>
       <div className='flex flex-1 flex-col overflow-hidden rounded-md border p-2'>
         <div className='flex-1 overflow-y-auto px-4 pt-2'>
@@ -208,7 +202,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
             <div className='flex h-full items-center justify-center'>
               <Loader2 className='h-8 w-8 animate-spin text-blue-600' />
             </div>
-          ) : !shouldFetchResources && isLanguageDropdownEnabled ? (
+          ) : !shouldFetchResources ? (
             <div className='flex h-full items-center justify-center'>
               <p className='text-sm'>Select a language to view resources</p>
             </div>
