@@ -38,7 +38,7 @@ export const useResourceLanguages = (
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
 
   const isTranslationNotes = selectedResource.id === 'UWTranslationNotes';
-  const isImages = selectedResource.name === 'Images';
+  const isImages = selectedResource.id === 'Images';
 
   // Fetch all languages
   const { data: allLanguages = [], isLoading: loadingAllLanguages } = useAllLanguages();
@@ -158,7 +158,7 @@ export const useResourceFetch = (
   sourceData: ProjectItem,
   selectedLanguage?: string
 ) => {
-  const isImageResource = selectedResource.name === 'Images';
+  const isImageResource = selectedResource.id === 'Images';
   const languageCode = selectedLanguage ?? sourceData.sourceLangCode;
 
   // Only fetch if language is selected
