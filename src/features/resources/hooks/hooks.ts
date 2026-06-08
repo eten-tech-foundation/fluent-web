@@ -37,16 +37,16 @@ export const useResourceLanguages = (
   const [availableLanguages, setAvailableLanguages] = useState<LanguageOption[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
 
-  const isTranslationNotes = selectedResource.id === 'UWTranslationNotes';
+  const isUWResources = selectedResource.id !== 'Images';
   const isImages = selectedResource.id === 'Images';
 
   // Fetch all languages
   const { data: allLanguages = [], isLoading: loadingAllLanguages } = useAllLanguages();
 
-  // Fetch resource collection for translation notes
+  // Fetch uW resources(tN,tQ,tW) collection from Aquifer
   const { data: collectionData, isLoading: loadingCollection } = useResourceCollection(
     selectedResource.id,
-    isTranslationNotes
+    isUWResources
   );
 
   // Fetch available resources for images
@@ -55,14 +55,14 @@ export const useResourceLanguages = (
 
   const loadingLanguages =
     loadingAllLanguages ||
-    (isTranslationNotes && loadingCollection) ||
+    (isUWResources && loadingCollection) ||
     (isImages && loadingAvailableResources);
 
   // Process language options whenever data changes
   useEffect(() => {
     if (!allLanguages.length) return;
 
-    if (!isTranslationNotes && !isImages) {
+    if (!isUWResources && !isImages) {
       setAvailableLanguages([]);
       setSelectedLanguage('');
       return;
@@ -91,7 +91,7 @@ export const useResourceLanguages = (
               : 'LTR',
           };
         });
-    } else if (isTranslationNotes && collectionData) {
+    } else if (isUWResources && collectionData) {
       languageOptions = collectionData.availableLanguages.map(availLang => {
         const langInfo = allLanguages.find((l: Language) => l.id === availLang.languageId);
 
@@ -129,7 +129,7 @@ export const useResourceLanguages = (
     availableResourcesData,
     collectionData,
     isImages,
-    isTranslationNotes,
+    isUWResources,
     sourceLanguageCode,
   ]);
 
