@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useMatch, useNavigate, useRouter } from '@tanstack/react-router';
-import { BookText, ChevronLeft, Loader } from 'lucide-react';
+import { BookText, ChevronLeft, GripVertical, Loader } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,9 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
   const [showResources, setShowResources] = useState(false);
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
+  const [resourcePanelWidth, setResourcePanelWidth] = useState(25); // percentage
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: savedResourceState, isFetched } = useResourceState(projectItem.chapterAssignmentId);
 
@@ -289,6 +292,29 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     setShowResources(prev => !prev);
   }, []);
 
+  const handleResizeDragStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidthPx = moveEvent.clientX - containerRect.left;
+      const newWidthPct = (newWidthPx / containerRect.width) * 100;
+      setResourcePanelWidth(Math.min(40, Math.max(20, newWidthPct)));
+    };
+
+    const onPointerUp = () => {
+      isDraggingRef.current = false;
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    };
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+  }, []);
+
   const backButton = (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
@@ -388,23 +414,41 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
         </div>
       </div>
 
-      <div className='flex h-full overflow-hidden'>
+      <div ref={containerRef} className='flex h-full overflow-hidden'>
         {showResources && isInitializedRef.current && (
-          <div className='w-[25%]'>
-            <ResourcePanel
-              activeVerseId={activeVerseId}
-              initialLanguage={currentLanguage}
-              initialResource={currentResource}
-              resourceNames={RESOURCE_NAMES}
-              sourceData={projectItem}
-              onLanguageChange={setCurrentLanguage}
-              onResourceChange={setCurrentResource}
-            />
-          </div>
+          <>
+            <div
+              className='min-w-0 shrink-0 overflow-hidden'
+              style={{ width: `${resourcePanelWidth}%` }}
+            >
+              <ResourcePanel
+                activeVerseId={activeVerseId}
+                initialLanguage={currentLanguage}
+                initialResource={currentResource}
+                resourceNames={RESOURCE_NAMES}
+                sourceData={projectItem}
+                onLanguageChange={setCurrentLanguage}
+                onResourceChange={setCurrentResource}
+              />
+            </div>
+            {/* Drag handle */}
+            <div
+              aria-label='Resize resource panel'
+              aria-orientation='vertical'
+              aria-valuemax={40}
+              aria-valuemin={20}
+              aria-valuenow={Math.round(resourcePanelWidth)}
+              className='group flex h-full w-5 shrink-0 cursor-col-resize items-center justify-center'
+              role='separator'
+              onPointerDown={handleResizeDragStart}
+            >
+              <GripVertical className='text-muted-foreground/80 group-hover:text-primary/70 h-5 w-5 transition-colors duration-150' />
+            </div>
+          </>
         )}
         <div className={`mx-auto ${showResources ? '' : 'max-w-7xl'} flex-1 overflow-hidden`}>
           <div
-            className='ml-2 grid h-full content-start'
+            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full content-start`}
             style={{
               gridTemplateColumns: '2rem 1fr 1fr',
               gridTemplateRows: 'auto 1fr',
