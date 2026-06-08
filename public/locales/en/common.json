@@ -28,5 +28,15 @@
   "loadingProjects": "Loading projects...",
   "loadingUsers": "Loading users...",
   "projectName": "Project Name",
-  "books": "Book(s)"
+  "books": "Book(s)",
+  "connectivityProfile": "Connectivity Profile",
+  "connectivityProfileInfo": "More information about Connectivity Profile",
+  "connectivityProfilePlaceholder": "Select profile",
+  "connectivityProfileNone": "None",
+  "connectivityUsuallyConnected": "Usually Connected",
+  "connectivitySometimesConnected": "Sometimes Connected",
+  "connectivityRarelyConnected": "Rarely Connected",
+  "connectivityTooltipUsually": "Usually Connected — Resources load on demand when chapters open; no download preparation is required.",
+  "connectivityTooltipSometimes": "Sometimes Connected — The app silently caches assigned chapters in the background when WiFi is detected; assigned translators take no action.",
+  "connectivityTooltipRarely": "Rarely Connected — The app prompts translators to prepare their device each time WiFi is detected before going offline."
 }
