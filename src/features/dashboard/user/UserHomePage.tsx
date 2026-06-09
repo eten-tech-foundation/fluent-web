@@ -117,6 +117,7 @@ export function UserHomePage() {
   const [navigatingToProject, setNavigatingToProject] = useState<string | null>(null);
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const lastCloseTime = useRef(0);
 
   const { userdetail, userDashboardTab, setUserDashboardTab } = useAppStore();
   const navigate = useNavigate();
@@ -212,6 +213,7 @@ export function UserHomePage() {
       : 'No work assigned';
 
   const handleRowClick = async (item: UserChapterAssignment) => {
+    if (Date.now() - lastCloseTime.current < 300) return;
     const projectKey = `${item.projectUnitId}-${item.bookId}-${item.chapterNumber}`;
     setNavigatingToProject(projectKey);
 
@@ -275,16 +277,30 @@ export function UserHomePage() {
       {!loading && (
         <div className='mb-4 flex shrink-0 gap-3'>
           <MultiSelectFilter
+            className='w-[200px] lg:w-[250px]'
+            contentClassName='w-[200px] lg:w-[250px]'
             label='Book'
             options={bookOptions}
             selected={selectedBooks}
             onChange={setSelectedBooks}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                lastCloseTime.current = Date.now();
+              }
+            }}
           />
           <MultiSelectFilter
+            className='w-48'
+            contentClassName='w-48'
             label='Status'
             options={statusOptions}
             selected={selectedStatuses}
             onChange={setSelectedStatuses}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                lastCloseTime.current = Date.now();
+              }
+            }}
           />
         </div>
       )}
