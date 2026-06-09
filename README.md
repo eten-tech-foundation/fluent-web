@@ -22,11 +22,11 @@ Authentication is powered by [better-auth](https://www.better-auth.com/). The br
 - **Password reset** (`/reset-password`): request a reset email, then set a new password.
 - **Invitation onboarding** (`/accept-invitation`): new users join by accepting an emailed invitation — there is no self-service signup.
 - **Sessions**: read the current session with `authClient.useSession()`, or use the `useAuth()` hook (`src/hooks/useAuth.ts`), which exposes `user`, `isAuthenticated`, `isLoading`, `login`, and `logout`.
-- **Protected routes**: pages under the `_authenticated` layout route are guarded — unauthenticated visitors are redirected to `/login?returnTo=<path>`.
+- **Protected routes**: pages under the `_authenticated` layout route are guarded — unauthenticated visitors are redirected to `/login?returnTo=<url>`, where `returnTo` is the full URL they were trying to reach.
 
 ### Quick Start
 
-1. Point the app at a better-auth server by setting `VITE_BETTER_AUTH_URL` in your `.env` (see [Environment Configuration](docs/environment-config.md)):
+1. Create a `.env` file with the required variables. At minimum you must set `VITE_API_URL`, `VITE_ENVIRONMENT`, `VITE_AQUIFER_API_URL`, `VITE_AQUIFER_API_KEY`, and `VITE_BETTER_AUTH_URL` — they are all validated at startup, and missing any of them fails with an "Invalid environment configuration" error. See [Environment Configuration](docs/environment-config.md) for the full list and how to manage per-environment files. To point the app at a better-auth server, set:
 
    ```env
    VITE_BETTER_AUTH_URL=http://localhost:9999/api/auth
