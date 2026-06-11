@@ -89,9 +89,13 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
                       {sv.localizedName}
                     </span>
                     {tqQuestionNodes.length === 0 ? (
-                      <span className='text-muted-foreground animate-pulse text-xs'>
-                        Loading question...
-                      </span>
+                      loadingGuides[sv.id] || !(sv.id in guideContents) ? (
+                        <span className='text-muted-foreground animate-pulse text-xs'>
+                          Loading question...
+                        </span>
+                      ) : (
+                        <span className='text-muted-foreground text-xs'>No question available</span>
+                      )
                     ) : (
                       tqQuestionNodes.map((node, i) => (
                         <TipTapRenderer

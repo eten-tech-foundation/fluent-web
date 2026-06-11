@@ -127,6 +127,8 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     fetchRelatedAudio,
   } = useGuideContent();
 
+  const pendingPrefetchIds = useRef<Set<number>>(new Set());
+
   const { resourceDialog, loadingResourceDialog, handleResourceClick, resourceError, closeDialog } =
     useResourceDialog();
 
@@ -182,8 +184,15 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
       shouldFetchResources
     ) {
       localizeRefName.forEach(item => {
-        if (!(item.id in guideContents)) {
-          void fetchGuideContent(item.id);
+        if (!(item.id in guideContents) && !pendingPrefetchIds.current.has(item.id)) {
+          pendingPrefetchIds.current.add(item.id);
+          fetchGuideContent(item.id)
+            .then(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            })
+            .catch(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            });
         }
       });
     }
