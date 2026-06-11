@@ -175,6 +175,26 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localizeRefName, shouldFetchResources]);
 
+  useEffect(() => {
+    if (
+      selectedResource.id === 'UWTranslationQuestions' &&
+      localizeRefName.length > 0 &&
+      shouldFetchResources
+    ) {
+      localizeRefName.forEach(item => {
+        if (!(item.id in guideContents)) {
+          void fetchGuideContent(item.id);
+        }
+      });
+    }
+  }, [
+    selectedResource.id,
+    localizeRefName,
+    shouldFetchResources,
+    guideContents,
+    fetchGuideContent,
+  ]);
+
   // Show loading state while initializing
   const isInitializing = !isLanguageInitializedRef.current && loadingLanguages;
 
@@ -220,6 +240,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
               loadingGuides={loadingGuides}
               openItem={openItem}
               relatedAudioIds={relatedAudioIds}
+              resourceId={selectedResource.id}
               resources={localizeRefName}
               onAccordionChange={handleAccordionChange}
               onResourceClick={handleResourceClick}
