@@ -7,6 +7,9 @@ import { type ProjectItem, type User } from './types';
 
 export const router = createRouter({
   routeTree,
+  // Prefetch a route's split chunk on link hover/focus so code-splitting
+  // doesn't add navigation latency on first visit to each route.
+  defaultPreload: 'intent',
   context: {
     auth: {
       isAuthenticated: false,

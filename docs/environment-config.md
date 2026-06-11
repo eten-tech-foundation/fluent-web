@@ -42,12 +42,16 @@ This script copies the contents of the corresponding `.env.[environment]` file t
 
 ## Available Environment Variables
 
-| Variable      | Description              | Required |
-| ------------- | ------------------------ | -------- |
-| `API_URL`     | The URL of the API       | Yes      |
-| `ENVIRONMENT` | Current environment name | Yes      |
+| Variable                              | Description                                            | Required |
+| ------------------------------------- | ------------------------------------------------------ | -------- |
+| `VITE_API_URL`                        | Base URL of the Fluent API                             | Yes      |
+| `VITE_ENVIRONMENT`                    | One of `local`, `development`, `staging`, `production` | Yes      |
+| `VITE_BETTER_AUTH_URL`                | Base URL of the better-auth server (Fluent API auth)   | Yes      |
+| `VITE_AQUIFER_API_URL`                | Base URL of the Aquifer API                            | Yes      |
+| `VITE_AQUIFER_API_KEY`                | API key for the Aquifer API                            | Yes      |
+| `VITE_APP_INSIGHTS_CONNECTION_STRING` | Azure Application Insights connection string           | No       |
 
-| `
+All variables use the `VITE_` prefix so Vite exposes them to the client at build time. `src/lib/config.ts` validates them at startup and maps them onto the `config` object described below.
 
 ## Using Environment Variables in Code
 
@@ -65,7 +69,7 @@ if (config.environment.isDevelopment) {
 }
 
 // Access monitoring configuration
-const appInsightsKey = config.monitoring.appInsightsKey;
+const appInsightsConnectionString = config.monitoring.appInsightsConnectionString;
 ```
 
 ## Containerized Development
