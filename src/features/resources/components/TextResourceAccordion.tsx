@@ -13,6 +13,7 @@ import {
   type ContentItem,
   type GuideContent,
   type ResourceItem,
+  type TipTapNode,
 } from '@/lib/types';
 
 interface TextResourceAccordionProps {
@@ -24,6 +25,7 @@ interface TextResourceAccordionProps {
   onAccordionChange: (value: string[]) => void;
   onResourceClick: (resourceId: number, parentResourceId?: number | null) => void;
   openItem: string[];
+  resourceId?: string;
 }
 
 const isAudioContent = (content: GuideContent['content']): content is AudioContent => {
@@ -38,6 +40,10 @@ const isContentItemArray = (content: GuideContent['content']): content is Conten
   return Array.isArray(content);
 };
 
+const isTipTapNode = (value: unknown): value is TipTapNode => {
+  return typeof value === 'object' && value !== null && 'type' in value;
+};
+
 export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
   resources,
   guideContents,
@@ -47,9 +53,11 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
   onAccordionChange,
   onResourceClick,
   openItem,
+  resourceId,
 }) => {
   const dirAttr = direction.toLowerCase() as 'ltr' | 'rtl';
   const alignClass = direction === 'RTL' ? 'text-right' : 'text-left';
+  const isTQ = resourceId === 'UWTranslationQuestions';
 
   return (
     <div className='h-full space-y-2' dir={dirAttr}>
@@ -59,11 +67,50 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
           const audioContent = relatedAudioId ? guideContents[relatedAudioId] : null;
           const audioData =
             audioContent && isAudioContent(audioContent.content) ? audioContent.content : null;
+          const guideContent = guideContents[sv.id];
+
+          const tqQuestionNodes: TipTapNode[] = [];
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (isTQ && guideContent && isContentItemArray(guideContent.content)) {
+            for (const item of guideContent.content) {
+              const { tiptap } = item;
+              if (isTipTapNode(tiptap) && tiptap.type === 'doc' && tiptap.content?.[0] != null) {
+                tqQuestionNodes.push(tiptap.content[0]);
+              }
+            }
+          }
 
           return (
             <AccordionItem key={sv.id} className='border-0' value={sv.id.toString()}>
               <AccordionTrigger className={`hover:bg-muted/50 px-4 ${alignClass}`} dir={dirAttr}>
-                {sv.localizedName}
+                {isTQ ? (
+                  <div className={`flex w-full flex-col gap-1 ${alignClass}`} dir={dirAttr}>
+                    <span className='text-muted-foreground text-sm font-semibold'>
+                      {sv.localizedName}
+                    </span>
+                    {tqQuestionNodes.length === 0 ? (
+                      loadingGuides[sv.id] || !(sv.id in guideContents) ? (
+                        <span className='text-muted-foreground animate-pulse text-xs'>
+                          Loading question...
+                        </span>
+                      ) : (
+                        <span className='text-muted-foreground text-xs'>No question available</span>
+                      )
+                    ) : (
+                      tqQuestionNodes.map((node, i) => (
+                        <TipTapRenderer
+                          key={i}
+                          content={node}
+                          direction={direction}
+                          parentResourceId={sv.id}
+                          onResourceClick={onResourceClick}
+                        />
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  sv.localizedName
+                )}
               </AccordionTrigger>
               <AccordionContent className='px-4 pb-4'>
                 {loadingGuides[sv.id] ? (
@@ -71,11 +118,11 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
                     <Loader2 className='h-6 w-6 animate-spin text-blue-600' />
                   </div>
                 ) : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-                guideContents[sv.id] ? (
+                guideContent ? (
                   <div dir={dirAttr}>
-                    {isContentItemArray(guideContents[sv.id].content) ? (
+                    {isContentItemArray(guideContent.content) ? (
                       <div className='space-y-6'>
-                        {(guideContents[sv.id].content as ContentItem[]).map((contentItem, idx) => {
+                        {guideContent.content.map((contentItem, idx) => {
                           if (!contentItem.tiptap) return null;
 
                           const stepNumber = contentItem.stepNumber;
@@ -86,6 +133,16 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
                             (s: AudioStep) => s.stepNumber === stepNumber
                           );
 
+                          const tiptapContent =
+                            isTQ &&
+                            isTipTapNode(contentItem.tiptap) &&
+                            contentItem.tiptap.type === 'doc'
+                              ? {
+                                  ...contentItem.tiptap,
+                                  content: contentItem.tiptap.content?.slice(1) ?? [],
+                                }
+                              : contentItem.tiptap;
+
                           return (
                             <div key={idx} className='pb-4' dir={dirAttr}>
                               {stepNumber && (
@@ -95,10 +152,9 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
                                   Step {stepNumber}
                                 </div>
                               )}
-                              {typeof contentItem.tiptap === 'object' &&
-                              'type' in contentItem.tiptap ? (
+                              {isTipTapNode(tiptapContent) ? (
                                 <TipTapRenderer
-                                  content={contentItem.tiptap}
+                                  content={tiptapContent}
                                   direction={direction}
                                   parentResourceId={sv.id}
                                   onResourceClick={onResourceClick}
@@ -123,7 +179,7 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
                           );
                         })}
                       </div>
-                    ) : !isAudioContent(guideContents[sv.id].content) ? (
+                    ) : !isAudioContent(guideContent.content) ? (
                       <p className={`text-sm ${alignClass}`}>No text content available</p>
                     ) : null}
                   </div>
