@@ -5,6 +5,13 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { server } from './msw/server';
 
+// jsdom doesn't implement ResizeObserver; MultiSelectFilter and Radix read it.
+window.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // jsdom doesn't implement matchMedia; the theme + a few components read it.
 window.matchMedia = ((query: string) => ({
   matches: false,

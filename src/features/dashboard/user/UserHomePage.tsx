@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
@@ -119,8 +119,12 @@ export function UserHomePage() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const lastCloseTime = useRef(0);
 
-  const { userdetail, userDashboardTab, setUserDashboardTab } = useAppStore();
+  const { userdetail } = useAppStore();
   const navigate = useNavigate();
+  // The active tab lives in the URL so each switch is a browser history
+  // entry — Back from My History lands on My Work instead of leaving the page.
+  const { tab } = useSearch({ from: '/_authenticated/' });
+  const isHistory = tab === 'my-history';
   const { data: chapterAssignmentsData, isLoading: loading } = useChapterAssignmentsByUserId(
     (userdetail as User).id
   );
@@ -129,7 +133,7 @@ export function UserHomePage() {
   useEffect(() => {
     setSelectedBooks([]);
     setSelectedStatuses([]);
-  }, [userDashboardTab]);
+  }, [isHistory]);
 
   const myWorkData: UserChapterAssignment[] = useMemo(() => {
     if (!chapterAssignmentsData) return [];
@@ -163,7 +167,6 @@ export function UserHomePage() {
       });
   }, [chapterAssignmentsData]);
 
-  const isHistory = userDashboardTab === 'my-history';
   const currentData = isHistory ? historyData : myWorkData;
 
   const bookOptions = useMemo(() => {
@@ -253,21 +256,21 @@ export function UserHomePage() {
       <div className='mb-6 shrink-0'>
         <button
           className={`cursor-pointer border-b-3 px-1 pb-3 text-sm font-medium transition-colors ${
-            userDashboardTab === 'my-work'
+            !isHistory
               ? 'border-primary text-foreground'
               : 'text-foreground border-transparent hover:text-gray-700'
           }`}
-          onClick={() => setUserDashboardTab('my-work')}
+          onClick={() => void navigate({ to: '/', search: {} })}
         >
           My Work ({myWorkData.length})
         </button>
         <button
           className={`ml-6 cursor-pointer border-b-3 px-1 pb-3 text-sm font-medium transition-colors ${
-            userDashboardTab === 'my-history'
+            isHistory
               ? 'border-primary text-foreground'
               : 'text-foreground border-transparent hover:text-gray-700'
           }`}
-          onClick={() => setUserDashboardTab('my-history')}
+          onClick={() => void navigate({ to: '/', search: { tab: 'my-history' } })}
         >
           My History ({historyData.length})
         </button>
