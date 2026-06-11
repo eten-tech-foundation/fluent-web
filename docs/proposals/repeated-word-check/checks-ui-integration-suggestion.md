@@ -1,6 +1,7 @@
 # Repeated Word Check UI — Proposal (Checks Tab, Checks Panel, and Suppression Persistence)
 
 **Status:** Draft for review.
+**Reviewer shortcut:** a condensed, stands-on-its-own review summary lives in [`checks-ui-integration-summary.md`](checks-ui-integration-summary.md).
 **Scope:** Implements the user-facing half of the Repeated Word Check feature: the **Checks tab** (#277) and **Checks view panel** (#278) on fluent-web, plus the small fluent-api additions both cards imply (suppression persistence). This is a single proposal covering both repos so reviewers see the whole design in one place; **implementation will ship as two PRs** (one per repo), and either may land first (§9.4).
 
 **Related cards:**
@@ -32,7 +33,7 @@ Both cards carry mockups (drafting page, Judges 4, Gujarati IRV); §5 transcribe
 
 ### 1.1 What the cards imply beyond fluent-web
 
-The ignore actions require server-side persistence that does not exist yet. #172's text ("the backend dependency for all Repeated Word Check UI work") is broad enough to cover suppression storage — the fluent-api proposal's **D1** deferred caching of _tool runs/findings_, which is a different concern from user suppression preferences (a requirement that did not exist until #277/#278 were authored). Accordingly, suppression persistence ships as an **extension of #172's scope** (decision **W1**), designed here and implemented in the fluent-api PR of this pair. No new product card is needed.
+The ignore actions require server-side persistence that does not exist yet. #172's text ("the backend dependency for all Repeated Word Check UI work") is broad enough to cover suppression storage — the fluent-api proposal's **D1** deferred caching of _tool runs/findings_, which is a different concern from user suppression preferences (a requirement that did not exist until #277/#278 were authored). Accordingly, suppression persistence ships as an **extension of #172's scope** (decision **W1**), designed here and implemented in the fluent-api PR of this pair, which also amends the approved fluent-api proposal pair (the suggestion + operations docs) to record the scope extension. No new product card is needed.
 
 ### 1.2 Repos touched
 
@@ -85,7 +86,7 @@ Restated conclusions; supporting analysis in the cited sections.
 | **W7** | Settings endpoint mirrors the editor-state idiom one level up: **`GET /users/settings` + `PUT /users/settings`**, session-implicit user (no user in URL), full-replace upsert of one Zod-typed JSONB blob. File quartet `domains/users/settings/user-settings.{route,service,repository,types}.ts`. | `user_settings` is to _user_ what `user_chapter_assignment_editor_state` is to _(user, chapter)_; same shape, same endpoint idiom, same review story ("we did what you already do"). Last-writer-wins on concurrent tabs is inherited from editor-state and accepted. See §8. |
 | **W8** | Graceful degradation by feature detection: if `GET /users/settings` 404s, the session records `globalIgnoresAvailable = false` and the `[Ignore Always]` button plus global menu entries are **not rendered** (capability hidden, never a dead control). Unknown/absent JSONB keys parse as empty on both sides. Either repo's PR can land first. | The UI must not assume the backend half exists. An invisible capability is honest; a dead button is a bug report. See §9. |
 | **W9** | Check-call failure surfaces as a single inline `text-sm text-red-500` line at the top of the Checks panel ("Checks failed to refresh"); the panel keeps rendering the last successful findings (TanStack keeps `query.data` on refetch failure) and the dot reflects that last-known state. Failures log via the existing `Logger`. No toast/banner/popup. | Matches the drafting page's own inline-status precedent ("Auto-save failed"). Failure mode degrades to "results are one save behind." See §9.2. |
-| **W10** | The check runs in drafting mode only — not in the read-only `/view` route — and is skipped (`enabled: false`) when no verse has content. | Card scope is the drafting view; empty chapters have nothing to check. Review-stage checks are future work. See §6.2. |
+| **W10** | The check runs in drafting mode only — not in the read-only `/view` route — and is skipped (`enabled: false`) when no verse has content and while the settings feature-detection probe (§9.1) is unresolved. | Card scope is the drafting view; empty chapters have nothing to check; the probe is one fast `GET`, and waiting for it means the first findings render is already cascade-correct. Review-stage checks are future work. See §6.2. |
 | **W11** | Left-panel architecture follows the mocks: a text-tab header row ("Resources \| Checks", blue underline active state, blue dot after "Checks"), dot visible from either tab; Checks content = per-check accordion sections with verse-grouped snippets and the two buttons; zero state inside the accordion. Proposed deviation for sign-off: when the whole panel is closed, the dot is mirrored on the panel-toggle button. | Mock-faithful where the mocks speak; the toggle-button dot preserves #277's intent (translator is notified) when the panel is hidden. See §5. |
 | **W12** | One proposal document (this file) covering both repos; two implementation PRs (fluent-web, fluent-api), cross-referencing each other and the cards. | Splitting the proposal doubles reviewer overhead for a design whose halves only make sense together. See §9.4. |
 
@@ -190,7 +191,7 @@ const [saveCounter, setSaveCounter] = useState(0);
 useQuery({
   queryKey: ['repeated-words', chapterAssignmentId, saveCounter],
   queryFn: () => postRepeatedWordsCheck(buildRequest(projectItem, verses)),
-  enabled: !readOnly && versesWithContent.length > 0,
+  enabled: !readOnly && versesWithContent.length > 0 && settingsProbeResolved,
   // TanStack retains previous data on refetch failure; see §9.2
 });
 ```
@@ -199,7 +200,8 @@ useQuery({
 - **No extra debounce:** the per-verse 2 s save debounce already rate-limits typing bursts; the check is sub-second. If a heavier check joins later, a coalescing debounce can wrap `setSaveCounter` without touching anything else.
 - **Request body** is the full `RepeatedWordsRequest` (D8 shape): `lang_code`/`lang_name` from the project's target language, `project_id`/`project_name` from `projectItem`, and `verses[]` covering **all currently drafted verses** of the chapter (content from the drafting state, not a refetch — what the translator sees is what gets checked).
 - **`snt_id` = `"{bookCode} {chapter}:{verse}"`** with the USFM book code (e.g. `JDG 4:3`), the convention the repo smoke tests already use. Implementation note: verify the field carrying the USFM code on the drafting page's `projectItem` (vs. display name) and thread it into the builder.
-- **Where it runs (W10):** drafting route only; `enabled` is false in the read-only `/view` route, when no verse has content, and while settings feature-detection is unresolved for suppression-dependent rendering (§9.1 — the check itself still runs; only the Ignore Always affordance waits).
+- **Where it runs (W10):** drafting route only; `enabled` is false in the read-only `/view` route (reviewers see no Checks activity in v1), when no verse has content, and while the settings feature-detection probe (§9.1) is unresolved — the probe is a single fast `GET`, and waiting for it means the first findings render is already cascade-correct (the user's global rules are known, present or absent).
+- **Emptied chapters resolve naturally:** any save of emptied text triggers a fresh check whose empty findings clear the panel and dot. (When *every* verse is emptied the query disables instead; the panel and dot then treat findings as empty rather than rendering stale data.)
 
 ### 6.3 Occurrence identity (W4)
 
@@ -207,7 +209,7 @@ A suppression must survive verse edits without our re-parsing text. The key is *
 
 - `ordinal` = index of this finding among findings in the same verse with the same `repeated_word`, ordered by `start_position` ("x of n"). Computed from **Greek Room's findings only** — we never tokenize verse text ourselves, so Greek Room's case/diacritic equivalence policy is inherited and consistent between runs.
 - Ordinals survive unrelated edits (`start_position` does not). Adding or removing an *earlier* same-pair occurrence shifts later ordinals and conservatively re-flags — the safe failure direction.
-- String comparison between a stored rule's `repeated_word` and a fresh finding's: **NFC-normalize both, compare exactly, no case folding.** Unicode case folding is locale-sensitive (the Turkish dotless-ı problem) and Fluent targets minority languages; NFC handles composed/decomposed accent variation. Consequence: a capitalization change re-flags — correct conservative behavior.
+- String comparison between a stored rule's `repeated_word` and a fresh finding's: **NFC-normalize both, compare exactly, no case folding of our own.** Unicode case folding is locale-sensitive (the Turkish dotless-ı problem) and Fluent targets minority languages; NFC handles composed/decomposed accent variation. Note that Greek Room already delivers `repeated_word` lowercased ("word word" form, per the fluent-ai schema) — original casing lives only in `surf`, which we display but never compare — so case equivalence is wholly Greek Room's policy, inherited rather than re-implemented.
 - Documented caveat: a triple repetition ("the the the") yields two overlapping findings (ordinals 1 and 2). Mechanically fine; slightly odd UX; accepted for v1.
 
 ### 6.4 The active/inactive cascade (W5)
@@ -290,7 +292,7 @@ export const editorStateResourcesSchema = z
 ```
 
 - `checkOccurrenceRules` is the tri-state map of §6.4 layer 2. Keys are the occurrence identity `"{snt_id}|{repeated_word}|{ordinal}"` (e.g. `"JDG 4:3|અને અને|1"`); the `|` separator cannot appear in a `snt_id` and `repeated_word` is the final segment-pair, so keys are unambiguous. Values: `'suppress'` ("Ignore This Time") or `'surface'` (per-occurrence undo of a global/machine verdict). Absent = silent.
-- fluent-web reads/writes these through the **existing** `GET/PUT /users/chapter-assignments/:id/editor-state` round-trip it already performs — the same debounced save that persists `activeResource` today carries the new keys. No new endpoint for occurrence rules.
+- fluent-web reads/writes these through the **existing** `GET/PUT /chapter-assignments/:id/editor-state` round-trip it already performs — the same debounced save that persists `activeResource` today carries the new keys. No new endpoint for occurrence rules.
 - Write pattern: read-modify-write of the blob the page already holds in memory. The page is the only writer for this `(user, chapterAssignment)` pair in practice (concurrent same-user tabs are a pre-existing last-writer-wins, inherited).
 
 ### 7.2 Global rules — new `user_settings` table
@@ -347,7 +349,7 @@ The settings endpoint deliberately mirrors the editor-state endpoint one level u
 | `GET` | `/users/settings` | session (any authenticated user) | — | `200` `{ settings: UserSettings \| null, updatedAt }` — `settings: null` when the user has no row yet (mirrors editor-state's no-state-yet response; **not** a 404) |
 | `PUT` | `/users/settings` | session (any authenticated user) | `{ settings: UserSettings }` | `200` saved state; `400` on schema violation |
 
-- **No special permission** beyond an authenticated session: every user owns exactly their own settings row, and the handler scopes all reads/writes to `currentUser.id`. (Editor-state precedent; there is nothing to elevate.)
+- **No special permission** beyond an authenticated session: every user owns exactly their own settings row, and the handler scopes all reads/writes to `currentUser.id`. (Editor-state additionally guards with `CONTENT_UPDATE` + chapter-assignment participation because it is tied to a chapter resource; settings have no resource to scope, so session identity alone is the right guard.)
 - **PUT is full-replace.** The client GETs, merges in memory, PUTs the whole blob — the editor-state write pattern. Concurrent tabs are last-writer-wins, identical to editor-state's accepted behavior; for an ignore-list this worst case is "one ignore from another tab is lost until re-clicked."
 - Rejected alternatives, for the record: `/user-settings` (breaks the `domains/users` nesting), `/users/me/settings` (no `me` convention exists in this API), and per-feature endpoints like `/users/settings/check-ignores` (the blob is one document; sub-paths invite partial-update semantics we don't need).
 
@@ -379,7 +381,7 @@ The two PRs (fluent-web, fluent-api) may land and deploy in either order, so the
 
 - On drafting-page mount, `useSuppressions` probes `GET /users/settings` once per session. **`404` ⇒ `globalIgnoresAvailable = false`** for the session (the route doesn't exist yet on this deployment); any 2xx — including `settings: null` — ⇒ available.
 - When unavailable, the **capability is hidden, not disabled**: `[Ignore Always]` is simply not rendered, and the `[Undo ▾]` chevron omits global entries. A dead button is a bug report; an absent one is honest. Occurrence-level ignores (editor-state-backed) work regardless.
-- While the probe is unresolved, active findings render with `[Ignore This Time]` only — the check itself never waits on the probe (§6.2).
+- The check query waits for the probe to resolve before its first run (W10, §6.2) — one fast `GET`, so findings never render ahead of the user's global rules. The probe resolves on any terminal response: 2xx ⇒ available, `404` ⇒ unavailable; a network failure resolves it as unavailable for the session (conservative: occurrence ignores only).
 - **Unknown-key tolerance both ways:** `userSettingsSchema` uses `.catch({})` server-side; client-side parsing treats absent/unknown keys as empty. A newer client against an older blob (or vice versa) degrades to "no global rules," never to an error. The same applies to the editor-state blob's new optional keys (§7.1) — old clients ignore them, old rows omit them.
 
 ### 9.2 Check-call failure (W9)
@@ -416,7 +418,7 @@ The repo now ships test infrastructure under `src/test/` (`msw/server.ts`, `rend
 
 | Area | Representative cases |
 | --- | --- |
-| `useResolvedFindings` (pure) | Cascade precedence table: machine-legitimate vs. global vs. occurrence, `suppress`/`surface`/silent at each layer, most-specific-wins; ordinal assignment incl. "the the the" overlap; NFC-equal / case-different comparisons. |
+| `useResolvedFindings` (pure) | Cascade precedence table: machine-legitimate vs. global vs. occurrence, `suppress`/`surface`/silent at each layer, most-specific-wins; ordinal assignment incl. "the the the" overlap; NFC composed/decomposed key equivalence. |
 | `useRepeatedWordsCheck` | Fires on `saveCounter` change; request body shape (snake_case verbatim, `snt_id` format, all drafted verses); `enabled` gating (readOnly, empty chapter); previous data retained on 502 (MSW error handler). |
 | `useSuppressions` | Feature-detect: 404 ⇒ `globalIgnoresAvailable=false`; 200-with-null ⇒ available; occurrence rule round-trip through editor-state blob; global write purges current-chapter occurrence rules for the pair; optimistic rollback on PUT failure. |
 | `ChecksPanel` / `FindingRow` | Verse grouping + separators; zero state (and *not* on error); inline error line; active buttons vs. greyed-with-reason + `[Undo ▾]`; "Show ignored & OK" toggle; `[Ignore Always]` absent when capability unavailable. |
