@@ -144,7 +144,7 @@ The cards' mockups (drafting page, Judges 4, Gujarati IRV project) define the vi
 - **Tab header (#277 mock):** the left panel's current `Resources` heading is replaced by a text-tab row — **"Resources | Checks"** — active tab in blue with a blue underline, inactive tab plain. The **notification dot is a solid blue filled circle immediately right of the "Checks" label**, and the mock shows it while the *Resources* tab is active: the dot is visible from either tab whenever the panel is open.
 - **Checks content (#278 mocks):** below the tab header, a card containing a **collapsible "Repeated Words" accordion section** (expanded by default). The accordion-per-check structure anticipates future sibling checks (the board already holds draft cards for Greek Room Wildebeest and Spell checks) without UI rework. Inside the section, findings are grouped by verse:
   - bold **"Verse N"** heading per verse that has findings (verses without findings get no group);
-  - one row per occurrence: a one-line context snippet showing the repeated pair in situ;
+  - one row per occurrence: a one-line context snippet showing the repeated pair in context;
   - two solid-blue buttons side by side beneath each snippet: `[Ignore Here] [Ignore Everywhere]`;
   - a horizontal separator between verse groups;
   - a **"Show Ignored" toggle** at the bottom of the active list (off by default). When on, previously ignored occurrences appear below the active ones — dimmed, each labeled with its ignore type (_"Ignore Here"_, _"Ignore Everywhere"_, _"Default Ignore"_) and showing an **"Undo Ignore"** action in place of the two ignore buttons.
@@ -170,7 +170,7 @@ None of these block implementation; they are listed in §12 for explicit confirm
 
 ### 6.1 File layout
 
-```
+```text
 fluent-web/src/
 ├── components/ui/                          # (existing; shadcn primitives incl. dropdown-menu, checkbox)
 ├── features/
@@ -382,7 +382,7 @@ Otherwise it keeps the editor-state idiom: **full-replace upsert** on PUT, one Z
 
 ### 8.2 File layout
 
-```
+```text
 fluent-api/src/domains/self/settings/
 ├── self-settings.route.ts        # GET + PUT, OpenAPI-described, session user from context
 ├── self-settings.service.ts      # get / upsert, Result-typed like editor-state service
