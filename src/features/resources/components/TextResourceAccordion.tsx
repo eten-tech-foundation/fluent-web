@@ -119,24 +119,39 @@ const TextResourceAccordionItem: React.FC<TextResourceAccordionItemProps> = ({
         continue;
       }
 
-      let start = -1;
-      let end = -1;
+      const isStartBefore =
+        (assoc.startBookCode === bookCode && assoc.startChapter < chapterNumber) ||
+        (assoc.startBookCode !== bookCode && assoc.endBookCode === bookCode);
 
-      if (assoc.startBookCode === bookCode && assoc.startChapter === chapterNumber) {
-        start = assoc.startVerse;
-      }
-      if (assoc.endBookCode === bookCode && assoc.endChapter === chapterNumber) {
-        end = assoc.endVerse;
+      const isStartIn = assoc.startBookCode === bookCode && assoc.startChapter === chapterNumber;
+
+      const isEndAfter =
+        (assoc.endBookCode === bookCode && assoc.endChapter > chapterNumber) ||
+        (assoc.endBookCode !== bookCode && assoc.startBookCode === bookCode);
+
+      const isEndIn = assoc.endBookCode === bookCode && assoc.endChapter === chapterNumber;
+
+      let startV = -1;
+      let endV = -1;
+
+      if (isStartIn && isEndIn) {
+        startV = assoc.startVerse;
+        endV = assoc.endVerse;
+      } else if (isStartBefore && isEndIn) {
+        startV = 1;
+        endV = assoc.endVerse;
+      } else if (isStartIn && isEndAfter) {
+        startV = assoc.startVerse;
+        endV = sourceData.totalVerses;
+      } else if (isStartBefore && isEndAfter) {
+        startV = 1;
+        endV = sourceData.totalVerses;
       }
 
-      if (start !== -1 && end !== -1) {
-        for (let v = Math.min(start, end); v <= Math.max(start, end); v++) {
+      if (startV !== -1 && endV !== -1) {
+        for (let v = Math.min(startV, endV); v <= Math.max(startV, endV); v++) {
           versesSet.add(v);
         }
-      } else if (start !== -1) {
-        versesSet.add(start);
-      } else if (end !== -1) {
-        versesSet.add(end);
       }
     }
 
@@ -191,7 +206,7 @@ const TextResourceAccordionItem: React.FC<TextResourceAccordionItemProps> = ({
             {isTW && isEnglish && formattedVerses && (
               <div className='mb-4' dir={dirAttr}>
                 <div className={`text-foreground text-sm font-bold ${alignClass}`}>
-                  Used in These verses
+                  Used in these verses
                 </div>
                 <div className={`text-foreground/90 mt-1 text-sm leading-normal ${alignClass}`}>
                   {formattedVerses}
