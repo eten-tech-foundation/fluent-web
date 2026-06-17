@@ -251,6 +251,8 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
               relatedAudioIds={relatedAudioIds}
               resourceId={selectedResource.id}
               resources={localizeRefName}
+              selectedLanguage={selectedLanguage}
+              sourceData={sourceData}
               onAccordionChange={handleAccordionChange}
               onResourceClick={handleResourceClick}
             />

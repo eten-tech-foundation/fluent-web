@@ -5,10 +5,12 @@ import {
   useAvailableResources,
   useGuideContent as useGuideContentQuery,
   useImageUrls,
+  useResourceAssociations,
   useResourceCollection,
   useResourceWithAssociation,
   useResourcesByVerse,
   type Language,
+  type PassageAssociation,
 } from '@/features/resources/hooks/useAquiferResources';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -18,6 +20,8 @@ import {
   type ResourceItem,
   type ResourceName,
 } from '@/lib/types';
+
+export { useResourceAssociations, type PassageAssociation };
 
 export interface LanguageOption {
   id: number;

@@ -8,6 +8,7 @@ interface TipTapRendererProps {
   direction?: 'LTR' | 'RTL';
   onResourceClick?: (resourceId: number, parentResourceId?: number) => void;
   parentResourceId?: number;
+  variant?: 'default' | 'compact';
 }
 
 export const TipTapRenderer: React.FC<TipTapRendererProps> = ({
@@ -15,6 +16,7 @@ export const TipTapRenderer: React.FC<TipTapRendererProps> = ({
   direction = 'LTR',
   onResourceClick,
   parentResourceId,
+  variant = 'default',
 }) => {
   const dirAttr = direction.toLowerCase() as 'ltr' | 'rtl';
   const alignClass = direction === 'RTL' ? 'text-right' : 'text-left';
@@ -34,13 +36,22 @@ export const TipTapRenderer: React.FC<TipTapRendererProps> = ({
       case 'heading': {
         const level = node.attrs?.level ?? 1;
         const HeadingTag = `h${level}` as keyof JSX.IntrinsicElements;
-        const headingClasses: Record<number, string> = {
-          1: 'text-2xl font-bold  mb-3',
-          2: 'text-xl font-semibold  mb-2 mt-4',
-          3: 'text-lg font-semibold  mb-2',
-          4: 'text-base font-semibold  mb-2',
-          5: 'text-sm font-semibold  mb-2',
-        };
+        const headingClasses: Record<number, string> =
+          variant === 'compact'
+            ? {
+                1: 'text-base font-bold mb-2',
+                2: 'text-sm font-bold mb-2 mt-4',
+                3: 'text-sm font-semibold mb-2 mt-3',
+                4: 'text-xs font-semibold mb-1 mt-2',
+                5: 'text-xs font-semibold mb-1 mt-2',
+              }
+            : {
+                1: 'text-2xl font-bold  mb-3',
+                2: 'text-xl font-semibold  mb-2 mt-4',
+                3: 'text-lg font-semibold  mb-2',
+                4: 'text-base font-semibold  mb-2',
+                5: 'text-sm font-semibold  mb-2',
+              };
         return (
           <HeadingTag
             key={index}
