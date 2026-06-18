@@ -27,6 +27,7 @@ interface ResourcePanelProps {
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
   onBibleVersesChange?: (verses: BibleVerse[]) => void;
+  onBibleLoadingChange?: (loading: boolean) => void;
   openResourceBiblePanel?: (open: boolean) => void;
   selectPanel?: (panel: number) => void;
   bibleResourceName: (name: string) => void;
@@ -41,6 +42,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onResourceChange,
   onLanguageChange,
   onBibleVersesChange,
+  onBibleLoadingChange,
   openResourceBiblePanel,
   selectPanel,
   bibleResourceName,
@@ -183,14 +185,16 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     onBibleVersesChange?.(bibleVerses);
   }, [isBibleResource, bibleVerses, onBibleVersesChange]);
 
-  // Clear bible verses in the drafting grid only when switching AWAY from Bibles
+  useEffect(() => {
+    if (!isBibleResource) return;
+    onBibleLoadingChange?.(loadingBibleContent);
+  }, [isBibleResource, loadingBibleContent, onBibleLoadingChange]);
+
+  // Clear bible verses in the drafting grid only when switching to other Bibles
   const prevIsBibleRef = useRef(isBibleResource);
   useEffect(() => {
-    if (prevIsBibleRef.current && !isBibleResource) {
-      onBibleVersesChange?.([]);
-    }
     prevIsBibleRef.current = isBibleResource;
-  }, [isBibleResource, onBibleVersesChange]);
+  }, [isBibleResource]);
 
   // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {

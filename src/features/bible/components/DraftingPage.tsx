@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMatch, useNavigate, useRouter } from '@tanstack/react-router';
-import { BookText, ChevronLeft, GripVertical, Loader, X } from 'lucide-react';
+import { BookText, ChevronLeft, GripVertical, Loader, Loader2, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
   const [openResourcePanel, setOpenResourcePanel] = useState(false);
   const [bibleTabLabel, setBibleTabLabel] = useState('');
   const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
+  const [bibleContentLoading, setBibleContentLoading] = useState(false);
 
   const isDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -326,6 +327,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     setOpenResourcePanel(false);
     setBibleTabLabel('');
     setBibleVerses([]);
+    setBibleContentLoading(false);
   }, []);
 
   // O(1) verse lookup for the bible panel left column
@@ -491,6 +493,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 resourceNames={RESOURCE_NAMES}
                 selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
                 sourceData={projectItem}
+                onBibleLoadingChange={setBibleContentLoading}
                 onBibleVersesChange={setBibleVerses}
                 onLanguageChange={setCurrentLanguage}
                 onResourceChange={setCurrentResource}
@@ -562,13 +565,12 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 onScroll={() => !readOnly && updateButtonPosition()}
               >
                 {/*
-                  Panel 2 empty state: bible selected but no verses loaded yet.
-                  Left column shows a full-height placeholder; right column shows
-                  all target textareas so the translator can keep working.
-                  The verse loop below is hidden (not unmounted) to preserve
-                  verseRefs, textareaRefs and useDrafting scroll state.
+                  Panel 2 loading state: a bible was just selected (or a new
+                  one chosen) and its content is still being fetched. Shown
+                  BEFORE the empty-state check below so switching bibles never
+                  flashes "No content available" while data is in flight.
                 */}
-                {selectedPanel === 2 && bibleVerses.length === 0 && (
+                {selectedPanel === 2 && bibleContentLoading && (
                   <div
                     className='grid h-full items-start py-4'
                     style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
@@ -576,7 +578,28 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                     <div className='w-8' />
                     <div className='flex h-full items-center justify-center px-6'>
                       <div className='bg-muted flex h-full w-full items-center justify-center rounded-lg border-2'>
-                        <p className='text-muted-foreground text-sm'>No translation available</p>
+                        <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
+                      </div>
+                    </div>
+                    <div className='flex flex-col px-6'>
+                      {sourceVerses.map(verse => (
+                        <div key={verse.verseNumber} className='py-4'>
+                          {renderTargetColumn(verse.verseNumber)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPanel === 2 && !bibleContentLoading && bibleVerses.length === 0 && (
+                  <div
+                    className='grid h-full items-start py-4'
+                    style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+                  >
+                    <div className='w-8' />
+                    <div className='flex h-full justify-center px-6'>
+                      <div className='bg-muted flex h-full w-full justify-center rounded-lg border-2 pt-10'>
+                        <p className='text-muted-foreground text-sm'>No content available</p>
                       </div>
                     </div>
                     <div className='flex flex-col px-6'>
@@ -592,10 +615,14 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 {/*
                   Main verse loop — always iterates over sourceVerses so the
                   row count is stable across panel switches.
-                  Hidden (not unmounted) during the empty-state above.
+                  Hidden (not unmounted) during the loading/empty states above.
                 */}
                 <div
-                  className={selectedPanel === 2 && bibleVerses.length === 0 ? 'hidden' : undefined}
+                  className={
+                    selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)
+                      ? 'hidden'
+                      : undefined
+                  }
                 >
                   {sourceVerses.map(verse => {
                     const isActive = !readOnly && activeVerseId === verse.verseNumber;

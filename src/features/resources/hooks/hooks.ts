@@ -7,7 +7,6 @@ import {
   useAvailableResources,
   useGuideContent as useGuideContentQuery,
   useImageUrls,
-  useResourceAssociations,
   useResourceCollection,
   useResourceWithAssociation,
   useResourcesByVerse,
@@ -16,7 +15,6 @@ import {
   type AquiferChapter,
   type AquiferVerse,
   type Language,
-  type PassageAssociation,
 } from '@/features/resources/hooks/useAquiferResources';
 import {
   useYouVersionBibles,
@@ -33,8 +31,6 @@ import {
   type ResourceItem,
   type ResourceName,
 } from '@/lib/types';
-
-export { useResourceAssociations, type PassageAssociation };
 
 export interface LanguageOption {
   id: number;
@@ -550,12 +546,13 @@ export const useBibleResources = (
       const chapter = (aquiferBibleText as AquiferBibleTextResponse).chapters.find(
         (c: AquiferChapter) => c.number === chapterNumber
       );
-      return (
-        chapter?.verses.map((v: AquiferVerse) => ({
-          verseNumber: v.number,
-          text: v.text,
-        })) ?? []
-      );
+
+      if (!chapter) return [];
+
+      return chapter.verses.map((v: AquiferVerse) => ({
+        verseNumber: v.number,
+        text: v.text,
+      }));
     }
 
     if (isYouVersion && yvChapterMeta && yvPassageResults.length > 0) {

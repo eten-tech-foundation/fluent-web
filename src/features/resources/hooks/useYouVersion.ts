@@ -134,12 +134,11 @@ export const useYouVersionChapterText = (
   chapterMeta: YouVersionChapterResponse | undefined,
   enabled: boolean = true
 ): Array<{ data: YouVersionPassageResponse | undefined; isLoading: boolean }> => {
-  const verses = chapterMeta?.verses ?? [];
+  const verses = chapterMeta === undefined ? [] : chapterMeta.verses;
   const MAX_VERSES = 176;
 
   const results = Array.from({ length: MAX_VERSES }, (_, i) => {
-    const verse = verses[i];
-    const passageId = verse.passage_id;
+    const passageId = i < verses.length ? verses[i].passage_id : '';
     const shouldFetch = enabled && bibleId !== null && !!passageId;
 
     // eslint-disable-next-line react-hooks/rules-of-hooks
