@@ -57,11 +57,21 @@ export interface FetchResourcesResponse {
   items: unknown[];
 }
 
+export interface PassageAssociation {
+  startBookCode: string;
+  startChapter: number;
+  startVerse: number;
+  endBookCode: string;
+  endChapter: number;
+  endVerse: number;
+}
+
 export interface AssociationResponse {
   resourceAssociations?: Array<{
     referenceId: number;
     contentId: number;
   }>;
+  passageAssociations?: PassageAssociation[];
 }
 
 // Fetch functions
