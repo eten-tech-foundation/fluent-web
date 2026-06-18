@@ -410,10 +410,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   return (
     <aside className='bg-background flex h-full flex-col'>
+      {/* The "Resources" heading was removed: the shared LeftPanel tab row
+          ("Resources | Checks") now serves as this panel's header (W11, §6.6). */}
       <div className='bg-background top-0 py-4'>
-        <div className='flex items-center gap-2'>
-          <h3 className='text-foreground text-xl font-semibold'>Resources</h3>
-        </div>
         <ResourceChipRow
           resourceNames={resourceNames}
           selectedResource={selectedResource}
