@@ -7,6 +7,7 @@ import {
   useAvailableResources,
   useGuideContent as useGuideContentQuery,
   useImageUrls,
+  useResourceAssociations,
   useResourceCollection,
   useResourceWithAssociation,
   useResourcesByVerse,
@@ -15,6 +16,7 @@ import {
   type AquiferChapter,
   type AquiferVerse,
   type Language,
+  type PassageAssociation,
 } from '@/features/resources/hooks/useAquiferResources';
 import {
   useYouVersionBibles,
@@ -31,6 +33,8 @@ import {
   type ResourceItem,
   type ResourceName,
 } from '@/lib/types';
+
+export { useResourceAssociations, type PassageAssociation };
 
 export interface LanguageOption {
   id: number;

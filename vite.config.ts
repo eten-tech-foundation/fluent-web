@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      tanstackRouter(),
+      tanstackRouter({ autoCodeSplitting: true }),
       react(),
       tailwindcss(),
       isAnalyze &&
@@ -51,6 +51,16 @@ export default defineConfig(({ mode }) => {
 
     test: {
       environment: 'jsdom',
+      setupFiles: ['./src/test/setup.ts'],
+      // Dummy values so src/lib/config.ts env validation passes under vitest.
+      env: {
+        VITE_API_URL: 'https://api.test.local',
+        VITE_AQUIFER_API_URL: 'https://aquifer.test.local',
+        VITE_AQUIFER_API_KEY: 'test-aquifer-key',
+        VITE_BETTER_AUTH_URL: 'https://auth.test.local',
+        VITE_ENVIRONMENT: 'production',
+        VITE_APP_INSIGHTS_CONNECTION_STRING: '',
+      },
     },
   };
 });

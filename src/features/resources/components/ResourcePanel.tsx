@@ -152,6 +152,8 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     fetchRelatedAudio,
   } = useGuideContent();
 
+  const pendingPrefetchIds = useRef<Set<number>>(new Set());
+
   const { resourceDialog, loadingResourceDialog, handleResourceClick, resourceError, closeDialog } =
     useResourceDialog();
 
@@ -249,8 +251,34 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localizeRefName, shouldFetchResources]);
 
-  // Derived state
+  useEffect(() => {
+    if (
+      selectedResource.id === 'UWTranslationQuestions' &&
+      localizeRefName.length > 0 &&
+      shouldFetchResources
+    ) {
+      localizeRefName.forEach(item => {
+        if (!(item.id in guideContents) && !pendingPrefetchIds.current.has(item.id)) {
+          pendingPrefetchIds.current.add(item.id);
+          fetchGuideContent(item.id)
+            .then(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            })
+            .catch(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            });
+        }
+      });
+    }
+  }, [
+    selectedResource.id,
+    localizeRefName,
+    shouldFetchResources,
+    guideContents,
+    fetchGuideContent,
+  ]);
 
+  // Show loading state while initializing
   const isInitializing = !isLanguageInitializedRef.current && loadingLanguages;
 
   const renderBibleContent = () => {
