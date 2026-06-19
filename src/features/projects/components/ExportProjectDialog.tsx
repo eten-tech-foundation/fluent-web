@@ -115,7 +115,7 @@ export const ExportProjectDialog: React.FC<ExportProjectDialogProps> = ({
 
       onClose();
     } catch (err) {
-      setError('Export Failed');
+      setError(err instanceof Error ? err.message : 'Export Failed');
       Logger.logException(err, {
         context: 'Export failed',
         projectUnitId,
