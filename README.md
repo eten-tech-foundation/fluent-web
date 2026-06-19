@@ -26,7 +26,7 @@ Authentication is powered by [better-auth](https://www.better-auth.com/). The br
 
 ### Quick Start
 
-1. Create a `.env` file with the required variables. At minimum you must set `VITE_API_URL`, `VITE_ENVIRONMENT`, `VITE_AQUIFER_API_URL`, `VITE_AQUIFER_API_KEY`, and `VITE_BETTER_AUTH_URL` — they are all validated at startup, and missing any of them fails with an "Invalid environment configuration" error. See [Environment Configuration](docs/environment-config.md) for the full list and how to manage per-environment files. To point the app at a better-auth server, set:
+1. Create a `.env` file with the required variables. At minimum you must set `VITE_API_URL`, `VITE_ENVIRONMENT`, `VITE_AQUIFER_API_URL`, `VITE_AQUIFER_API_KEY`, `VITE_YOUVERSION_API_URL`, `VITE_YOUVERSION_API_KEY` and `VITE_BETTER_AUTH_URL` — they are all validated at startup, and missing any of them fails with an "Invalid environment configuration" error. See [Environment Configuration](docs/environment-config.md) for the full list and how to manage per-environment files. To point the app at a better-auth server, set:
 
    ```env
    VITE_BETTER_AUTH_URL=http://localhost:9999/api/auth
