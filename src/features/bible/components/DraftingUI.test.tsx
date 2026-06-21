@@ -64,6 +64,32 @@ vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: (props: unknown) => mockUsePericope(props) as unknown,
 }));
 
+// Mock the Repeated Word Check hooks (Phase 4). These wrap TanStack Query /
+// fetch; this suite exercises drafting/pericope/resource behavior, not the
+// check itself (which is unit-tested in `useRepeatedWordsCheck.test.ts` and the
+// checks-feature component tests). Mocking them keeps DraftingUI renderable
+// without a QueryClientProvider and with no network I/O.
+vi.mock('@/features/checks/hooks/useSuppressions', () => ({
+  useSuppressions: () => ({
+    occurrenceRules: {},
+    globalRules: {},
+    globalIgnoresAvailable: false,
+    settingsProbeResolved: true,
+    ignoreHere: vi.fn(),
+    ignoreEverywhere: vi.fn(),
+    undoOccurrence: vi.fn(),
+    stopIgnoringEverywhere: vi.fn(),
+  }),
+}));
+
+vi.mock('@/features/checks/hooks/useRepeatedWordsCheck', () => ({
+  useRepeatedWordsCheck: () => ({ data: undefined, isError: false }),
+}));
+
+vi.mock('@/features/checks/hooks/useResolvedFindings', () => ({
+  useResolvedFindings: () => ({ active: [], inactive: [] }),
+}));
+
 // Mock ResourcePanel
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({

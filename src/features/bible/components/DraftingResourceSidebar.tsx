@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import { GripVertical } from 'lucide-react';
 
+import { type LeftTab } from '@/features/bible/hooks/useResourceStatePersistence';
+import { LeftPanel } from '@/features/checks/components/LeftPanel';
 import { ResourcePanel } from '@/features/resources/components/ResourcePanel';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { type ProjectItem, type ResourceName } from '@/lib/types';
@@ -21,6 +23,15 @@ interface DraftingResourceSidebarProps {
   setBibleVerses: (verses: BibleVerse[]) => void;
   setCurrentLanguage: (lang: string) => void;
   setCurrentResource: (res: ResourceName) => void;
+  /** Controlled active left-panel tab (Resources | Checks), persisted by the
+   *  parent in the editor-state blob (Repeated Word Check, W11/§6.6). */
+  activeLeftTab: LeftTab;
+  /** Called when the translator switches tabs; the parent persists it. */
+  onTabChange: (tab: LeftTab) => void;
+  /** Cascade-resolved active-finding count; drives the tab notification dot. */
+  activeFindingsCount: number;
+  /** Body for the Checks tab (the `ChecksPanel`, composed by the parent). */
+  checksContent: ReactNode;
 }
 
 export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = ({
@@ -38,6 +49,10 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   setBibleVerses,
   setCurrentLanguage,
   setCurrentResource,
+  activeLeftTab,
+  onTabChange,
+  activeFindingsCount,
+  checksContent,
 }) => {
   const [resourcePanelWidth, setResourcePanelWidth] = useState(25); // percentage
   const isDraggingRef = useRef(false);
@@ -101,22 +116,30 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   return (
     <>
       <div className='min-w-0 shrink-0 overflow-hidden' style={{ width: `${resourcePanelWidth}%` }}>
-        <ResourcePanel
-          activeVerseId={resourceVerseId}
-          bibleResourceName={setBibleTabLabel}
-          initialLanguage={currentLanguage}
-          initialResource={currentResource}
-          openResourceBiblePanel={setOpenResourcePanel}
-          registerClearBible={fn => {
-            clearBibleRef.current = fn;
-          }}
-          resourceNames={resourceNames}
-          selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
-          sourceData={projectItem}
-          onBibleLoadingChange={setBibleContentLoading}
-          onBibleVersesChange={setBibleVerses}
-          onLanguageChange={setCurrentLanguage}
-          onResourceChange={setCurrentResource}
+        <LeftPanel
+          activeFindingsCount={activeFindingsCount}
+          activeTab={activeLeftTab}
+          checksContent={checksContent}
+          resourcesContent={
+            <ResourcePanel
+              activeVerseId={resourceVerseId}
+              bibleResourceName={setBibleTabLabel}
+              initialLanguage={currentLanguage}
+              initialResource={currentResource}
+              openResourceBiblePanel={setOpenResourcePanel}
+              registerClearBible={fn => {
+                clearBibleRef.current = fn;
+              }}
+              resourceNames={resourceNames}
+              selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
+              sourceData={projectItem}
+              onBibleLoadingChange={setBibleContentLoading}
+              onBibleVersesChange={setBibleVerses}
+              onLanguageChange={setCurrentLanguage}
+              onResourceChange={setCurrentResource}
+            />
+          }
+          onTabChange={onTabChange}
         />
       </div>
       {/* Drag handle */}

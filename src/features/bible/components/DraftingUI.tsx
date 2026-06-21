@@ -11,9 +11,15 @@ import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import {
+  type LeftTab,
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
+import { type OccurrenceRules } from '@/features/checks/checks.types';
+import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
+import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
+import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
+import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -64,6 +70,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
   const [bibleContentLoading, setBibleContentLoading] = useState(false);
 
+  // Which left-panel tab is showing (Resources | Checks). Persisted in the
+  // editor-state blob as `activeLeftTab` (W11, §6.6).
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftTab>('resources');
+  // Occurrence-level suppression rules for the Repeated Word Check (cascade
+  // layer 2). Held here so they ride the existing debounced editor-state save
+  // — the single writer for the blob (§7.1).
+  const [occurrenceRules, setOccurrenceRules] = useState<OccurrenceRules>({});
+  // Increments on every successful verse auto-save; part of the check query key
+  // so the check re-fires exactly on the auto-save event (W3, card #172).
+  const [saveCounter, setSaveCounter] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const clearBibleRef = useRef<(() => void) | null>(null);
 
@@ -78,6 +95,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     activeResource: string;
     languageCode: string;
     tabStatus: boolean;
+    activeLeftTab: LeftTab;
+    checkOccurrenceRules: OccurrenceRules;
   } | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -119,6 +138,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           assignedUserId: userdetail.id,
         },
       });
+
+      // Bump on the successful auto-save event so the Repeated Word Check
+      // re-fires (W3, card #172). `useAddTranslatedVerse` doesn't forward
+      // mutate-time `onSuccess`, so we bump after the awaited resolve.
+      setSaveCounter(c => c + 1);
     },
     [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
   );
@@ -170,6 +194,54 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealNextVerse,
   });
 
+  // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
+
+  // The single writer for the occurrence-rule map: `useSuppressions` does the
+  // read-modify-write and hands the next full map back here; updating state
+  // makes it ride the existing debounced editor-state save (one writer, §7.1).
+  const saveOccurrenceRules = useCallback((next: OccurrenceRules) => {
+    setOccurrenceRules(next);
+  }, []);
+
+  const {
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+    globalIgnoresAvailable,
+    settingsProbeResolved,
+    ignoreHere,
+    ignoreEverywhere,
+    undoOccurrence,
+    stopIgnoringEverywhere,
+  } = useSuppressions({ occurrenceRules, saveOccurrenceRules });
+
+  // What the translator currently sees is what gets checked (§6.2) — feed the
+  // live drafting verses, not a refetch.
+  const checkVerses = verses.map(v => ({ verseNumber: v.verseNumber, content: v.content }));
+  const hasContent = checkVerses.some(v => v.content.trim() !== '');
+
+  const checkQuery = useRepeatedWordsCheck({
+    projectItem,
+    verses: checkVerses,
+    saveCounter,
+    // Wait for the settings probe so the first render is cascade-correct, and
+    // never run in read-only `/view` or when the chapter is empty (W10/§9.1).
+    enabled: !readOnly && hasContent && settingsProbeResolved,
+  });
+
+  const resolved = useResolvedFindings({
+    findings: checkQuery.data?.result?.findings ?? [],
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+  });
+
+  // Active-finding count drives both notification dots; computed once here and
+  // threaded to the tab and the closed-panel toggle button (S5, §6.4).
+  const activeFindingsCount = resolved.active.length;
+
+  const handleTabChange = useCallback((tab: LeftTab) => {
+    setActiveLeftTab(tab);
+  }, []);
+
   const handleBack = useCallback(() => {
     clearCurrentProjectItem();
 
@@ -186,11 +258,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     if (!isFetched || isInitializedRef.current) return;
 
     if (savedResourceState) {
-      const { languageCode, tabStatus } = savedResourceState;
+      const { languageCode, tabStatus, activeLeftTab: savedTab } = savedResourceState;
+      const savedOccurrenceRules = savedResourceState.checkOccurrenceRules ?? {};
 
       if (typeof tabStatus === 'boolean') {
         setShowResources(tabStatus);
       }
+
+      if (savedTab === 'resources' || savedTab === 'checks') {
+        setActiveLeftTab(savedTab);
+      }
+
+      setOccurrenceRules(savedOccurrenceRules);
 
       setCurrentLanguage(languageCode || projectItem.sourceLangCode);
 
@@ -201,6 +280,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         activeResource: RESOURCE_NAMES[0].id,
         languageCode: languageCode || projectItem.sourceLangCode,
         tabStatus: typeof tabStatus === 'boolean' ? tabStatus : false,
+        activeLeftTab: savedTab === 'checks' ? 'checks' : 'resources',
+        checkOccurrenceRules: savedOccurrenceRules,
       };
     } else {
       setCurrentLanguage(projectItem.sourceLangCode);
@@ -212,6 +293,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         activeResource: RESOURCE_NAMES[0].id,
         languageCode: projectItem.sourceLangCode,
         tabStatus: false,
+        activeLeftTab: 'resources',
+        checkOccurrenceRules: {},
       };
     }
 
@@ -236,6 +319,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       activeResource: currentResource.id,
       languageCode: currentLanguage || projectItem.sourceLangCode,
       tabStatus: showResources,
+      activeLeftTab,
+      checkOccurrenceRules: occurrenceRules,
     };
 
     if (lastSavedStateRef.current) {
@@ -245,7 +330,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         lastSavedStateRef.current.verseNumber !== currentState.verseNumber ||
         lastSavedStateRef.current.activeResource !== currentState.activeResource ||
         lastSavedStateRef.current.languageCode !== currentState.languageCode ||
-        lastSavedStateRef.current.tabStatus !== currentState.tabStatus;
+        lastSavedStateRef.current.tabStatus !== currentState.tabStatus ||
+        lastSavedStateRef.current.activeLeftTab !== currentState.activeLeftTab ||
+        // Occurrence rules are replaced by-reference on every write (the hook
+        // returns a fresh map), so an identity check is sufficient and cheap.
+        lastSavedStateRef.current.checkOccurrenceRules !== currentState.checkOccurrenceRules;
 
       if (!hasChanged) return;
     }
@@ -271,6 +360,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     currentResource.id,
     currentLanguage,
     showResources,
+    activeLeftTab,
+    occurrenceRules,
     activeVerseId,
     projectItem.chapterAssignmentId,
     projectItem.book,
@@ -406,6 +497,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   return (
     <div className='flex h-full flex-col overflow-hidden'>
       <DraftingHeader
+        activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}
         hasAnyError={hasAnyError}
         isAnythingSaving={isAnythingSaving}
@@ -424,6 +516,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       <div ref={containerRef} className='flex h-full overflow-hidden'>
         {showResources && isInitializedRef.current && (
           <DraftingResourceSidebar
+            activeFindingsCount={activeFindingsCount}
+            activeLeftTab={activeLeftTab}
+            checksContent={
+              <ChecksPanel
+                globalIgnoresAvailable={globalIgnoresAvailable}
+                isError={checkQuery.isError}
+                resolved={resolved}
+                onIgnoreEverywhere={ignoreEverywhere}
+                onIgnoreHere={ignoreHere}
+                onStopIgnoringEverywhere={stopIgnoringEverywhere}
+                onUndo={undoOccurrence}
+              />
+            }
             clearBibleRef={clearBibleRef}
             containerRef={containerRef}
             currentLanguage={currentLanguage}
@@ -438,6 +543,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             setCurrentResource={setCurrentResource}
             setOpenResourcePanel={setOpenResourcePanel}
             setSelectedPanel={setSelectedPanel}
+            onTabChange={handleTabChange}
           />
         )}
 
