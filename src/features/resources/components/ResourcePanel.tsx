@@ -190,12 +190,6 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     onBibleLoadingChange?.(loadingBibleContent);
   }, [isBibleResource, loadingBibleContent, onBibleLoadingChange]);
 
-  // Clear bible verses in the drafting grid only when switching to other Bibles
-  const prevIsBibleRef = useRef(isBibleResource);
-  useEffect(() => {
-    prevIsBibleRef.current = isBibleResource;
-  }, [isBibleResource]);
-
   // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {
     setSelectedResource(resource);

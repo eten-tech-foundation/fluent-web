@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { config, getYouVersionApiHeaders } from '@/lib/config';
+import { Logger } from '@/lib/services/logger';
 
 const YOUVERSION_API_BASE_URL = config.api.youversion_url;
 
@@ -56,7 +57,12 @@ const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBib
     }
   );
 
-  if (!response.ok) throw new Error('Failed to fetch YouVersion bibles');
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch YouVersion bibles'), {
+      context: `status=${response.status} languageTag=${languageTag}`,
+    });
+    return [];
+  }
 
   const json = (await response.json()) as YouVersionBiblesResponse;
   return json.data;
@@ -76,7 +82,17 @@ const fetchYouVersionChapterMeta = async (
     }
   );
 
-  if (!response.ok) throw new Error('Failed to fetch YouVersion chapter metadata');
+  if (response.status === 404) {
+    return { id: 0, passage_id: '', title: 0, verses: [] };
+  }
+
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch YouVersion chapter metadata'), {
+      context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
+    });
+    return { id: 0, passage_id: '', title: 0, verses: [] };
+  }
+
   return (await response.json()) as YouVersionChapterResponse;
 };
 
@@ -93,7 +109,17 @@ const fetchYouVersionPassage = async (
     }
   );
 
-  if (!response.ok) throw new Error(`Failed to fetch YouVersion passage ${passageId}`);
+  if (response.status === 404) {
+    return { id: passageId, content: '', reference: '' };
+  }
+
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch YouVersion passage'), {
+      context: `status=${response.status} bibleId=${bibleId} passageId=${passageId}`,
+    });
+    return { id: passageId, content: '', reference: '' };
+  }
+
   return (await response.json()) as YouVersionPassageResponse;
 };
 
@@ -106,6 +132,8 @@ export const useYouVersionBibles = (languageTag: string, enabled: boolean = true
     enabled: enabled && !!languageTag,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 };
 
@@ -126,6 +154,8 @@ export const useYouVersionChapterMeta = (
     enabled: enabled && bibleId !== null && !!bookId && !!chapterId,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 };
 
@@ -153,6 +183,8 @@ export const useYouVersionChapterText = (
       enabled: shouldFetch,
       staleTime: 5 * 60 * 1000,
       gcTime: 15 * 60 * 1000,
+      retry: false,
+      throwOnError: false,
     });
   });
 

@@ -57,21 +57,11 @@ export interface FetchResourcesResponse {
   items: unknown[];
 }
 
-export interface PassageAssociation {
-  startBookCode: string;
-  startChapter: number;
-  startVerse: number;
-  endBookCode: string;
-  endChapter: number;
-  endVerse: number;
-}
-
 export interface AssociationResponse {
   resourceAssociations?: Array<{
     referenceId: number;
     contentId: number;
   }>;
-  passageAssociations?: PassageAssociation[];
 }
 
 // Aquifer Bible Types
@@ -279,7 +269,13 @@ const fetchAquiferBibles = async (languageCode: string): Promise<AquiferBible[]>
     headers: getApiHeaders(),
   });
 
-  if (!response.ok) throw new Error('Failed to fetch Aquifer bibles');
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch Aquifer bibles'), {
+      context: `status=${response.status} languageCode=${languageCode}`,
+    });
+    return [];
+  }
+
   return (await response.json()) as AquiferBible[];
 };
 
@@ -288,6 +284,15 @@ const fetchAquiferBibleText = async (
   bookCode: string,
   chapter: number
 ): Promise<AquiferBibleTextResponse> => {
+  const emptyResponse: AquiferBibleTextResponse = {
+    bibleId,
+    bibleName: '',
+    bibleAbbreviation: '',
+    bookName: '',
+    bookCode,
+    chapters: [],
+  };
+
   const response = await fetch(
     `${API_BASE_URL}/bibles/${bibleId}/texts?BookCode=${bookCode}&StartChapter=${chapter}&EndChapter=${chapter}`,
     {
@@ -297,7 +302,17 @@ const fetchAquiferBibleText = async (
     }
   );
 
-  if (!response.ok) throw new Error('Failed to fetch Aquifer bible text');
+  if (response.status === 404) {
+    return emptyResponse;
+  }
+
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch Aquifer bible text'), {
+      context: `status=${response.status} bibleId=${bibleId} bookCode=${bookCode} chapter=${chapter}`,
+    });
+    return emptyResponse;
+  }
+
   return (await response.json()) as AquiferBibleTextResponse;
 };
 
@@ -422,6 +437,8 @@ export const useAquiferBibles = (languageCode: string, enabled: boolean = true) 
     enabled: enabled && !!languageCode,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 };
 
@@ -442,5 +459,7 @@ export const useAquiferBibleText = (
     enabled: enabled && bibleId !== null,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 };
