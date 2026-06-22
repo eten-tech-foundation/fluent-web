@@ -382,7 +382,10 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
           loadingGuides={loadingGuides}
           openItem={openItem}
           relatedAudioIds={relatedAudioIds}
+          resourceId={selectedResource.id}
           resources={localizeRefName}
+          selectedLanguage={selectedLanguage}
+          sourceData={sourceData}
           onAccordionChange={handleAccordionChange}
           onResourceClick={handleResourceClick}
         />
