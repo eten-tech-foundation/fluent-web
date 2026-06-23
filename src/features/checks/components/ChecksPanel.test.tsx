@@ -111,14 +111,37 @@ describe('ChecksPanel — Show Ignored toggle', () => {
     // Default OFF: the inactive snippet is not shown.
     expect(screen.queryByText('and and (in JDG 4:1)')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('checkbox', { name: 'Show Ignored' }));
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
     expect(screen.getByText('and and (in JDG 4:1)')).toBeInTheDocument();
     expect(screen.getByTestId('inactive-label')).toHaveTextContent('Ignore Here');
   });
 
   it('does not render the toggle when there are no inactive findings', () => {
     renderPanel({ active: [active('JDG 4:1', 'the the')], inactive: [] });
-    expect(screen.queryByRole('checkbox', { name: 'Show Ignored' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Show Ignored' })).not.toBeInTheDocument();
+  });
+
+  it('renders revealed ignored findings in a dedicated section BELOW the toggle (revised #278 mock)', async () => {
+    const resolved: ResolvedFindings = {
+      active: [active('JDG 4:1', 'the the')],
+      inactive: [inactive('JDG 4:2', 'and and', 'occurrence')],
+    };
+    const { user } = renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+    );
+
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
+
+    const ignoredSection = screen.getByTestId('ignored-section');
+    // The ignored finding lives inside the dedicated below-toggle section...
+    expect(ignoredSection).toHaveTextContent('and and (in JDG 4:2)');
+    expect(ignoredSection).toHaveTextContent('Verse 2');
+    // ...and NOT interleaved into the active group above the toggle.
+    expect(ignoredSection).not.toHaveTextContent('the the (in JDG 4:1)');
+
+    // The toggle (switch) appears in the DOM before the ignored section.
+    const toggle = screen.getByRole('switch', { name: 'Show Ignored' });
+    expect(toggle.compareDocumentPosition(ignoredSection)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('resets the toggle (not persisted) across remounts', async () => {
@@ -129,7 +152,7 @@ describe('ChecksPanel — Show Ignored toggle', () => {
     const { user, unmount } = renderWithProviders(
       <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
     );
-    await user.click(screen.getByRole('checkbox', { name: 'Show Ignored' }));
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
     expect(screen.getByText('and and (in JDG 4:1)')).toBeInTheDocument();
     unmount();
 
