@@ -295,7 +295,21 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
   );
 
   const toggleResources = useCallback(() => {
-    setShowResources(prev => !prev);
+    setShowResources(prev => {
+      const nextShow = !prev;
+
+      // When hiding the resource panel, ResourcePanel unmounts and loses its
+      // internal hook state (selectedBible resets to null).
+      if (!nextShow) {
+        setSelectedPanel(1);
+        setOpenResourcePanel(false);
+        setBibleTabLabel('');
+        setBibleVerses([]);
+        setBibleContentLoading(false);
+      }
+
+      return nextShow;
+    });
   }, []);
 
   const handleResizeDragStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {

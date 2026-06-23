@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 
 import { config, getYouVersionApiHeaders } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
@@ -165,31 +165,25 @@ export const useYouVersionChapterText = (
   enabled: boolean = true
 ): Array<{ data: YouVersionPassageResponse | undefined; isLoading: boolean }> => {
   const verses = chapterMeta === undefined ? [] : chapterMeta.verses;
-  const MAX_VERSES = 176;
 
-  const results = Array.from({ length: MAX_VERSES }, (_, i) => {
-    const passageId = i < verses.length ? verses[i].passage_id : '';
-    const shouldFetch = enabled && bibleId !== null && !!passageId;
-
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    return useQuery({
-      queryKey: ['youversion-passage', bibleId, passageId],
+  const results = useQueries({
+    queries: verses.map(verse => ({
+      queryKey: ['youversion-passage', bibleId, verse.passage_id],
       queryFn: () => {
         if (bibleId === null) {
           throw new Error('useYouVersionChapterText called with null bibleId');
         }
-        return fetchYouVersionPassage(bibleId, passageId);
+        return fetchYouVersionPassage(bibleId, verse.passage_id);
       },
-      enabled: shouldFetch,
+      enabled: enabled && bibleId !== null && !!verse.passage_id,
       staleTime: 5 * 60 * 1000,
       gcTime: 15 * 60 * 1000,
       retry: false,
       throwOnError: false,
-    });
+    })),
   });
 
-  // Return only the slice that corresponds to actual verses
-  return results.slice(0, verses.length).map(r => ({
+  return results.map(r => ({
     data: r.data,
     isLoading: r.isLoading,
   }));
