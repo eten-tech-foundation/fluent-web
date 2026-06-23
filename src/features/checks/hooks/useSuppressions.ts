@@ -215,9 +215,11 @@ export interface UseSuppressionsResult {
    * write an occurrence-level `'surface'` override so the global rule / Greek
    * Room verdict survives but this one occurrence re-surfaces. */
   undoOccurrence: (resolved: ResolvedFinding) => void;
-  /** Chevron action: stop ignoring this pair everywhere — delete the global
-   * entry (and purge current-chapter occurrence rules for it). Optimistic;
-   * rolls back on PUT failure. */
+  /** Chevron action: stop ignoring this pair everywhere. If a global
+   * `'suppress'` exists, deletes it; otherwise writes a global `'surface'`
+   * override (e.g. to override Greek Room `legitimate` for the pair globally).
+   * Purges current-chapter occurrence rules for the pair. Optimistic; rolls
+   * back on PUT failure. */
   stopIgnoringEverywhere: (repeatedWord: string) => void;
 }
 
@@ -270,7 +272,16 @@ export const useSuppressions = ({
 
   const ignoreHere = useCallback(
     (occurrenceKey: string) => {
-      saveOccurrenceRules(setRule(occurrenceRef.current, occurrenceKey, 'suppress'));
+      const currentVerdict = occurrenceRef.current[occurrenceKey] as RuleVerdict | undefined;
+      if (currentVerdict === 'surface') {
+        // The finding is only active because of a 'surface' override (e.g. the
+        // user previously undid a legitimate or global suppression). To re-ignore,
+        // just remove the override — the lower layer will re-suppress naturally.
+        // This avoids stacking 'suppress' over 'surface' (BUG #3).
+        saveOccurrenceRules(deleteRule(occurrenceRef.current, occurrenceKey));
+      } else {
+        saveOccurrenceRules(setRule(occurrenceRef.current, occurrenceKey, 'suppress'));
+      }
     },
     [saveOccurrenceRules]
   );
@@ -329,14 +340,27 @@ export const useSuppressions = ({
 
   const ignoreEverywhere = useCallback(
     (repeatedWord: string) => {
-      writeGlobal(repeatedWord, rules => setRule(rules, normalizePair(repeatedWord), 'suppress'));
+      const pair = normalizePair(repeatedWord);
+      writeGlobal(repeatedWord, rules => {
+        const current = rules[pair] as RuleVerdict | undefined;
+        // Toggle principle: if there's a 'surface' override, just remove it
+        // (the lower layer or default will re-suppress). Otherwise write 'suppress'.
+        return current === 'surface' ? deleteRule(rules, pair) : setRule(rules, pair, 'suppress');
+      });
     },
     [writeGlobal]
   );
 
   const stopIgnoringEverywhere = useCallback(
     (repeatedWord: string) => {
-      writeGlobal(repeatedWord, rules => deleteRule(rules, normalizePair(repeatedWord)));
+      const pair = normalizePair(repeatedWord);
+      writeGlobal(repeatedWord, rules => {
+        const current = rules[pair] as RuleVerdict | undefined;
+        // Toggle principle: if there's a 'suppress' rule, just remove it.
+        // Otherwise write 'surface' to override a lower-layer verdict (e.g.
+        // Greek Room `legitimate`) globally for this pair (BUG #4).
+        return current === 'suppress' ? deleteRule(rules, pair) : setRule(rules, pair, 'surface');
+      });
     },
     [writeGlobal]
   );
