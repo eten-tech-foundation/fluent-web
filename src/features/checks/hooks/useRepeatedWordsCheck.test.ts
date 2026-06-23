@@ -40,7 +40,12 @@ const makeProjectItem = (over: Partial<ProjectItem> = {}): ProjectItem => ({
   projectUnitId: 7,
   bibleId: 1,
   bibleName: 'Test Bible',
-  targetLanguage: 'spa',
+  // `targetLanguage` is the human display NAME; the check must send it as
+  // `lang_name`, NOT as `lang_code` (greek-room keys its legitimate-duplicate
+  // whitelist on the ISO code). See phase-04 manual smoke (BUG #2, 2026-06-23).
+  targetLanguage: 'Spanish',
+  // `targetLanguageCode` is the ISO 639-3 code the check must send as `lang_code`.
+  targetLanguageCode: 'spa',
   bookId: 7,
   // `book` is the human display name; the check must NOT use it for snt_id.
   book: 'Judges',
@@ -130,11 +135,48 @@ describe('buildRepeatedWordsRequest', () => {
       { verseNumber: 3, content: 'x' },
     ]);
     expect(request).toMatchObject({
+      // lang_code is the ISO 639-3 CODE; lang_name is the human display NAME.
       lang_code: 'spa',
-      lang_name: 'spa',
-      project_id: 7,
+      lang_name: 'Spanish',
+      // project_id is sent as a STRING: fluent-ai declares it `str` (strict), so
+      // a numeric value is rejected 422 → 502. See the phase-04 manual smoke.
+      project_id: '7',
       project_name: 'Test Project',
     });
+  });
+
+  it('sends the ISO code as lang_code and the display name as lang_name (BUG #2 regression)', () => {
+    // Greek-room keys its legitimate-duplicate whitelist on the ISO 639-3 code
+    // (e.g. "eng" recognises "truly truly"); sending the display name ("English")
+    // silently disables legitimate-duplicate suppression. lang_code MUST be the
+    // code, lang_name the name. See phase-04 manual smoke (BUG #2, 2026-06-23).
+    const request = buildRepeatedWordsRequest(
+      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: 'eng' }),
+      [{ verseNumber: 3, content: 'truly truly' }]
+    );
+    expect(request.lang_code).toBe('eng');
+    expect(request.lang_name).toBe('English');
+    // Guard against a regression that sends the name as the code.
+    expect(request.lang_code).not.toBe('English');
+  });
+
+  it('falls back to "<unknown>" when targetLanguageCode is missing (no crash)', () => {
+    const request = buildRepeatedWordsRequest(
+      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: undefined }),
+      [{ verseNumber: 3, content: 'truly truly' }]
+    );
+    // A missing code must NOT produce undefined/empty on the wire; greek-room
+    // just won't match any legitimate whitelist for an unknown code.
+    expect(request.lang_code).toBe('<unknown>');
+    expect(request.lang_name).toBe('English');
+  });
+
+  it('sends project_id as a string (fluent-ai requires str, not int)', () => {
+    const request = buildRepeatedWordsRequest(makeProjectItem({ projectUnitId: 123 }), [
+      { verseNumber: 3, content: 'x' },
+    ]);
+    expect(typeof request.project_id).toBe('string');
+    expect(request.project_id).toBe('123');
   });
 });
 

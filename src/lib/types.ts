@@ -114,7 +114,16 @@ export interface ProjectItem {
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /**
+   * ISO 639-3 target language CODE, e.g. "eng". Sent as the check's `lang_code`
+   * — greek-room keys its legitimate-duplicate whitelist on this code, so the
+   * display name must NOT be used here. See phase-04 manual smoke (BUG #2).
+   * Optional: older API responses may omit it; the check falls back to
+   * "<unknown>" rather than crashing.
+   */
+  targetLanguageCode?: string;
   bookId: number;
   book: string;
   chapterStatus: string;
@@ -247,7 +256,10 @@ export interface UserChapterAssignment {
   bibleId: number;
   bibleName: string;
   chapterStatus: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /** ISO 639-3 target language CODE, e.g. "eng" (sent as the check's lang_code). */
+  targetLanguageCode: string;
   sourceLangCode: string;
   bookCode: string;
   bookId: number;

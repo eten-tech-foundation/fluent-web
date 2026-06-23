@@ -37,6 +37,7 @@ const assignment = (overrides: Partial<UserChapterAssignment>): UserChapterAssig
   bibleName: 'Test Bible',
   chapterStatus: 'draft',
   targetLanguage: 'Spanish',
+  targetLanguageCode: 'spa',
   sourceLangCode: 'eng',
   bookCode: 'GEN',
   bookId: 1,

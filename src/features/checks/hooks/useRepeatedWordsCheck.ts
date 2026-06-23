@@ -49,10 +49,27 @@ export const buildRepeatedWordsRequest = (
       text: v.content,
     }));
 
+  // `lang_code` MUST be the ISO 639-3 code (e.g. "eng"): greek-room keys its
+  // legitimate-duplicate whitelist on the code, so sending the display name
+  // ("English") silently disables legitimate-duplicate suppression. `lang_name`
+  // carries the human name. See phase-04 manual smoke (BUG #2, 2026-06-23).
+  //
+  // Defensive fallback: if the API omits the code (undefined) OR sends it empty
+  // (fluent-api defaults a null ISO column to ""), send "<unknown>" rather than
+  // an empty/undefined value. greek-room simply won't match any legitimate
+  // whitelist for an unknown code (duplicates are still flagged) — a safe
+  // degradation that keeps the check running instead of crashing.
+  const langCode = projectItem.targetLanguageCode?.trim() ? projectItem.targetLanguageCode : null;
+
   return {
-    lang_code: projectItem.targetLanguage,
+    lang_code: langCode ?? '<unknown>',
     lang_name: projectItem.targetLanguage,
-    project_id: projectItem.projectUnitId,
+    // fluent-ai declares `project_id: str` (Pydantic v2, strict — it does NOT
+    // coerce an int to a str), so a numeric `projectUnitId` is rejected with a
+    // 422 that fluent-api surfaces as a 502. fluent-api's own schema is the
+    // tolerant side (accepts string | number); we are the compliant side and
+    // send the contract-correct string. See phase-04 manual smoke (2026-06-23).
+    project_id: String(projectItem.projectUnitId),
     project_name: projectItem.projectName,
     verses: verseInputs,
   };
