@@ -6,9 +6,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 
 import { type ResolvedFinding, type ResolvedFindings } from '../checks.types';
 
@@ -49,55 +49,74 @@ interface VerseGroup {
 }
 
 /**
- * Group resolved findings by verse (`snt_id`), preserving first-seen verse order
- * and, within each verse, active findings before inactive ones. Only verses that
- * actually have rows to show produce a group (§5.1, §6.4).
+ * Group one bucket of resolved findings by verse (`snt_id`), preserving
+ * first-seen verse order. Only verses that actually have rows produce a group
+ * (§5.1, §6.4). Active and inactive findings are grouped **separately** now
+ * (revised #278 mock): active findings render above the "Show Ignored" toggle,
+ * ignored findings in their own dedicated section below it — so each call groups
+ * a single, already-filtered bucket rather than merging the two.
  */
-const groupByVerse = (
-  active: ResolvedFinding[],
-  inactive: ResolvedFinding[],
-  showIgnored: boolean
-): VerseGroup[] => {
+const groupByVerse = (findings: ResolvedFinding[]): VerseGroup[] => {
   const order: string[] = [];
-  const byVerse = new Map<string, { active: ResolvedFinding[]; inactive: ResolvedFinding[] }>();
+  const byVerse = new Map<string, ResolvedFinding[]>();
 
-  const bucket = (sntId: string) => {
-    let entry = byVerse.get(sntId);
-    if (!entry) {
-      entry = { active: [], inactive: [] };
-      byVerse.set(sntId, entry);
+  for (const f of findings) {
+    const sntId = f.finding.snt_id;
+    let rows = byVerse.get(sntId);
+    if (!rows) {
+      rows = [];
+      byVerse.set(sntId, rows);
       order.push(sntId);
     }
-    return entry;
-  };
-
-  for (const f of active) bucket(f.finding.snt_id).active.push(f);
-  if (showIgnored) {
-    for (const f of inactive) bucket(f.finding.snt_id).inactive.push(f);
+    rows.push(f);
   }
 
-  return order
-    .map(sntId => {
-      const entry = byVerse.get(sntId) ?? { active: [], inactive: [] };
-      return {
-        sntId,
-        heading: verseHeading(sntId),
-        rows: [...entry.active, ...entry.inactive],
-      };
-    })
-    .filter(group => group.rows.length > 0);
+  return order.map(sntId => ({
+    sntId,
+    heading: verseHeading(sntId),
+    rows: byVerse.get(sntId) ?? [],
+  }));
 };
+
+/** Render a list of verse groups with separators between (one fewer than groups). */
+const renderGroups = (
+  groups: VerseGroup[],
+  globalIgnoresAvailable: boolean,
+  handlers: Pick<
+    ChecksPanelProps,
+    'onIgnoreHere' | 'onIgnoreEverywhere' | 'onUndo' | 'onStopIgnoringEverywhere'
+  >
+) =>
+  groups.map((group, index) => (
+    <div key={group.sntId}>
+      {index > 0 && <Separator className='my-2' />}
+      <h4 className='text-sm font-bold'>{group.heading}</h4>
+      {group.rows.map(row => (
+        <FindingRow
+          key={row.occurrenceKey}
+          globalIgnoresAvailable={globalIgnoresAvailable}
+          resolved={row}
+          onIgnoreEverywhere={handlers.onIgnoreEverywhere}
+          onIgnoreHere={handlers.onIgnoreHere}
+          onStopIgnoringEverywhere={handlers.onStopIgnoringEverywhere}
+          onUndo={handlers.onUndo}
+        />
+      ))}
+    </div>
+  ));
 
 /**
  * The Checks-tab body (§5.1, §6.4–§6.6).
  *
  * A per-check accordion (only "Repeated Words" is wired; the structure
- * anticipates sibling checks) containing verse-grouped findings, a bottom
- * "Show Ignored" toggle, a zero state, and an inline error line. Purely
- * presentational — it receives the cascade-resolved buckets and the suppression
- * callbacks; it owns neither the check query nor the suppression hook (Phase 4
- * composes them), and only the session-local "Show Ignored" toggle is local
- * state (deliberately **not** persisted, per revised #278).
+ * anticipates sibling checks) containing the active verse-grouped findings, a
+ * "Show Ignored" toggle, and — when toggled on — a dedicated **ignored** section
+ * *below* the toggle (revised #278 mock layout: ignored occurrences appear below
+ * the active flags, visually distinct/dimmed). Also a zero state and an inline
+ * error line. Purely presentational — it receives the cascade-resolved buckets
+ * and the suppression callbacks; it owns neither the check query nor the
+ * suppression hook (Phase 4 composes them), and only the session-local "Show
+ * Ignored" toggle is local state (deliberately **not** persisted, per #278).
  */
 export const ChecksPanel: React.FC<ChecksPanelProps> = ({
   resolved,
@@ -111,12 +130,15 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
   const [showIgnored, setShowIgnored] = useState(false);
 
   const { active, inactive } = resolved;
-  const groups = groupByVerse(active, inactive, showIgnored);
+  const handlers = { onIgnoreHere, onIgnoreEverywhere, onUndo, onStopIgnoringEverywhere };
+  const activeGroups = groupByVerse(active);
+  const ignoredGroups = groupByVerse(inactive);
+  const hasIgnored = inactive.length > 0;
+  const showingIgnored = showIgnored && hasIgnored;
   // The zero state must never show on error (§9.2 — an error line over an empty
   // section instead) and only when there is genuinely nothing to display: no
   // active findings AND nothing currently revealed by the "Show Ignored" toggle.
-  const showZeroState = !isError && groups.length === 0;
-  const hasIgnored = inactive.length > 0;
+  const showZeroState = !isError && activeGroups.length === 0 && !showingIgnored;
 
   return (
     <div className='px-1 py-3'>
@@ -134,37 +156,25 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
               {showZeroState ? (
                 <p className='py-4 text-center text-sm font-bold'>No issues found</p>
               ) : (
-                <div>
-                  {groups.map((group, index) => (
-                    <div key={group.sntId}>
-                      {index > 0 && <Separator className='my-2' />}
-                      <h4 className='text-sm font-bold'>{group.heading}</h4>
-                      {group.rows.map(row => (
-                        <FindingRow
-                          key={row.occurrenceKey}
-                          globalIgnoresAvailable={globalIgnoresAvailable}
-                          resolved={row}
-                          onIgnoreEverywhere={onIgnoreEverywhere}
-                          onIgnoreHere={onIgnoreHere}
-                          onStopIgnoringEverywhere={onStopIgnoringEverywhere}
-                          onUndo={onUndo}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
+                <div>{renderGroups(activeGroups, globalIgnoresAvailable, handlers)}</div>
               )}
 
               {hasIgnored && (
                 <div className='mt-3 flex items-center gap-2 border-t pt-3'>
-                  <Checkbox
+                  <Switch
                     checked={showIgnored}
                     id='checks-show-ignored'
-                    onCheckedChange={value => setShowIgnored(value === true)}
+                    onCheckedChange={setShowIgnored}
                   />
                   <Label className='text-sm font-normal' htmlFor='checks-show-ignored'>
                     Show Ignored
                   </Label>
+                </div>
+              )}
+
+              {showingIgnored && (
+                <div className='mt-3' data-testid='ignored-section'>
+                  {renderGroups(ignoredGroups, globalIgnoresAvailable, handlers)}
                 </div>
               )}
             </AccordionContent>

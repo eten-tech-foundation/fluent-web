@@ -131,7 +131,7 @@ export const FindingRow: React.FC<FindingRowProps> = ({
   return (
     <div className='py-2 opacity-50' data-testid='finding-row'>
       <p className='text-sm'>{snippet}</p>
-      <div className='mt-2 flex flex-wrap items-center gap-2'>
+      <div className='mt-2 flex flex-wrap items-center justify-between gap-2'>
         <span className='text-muted-foreground text-xs font-medium' data-testid='inactive-label'>
           {label}
         </span>
