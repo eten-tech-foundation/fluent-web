@@ -49,6 +49,8 @@ This script copies the contents of the corresponding `.env.[environment]` file t
 | `VITE_BETTER_AUTH_URL`                | Base URL of the better-auth server (Fluent API auth)   | Yes      |
 | `VITE_AQUIFER_API_URL`                | Base URL of the Aquifer API                            | Yes      |
 | `VITE_AQUIFER_API_KEY`                | API key for the Aquifer API                            | Yes      |
+| `VITE_YOUVERSION_API_URL`             | Base URL of the YouVersion API                         | Yes      |
+| `VITE_YOUVERSION_API_KEY`             | API key for the YouVersion API                         | Yes      |
 | `VITE_APP_INSIGHTS_CONNECTION_STRING` | Azure Application Insights connection string           | No       |
 
 All variables use the `VITE_` prefix so Vite exposes them to the client at build time. `src/lib/config.ts` validates them at startup and maps them onto the `config` object described below.
