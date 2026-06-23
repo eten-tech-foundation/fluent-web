@@ -172,6 +172,20 @@ describe('useSuppressions — occurrence actions', () => {
     });
   });
 
+  it('BUG #3 regression: ignoreHere DELETES a "surface" override instead of stacking "suppress"', async () => {
+    // Scenario: a legitimate finding was surfaced (undo), then the user clicks
+    // Ignore Here again. The 'surface' override should be removed so the finding
+    // falls back to the lower-layer verdict (legitimate), not overwritten with
+    // 'suppress' which would change the inactiveReason and require two undos.
+    const save = vi.fn();
+    const { result } = setup({ 'JDG 4:3|the the|0': 'surface' }, save);
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    act(() => result.current.ignoreHere('JDG 4:3|the the|0'));
+    // Should delete the 'surface' key, not write 'suppress' over it.
+    expect(save).toHaveBeenCalledWith({});
+  });
+
   it('undoOccurrence DELETES the rule when the finding is hidden by its own occurrence rule', async () => {
     const save = vi.fn();
     const { result } = setup({ 'JDG 4:3|the the|0': 'suppress' }, save);
@@ -255,6 +269,45 @@ describe('useSuppressions — global actions', () => {
     await waitFor(() =>
       expect(put.body).toEqual({
         settings: { checkIgnoredWordPairs: { 'and and': 'suppress' } },
+      })
+    );
+  });
+
+  it('BUG #4 regression: stopIgnoringEverywhere writes "surface" when no global suppress exists (e.g. legitimate-only finding)', async () => {
+    // Scenario: a finding is only suppressed by Greek Room legitimate (no global
+    // rule). The chevron "Stop ignoring everywhere" should write a global 'surface'
+    // to override the legitimate verdict for this pair across all projects.
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+    const put = mockPut();
+    const { result } = setup({}, vi.fn());
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    act(() => result.current.stopIgnoringEverywhere('truly truly'));
+    expect(result.current.globalRules).toEqual({ 'truly truly': 'surface' });
+    await waitFor(() =>
+      expect(put.body).toEqual({
+        settings: { checkIgnoredWordPairs: { 'truly truly': 'surface' } },
+      })
+    );
+  });
+
+  it('ignoreEverywhere DELETES a "surface" global override instead of stacking "suppress" (toggle principle)', async () => {
+    // Scenario: a pair was previously globally surfaced (e.g. to override
+    // legitimate). Clicking "Ignore Everywhere" should just remove the 'surface'
+    // override, letting the lower layer (legitimate) re-suppress naturally.
+    mockGet({
+      settings: { checkIgnoredWordPairs: { 'truly truly': 'surface' } },
+      updatedAt: null,
+    });
+    const put = mockPut();
+    const { result } = setup({}, vi.fn());
+    await waitFor(() => expect(result.current.globalRules).toEqual({ 'truly truly': 'surface' }));
+
+    act(() => result.current.ignoreEverywhere('truly truly'));
+    expect(result.current.globalRules).toEqual({});
+    await waitFor(() =>
+      expect(put.body).toEqual({
+        settings: { checkIgnoredWordPairs: {} },
       })
     );
   });
