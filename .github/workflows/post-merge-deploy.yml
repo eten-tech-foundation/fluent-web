@@ -48,3 +48,5 @@ jobs:
           VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
           VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
           VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
+          VITE_YOUVERSION_API_URL: ${{ secrets.VITE_YOUVERSION_API_URL }}
+          VITE_YOUVERSION_API_KEY: ${{ secrets.VITE_YOUVERSION_API_KEY }}

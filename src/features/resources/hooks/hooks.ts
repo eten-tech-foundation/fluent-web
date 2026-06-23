@@ -2,16 +2,27 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   useAllLanguages,
+  useAquiferBibleText,
+  useAquiferBibles,
   useAvailableResources,
   useGuideContent as useGuideContentQuery,
   useImageUrls,
-  useResourceAssociations,
   useResourceCollection,
   useResourceWithAssociation,
   useResourcesByVerse,
+  type AquiferBible,
+  type AquiferBibleTextResponse,
+  type AquiferChapter,
+  type AquiferVerse,
   type Language,
-  type PassageAssociation,
 } from '@/features/resources/hooks/useAquiferResources';
+import {
+  useYouVersionBibles,
+  useYouVersionChapterMeta,
+  useYouVersionChapterText,
+  type YouVersionBible,
+  type YouVersionChapterResponse,
+} from '@/features/resources/hooks/useYouVersion';
 import { Logger } from '@/lib/services/logger';
 import {
   type GuideContent,
@@ -20,8 +31,6 @@ import {
   type ResourceItem,
   type ResourceName,
 } from '@/lib/types';
-
-export { useResourceAssociations, type PassageAssociation };
 
 export interface LanguageOption {
   id: number;
@@ -32,7 +41,21 @@ export interface LanguageOption {
   scriptDirection: 'LTR' | 'RTL';
 }
 
-// Hook for fetching available languages for a resource collection
+export type BibleSource = 'aquifer' | 'youversion';
+
+export interface UnifiedBible {
+  id: string;
+  name: string;
+  abbreviation: string;
+  source: BibleSource;
+  rawId: number;
+}
+
+export interface BibleVerse {
+  verseNumber: number;
+  text: string;
+}
+
 export const useResourceLanguages = (
   selectedResource: ResourceName,
   sourceLanguageCode: string,
@@ -41,8 +64,10 @@ export const useResourceLanguages = (
   const [availableLanguages, setAvailableLanguages] = useState<LanguageOption[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
 
-  const isUWResources = selectedResource.id !== 'Images';
+  const isBibleResource = selectedResource.id === 'Bibles';
   const isImages = selectedResource.id === 'Images';
+  // UW resources (TN, TQ, TW) use the collection endpoint
+  const isUWResources = !isImages && !isBibleResource;
 
   // Fetch all languages
   const { data: allLanguages = [], isLoading: loadingAllLanguages } = useAllLanguages();
@@ -65,12 +90,6 @@ export const useResourceLanguages = (
   // Process language options whenever data changes
   useEffect(() => {
     if (!allLanguages.length) return;
-
-    if (!isUWResources && !isImages) {
-      setAvailableLanguages([]);
-      setSelectedLanguage('');
-      return;
-    }
 
     let languageOptions: LanguageOption[] = [];
 
@@ -110,9 +129,25 @@ export const useResourceLanguages = (
             : 'LTR',
         };
       });
+    } else if (isBibleResource) {
+      // For Bibles, expose all known languages — both APIs accept any language code.
+      // If a language has no bibles the list will be empty and the panel shows the
+      // "No Bibles are currently available." empty state.
+      languageOptions = allLanguages.map((l: Language) => ({
+        id: l.id,
+        code: l.code,
+        display: l.localizedDisplay,
+        englishDisplay: l.englishDisplay,
+        itemCount: 0,
+        scriptDirection: l.scriptDirection as 'LTR' | 'RTL',
+      }));
+    } else {
+      setAvailableLanguages([]);
+      setSelectedLanguage('');
+      return;
     }
 
-    // Always include source language
+    // Always ensure the source language appears at the top of the list
     const sourceLanguageInfo = allLanguages.find((l: Language) => l.code === sourceLanguageCode);
     const hasSourceLanguage = languageOptions.some(l => l.code === sourceLanguageCode);
 
@@ -132,6 +167,7 @@ export const useResourceLanguages = (
     allLanguages,
     availableResourcesData,
     collectionData,
+    isBibleResource,
     isImages,
     isUWResources,
     sourceLanguageCode,
@@ -155,7 +191,7 @@ export const useResourceLanguages = (
   };
 };
 
-// Hook for fetching resources (content for specific verse)
+// useResourceFetch
 export const useResourceFetch = (
   selectedResource: ResourceName,
   activeVerseId: number,
@@ -163,12 +199,12 @@ export const useResourceFetch = (
   selectedLanguage?: string
 ) => {
   const isImageResource = selectedResource.id === 'Images';
+  const isBibleResource = selectedResource.id === 'Bibles';
   const languageCode = selectedLanguage ?? sourceData.sourceLangCode;
 
-  // Only fetch if language is selected
-  const shouldFetch = !!selectedLanguage;
+  // Bibles use their own fetch path — skip the generic verse-search endpoint
+  const shouldFetch = !!selectedLanguage && !isBibleResource;
 
-  // Fetch resources based on type
   const {
     data: resourcesData,
     isLoading: loadingResources,
@@ -390,10 +426,8 @@ export const useResourceDialog = () => {
           id: currentResourceId,
           name: '',
           localizedName: '',
-          content: [], // Empty array matches GuideContentData type (ContentItem[] | AudioContent)
-          grouping: {
-            collectionCode: '',
-          },
+          content: [],
+          grouping: { collectionCode: '' },
         });
       }
     }
@@ -422,5 +456,151 @@ export const useResourceDialog = () => {
     resourceError,
     handleResourceClick,
     closeDialog,
+  };
+};
+
+// useBibleResources
+export const useBibleResources = (
+  selectedLanguage: string,
+  bookCode: string,
+  chapterNumber: number,
+  enabled: boolean = true
+) => {
+  const [selectedBible, setSelectedBible] = useState<UnifiedBible | null>(null);
+  const shouldFetchLists = enabled && !!selectedLanguage;
+
+  const { data: aquiferBibles = [], isLoading: loadingAquiferBibles } = useAquiferBibles(
+    selectedLanguage,
+    shouldFetchLists
+  );
+
+  const { data: yvBibles = [], isLoading: loadingYVBibles } = useYouVersionBibles(
+    selectedLanguage,
+    shouldFetchLists
+  );
+
+  const loadingBibles = loadingAquiferBibles || loadingYVBibles;
+
+  // Sort each source alphabetically by name, then merge into one list.
+  const unifiedBibles: UnifiedBible[] = useMemo(() => {
+    const fromAquifer: UnifiedBible[] = aquiferBibles.map((b: AquiferBible) => ({
+      id: `aq-${b.id}`,
+      name: b.name,
+      abbreviation: b.abbreviation,
+      source: 'aquifer' as BibleSource,
+      rawId: b.id,
+    }));
+
+    const fromYouVersion: UnifiedBible[] = yvBibles.map((b: YouVersionBible) => ({
+      id: `yv-${b.id}`,
+      name: b.title,
+      abbreviation: b.abbreviation,
+      source: 'youversion' as BibleSource,
+      rawId: b.id,
+    }));
+
+    return [...fromAquifer, ...fromYouVersion].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    );
+  }, [aquiferBibles, yvBibles]);
+
+  // Aquifer content
+
+  const isAquifer = selectedBible?.source === 'aquifer';
+
+  const { data: aquiferBibleText, isLoading: loadingAquiferText } = useAquiferBibleText(
+    isAquifer ? selectedBible.rawId : null,
+    bookCode,
+    chapterNumber,
+    isAquifer
+  );
+
+  // YouVersion content
+  // Step 1: fetch chapter meta to get the ordered verse passage_id list.
+  // Step 2: fan out one passage fetch per verse via useYouVersionChapterText.
+
+  const isYouVersion = selectedBible?.source === 'youversion';
+  const youVersionChapterId = chapterNumber;
+
+  const { data: yvChapterMeta, isLoading: loadingYVMeta } = useYouVersionChapterMeta(
+    isYouVersion ? selectedBible.rawId : null,
+    bookCode,
+    youVersionChapterId,
+    isYouVersion
+  );
+
+  const yvPassageResults = useYouVersionChapterText(
+    isYouVersion ? selectedBible.rawId : null,
+    yvChapterMeta,
+    isYouVersion && !loadingYVMeta
+  );
+
+  const loadingYVText = loadingYVMeta || yvPassageResults.some(r => r.isLoading);
+
+  const loadingBibleContent = loadingAquiferText || loadingYVText;
+
+  // Normalise to a flat verse list
+
+  const bibleVerses: BibleVerse[] = useMemo(() => {
+    if (isAquifer && aquiferBibleText) {
+      const chapter = (aquiferBibleText as AquiferBibleTextResponse).chapters.find(
+        (c: AquiferChapter) => c.number === chapterNumber
+      );
+
+      if (!chapter) return [];
+
+      return chapter.verses.map((v: AquiferVerse) => ({
+        verseNumber: v.number,
+        text: v.text,
+      }));
+    }
+
+    if (isYouVersion && yvChapterMeta && yvPassageResults.length > 0) {
+      const verses: BibleVerse[] = [];
+
+      yvPassageResults.forEach((result, index) => {
+        if (result.data) {
+          const verseMeta = (yvChapterMeta as YouVersionChapterResponse).verses[index];
+          const passageId = verseMeta.passage_id;
+          // passage_id format: "GEN.1.5" — verse number is the third segment
+          const verseNumber = parseInt(passageId.split('.')[2] ?? '0', 10);
+
+          if (verseNumber > 0) {
+            verses.push({ verseNumber, text: result.data.content });
+          }
+        }
+      });
+
+      // Sort ascending by verse number — fan-out results may arrive out of order
+      return verses.sort((a, b) => a.verseNumber - b.verseNumber);
+    }
+
+    return [];
+  }, [isAquifer, isYouVersion, aquiferBibleText, yvChapterMeta, yvPassageResults, chapterNumber]);
+
+  // Handlers
+
+  const handleBibleChange = useCallback(
+    (bibleId: string) => {
+      const found = unifiedBibles.find(b => b.id === bibleId) ?? null;
+      setSelectedBible(found);
+    },
+    [unifiedBibles]
+  );
+
+  // Called when the Bible tab is closed so state is fully reset and the tab
+  // cannot be restored after a workspace reload.
+  const clearSelectedBible = useCallback(() => {
+    setSelectedBible(null);
+  }, []);
+
+  return {
+    unifiedBibles,
+    loadingBibles,
+    loadingBibleContent,
+    selectedBible,
+    handleBibleChange,
+    clearSelectedBible,
+    bibleVerses,
   };
 };
