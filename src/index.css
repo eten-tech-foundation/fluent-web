@@ -163,7 +163,7 @@
   --chart-3: #17c964; /* Green */
   --chart-4: #f5a524; /* Amber */
   --chart-5: #ef4444; /* Red */
-  --workflow-not-started: #e5e7eb;
+  --workflow-not-started: #c4cad6;
   --workflow-drafting: #fde047;
   --workflow-peer-check: #ea580c;
   --workflow-community-review: #9333ea;
@@ -263,7 +263,7 @@
   --chart-5: #f87171; /* Red */
   --scrollbar-track: #202630;
   --scrollbar-thumb: #9da6b5;
-  --workflow-not-started: #e5e7eb;
+  --workflow-not-started: #c4cad6;
   --workflow-drafting: #fde047;
   --workflow-peer-check: #ea580c;
   --workflow-community-review: #9333ea;

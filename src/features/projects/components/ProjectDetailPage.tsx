@@ -100,7 +100,7 @@ const CardProgressBar: React.FC<{
         {legendItems.map(item => (
           <div key={item.key} className='flex items-center gap-2'>
             <div
-              className='border-border h-4 w-4 shrink-0 rounded-none border'
+              className='h-4 w-4 shrink-0 rounded-none'
               style={{ backgroundColor: item.color }}
             />
             <span className='text-muted-foreground text-xs'>{item.displayName}</span>
