@@ -19,7 +19,7 @@ import {
   type TipTapNode,
 } from '@/lib/types';
 
-import { useResourceAssociations } from '../hooks/hooks';
+import { useResourceAssociations } from '../hooks/useAquiferResources';
 
 interface TextResourceAccordionProps {
   resources: ResourceItem[];
