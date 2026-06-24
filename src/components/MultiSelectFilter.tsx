@@ -99,7 +99,7 @@ export function MultiSelectFilter({
         align='start'
         className={cn(
           'text-popover-foreground pointer-events-auto overflow-x-hidden rounded-md border p-1 shadow-md',
-          contentClassName || 'w-72'
+          contentClassName ?? 'w-72'
         )}
         sideOffset={4}
         style={{
