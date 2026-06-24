@@ -102,12 +102,6 @@
   --color-hover: var(--hover);
   --color-card-hover: var(--card-hover);
   --color-popover-hover: var(--popover-hover);
-  --color-workflow-not-started: var(--workflow-not-started);
-  --color-workflow-drafting: var(--workflow-drafting);
-  --color-workflow-peer-check: var(--workflow-peer-check);
-  --color-workflow-community-review: var(--workflow-community-review);
-  --color-workflow-advanced-check: var(--workflow-advanced-check);
-  --color-workflow-complete: var(--workflow-complete);
 }
 
 :root {
