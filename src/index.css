@@ -102,6 +102,12 @@
   --color-hover: var(--hover);
   --color-card-hover: var(--card-hover);
   --color-popover-hover: var(--popover-hover);
+  --color-workflow-not-started: var(--workflow-not-started);
+  --color-workflow-drafting: var(--workflow-drafting);
+  --color-workflow-peer-check: var(--workflow-peer-check);
+  --color-workflow-community-review: var(--workflow-community-review);
+  --color-workflow-advanced-check: var(--workflow-advanced-check);
+  --color-workflow-complete: var(--workflow-complete);
 }
 
 :root {
@@ -163,6 +169,12 @@
   --chart-3: #17c964; /* Green */
   --chart-4: #f5a524; /* Amber */
   --chart-5: #ef4444; /* Red */
+  --workflow-not-started: #e5e7eb;
+  --workflow-drafting: #fde047;
+  --workflow-peer-check: #ea580c;
+  --workflow-community-review: #9333ea;
+  --workflow-advanced-check: #1d9bf0;
+  --workflow-complete: #16a34a;
 
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -257,6 +269,12 @@
   --chart-5: #f87171; /* Red */
   --scrollbar-track: #202630;
   --scrollbar-thumb: #9da6b5;
+  --workflow-not-started: #e5e7eb;
+  --workflow-drafting: #fde047;
+  --workflow-peer-check: #ea580c;
+  --workflow-community-review: #9333ea;
+  --workflow-advanced-check: #1d9bf0;
+  --workflow-complete: #16a34a;
 }
 
 @layer base {
