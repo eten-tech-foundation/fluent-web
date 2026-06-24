@@ -1,14 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
+import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import {
-  UserRole,
-  type CreateProject,
-  type Project,
-  type ProjectItem,
-  type User,
-} from '@/lib/types';
+import { type CreateProject, type Project, type ProjectItem, type User } from '@/lib/types';
 
 const fetchProjects = async (): Promise<Project[]> => {
   const res = await fetch(`${config.api.url}/projects`, {
@@ -71,11 +66,24 @@ export const useUserProjects = (user: User | null | undefined) => {
   });
 };
 
+/**
+ * Determines the correct project-fetching endpoint based on the user's active
+ * org grants.
+ *
+ * - Org Owner / Org Manager / SuperAdmin / Project Manager → GET /projects
+ *   (backend scopes to activeOrgId)
+ * - Translator / Observer → GET /users/{id}/projects
+ *   (only their assigned projects)
+ */
 export const useProjectsByRole = (user: User | null | undefined) => {
-  const isManager = user?.role === UserRole.PROJECT_MANAGER;
-  const managerQuery = useProjects(isManager);
-  const translatorQuery = useUserProjects(!isManager ? user : null);
-  return isManager ? managerQuery : translatorQuery;
+  const activeGrants = getActiveGrants(user?.grants, user?.lastActiveOrgId);
+  // Project Managers also see all org projects (they are assigned to specific ones,
+  // but the backend /projects endpoint is scoped to the active org)
+  const isAnyManager = isManager(activeGrants);
+
+  const managerQuery = useProjects(isAnyManager);
+  const translatorQuery = useUserProjects(!isAnyManager ? user : null);
+  return isAnyManager ? managerQuery : translatorQuery;
 };
 
 export const useCreateProject = () => {

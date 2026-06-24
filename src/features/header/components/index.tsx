@@ -7,6 +7,8 @@ import MainMenu from '@/components/header/MainMenu';
 import UserMenu from '@/components/header/UserMenu';
 import { useAppStore } from '@/store/store';
 
+import { OrgSwitcher } from './OrgSwitcher';
+
 const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,7 +86,8 @@ const Header: React.FC = () => {
             )}
           </div>
 
-          <div className='shrink-0 pr-[18px]'>
+          <div className='flex shrink-0 items-center gap-2 pr-[18px]'>
+            <OrgSwitcher />
             <UserMenu onEditProfile={handleEditProfile} onToggleSettings={onNavigateToSettings}>
               <button
                 aria-label='User menu'

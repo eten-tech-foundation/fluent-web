@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { UserRole } from '@/lib/types';
+import { getActiveGrants, canViewUsers } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -27,12 +27,17 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
   const { userdetail } = useAppStore();
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
   const [open, setOpen] = React.useState(false);
   const location = useLocation();
+
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  // Show users menu item for any role with USER_VIEW permission
+  const showUsers = canViewUsers(activeGrants);
+
   if (!isAuthenticated || !user) {
     return null;
   }
+
   const isDashboardActive = location.pathname === '/';
   const isUsersActive = location.pathname === '/users';
   const isProjectsActive = location.pathname === '/projects';
@@ -64,7 +69,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClosePopover={() => setOpen(false)}
             />
           </>
-          {isManager && (
+          {showUsers && (
             <>
               <MenuItem
                 icon={<Users size={18} />}

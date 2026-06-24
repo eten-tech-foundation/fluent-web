@@ -29,6 +29,7 @@ import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
 import { getStatusDisplay } from '@/lib/formatters';
+import { getActiveGrants, isManager as isManagerCheck } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -248,7 +249,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     projectId ? projectId.toString() : '0'
   );
 
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
+  const activeOrgId = userdetail?.lastActiveOrgId;
+  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+  const isManager = isManagerCheck(activeGrants);
 
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 

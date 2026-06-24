@@ -22,12 +22,18 @@ export function EditProfile({ isOpen, onClose }: EditProfileProps) {
       const res = await updateUserMutation.mutateAsync({
         userData: userData as User,
       });
+      const grants = res.orgGrants ?? res.grants ?? [];
+      const activeOrgId = userdetail?.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
+      const activeGrant = grants.find(g => g.orgId === activeOrgId);
+
       setUserDetail({
         id: res.id,
         email: res.email,
         username: res.username,
-        role: res.role,
-        organization: res.organization,
+        role: activeGrant?.roleId ?? res.role,
+        organization: activeOrgId ?? res.organization,
+        lastActiveOrgId: res.lastActiveOrgId ?? userdetail?.lastActiveOrgId,
+        grants: grants,
         firstName: res.firstName,
         lastName: res.lastName,
         status: res.status,

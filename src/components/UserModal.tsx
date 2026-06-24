@@ -77,7 +77,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           firstName: user.firstName ?? '',
           lastName: user.lastName ?? '',
           email: user.email,
-          role: user.role,
+          role: user.role ?? 0,
           status: user.status ?? '',
         });
       } else {
