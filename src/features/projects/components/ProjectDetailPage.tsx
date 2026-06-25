@@ -328,6 +328,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         bibleId: assignment.bibleId,
         bibleName: projectSource,
         targetLanguage: projectTargetLanguageName,
+        // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
+        // the progress endpoint now surfaces this so the PM path no longer
+        // sends "<unknown>".
+        targetLanguageCode: assignment.targetLanguageCode,
         bookId: assignment.bookId,
         book: assignment.bookNameEng,
         chapterStatus: assignment.status,
