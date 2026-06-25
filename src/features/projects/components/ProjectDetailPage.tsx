@@ -28,7 +28,7 @@ import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBoo
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getStatusDisplay } from '@/lib/formatters';
+import { getConnectivityProfileDisplay, getStatusDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -50,6 +50,7 @@ interface ProjectDetailPageProps {
   projectSourceLanguageName: string;
   projectTargetLanguageName: string;
   projectSource: string;
+  projectConnectivityProfile?: string | null;
   projectChapterStatusCounts: ChapterStatusCounts;
   projectWorkflowConfig: WorkflowStep[];
   isAddUserOpen?: boolean;
@@ -216,6 +217,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   projectSourceLanguageName,
   projectTargetLanguageName,
   projectSource,
+  projectConnectivityProfile,
   projectChapterStatusCounts,
   projectWorkflowConfig,
   isAddUserOpen = false,
@@ -476,6 +478,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <label className='text-base font-bold'>Source Bible</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {projectSource}
+                </p>
+
+                <label className='text-base font-bold'>Connectivity Profile</label>
+                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
+                  {getConnectivityProfileDisplay(projectConnectivityProfile)}
                 </p>
               </div>
               <CardProgressBar

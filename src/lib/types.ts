@@ -286,3 +286,11 @@ export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
 export type SortOption = 'recent' | 'title' | 'targetLanguage';
 
 export type StatusFilter = 'all' | 'potentially_stalled' | 'not_assigned';
+
+export type ConnectivityProfile = 'usually_connected' | 'sometimes_connected' | 'rarely_connected';
+
+export const ConnectivityProfileDisplay: Record<ConnectivityProfile, string> = {
+  usually_connected: 'Usually Connected',
+  sometimes_connected: 'Sometimes Connected',
+  rarely_connected: 'Rarely Connected',
+};
