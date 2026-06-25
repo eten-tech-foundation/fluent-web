@@ -275,6 +275,32 @@ describe('useSuppressions — global actions', () => {
     await waitFor(() => expect(result.current.globalRules).toEqual({}));
   });
 
+  it('CR-7 regression: a failed global PUT restores the optimistically-purged occurrence rules', async () => {
+    // The optimistic global write purges the current-chapter occurrence rules for
+    // the pair (a *persisted* write through saveOccurrenceRules). If the PUT then
+    // fails, the global flag rolls back — and so must the occurrence map, or the
+    // user's per-occurrence ignores for that pair would be permanently lost.
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+    mockPut(500);
+    const save = vi.fn();
+    const original: OccurrenceRules = {
+      'JDG 4:3|the the|0': 'suppress',
+      'JDG 4:3|and and|0': 'suppress',
+    };
+    const { result } = setup(original, save);
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    act(() => result.current.ignoreEverywhere('the the'));
+
+    // First call is the optimistic purge (the "the the" occurrence rule dropped).
+    expect(save).toHaveBeenNthCalledWith(1, { 'JDG 4:3|and and|0': 'suppress' });
+    // After the PUT 500, the catch restores the full pre-purge occurrence map.
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save).toHaveBeenNthCalledWith(2, original);
+    // Global map also rolled back to its prior (empty) state.
+    expect(result.current.globalRules).toEqual({});
+  });
+
   it('stopIgnoringEverywhere deletes the global entry and PUTs the reduced blob', async () => {
     mockGet({
       settings: { checkIgnoredWordPairs: { 'the the': 'suppress', 'and and': 'suppress' } },
