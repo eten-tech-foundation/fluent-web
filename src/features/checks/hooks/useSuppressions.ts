@@ -142,11 +142,35 @@ export const deleteRule = <T extends Record<string, RuleVerdict>>(rules: T, key:
 };
 
 /**
+ * Extract the `repeated_word` segment from an occurrence key
+ * (`"{snt_id}|{repeated_word}|{ordinal}"`).
+ *
+ * We deliberately do **not** `split('|')`: the `repeated_word` is the *middle*
+ * field, and while `snt_id` (`"{bookCode} {chapter}:{verse}"`) and `ordinal` (a
+ * number) provably contain no `|`, the pair itself is verse-derived text and is
+ * not guaranteed to be pipe-free. A naive `split('|')[1]` would mis-slice such a
+ * pair (e.g. a key `"JDG 4:3|a | a|0"` would yield `"a "` instead of `"a | a"`)
+ * and silently fail to purge that rule. Because the two *outer* fields are
+ * pipe-free, the pair is exactly the substring between the first and last `|`,
+ * which we recover unambiguously regardless of any `|` inside it. Returns
+ * `undefined` for a malformed key (fewer than two delimiters).
+ */
+const extractPairFromKey = (key: string): string | undefined => {
+  const first = key.indexOf('|');
+  const last = key.lastIndexOf('|');
+  if (first === -1 || last === first) {
+    return undefined;
+  }
+  return key.slice(first + 1, last);
+};
+
+/**
  * Remove every occurrence rule that targets `repeatedWord` (NFC-normalized) in
  * the current chapter's occurrence map — used by "purge-local on global write"
  * (§6.5). The occurrence key is `"{snt_id}|{repeated_word}|{ordinal}"`, so we
- * match the normalized middle segment. Returns a new map (or the same instance
- * if nothing matched, to avoid needless writes).
+ * match the normalized middle segment (see {@link extractPairFromKey} for why we
+ * slice between the outer delimiters rather than `split('|')`). Returns a new map
+ * (or the same instance if nothing matched, to avoid needless writes).
  */
 export const purgeLocalForPair = (
   occurrenceRules: OccurrenceRules,
@@ -156,9 +180,7 @@ export const purgeLocalForPair = (
   let changed = false;
   const next: OccurrenceRules = {};
   for (const [key, verdict] of Object.entries(occurrenceRules)) {
-    const segments = key.split('|');
-    // key = snt_id | repeated_word | ordinal  (snt_id has no '|')
-    const pair = segments.length >= 3 ? segments[1] : undefined;
+    const pair = extractPairFromKey(key);
     if (pair !== undefined && normalizePair(pair) === target) {
       changed = true;
       continue; // drop it
