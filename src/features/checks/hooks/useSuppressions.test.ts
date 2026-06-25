@@ -311,4 +311,95 @@ describe('useSuppressions — global actions', () => {
       })
     );
   });
+
+  it('stopIgnoringEverywhere rolls back on PUT failure', async () => {
+    mockGet({
+      settings: { checkIgnoredWordPairs: { 'the the': 'suppress' } },
+      updatedAt: null,
+    });
+    mockPut(500);
+    const { result } = setup({}, vi.fn());
+    await waitFor(() =>
+      expect(result.current.globalRules).toEqual({ 'the the': 'suppress' })
+    );
+
+    act(() => result.current.stopIgnoringEverywhere('the the'));
+    // Optimistically removed, then rolls back on 500.
+    await waitFor(() => expect(result.current.globalRules).toEqual({ 'the the': 'suppress' }));
+  });
+
+  it('purge-local runs for NFC-composed vs decomposed pair in occurrence key', async () => {
+    // The occurrence key stores the NFC-normalized pair; global write purges by
+    // normalizing the repeated_word. Composed "caf\u00e9" must purge a key that
+    // stores the decomposed form "cafe\u0301" (or vice versa).
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+    mockPut();
+    const save = vi.fn();
+    const decomposedKey = 'GEN 1:1|cafe\u0301 cafe\u0301|0';
+    const { result } = setup({ [decomposedKey]: 'suppress' }, save);
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    // ignoreEverywhere with the composed form — should purge the decomposed occurrence rule.
+    act(() => result.current.ignoreEverywhere('caf\u00e9 caf\u00e9'));
+    // The save callback should have been called with an empty map (decomposed key purged).
+    expect(save).toHaveBeenCalledWith({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Occurrence rules propagation
+// ---------------------------------------------------------------------------
+
+describe('useSuppressions — occurrence rules propagation', () => {
+  it('passes through the injected occurrenceRules unchanged in the returned value', async () => {
+    const rules: OccurrenceRules = {
+      'JDG 4:3|the the|0': 'suppress',
+      'JDG 4:5|and and|0': 'surface',
+    };
+    const { result } = setup(rules, vi.fn());
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+    expect(result.current.occurrenceRules).toEqual(rules);
+  });
+
+  it('updates the occurrenceRules reference when the prop changes (via rerender)', async () => {
+    const save = vi.fn();
+    const { result, rerender } = setup({}, save);
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    const newRules: OccurrenceRules = { 'JDG 4:1|the the|0': 'suppress' };
+    rerender({ occurrenceRules: newRules, saveOccurrenceRules: save });
+    expect(result.current.occurrenceRules).toEqual(newRules);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// settingsProbeResolved timing
+// ---------------------------------------------------------------------------
+
+describe('useSuppressions — settingsProbeResolved gates the check query', () => {
+  it('starts false before the probe returns', () => {
+    // The beforeEach sets up a default GET handler; the probe resolves
+    // asynchronously, so at the very start it must be false.
+    const { result } = setup();
+    expect(result.current.settingsProbeResolved).toBe(false);
+  });
+
+  it('becomes true after a 200 response', async () => {
+    const { result } = setup();
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+  });
+
+  it('becomes true even after a 404 (unavailable but resolved)', async () => {
+    mockGet({ message: 'Not Found' }, 404);
+    const { result } = setup();
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+    expect(result.current.globalIgnoresAvailable).toBe(false);
+  });
+
+  it('becomes true even after a non-404 server error (conservatively unavailable)', async () => {
+    mockGet({}, 503);
+    const { result } = setup();
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+    expect(result.current.globalIgnoresAvailable).toBe(false);
+  });
 });
