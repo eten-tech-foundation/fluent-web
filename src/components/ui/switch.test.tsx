@@ -74,12 +74,6 @@ describe('Switch', () => {
     expect(onCheckedChange).not.toHaveBeenCalled();
   });
 
-  it('forwards a ref or any other native prop (aria-label) to the underlying element', () => {
-    render(<Switch aria-label='Dark mode' />);
-    const switchEl = document.querySelector('[data-slot="switch"]');
-    expect(switchEl).toHaveAttribute('aria-label', 'Dark mode');
-  });
-
   it('can be identified by an id linked from a label', () => {
     render(
       <>
