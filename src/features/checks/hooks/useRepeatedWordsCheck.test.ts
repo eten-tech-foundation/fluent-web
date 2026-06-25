@@ -159,13 +159,16 @@ describe('buildRepeatedWordsRequest', () => {
     expect(request.lang_code).not.toBe('English');
   });
 
-  it('falls back to "<unknown>" when targetLanguageCode is missing (no crash)', () => {
+  it('falls back to "<unknown>" when targetLanguageCode is empty (no crash)', () => {
+    // `targetLanguageCode` is a required `string` (BUG #3 made it non-optional so
+    // the compiler catches any ProjectItem constructor that omits it). The runtime
+    // fallback still degrades gracefully: an empty/whitespace code becomes
+    // "<unknown>" on the wire rather than producing undefined/empty.
     const request = buildRepeatedWordsRequest(
-      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: undefined }),
+      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: '' }),
       [{ verseNumber: 3, content: 'truly truly' }]
     );
-    // A missing code must NOT produce undefined/empty on the wire; greek-room
-    // just won't match any legitimate whitelist for an unknown code.
+    // greek-room just won't match any legitimate whitelist for an unknown code.
     expect(request.lang_code).toBe('<unknown>');
     expect(request.lang_name).toBe('English');
   });
