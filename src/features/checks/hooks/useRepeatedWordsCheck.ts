@@ -59,6 +59,12 @@ export const buildRepeatedWordsRequest = (
   // an empty/undefined value. greek-room simply won't match any legitimate
   // whitelist for an unknown code (duplicates are still flagged) — a safe
   // degradation that keeps the check running instead of crashing.
+  // The `?.` here is intentionally defensive against a RUNTIME value the TYPE
+  // says can't happen: `targetLanguageCode` is typed non-optional, but the API
+  // can still omit it. We keep the type non-optional (so genuinely missing
+  // usages elsewhere stay caught) and guard only at this trust boundary, hence
+  // the targeted disable of the "unnecessary optional chain" rule.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive guard against an undefined runtime value the type does not model
   const langCode = projectItem.targetLanguageCode?.trim() ? projectItem.targetLanguageCode : null;
 
   return {
@@ -122,7 +128,13 @@ export interface UseRepeatedWordsCheckParams {
  *    `refetchInterval` can be added later without reshaping callers (D3/D9).
  *  - `failed` / `cancelled` ⇒ fluent-api surfaces these as HTTP 502 errors, so
  *    they arrive here as `query.isError` (handled by the panel's inline error,
- *    W9). TanStack retains the last successful `data` on refetch failure.
+ *    W9).
+ *
+ * Note on stale data: TanStack only retains the previous `data` on a refetch of
+ * the *same* query key. Because the key includes `saveCounter`, each auto-save
+ * is effectively a NEW key — so a failed re-check after a save leaves `data`
+ * `undefined`, not the prior findings. The panel handles this purely via
+ * `isError` (it does not rely on stale `data` surviving the error).
  *
  * Follows the fetch pattern in `features/bible/hooks/useBibleTarget.ts`.
  */
@@ -146,8 +158,11 @@ export const useRepeatedWordsCheck = ({
       }
     },
     enabled: enabled && hasContent,
-    // Keep the last successful findings visible on refetch failure (W9); the
-    // panel renders an inline error line above them.
+    // No automatic retry: a failed check surfaces immediately as `isError` so
+    // the panel can render its inline error line (W9). (We do NOT rely on
+    // TanStack keeping stale `data` here — the `saveCounter` query key changes
+    // on each save, so the prior findings are not retained across a failed
+    // re-check; see the stale-data note in the docblock above.)
     retry: false,
   });
 };

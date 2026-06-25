@@ -15,8 +15,7 @@ import {
 } from './useResourceStatePersistence';
 
 const API_BASE = config.api.url;
-const editorStateUrl = (id: number) =>
-  `${API_BASE}/chapter-assignments/${id}/editor-state`;
+const editorStateUrl = (id: number) => `${API_BASE}/chapter-assignments/${id}/editor-state`;
 
 const makeWrapper = () => {
   const queryClient = createTestQueryClient();
@@ -43,9 +42,7 @@ const makeState = (over: Partial<FetchResourceState> = {}): FetchResourceState =
 describe('useResourceState — new field: activeLeftTab', () => {
   it('returns activeLeftTab "checks" when the server includes it', async () => {
     const state = makeState({ activeLeftTab: 'checks' });
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -57,9 +54,7 @@ describe('useResourceState — new field: activeLeftTab', () => {
 
   it('returns activeLeftTab "resources" when the server includes it', async () => {
     const state = makeState({ activeLeftTab: 'resources' });
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -72,9 +67,7 @@ describe('useResourceState — new field: activeLeftTab', () => {
   it('returns undefined activeLeftTab when the server omits it (old row, backward-compatible)', async () => {
     // Old rows do not include activeLeftTab; the key must simply be absent.
     const state = makeState(); // no activeLeftTab
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -92,9 +85,7 @@ describe('useResourceState — new field: checkOccurrenceRules', () => {
       'JDG 4:5|and and|0': 'surface' as const,
     };
     const state = makeState({ checkOccurrenceRules: rules });
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -106,9 +97,7 @@ describe('useResourceState — new field: checkOccurrenceRules', () => {
 
   it('returns empty checkOccurrenceRules when the server sends an empty map', async () => {
     const state = makeState({ checkOccurrenceRules: {} });
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -120,9 +109,7 @@ describe('useResourceState — new field: checkOccurrenceRules', () => {
 
   it('returns undefined checkOccurrenceRules when the server omits it (old row, backward-compatible)', async () => {
     const state = makeState(); // no checkOccurrenceRules
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(state))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -135,9 +122,7 @@ describe('useResourceState — new field: checkOccurrenceRules', () => {
 
 describe('useResourceState — edge cases', () => {
   it('returns null when the chapter has no saved state (404)', async () => {
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json(null, { status: 404 }))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(null, { status: 404 })));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -148,9 +133,7 @@ describe('useResourceState — edge cases', () => {
   });
 
   it('errors when the server returns a non-404 error', async () => {
-    server.use(
-      http.get(editorStateUrl(99), () => HttpResponse.json({}, { status: 500 }))
-    );
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json({}, { status: 500 })));
 
     const { result } = renderHook(() => useResourceState(99), {
       wrapper: makeWrapper(),
@@ -324,14 +307,16 @@ describe('useSaveResourceState — new fields in payload', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect((captured.body as { resources: FetchResourceState }).resources.activeLeftTab).toBeUndefined();
-    expect((captured.body as { resources: FetchResourceState }).resources.checkOccurrenceRules).toBeUndefined();
+    expect(
+      (captured.body as { resources: FetchResourceState }).resources.activeLeftTab
+    ).toBeUndefined();
+    expect(
+      (captured.body as { resources: FetchResourceState }).resources.checkOccurrenceRules
+    ).toBeUndefined();
   });
 
   it('errors and does not mutate cache on server failure', async () => {
-    server.use(
-      http.put(editorStateUrl(10), () => HttpResponse.json({}, { status: 500 }))
-    );
+    server.use(http.put(editorStateUrl(10), () => HttpResponse.json({}, { status: 500 })));
 
     // Silence the expected Logger.logException call by spying without throwing
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -384,7 +369,9 @@ describe('useSaveResourceState — new fields in payload', () => {
     await act(async () => {
       saveHook.result.current.mutate({
         chapterAssignmentId: 10,
-        resourceState: { resources: { ...savedState, bookCode: 'JDG', chapterNumber: 4, verseNumber: 3 } },
+        resourceState: {
+          resources: { ...savedState, bookCode: 'JDG', chapterNumber: 4, verseNumber: 3 },
+        },
       });
     });
 

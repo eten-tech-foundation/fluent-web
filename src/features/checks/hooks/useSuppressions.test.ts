@@ -319,9 +319,7 @@ describe('useSuppressions — global actions', () => {
     });
     mockPut(500);
     const { result } = setup({}, vi.fn());
-    await waitFor(() =>
-      expect(result.current.globalRules).toEqual({ 'the the': 'suppress' })
-    );
+    await waitFor(() => expect(result.current.globalRules).toEqual({ 'the the': 'suppress' }));
 
     act(() => result.current.stopIgnoringEverywhere('the the'));
     // Optimistically removed, then rolls back on 500.

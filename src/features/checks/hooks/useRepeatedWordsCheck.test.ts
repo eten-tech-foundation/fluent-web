@@ -275,31 +275,6 @@ describe('useRepeatedWordsCheck — error handling', () => {
     );
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
-
-  it('retains prior successful data on refetch failure (TanStack placeholderData behaviour)', async () => {
-    // First call succeeds with 2 findings.
-    const calls = mockPost(makeResponse(2));
-    const { result, rerender } = renderHook(
-      (saveCounter: number) =>
-        useRepeatedWordsCheck({
-          projectItem: makeProjectItem(),
-          verses: [{ verseNumber: 3, content: 'the the' }],
-          saveCounter,
-          enabled: true,
-        }),
-      { initialProps: 0, wrapper: makeWrapper() }
-    );
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.result?.findings).toHaveLength(2);
-    expect(calls.count).toBe(1);
-
-    // Second call returns a 502 — the prior data should still be on `data`.
-    mockPost(makeResponse(0), 502);
-    rerender(1);
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    // TanStack keeps stale data after a refetch failure.
-    expect(result.current.data?.result?.findings).toHaveLength(2);
-  });
 });
 
 describe('buildRepeatedWordsRequest — additional edge cases', () => {
@@ -323,18 +298,16 @@ describe('buildRepeatedWordsRequest — additional edge cases', () => {
   });
 
   it('builds snt_id from chapterNumber on projectItem (not a hardcoded chapter)', () => {
-    const request = buildRepeatedWordsRequest(
-      makeProjectItem({ chapterNumber: 12 }),
-      [{ verseNumber: 5, content: 'text' }]
-    );
+    const request = buildRepeatedWordsRequest(makeProjectItem({ chapterNumber: 12 }), [
+      { verseNumber: 5, content: 'text' },
+    ]);
     expect(request.verses[0].snt_id).toBe('JDG 12:5');
   });
 
   it('uses whitespace-trimmed targetLanguageCode — empty after trim falls back to <unknown>', () => {
-    const request = buildRepeatedWordsRequest(
-      makeProjectItem({ targetLanguageCode: '   ' }),
-      [{ verseNumber: 1, content: 'text' }]
-    );
+    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLanguageCode: '   ' }), [
+      { verseNumber: 1, content: 'text' },
+    ]);
     expect(request.lang_code).toBe('<unknown>');
   });
 });

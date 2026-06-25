@@ -291,10 +291,7 @@ describe('resolveFindings — multi-verse, multi-pair scenarios', () => {
 
 describe('resolveFindings — occurrence key uniqueness', () => {
   it('builds unique occurrence keys for same pair across different verses', () => {
-    const findings = [
-      makeFinding({ snt_id: 'JDG 4:3' }),
-      makeFinding({ snt_id: 'JDG 4:4' }),
-    ];
+    const findings = [makeFinding({ snt_id: 'JDG 4:3' }), makeFinding({ snt_id: 'JDG 4:4' })];
     const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
     const keys = result.active.map(r => r.occurrenceKey);
     expect(new Set(keys).size).toBe(2); // all unique
