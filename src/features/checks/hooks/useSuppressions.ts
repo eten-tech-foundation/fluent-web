@@ -340,6 +340,10 @@ export const useSuppressions = ({
     (repeatedWord: string, mutate: (rules: GlobalRules) => GlobalRules) => {
       const pair = normalizePair(repeatedWord);
       const previous = globalRules;
+      // Snapshot the occurrence map *before* the optimistic purge so we can
+      // fully roll back if the PUT fails (the purge below is a persisted write
+      // through the single editor-state writer, not just local state).
+      const previousOccurrence = occurrenceRef.current;
       const next = mutate(previous);
       // Optimistic: the finding greys/un-greys immediately.
       setGlobalRules(next);
@@ -354,10 +358,16 @@ export const useSuppressions = ({
           // Rollback: the flag returns to its prior state; re-click allowed.
           // (No queued retry for v1 — the visible flip is the failure notice.)
           setGlobalRules(previous);
+          // Also restore the occurrence rules the optimistic purge removed —
+          // otherwise the user's per-occurrence ignores for this pair would be
+          // permanently lost while the global write rolled back. Re-saving an
+          // identical map (when nothing was purged) is harmless: the editor-state
+          // save is debounced/idempotent.
+          saveOccurrenceRules(previousOccurrence);
         }
       });
     },
-    [globalRules, purgeCurrentChapter]
+    [globalRules, purgeCurrentChapter, saveOccurrenceRules]
   );
 
   const ignoreEverywhere = useCallback(
