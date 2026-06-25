@@ -310,4 +310,15 @@ describe('buildRepeatedWordsRequest — additional edge cases', () => {
     ]);
     expect(request.lang_code).toBe('<unknown>');
   });
+
+  it('sends the TRIMMED code, not the padded value (a padded " spa " becomes "spa")', () => {
+    // greek-room keys its legitimate-duplicate whitelist on the EXACT code, so a
+    // padded code (" spa ") would match nothing and silently disable suppression
+    // (the BUG #2 failure mode). The guard must forward the trimmed value, not
+    // just use the trim to test truthiness. See phase-04 manual smoke (BUG #2).
+    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLanguageCode: ' spa ' }), [
+      { verseNumber: 1, content: 'text' },
+    ]);
+    expect(request.lang_code).toBe('spa');
+  });
 });

@@ -64,8 +64,14 @@ export const buildRepeatedWordsRequest = (
   // can still omit it. We keep the type non-optional (so genuinely missing
   // usages elsewhere stay caught) and guard only at this trust boundary, hence
   // the targeted disable of the "unnecessary optional chain" rule.
+  // Trim ONCE and forward the trimmed value: greek-room keys its
+  // legitimate-duplicate whitelist on the exact code, so a padded code
+  // (" spa ") must be normalized to "spa" before it goes on the wire — testing
+  // truthiness on a trimmed copy while forwarding the untrimmed original would
+  // silently disable suppression (the BUG #2 failure mode).
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive guard against an undefined runtime value the type does not model
-  const langCode = projectItem.targetLanguageCode?.trim() ? projectItem.targetLanguageCode : null;
+  const trimmedCode = projectItem.targetLanguageCode?.trim();
+  const langCode = trimmedCode ? trimmedCode : null;
 
   return {
     lang_code: langCode ?? '<unknown>',
