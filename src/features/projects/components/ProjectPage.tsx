@@ -38,11 +38,11 @@ const ProjectProgressBar: React.FC<{ project: Project }> = ({ project }) => {
   const segments = calculateProgressSegments(project.chapterStatusCounts);
 
   if (segments.length === 0) {
-    return <div className='border-border bg-primary/10 h-6 w-full border' />;
+    return <div className='bg-primary/10 h-[7px] w-full rounded-full' />;
   }
 
   return (
-    <div className='border-border flex h-6 w-full overflow-hidden border'>
+    <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
       {segments.map((segment, index) => (
         <div
           key={`${segment.status}-${index}`}

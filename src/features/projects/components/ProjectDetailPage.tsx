@@ -63,13 +63,13 @@ const CardProgressBar: React.FC<{
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
 }> = ({ chapterStatusCounts, workflowConfig }) => {
-  const { colors, calculateProgressSegments } = useProgressBar(workflowConfig);
+  const { legendItems, calculateProgressSegments } = useProgressBar(workflowConfig);
   const segments = calculateProgressSegments(chapterStatusCounts);
 
   return (
     <div className='space-y-2'>
       <TooltipProvider delayDuration={100}>
-        <div className='border-border flex h-6 w-full overflow-hidden border'>
+        <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
           {segments.length === 0 ? (
             <div className='bg-primary/10 h-full w-full' />
           ) : (
@@ -96,19 +96,16 @@ const CardProgressBar: React.FC<{
         </div>
       </TooltipProvider>
 
-      <div className='flex flex-wrap gap-x-2 gap-y-1.5 pt-1'>
-        {[...workflowConfig].reverse().map(step => {
-          const colorInfo = colors[step.id];
-          return (
-            <div key={step.id} className='flex items-center gap-2'>
-              <div
-                className='h-4 w-4 shrink-0 rounded-none'
-                style={{ backgroundColor: colorInfo.rgba }}
-              />
-              <span className='text-muted-foreground text-xs'>{step.label}</span>
-            </div>
-          );
-        })}
+      <div className='grid grid-cols-2 gap-x-8 gap-y-2 pt-1'>
+        {legendItems.map(item => (
+          <div key={item.key} className='flex items-center gap-2'>
+            <div
+              className='h-4 w-4 shrink-0 rounded-none'
+              style={{ backgroundColor: item.color }}
+            />
+            <span className='text-muted-foreground text-xs'>{item.displayName}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
