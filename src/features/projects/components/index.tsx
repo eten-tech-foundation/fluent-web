@@ -5,6 +5,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
 import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
+import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { type CreateProject } from '@/lib/types';
 import { useAppStore } from '@/store/store';
