@@ -37,6 +37,30 @@ describe('LeftPanel', () => {
     );
   });
 
+  it('wires both tabs to the shared tabpanel via aria-controls', () => {
+    render(<LeftPanel {...baseProps} activeTab='resources' />);
+    const panel = screen.getByRole('tabpanel');
+    const panelId = panel.getAttribute('id');
+    expect(panelId).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Resources/ })).toHaveAttribute(
+      'aria-controls',
+      panelId
+    );
+    expect(screen.getByRole('tab', { name: /Checks/ })).toHaveAttribute('aria-controls', panelId);
+  });
+
+  it('labels the tabpanel by the active tab (aria-labelledby tracks the active tab)', () => {
+    const { rerender } = render(<LeftPanel {...baseProps} activeTab='resources' />);
+    const resourcesTabId = screen.getByRole('tab', { name: /Resources/ }).getAttribute('id');
+    expect(resourcesTabId).toBeTruthy();
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', resourcesTabId);
+
+    rerender(<LeftPanel {...baseProps} activeTab='checks' />);
+    const checksTabId = screen.getByRole('tab', { name: /Checks/ }).getAttribute('id');
+    expect(checksTabId).toBeTruthy();
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', checksTabId);
+  });
+
   it('calls onTabChange when a tab is clicked', () => {
     const onTabChange = vi.fn();
     render(<LeftPanel {...baseProps} activeTab='resources' onTabChange={onTabChange} />);

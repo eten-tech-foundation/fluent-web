@@ -26,15 +26,29 @@ export interface LeftPanelProps {
   checksContent: ReactNode;
 }
 
+/**
+ * Stable element ids wiring the tabs to the shared panel (W11, §6.6). The two
+ * tabs share a single body container; `aria-labelledby` on the panel points at
+ * whichever tab is currently active, so screen readers announce the panel's
+ * controlling tab. (CR-5: complete the ARIA tab/tabpanel relationship.)
+ */
+const TAB_IDS: Record<LeftTab, string> = {
+  resources: 'left-panel-tab-resources',
+  checks: 'left-panel-tab-checks',
+};
+const PANEL_ID = 'left-panel-tabpanel';
+
 interface TabButtonProps {
+  id: string;
   label: string;
   isActive: boolean;
   onClick: () => void;
   showDot?: boolean;
 }
 
-const TabButton: React.FC<TabButtonProps> = ({ label, isActive, onClick, showDot = false }) => (
+const TabButton: React.FC<TabButtonProps> = ({ id, label, isActive, onClick, showDot = false }) => (
   <button
+    aria-controls={PANEL_ID}
     aria-selected={isActive}
     className={cn(
       'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-base font-semibold transition-colors',
@@ -42,6 +56,7 @@ const TabButton: React.FC<TabButtonProps> = ({ label, isActive, onClick, showDot
         ? 'border-blue-600 text-blue-600'
         : 'text-muted-foreground hover:text-foreground border-transparent'
     )}
+    id={id}
     role='tab'
     type='button'
     onClick={onClick}
@@ -85,6 +100,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     <div className='flex h-full flex-col'>
       <div aria-label='Left panel' className='flex items-center gap-6 px-1 pt-4' role='tablist'>
         <TabButton
+          id={TAB_IDS.resources}
           isActive={activeTab === 'resources'}
           label='Resources'
           onClick={() => onTabChange('resources')}
@@ -93,6 +109,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             and is visible whatever tab is active (mock shows it while the
             Resources tab is active too) — §5.1, W11. */}
         <TabButton
+          id={TAB_IDS.checks}
           isActive={activeTab === 'checks'}
           label='Checks'
           showDot={hasActiveFindings}
@@ -100,7 +117,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         />
       </div>
 
-      <div className='min-h-0 flex-1'>
+      {/* Single shared panel: `aria-labelledby` tracks the active tab so the
+          tab/tabpanel relationship is complete for assistive tech (CR-5). */}
+      <div
+        aria-labelledby={TAB_IDS[activeTab]}
+        className='min-h-0 flex-1'
+        id={PANEL_ID}
+        role='tabpanel'
+      >
         {activeTab === 'resources' ? resourcesContent : checksContent}
       </div>
     </div>
