@@ -1,9 +1,15 @@
 import { type ReactNode } from 'react';
 
+import { type LeftTab } from '@/features/bible/hooks/useResourceStatePersistence';
 import { cn } from '@/lib/utils';
 
-/** Which tab of the drafting-page left panel is showing (persisted, W11). */
-export type LeftTab = 'resources' | 'checks';
+/**
+ * Which tab of the drafting-page left panel is showing (persisted, W11).
+ * Single source of truth lives in `useResourceStatePersistence`, where it is
+ * the editor-state `activeLeftTab` field; re-exported here so consumers of the
+ * panel's type surface can keep importing it from `LeftPanel`.
+ */
+export type { LeftTab };
 
 export interface LeftPanelProps {
   /** Controlled active tab; lifted to `DraftingPage` so it can be persisted
