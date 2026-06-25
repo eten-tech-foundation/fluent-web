@@ -229,4 +229,88 @@ describe('resolveFindings — output shape', () => {
     expect(result.active).toEqual([]);
     expect(result.inactive).toEqual([]);
   });
+
+  it('puts inactiveReason on inactive findings', () => {
+    const result = resolveFindings([makeFinding({ legitimate: true })], NO_OCCURRENCE, NO_GLOBAL);
+    expect(result.inactive[0]).toHaveProperty('inactiveReason', 'legitimate');
+  });
+
+  it('includes occurrenceKey on inactive findings', () => {
+    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const result = resolveFindings([makeFinding()], occ, NO_GLOBAL);
+    expect(result.inactive[0].occurrenceKey).toBe('JDG 4:3|the the|0');
+  });
+});
+
+describe('resolveFindings — multi-verse, multi-pair scenarios', () => {
+  it('handles findings from multiple verses independently', () => {
+    const occ: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const findings = [
+      makeFinding({ snt_id: 'JDG 4:3', repeated_word: 'the the' }),
+      makeFinding({ snt_id: 'JDG 4:4', repeated_word: 'the the' }),
+    ];
+    const result = resolveFindings(findings, occ, NO_GLOBAL);
+    // The JDG 4:3 occurrence is suppressed; JDG 4:4 one is not (it's a different verse).
+    expect(result.active).toHaveLength(1);
+    expect(result.active[0].finding.snt_id).toBe('JDG 4:4');
+    expect(result.inactive).toHaveLength(1);
+    expect(result.inactive[0].finding.snt_id).toBe('JDG 4:3');
+  });
+
+  it('handles multiple different pairs in the same verse', () => {
+    const global: GlobalRules = { 'and and': 'suppress' };
+    const findings = [
+      makeFinding({ repeated_word: 'the the' }),
+      makeFinding({ repeated_word: 'and and', start_position: 10 }),
+    ];
+    const result = resolveFindings(findings, NO_OCCURRENCE, global);
+    expect(result.active).toHaveLength(1);
+    expect(result.active[0].finding.repeated_word).toBe('the the');
+    expect(result.inactive).toHaveLength(1);
+    expect(result.inactive[0].finding.repeated_word).toBe('and and');
+    expect(result.inactive[0].inactiveReason).toBe('global');
+  });
+
+  it('preserves input order of findings in the output buckets', () => {
+    // Two findings, same pair and verse, out of order by start_position.
+    // Ordinals are assigned by start_position, but the output ordering
+    // reflects the *input* order (the caller's order is preserved).
+    const findings = [
+      makeFinding({ start_position: 40, surf: 'B the the' }),
+      makeFinding({ start_position: 10, surf: 'A the the' }),
+    ];
+    const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
+    // Both active; input order preserved (start_position:40 first, then 10).
+    expect(result.active[0].finding.surf).toBe('B the the');
+    expect(result.active[1].finding.surf).toBe('A the the');
+    // But ordinals follow start_position: start_position:10 is ordinal 0, 40 is ordinal 1.
+    expect(result.active[0].ordinal).toBe(1); // was start_position:40
+    expect(result.active[1].ordinal).toBe(0); // was start_position:10
+  });
+});
+
+describe('resolveFindings — occurrence key uniqueness', () => {
+  it('builds unique occurrence keys for same pair across different verses', () => {
+    const findings = [
+      makeFinding({ snt_id: 'JDG 4:3' }),
+      makeFinding({ snt_id: 'JDG 4:4' }),
+    ];
+    const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
+    const keys = result.active.map(r => r.occurrenceKey);
+    expect(new Set(keys).size).toBe(2); // all unique
+    expect(keys).toContain('JDG 4:3|the the|0');
+    expect(keys).toContain('JDG 4:4|the the|0');
+  });
+
+  it('builds unique occurrence keys for different pairs in the same verse', () => {
+    const findings = [
+      makeFinding({ repeated_word: 'the the', start_position: 0 }),
+      makeFinding({ repeated_word: 'and and', start_position: 10 }),
+    ];
+    const result = resolveFindings(findings, NO_OCCURRENCE, NO_GLOBAL);
+    const keys = result.active.map(r => r.occurrenceKey);
+    expect(new Set(keys).size).toBe(2);
+    expect(keys).toContain('JDG 4:3|the the|0');
+    expect(keys).toContain('JDG 4:3|and and|0');
+  });
 });

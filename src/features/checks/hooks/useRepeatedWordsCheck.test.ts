@@ -274,4 +274,66 @@ describe('useRepeatedWordsCheck — error handling', () => {
     );
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
+
+  it('retains prior successful data on refetch failure (TanStack placeholderData behaviour)', async () => {
+    // First call succeeds with 2 findings.
+    const calls = mockPost(makeResponse(2));
+    const { result, rerender } = renderHook(
+      (saveCounter: number) =>
+        useRepeatedWordsCheck({
+          projectItem: makeProjectItem(),
+          verses: [{ verseNumber: 3, content: 'the the' }],
+          saveCounter,
+          enabled: true,
+        }),
+      { initialProps: 0, wrapper: makeWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.result?.findings).toHaveLength(2);
+    expect(calls.count).toBe(1);
+
+    // Second call returns a 502 — the prior data should still be on `data`.
+    mockPost(makeResponse(0), 502);
+    rerender(1);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // TanStack keeps stale data after a refetch failure.
+    expect(result.current.data?.result?.findings).toHaveLength(2);
+  });
+});
+
+describe('buildRepeatedWordsRequest — additional edge cases', () => {
+  it('sends only verses with non-empty content (mixed empty and non-empty)', () => {
+    const request = buildRepeatedWordsRequest(makeProjectItem(), [
+      { verseNumber: 1, content: 'real text' },
+      { verseNumber: 2, content: '' },
+      { verseNumber: 3, content: '   ' },
+      { verseNumber: 4, content: 'more text' },
+    ]);
+    expect(request.verses).toHaveLength(2);
+    expect(request.verses.map(v => v.snt_id)).toEqual(['JDG 4:1', 'JDG 4:4']);
+  });
+
+  it('sends an empty verses array when all content is blank', () => {
+    const request = buildRepeatedWordsRequest(makeProjectItem(), [
+      { verseNumber: 1, content: '' },
+      { verseNumber: 2, content: '   ' },
+    ]);
+    expect(request.verses).toHaveLength(0);
+  });
+
+  it('builds snt_id from chapterNumber on projectItem (not a hardcoded chapter)', () => {
+    const request = buildRepeatedWordsRequest(
+      makeProjectItem({ chapterNumber: 12 }),
+      [{ verseNumber: 5, content: 'text' }]
+    );
+    expect(request.verses[0].snt_id).toBe('JDG 12:5');
+  });
+
+  it('uses whitespace-trimmed targetLanguageCode — empty after trim falls back to <unknown>', () => {
+    const request = buildRepeatedWordsRequest(
+      makeProjectItem({ targetLanguageCode: '   ' }),
+      [{ verseNumber: 1, content: 'text' }]
+    );
+    expect(request.lang_code).toBe('<unknown>');
+  });
 });

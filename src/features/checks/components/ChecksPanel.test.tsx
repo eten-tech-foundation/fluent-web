@@ -163,3 +163,115 @@ describe('ChecksPanel — Show Ignored toggle', () => {
     expect(screen.queryByText('and and (in JDG 4:1)')).not.toBeInTheDocument();
   });
 });
+
+describe('ChecksPanel — verseHeading helper (via grouping)', () => {
+  it('handles a snt_id with no colon by rendering the raw id as the heading', () => {
+    renderPanel({ active: [active('NOCOLON', 'the the')], inactive: [] });
+    expect(screen.getByRole('heading', { name: 'NOCOLON' })).toBeInTheDocument();
+  });
+
+  it('handles a snt_id whose verse segment after the colon is not a number', () => {
+    renderPanel({ active: [active('JDG 4:abc', 'the the')], inactive: [] });
+    expect(screen.getByRole('heading', { name: 'JDG 4:abc' })).toBeInTheDocument();
+  });
+
+  it('renders multi-digit verse numbers correctly', () => {
+    renderPanel({ active: [active('REV 22:21', 'the the')], inactive: [] });
+    expect(screen.getByRole('heading', { name: 'Verse 21' })).toBeInTheDocument();
+  });
+});
+
+describe('ChecksPanel — "Show Ignored" toggle visibility', () => {
+  it('does not render the ignored section before the toggle is clicked even with inactive findings', () => {
+    const resolved: ResolvedFindings = {
+      active: [],
+      inactive: [inactive('JDG 4:1', 'the the', 'legitimate')],
+    };
+    renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+    );
+    expect(screen.queryByTestId('ignored-section')).not.toBeInTheDocument();
+  });
+
+  it('shows the zero state while inactive findings exist but toggle is off', () => {
+    // No active findings + inactive findings present + toggle off = zero state visible
+    // because showingIgnored is false and activeGroups is empty.
+    const resolved: ResolvedFindings = {
+      active: [],
+      inactive: [inactive('JDG 4:1', 'the the', 'occurrence')],
+    };
+    renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+    );
+    expect(screen.getByText('No issues found')).toBeInTheDocument();
+    expect(screen.queryByTestId('ignored-section')).not.toBeInTheDocument();
+  });
+
+  it('hides the zero state once the toggle is turned on (ignored items now showing)', async () => {
+    const resolved: ResolvedFindings = {
+      active: [],
+      inactive: [inactive('JDG 4:1', 'the the', 'occurrence')],
+    };
+    const { user } = renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+    );
+    // Toggle is OFF: zero state is visible.
+    expect(screen.getByText('No issues found')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
+
+    // Toggle is ON: zero state must be hidden; ignored section appears.
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+    expect(screen.getByTestId('ignored-section')).toBeInTheDocument();
+  });
+
+  it('supports all three inactive reasons (occurrence / global / legitimate) in the ignored section', async () => {
+    const resolved: ResolvedFindings = {
+      active: [],
+      inactive: [
+        inactive('JDG 4:1', 'the the', 'occurrence', 0),
+        inactive('JDG 4:2', 'and and', 'global', 0),
+        inactive('JDG 4:3', 'for for', 'legitimate', 0),
+      ],
+    };
+    const { user } = renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+    );
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
+
+    const section = screen.getByTestId('ignored-section');
+    expect(section).toHaveTextContent('Verse 1');
+    expect(section).toHaveTextContent('Verse 2');
+    expect(section).toHaveTextContent('Verse 3');
+  });
+});
+
+describe('ChecksPanel — callback wiring', () => {
+  it('passes onIgnoreHere through to the active FindingRow', async () => {
+    const h = handlers();
+    const resolved: ResolvedFindings = {
+      active: [active('JDG 4:1', 'the the')],
+      inactive: [],
+    };
+    const { user } = renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...h} />
+    );
+    await user.click(screen.getByRole('button', { name: 'Ignore Here' }));
+    expect(h.onIgnoreHere).toHaveBeenCalledWith('JDG 4:1|the the|0');
+  });
+
+  it('passes onUndo through to the inactive FindingRow (after toggle)', async () => {
+    const h = handlers();
+    const inactiveFinding = inactive('JDG 4:1', 'the the', 'occurrence');
+    const resolved: ResolvedFindings = {
+      active: [active('JDG 4:2', 'and and')],
+      inactive: [inactiveFinding],
+    };
+    const { user } = renderWithProviders(
+      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...h} />
+    );
+    await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
+    await user.click(screen.getByRole('button', { name: 'Undo Ignore' }));
+    expect(h.onUndo).toHaveBeenCalledWith(inactiveFinding);
+  });
+});
