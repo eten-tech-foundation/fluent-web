@@ -113,6 +113,28 @@ describe('purgeLocalForPair', () => {
     expect(out.changed).toBe(false);
     expect(out.rules).toBe(rules);
   });
+
+  it('CR-1 regression: purges a pair that itself contains the "|" delimiter', () => {
+    // The pair is the *middle* field; the outer fields (snt_id, ordinal) are
+    // pipe-free, so a "|" inside the repeated_word must not break matching.
+    // A naive split('|')[1] would read "a " and fail to purge this rule.
+    const rules: OccurrenceRules = {
+      'JDG 4:3|a | a|0': 'suppress',
+      'JDG 4:3|and and|0': 'suppress',
+    };
+    const { rules: next, changed } = purgeLocalForPair(rules, 'a | a');
+    expect(changed).toBe(true);
+    expect(next).toEqual({ 'JDG 4:3|and and|0': 'suppress' });
+  });
+
+  it('CR-1 regression: handles pairs with other awkward characters (quote, backslash)', () => {
+    const rules: OccurrenceRules = {
+      'GEN 1:1|a" a"|0': 'suppress',
+      'GEN 1:2|b\\ b\\|0': 'surface',
+    };
+    expect(purgeLocalForPair(rules, 'a" a"').rules).toEqual({ 'GEN 1:2|b\\ b\\|0': 'surface' });
+    expect(purgeLocalForPair(rules, 'b\\ b\\').rules).toEqual({ 'GEN 1:1|a" a"|0': 'suppress' });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -324,6 +346,25 @@ describe('useSuppressions — global actions', () => {
     act(() => result.current.stopIgnoringEverywhere('the the'));
     // Optimistically removed, then rolls back on 500.
     await waitFor(() => expect(result.current.globalRules).toEqual({ 'the the': 'suppress' }));
+  });
+
+  it('CR-1 regression: ignoreEverywhere purges a current-chapter rule whose pair contains "|"', async () => {
+    // End-to-end through the real purge path (purgeCurrentChapter → purgeLocalForPair).
+    // The occurrence key for a pipe-containing pair must still be purged on a
+    // global "Ignore Everywhere"; otherwise the just-clicked panel keeps a stale
+    // occurrence rule (occurrence beats global) for that pair.
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+    mockPut();
+    const save = vi.fn();
+    const { result } = setup(
+      { 'JDG 4:3|a | a|0': 'suppress', 'JDG 4:3|and and|0': 'suppress' },
+      save
+    );
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    act(() => result.current.ignoreEverywhere('a | a'));
+    // Only the pipe-containing rule is purged; the unrelated one stands.
+    expect(save).toHaveBeenCalledWith({ 'JDG 4:3|and and|0': 'suppress' });
   });
 
   it('purge-local runs for NFC-composed vs decomposed pair in occurrence key', async () => {

@@ -45,9 +45,15 @@ export const normalizePair = (repeatedWord: string): string => repeatedWord.norm
 /**
  * Build the stable occurrence-identity key `"{snt_id}|{repeated_word}|{ordinal}"`.
  * The `repeated_word` segment is NFC-normalized so a stored rule matches a fresh
- * finding regardless of composed/decomposed accent representation. The `|`
- * separator cannot appear in a `snt_id`, and `repeated_word` is the final
- * segment-pair, so keys are unambiguous (§7.1).
+ * finding regardless of composed/decomposed accent representation (§7.1).
+ *
+ * The `|` separator is chosen because the two *outer* fields are provably
+ * pipe-free — `snt_id` is `"{bookCode} {chapter}:{verse}"` and `ordinal` is a
+ * number — so the key always splits into exactly three logical parts even if the
+ * verse-derived `repeated_word` itself were to contain a `|`. Consumers that need
+ * to recover the pair therefore slice the *middle* field (between the first and
+ * last `|`) rather than `split('|')[1]`; see `purgeLocalForPair` in
+ * `useSuppressions.ts`.
  */
 export const buildOccurrenceKey = (sntId: string, repeatedWord: string, ordinal: number): string =>
   `${sntId}|${normalizePair(repeatedWord)}|${ordinal}`;
