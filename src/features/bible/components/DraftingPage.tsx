@@ -662,11 +662,11 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                               }`}
                             >
                               {bibleVerseMap.has(verse.verseNumber) ? (
-                                <p className='min-h-12 text-sm leading-relaxed'>
+                                <p className='min-h-12 leading-relaxed'>
                                   {bibleVerseMap.get(verse.verseNumber)}
                                 </p>
                               ) : (
-                                <p className='text-muted-foreground min-h-12 text-sm leading-relaxed'>
+                                <p className='text-muted-foreground min-h-12 leading-relaxed'>
                                   No content available
                                 </p>
                               )}
