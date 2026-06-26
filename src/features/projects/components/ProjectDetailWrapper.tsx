@@ -115,6 +115,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       <ProjectDetailPage
         isAddUserOpen={modal === 'add'}
         projectChapterStatusCounts={project.chapterStatusCounts}
+        projectConnectivityProfile={project.metadata.connectivityProfile}
         projectId={project.id}
         projectSource={project.sourceName}
         projectSourceLanguageName={project.sourceLanguageName}
