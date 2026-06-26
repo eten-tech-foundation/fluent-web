@@ -32,9 +32,9 @@ type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
+  { id: 'Bibles', name: 'Bibles' },
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
-  { id: 'Bibles', name: 'Bibles' },
   // { id: 'AOSN', name: 'AOSN' }, // Uncomment when AOSN resources are available
 ];
 
@@ -64,6 +64,8 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const isDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const clearBibleRef = useRef<(() => void) | null>(null);
 
   const { data: savedResourceState, isFetched } = useResourceState(projectItem.chapterAssignmentId);
 
@@ -294,6 +296,15 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     [moveToNextVerse]
   );
 
+  const resetBibleState = useCallback(() => {
+    clearBibleRef.current?.();
+    setSelectedPanel(1);
+    setOpenResourcePanel(false);
+    setBibleTabLabel('');
+    setBibleVerses([]);
+    setBibleContentLoading(false);
+  }, []);
+
   const toggleResources = useCallback(() => {
     setShowResources(prev => {
       const nextShow = !prev;
@@ -301,16 +312,12 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
       // When hiding the resource panel, ResourcePanel unmounts and loses its
       // internal hook state (selectedBible resets to null).
       if (!nextShow) {
-        setSelectedPanel(1);
-        setOpenResourcePanel(false);
-        setBibleTabLabel('');
-        setBibleVerses([]);
-        setBibleContentLoading(false);
+        resetBibleState();
       }
 
       return nextShow;
     });
-  }, []);
+  }, [resetBibleState]);
 
   const handleResizeDragStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -337,12 +344,8 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // Close Tab 2: reset all bible-related state, revert to panel 1
   const handleBibleTabClose = useCallback(() => {
-    setSelectedPanel(1);
-    setOpenResourcePanel(false);
-    setBibleTabLabel('');
-    setBibleVerses([]);
-    setBibleContentLoading(false);
-  }, []);
+    resetBibleState();
+  }, [resetBibleState]);
 
   // O(1) verse lookup for the bible panel left column
   const bibleVerseMap = useMemo<Map<number, string>>(() => {
@@ -504,6 +507,9 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 initialLanguage={currentLanguage}
                 initialResource={currentResource}
                 openResourceBiblePanel={setOpenResourcePanel}
+                registerClearBible={fn => {
+                  clearBibleRef.current = fn;
+                }}
                 resourceNames={RESOURCE_NAMES}
                 selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
                 sourceData={projectItem}
@@ -578,12 +584,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 style={{ scrollbarGutter: 'stable' }}
                 onScroll={() => !readOnly && updateButtonPosition()}
               >
-                {/*
-                  Panel 2 loading state: a bible was just selected (or a new
-                  one chosen) and its content is still being fetched. Shown
-                  BEFORE the empty-state check below so switching bibles never
-                  flashes "No content available" while data is in flight.
-                */}
                 {selectedPanel === 2 && bibleContentLoading && (
                   <div
                     className='grid h-full items-start py-4'
@@ -626,11 +626,6 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                   </div>
                 )}
 
-                {/*
-                  Main verse loop — always iterates over sourceVerses so the
-                  row count is stable across panel switches.
-                  Hidden (not unmounted) during the loading/empty states above.
-                */}
                 <div
                   className={
                     selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)
@@ -661,7 +656,11 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                               <p className='min-h-12 leading-relaxed'>{verse.text}</p>
                             </div>
                           ) : (
-                            <div className='bg-muted rounded-lg border-2 px-4 py-1 shadow-sm'>
+                            <div
+                              className={`bg-muted rounded-lg border-2 px-4 py-1 shadow-sm ${
+                                isActive ? 'border-primary' : ''
+                              }`}
+                            >
                               {bibleVerseMap.has(verse.verseNumber) ? (
                                 <p className='min-h-12 text-sm leading-relaxed'>
                                   {bibleVerseMap.get(verse.verseNumber)}
