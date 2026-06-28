@@ -290,6 +290,15 @@ export const useSuppressions = ({
     };
   }, []);
 
+  // Last global-rules map the server has *confirmed* (probe result, then each
+  // successful PUT). Rollback restores from THIS, never from a call-time
+  // snapshot: with writes serialized (see `putChainRef`), a later write B can be
+  // issued while an earlier write A is still optimistic-but-unconfirmed, so B's
+  // call-time `previous` may contain A's never-persisted change. Reverting to the
+  // last *committed* baseline can't resurrect that phantom state (CR `3488525698`).
+  // Only ever written in the success path; only ever read in the catch.
+  const committedGlobalRef = useRef<GlobalRules>({});
+
   useEffect(() => {
     if (probeStarted.current) {
       return;
@@ -301,6 +310,7 @@ export const useSuppressions = ({
       }
       setGlobalIgnoresAvailable(available);
       setGlobalRules(available ? rules : {});
+      committedGlobalRef.current = available ? rules : {};
       setSettingsProbeResolved(true);
     });
   }, []);
@@ -361,13 +371,27 @@ export const useSuppressions = ({
 
   // --- Global actions (optimistic + rollback; purge current-chapter local) ---
 
-  /** Apply a current-chapter purge for `pair` through the single writer. */
+  /**
+   * Apply a current-chapter purge for `pair` through the single writer. Returns
+   * the occurrence entries it removed (key → verdict) so a failed global write
+   * can restore *just those* keys — see the rollback in `writeGlobal`. Empty
+   * when nothing matched (no write issued).
+   */
   const purgeCurrentChapter = useCallback(
-    (repeatedWord: string) => {
-      const { rules, changed } = purgeLocalForPair(occurrenceRef.current, repeatedWord);
-      if (changed) {
-        saveOccurrenceRules(rules);
+    (repeatedWord: string): OccurrenceRules => {
+      const before = occurrenceRef.current;
+      const { rules, changed } = purgeLocalForPair(before, repeatedWord);
+      if (!changed) {
+        return {};
       }
+      const purged: OccurrenceRules = {};
+      for (const [key, verdict] of Object.entries(before)) {
+        if (!(key in rules)) {
+          purged[key] = verdict;
+        }
+      }
+      saveOccurrenceRules(rules);
+      return purged;
     },
     [saveOccurrenceRules]
   );
@@ -376,10 +400,6 @@ export const useSuppressions = ({
     (repeatedWord: string, mutate: (rules: GlobalRules) => GlobalRules) => {
       const pair = normalizePair(repeatedWord);
       const previous = globalRules;
-      // Snapshot the occurrence map *before* the optimistic purge so we can
-      // fully roll back if the PUT fails (the purge below is a persisted write
-      // through the single editor-state writer, not just local state).
-      const previousOccurrence = occurrenceRef.current;
       // Mark this as the latest issued write. On failure we only roll back if no
       // newer write was issued in the meantime (CR-15 sequence guard).
       const mySeq = ++writeSeqRef.current;
@@ -387,8 +407,9 @@ export const useSuppressions = ({
       // Optimistic: the finding greys/un-greys immediately.
       setGlobalRules(next);
       // Purge current-chapter occurrence rules for the pair so the just-clicked
-      // panel doesn't appear to ignore the action (occurrence beats global).
-      purgeCurrentChapter(pair);
+      // panel doesn't appear to ignore the action (occurrence beats global). Keep
+      // exactly which entries were removed so a failed PUT restores only those.
+      const purgedOccurrence = purgeCurrentChapter(pair);
       // Send the full blob (single-key full-replace, §8.1), chained after the
       // previous global write so the PUTs commit on the server in UI-action
       // order. The leading `.catch(() => {})` swallows the *previous* link's
@@ -396,25 +417,35 @@ export const useSuppressions = ({
       // each write still reports its own failure in the trailing `.catch`.
       putChainRef.current = putChainRef.current
         .catch(() => {})
-        .then(() => putSelfSettings(next))
+        .then(async () => {
+          await putSelfSettings(next);
+          // Persisted: this map is now the confirmed baseline future rollbacks
+          // restore from. (Only the success path writes this ref.)
+          committedGlobalRef.current = next;
+        })
         .catch(error => {
           Logger.logException(error, {
             context: 'Repeated-words global ignore write failed; rolling back',
           });
           // Only the latest issued write may revert its own optimistic changes.
-          // If a newer edit was issued while this PUT was in flight, the
-          // call-time snapshots below are stale and would clobber that newer edit
-          // (CR-15), so we skip the rollback and let the newer write own the state.
+          // If a newer edit was issued while this PUT was in flight, rolling back
+          // would clobber that newer edit (CR-15), so we skip and let the newer
+          // write own the state.
           if (mounted.current && mySeq === writeSeqRef.current) {
-            // Rollback: the flag returns to its prior state; re-click allowed.
-            // (No queued retry for v1 — the visible flip is the failure notice.)
-            setGlobalRules(previous);
-            // Also restore the occurrence rules the optimistic purge removed —
-            // otherwise the user's per-occurrence ignores for this pair would be
-            // permanently lost while the global write rolled back. Re-saving an
-            // identical map (when nothing was purged) is harmless: the editor-state
-            // save is debounced/idempotent.
-            saveOccurrenceRules(previousOccurrence);
+            // Roll the global flag back to the last *server-confirmed* state —
+            // NOT the call-time `previous`, which (with serialized writes) could
+            // still hold an earlier write's never-persisted optimistic change
+            // (CR `3488525698`). Re-click allowed; the visible flip is the only
+            // failure notice (no queued retry for v1).
+            setGlobalRules(committedGlobalRef.current);
+            // Restore only the occurrence entries this write's purge removed,
+            // merging them back into the *current* map so unrelated occurrence
+            // edits made meanwhile survive (CR `3488525698`). Skip the write
+            // entirely when nothing was purged.
+            const purgedKeys = Object.keys(purgedOccurrence);
+            if (purgedKeys.length > 0) {
+              saveOccurrenceRules({ ...occurrenceRef.current, ...purgedOccurrence });
+            }
           }
         });
     },

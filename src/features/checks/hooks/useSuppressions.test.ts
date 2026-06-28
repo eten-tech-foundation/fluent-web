@@ -301,6 +301,40 @@ describe('useSuppressions — global actions', () => {
     expect(result.current.globalRules).toEqual({});
   });
 
+  it('NEW-C: rollback merges back only the purged keys, preserving a later unrelated occurrence edit', async () => {
+    // Regression for CR thread 3488525698. The old rollback restored the WHOLE
+    // call-time occurrence snapshot, which would wipe any occurrence edit the user
+    // made while the global PUT was in flight. We now merge back only the keys the
+    // optimistic purge removed, into the *current* map — so an unrelated edit that
+    // landed in the meantime survives the rollback.
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+    mockPut(500);
+    const save = vi.fn();
+    const original: OccurrenceRules = { 'JDG 4:3|the the|0': 'suppress' };
+    const { result, rerender } = setup(original, save);
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    // Global "Ignore Everywhere" for "the the": optimistically purges that key.
+    act(() => result.current.ignoreEverywhere('the the'));
+    expect(save).toHaveBeenNthCalledWith(1, {});
+
+    // While the PUT is in flight, an unrelated occurrence edit lands (e.g. the
+    // user clicks "Ignore Here" on a different finding). Simulate the new map
+    // flowing back in through the prop (the single editor-state writer).
+    const afterEdit: OccurrenceRules = { 'JDG 4:5|and and|0': 'suppress' };
+    rerender({ occurrenceRules: afterEdit, saveOccurrenceRules: save });
+
+    // PUT 500 → rollback merges ONLY the purged "the the" key back into the
+    // current map, keeping the unrelated "and and" edit intact (not overwritten
+    // by the stale pre-purge snapshot).
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save).toHaveBeenNthCalledWith(2, {
+      'JDG 4:5|and and|0': 'suppress',
+      'JDG 4:3|the the|0': 'suppress',
+    });
+    expect(result.current.globalRules).toEqual({});
+  });
+
   it('single-key full-replace: the PUT body carries only checkIgnoredWordPairs (no client-side sibling echo)', async () => {
     // The blob is single-key today; the client sends only the key it owns and the
     // server full-replaces (the API write schema strips unknown keys, so a second
@@ -470,6 +504,52 @@ describe('useSuppressions — global actions', () => {
     expect(order[1]).toEqual({
       settings: { checkIgnoredWordPairs: { aaa: 'suppress', bbb: 'suppress' } },
     });
+  });
+
+  it('NEW-C: a queued write rolls back to the last COMMITTED baseline, not a call-time snapshot holding an earlier unconfirmed write', async () => {
+    // Regression for CR thread 3488525698 (the half our serialization surfaced).
+    // Writes are serialized: A then B. B is issued while A is still optimistic but
+    // unconfirmed, so B's call-time `previous` already contains A's change. If A
+    // FAILS and B also FAILS, the seq-guard lets B (the latest) roll back. Rolling
+    // back to B's call-time snapshot would resurrect A's never-persisted state;
+    // we instead roll back to the last *server-confirmed* baseline (here: empty).
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+
+    let releaseFirst!: () => void;
+    const firstReleased = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let putCount = 0;
+    server.use(
+      http.put(SETTINGS_URL, async () => {
+        putCount += 1;
+        if (putCount === 1) {
+          await firstReleased;
+        }
+        // Both writes fail — neither ever commits, so the confirmed baseline stays empty.
+        return HttpResponse.json({ message: 'boom' }, { status: 500 });
+      })
+    );
+
+    const { result } = setup({}, vi.fn());
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    // Write A: optimistic {aaa}; its PUT starts and hangs (held open).
+    act(() => result.current.ignoreEverywhere('aaa'));
+    await waitFor(() => expect(putCount).toBe(1));
+
+    // Write B while A is unconfirmed: B's call-time `previous` is {aaa} (A's
+    // optimistic state). Optimistic now shows both.
+    act(() => result.current.ignoreEverywhere('bbb'));
+    expect(result.current.globalRules).toEqual({ aaa: 'suppress', bbb: 'suppress' });
+
+    // Release A (fails), then B runs (also fails). Only B rolls back (latest seq).
+    releaseFirst();
+    await waitFor(() => expect(putCount).toBe(2));
+
+    // B rolls back to the last COMMITTED baseline (empty), NOT to {aaa} — A's
+    // change was never persisted, so it must not survive as a phantom.
+    await waitFor(() => expect(result.current.globalRules).toEqual({}));
   });
 
   it('purge-local runs for NFC-composed vs decomposed pair in occurrence key', async () => {
