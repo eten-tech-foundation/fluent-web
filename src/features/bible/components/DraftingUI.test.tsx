@@ -131,6 +131,7 @@ const mockProjectItem: ProjectItem = {
   bibleId: 1,
   bibleName: 'WEB',
   targetLanguage: 'Spanish',
+  targetLanguageCode: 'spa',
   bookId: 1,
   book: 'Genesis',
   chapterStatus: ChapterAssignmentStatus.DRAFT,

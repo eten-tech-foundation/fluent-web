@@ -49,12 +49,25 @@ interface VerseGroup {
 }
 
 /**
- * Group one bucket of resolved findings by verse (`snt_id`), preserving
- * first-seen verse order. Only verses that actually have rows produce a group
- * (§5.1, §6.4). Active and inactive findings are grouped **separately** now
- * (revised #278 mock): active findings render above the "Show Ignored" toggle,
- * ignored findings in their own dedicated section below it — so each call groups
- * a single, already-filtered bucket rather than merging the two.
+ * Parse the verse number out of a `snt_id` (segment after the last `:`) for
+ * sort ordering. For a verse range (e.g. `"JDG 4:4-5"`) the leading number
+ * before the dash is used. A malformed `snt_id` (no colon / no leading digits)
+ * yields `Number.POSITIVE_INFINITY` so it sorts to the end — preserving the
+ * never-blank-heading guarantee (`verseHeading` still renders the raw id).
+ */
+const verseNum = (sntId: string): number => {
+  const afterColon = sntId.slice(sntId.lastIndexOf(':') + 1).trim();
+  const leadingDigits = /^\d+/.exec(afterColon)?.[0];
+  return leadingDigits ? Number(leadingDigits) : Number.POSITIVE_INFINITY;
+};
+
+/**
+ * Group one bucket of resolved findings by verse (`snt_id`), sorted by verse
+ * number. Only verses that actually have rows produce a group (§5.1, §6.4).
+ * Active and inactive findings are grouped **separately** now (revised #278
+ * mock): active findings render above the "Show Ignored" toggle, ignored
+ * findings in their own dedicated section below it — so each call groups a
+ * single, already-filtered bucket rather than merging the two.
  */
 const groupByVerse = (findings: ResolvedFinding[]): VerseGroup[] => {
   const order: string[] = [];
@@ -71,11 +84,13 @@ const groupByVerse = (findings: ResolvedFinding[]): VerseGroup[] => {
     rows.push(f);
   }
 
-  return order.map(sntId => ({
-    sntId,
-    heading: verseHeading(sntId),
-    rows: byVerse.get(sntId) ?? [],
-  }));
+  return order
+    .map(sntId => ({
+      sntId,
+      heading: verseHeading(sntId),
+      rows: byVerse.get(sntId) ?? [],
+    }))
+    .sort((a, b) => verseNum(a.sntId) - verseNum(b.sntId));
 };
 
 /** Render a list of verse groups with separators between (one fewer than groups). */
