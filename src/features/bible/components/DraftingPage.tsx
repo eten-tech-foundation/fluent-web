@@ -538,6 +538,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      aria-label={showResources ? 'Hide Resources' : 'Show Resources'}
                       aria-pressed={showResources}
                       className='bg-primary relative flex cursor-pointer items-center gap-2'
                       type='button'
@@ -549,7 +550,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                           translator is still notified (#277). */}
                       {!showResources && activeFindingsCount > 0 && (
                         <span
-                          aria-label='Active checks present'
+                          aria-hidden='true'
                           className='absolute -top-1 -right-1 inline-block h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white'
                           data-testid='checks-toggle-notification-dot'
                         />
