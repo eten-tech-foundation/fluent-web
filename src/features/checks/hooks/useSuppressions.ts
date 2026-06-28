@@ -46,19 +46,20 @@ import { normalizePair } from './useResolvedFindings';
 /**
  * The user-settings blob behind `/self/settings`. Tolerant of absent keys.
  *
- * The index signature lets us carry any *sibling* settings keys (owned by other
- * features) through the read-modify-write opaquely: the PUT is a full-replace of
- * the whole JSONB blob (§8.1, and the API `upsert` replaces `settings` wholesale
- * with no server-side merge), so we must echo back every key we read on GET or it
- * would be dropped (CR-14). Spreading siblings does not rename anything — this
- * stays on the camelCase `/self/settings` boundary, NOT the snake_case greek-room
- * pass-through (see checks.types.ts:1-19).
+ * Single-key today: `checkIgnoredWordPairs` is the only setting in the blob, so
+ * the PUT is a full-replace of the whole JSONB blob (§8.1; the API `upsert`
+ * replaces `settings` wholesale with no server-side merge) and the client simply
+ * sends the one key it owns. The API write schema strips unknown keys, so a
+ * second setting cannot be introduced without editing the server schema — at
+ * which point the server is responsible for read-merging keys (the API carries an
+ * implementation note gating that). We therefore deliberately do NOT cache/echo a
+ * client-side snapshot of sibling keys here. This stays on the camelCase
+ * `/self/settings` boundary, NOT the snake_case greek-room pass-through (see
+ * checks.types.ts:1-19).
  */
 interface SelfSettings {
   /** Global word-pair rules, keyed by NFC-normalized `repeated_word`. */
   checkIgnoredWordPairs?: GlobalRules;
-  /** Unknown sibling settings owned by other features — carried through untouched. */
-  [key: string]: unknown;
 }
 
 /** GET response: the server returns `{ settings }`, possibly `null` (W8). */
@@ -77,12 +78,6 @@ const SELF_SETTINGS_URL = `${config.api.url}/self/settings`;
 interface ProbeResult {
   available: boolean;
   rules: GlobalRules;
-  /**
-   * The full `settings` blob we read on GET (`{}` when absent/unavailable). Held
-   * so a later PUT can full-replace the blob while preserving sibling keys we
-   * don't model (CR-14).
-   */
-  snapshot: SelfSettings;
 }
 
 /** Pull the global rules out of a settings blob, tolerating any odd shape. */
@@ -107,40 +102,38 @@ const probeSelfSettings = async (): Promise<ProbeResult> => {
       headers: { 'Content-Type': 'application/json' },
     });
     if (res.status === 404) {
-      return { available: false, rules: {}, snapshot: {} };
+      return { available: false, rules: {} };
     }
     if (!res.ok) {
       // Other non-2xx (401/500/…): treat as unavailable for the session.
-      return { available: false, rules: {}, snapshot: {} };
+      return { available: false, rules: {} };
     }
     const body = (await res.json()) as SelfSettingsResponse | null;
     const settings = body?.settings ?? null;
     return {
       available: true,
       rules: extractGlobalRules(settings),
-      // Keep the whole blob so a later PUT can preserve sibling keys (CR-14).
-      snapshot: settings ?? {},
     };
   } catch (error) {
     Logger.logException(error, { context: 'Repeated-words self/settings probe failed' });
-    return { available: false, rules: {}, snapshot: {} };
+    return { available: false, rules: {} };
   }
 };
 
 /**
- * PUT the full settings blob (full-replace, §8.1). The caller supplies the
- * complete `checkIgnoredWordPairs` map it wants persisted plus the full
- * `snapshot` of the blob we last read on GET; we spread the snapshot first so
- * any sibling keys owned by other features ride through untouched and are not
- * dropped by the server-side full-replace (CR-14). This hook never sends a
- * partial patch.
+ * PUT the settings blob (full-replace, §8.1). The blob is single-key today
+ * (`checkIgnoredWordPairs`), so the caller supplies the complete map it wants
+ * persisted and we send the whole blob. A second setting cannot exist without a
+ * server-schema change, at which point the server merges keys (it carries an
+ * implementation note gating that) — so we deliberately send only the key we own
+ * and do NOT echo a client-cached snapshot.
  */
-const putSelfSettings = async (rules: GlobalRules, snapshot: SelfSettings): Promise<void> => {
+const putSelfSettings = async (rules: GlobalRules): Promise<void> => {
   const res = await fetch(SELF_SETTINGS_URL, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: { ...snapshot, checkIgnoredWordPairs: rules } }),
+    body: JSON.stringify({ settings: { checkIgnoredWordPairs: rules } }),
   });
   if (!res.ok) {
     throw new Error('Failed to save global ignore rules');
@@ -297,24 +290,17 @@ export const useSuppressions = ({
     };
   }, []);
 
-  // Full `settings` blob from the GET probe, held so a later PUT can full-replace
-  // the blob while preserving sibling keys other features own (CR-14). Defaults
-  // to `{}` until the probe resolves (and stays `{}` when unavailable).
-  const snapshotRef = useRef<SelfSettings>({});
-
   useEffect(() => {
     if (probeStarted.current) {
       return;
     }
     probeStarted.current = true;
-    void probeSelfSettings().then(({ available, rules, snapshot }) => {
+    void probeSelfSettings().then(({ available, rules }) => {
       if (!mounted.current) {
         return;
       }
       setGlobalIgnoresAvailable(available);
       setGlobalRules(available ? rules : {});
-      // Carry the full GET blob through to the next PUT (sibling-preserving).
-      snapshotRef.current = available ? snapshot : {};
       setSettingsProbeResolved(true);
     });
   }, []);
@@ -393,8 +379,8 @@ export const useSuppressions = ({
       // Purge current-chapter occurrence rules for the pair so the just-clicked
       // panel doesn't appear to ignore the action (occurrence beats global).
       purgeCurrentChapter(pair);
-      // Send the full blob, preserving any sibling settings keys (CR-14).
-      void putSelfSettings(next, snapshotRef.current).catch(error => {
+      // Send the full blob (single-key full-replace, §8.1).
+      void putSelfSettings(next).catch(error => {
         Logger.logException(error, {
           context: 'Repeated-words global ignore write failed; rolling back',
         });

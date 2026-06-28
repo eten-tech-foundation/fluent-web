@@ -301,13 +301,13 @@ describe('useSuppressions — global actions', () => {
     expect(result.current.globalRules).toEqual({});
   });
 
-  it('CR-14 regression: a global write preserves sibling settings keys read on GET (full-replace merge)', async () => {
-    // The PUT /self/settings is a full-replace of the whole JSONB blob (the API
-    // upsert overwrites `settings` wholesale, no server-side merge). So a global
-    // write must echo back every sibling key it read on GET, or those keys would
-    // be silently dropped. Here GET returns checkIgnoredWordPairs + an unrelated
-    // sibling; after ignore-everywhere the PUT body must still carry the sibling
-    // unchanged, with only checkIgnoredWordPairs updated.
+  it('single-key full-replace: the PUT body carries only checkIgnoredWordPairs (no client-side sibling echo)', async () => {
+    // The blob is single-key today; the client sends only the key it owns and the
+    // server full-replaces (the API write schema strips unknown keys, so a second
+    // setting cannot exist without a server-schema change that must add server-side
+    // merge — see the API implementation note). Even if GET happens to return an
+    // unknown sibling, the client must NOT echo it back: it sends only
+    // checkIgnoredWordPairs.
     mockGet({
       settings: { checkIgnoredWordPairs: {}, someOtherFeatureSetting: { enabled: true } },
       updatedAt: null,
@@ -320,10 +320,7 @@ describe('useSuppressions — global actions', () => {
 
     await waitFor(() =>
       expect(put.body).toEqual({
-        settings: {
-          someOtherFeatureSetting: { enabled: true },
-          checkIgnoredWordPairs: { 'the the': 'suppress' },
-        },
+        settings: { checkIgnoredWordPairs: { 'the the': 'suppress' } },
       })
     );
   });
