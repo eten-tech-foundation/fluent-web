@@ -301,6 +301,33 @@ describe('useSuppressions — global actions', () => {
     expect(result.current.globalRules).toEqual({});
   });
 
+  it('CR-14 regression: a global write preserves sibling settings keys read on GET (full-replace merge)', async () => {
+    // The PUT /self/settings is a full-replace of the whole JSONB blob (the API
+    // upsert overwrites `settings` wholesale, no server-side merge). So a global
+    // write must echo back every sibling key it read on GET, or those keys would
+    // be silently dropped. Here GET returns checkIgnoredWordPairs + an unrelated
+    // sibling; after ignore-everywhere the PUT body must still carry the sibling
+    // unchanged, with only checkIgnoredWordPairs updated.
+    mockGet({
+      settings: { checkIgnoredWordPairs: {}, someOtherFeatureSetting: { enabled: true } },
+      updatedAt: null,
+    });
+    const put = mockPut();
+    const { result } = setup({}, vi.fn());
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    act(() => result.current.ignoreEverywhere('the the'));
+
+    await waitFor(() =>
+      expect(put.body).toEqual({
+        settings: {
+          someOtherFeatureSetting: { enabled: true },
+          checkIgnoredWordPairs: { 'the the': 'suppress' },
+        },
+      })
+    );
+  });
+
   it('stopIgnoringEverywhere deletes the global entry and PUTs the reduced blob', async () => {
     mockGet({
       settings: { checkIgnoredWordPairs: { 'the the': 'suppress', 'and and': 'suppress' } },
