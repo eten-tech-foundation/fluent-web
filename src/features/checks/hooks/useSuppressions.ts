@@ -316,6 +316,16 @@ export const useSuppressions = ({
   // a newer in-flight edit's optimistic state (CR-15; successor to CR-7).
   const writeSeqRef = useRef(0);
 
+  // Tail of the global-write chain. Each PUT is appended after the previous one
+  // settles, so the full-replace PUTs reach the server strictly in UI-action
+  // order — an older successful write can no longer commit after a newer one.
+  // (The `/self/settings` blob is last-writer-wins with no server merge, §8.1, so
+  // out-of-order delivery of two overlapping PUTs would otherwise persist the
+  // stale blob even though the UI shows the newer edit.) The seq-guard above
+  // protects the client rollback; this chain protects the server write order.
+  // CR-15 follow-up.
+  const putChainRef = useRef<Promise<unknown>>(Promise.resolve());
+
   // --- Occurrence actions (write through the single editor-state writer) ---
 
   const ignoreHere = useCallback(
@@ -379,27 +389,34 @@ export const useSuppressions = ({
       // Purge current-chapter occurrence rules for the pair so the just-clicked
       // panel doesn't appear to ignore the action (occurrence beats global).
       purgeCurrentChapter(pair);
-      // Send the full blob (single-key full-replace, §8.1).
-      void putSelfSettings(next).catch(error => {
-        Logger.logException(error, {
-          context: 'Repeated-words global ignore write failed; rolling back',
+      // Send the full blob (single-key full-replace, §8.1), chained after the
+      // previous global write so the PUTs commit on the server in UI-action
+      // order. The leading `.catch(() => {})` swallows the *previous* link's
+      // rejection so one failed write doesn't break the chain for later ones;
+      // each write still reports its own failure in the trailing `.catch`.
+      putChainRef.current = putChainRef.current
+        .catch(() => {})
+        .then(() => putSelfSettings(next))
+        .catch(error => {
+          Logger.logException(error, {
+            context: 'Repeated-words global ignore write failed; rolling back',
+          });
+          // Only the latest issued write may revert its own optimistic changes.
+          // If a newer edit was issued while this PUT was in flight, the
+          // call-time snapshots below are stale and would clobber that newer edit
+          // (CR-15), so we skip the rollback and let the newer write own the state.
+          if (mounted.current && mySeq === writeSeqRef.current) {
+            // Rollback: the flag returns to its prior state; re-click allowed.
+            // (No queued retry for v1 — the visible flip is the failure notice.)
+            setGlobalRules(previous);
+            // Also restore the occurrence rules the optimistic purge removed —
+            // otherwise the user's per-occurrence ignores for this pair would be
+            // permanently lost while the global write rolled back. Re-saving an
+            // identical map (when nothing was purged) is harmless: the editor-state
+            // save is debounced/idempotent.
+            saveOccurrenceRules(previousOccurrence);
+          }
         });
-        // Only the latest issued write may revert its own optimistic changes. If
-        // a newer edit was issued while this PUT was in flight, the call-time
-        // snapshots below are stale and would clobber that newer edit (CR-15), so
-        // we skip the rollback and let the newer write own the state.
-        if (mounted.current && mySeq === writeSeqRef.current) {
-          // Rollback: the flag returns to its prior state; re-click allowed.
-          // (No queued retry for v1 — the visible flip is the failure notice.)
-          setGlobalRules(previous);
-          // Also restore the occurrence rules the optimistic purge removed —
-          // otherwise the user's per-occurrence ignores for this pair would be
-          // permanently lost while the global write rolled back. Re-saving an
-          // identical map (when nothing was purged) is harmless: the editor-state
-          // save is debounced/idempotent.
-          saveOccurrenceRules(previousOccurrence);
-        }
-      });
     },
     [globalRules, purgeCurrentChapter, saveOccurrenceRules]
   );
