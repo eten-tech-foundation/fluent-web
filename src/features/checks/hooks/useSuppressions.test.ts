@@ -417,6 +417,61 @@ describe('useSuppressions — global actions', () => {
     expect(save).toHaveBeenCalledWith({ 'JDG 4:3|and and|0': 'suppress' });
   });
 
+  it('CR-15 follow-up: serializes overlapping global writes so PUTs reach the server in UI-action order', async () => {
+    // Two quick global toggles must not race on the server. Each full-replace PUT
+    // is chained after the previous one settles, so the second PUT does not even
+    // start until the first has finished — guaranteeing the persisted blob ends in
+    // the same order as the user actions (an older PUT can't land after a newer
+    // one). We prove this by making the FIRST PUT hang until we release it: while
+    // it is in flight the second PUT must NOT have started; after release, both
+    // arrive in order.
+    mockGet({ settings: { checkIgnoredWordPairs: {} }, updatedAt: null });
+
+    const order: Array<Record<string, unknown>> = [];
+    let releaseFirst!: () => void;
+    const firstReleased = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let putCount = 0;
+    server.use(
+      http.put(SETTINGS_URL, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        putCount += 1;
+        if (putCount === 1) {
+          // Hold the first write open until the test releases it.
+          await firstReleased;
+        }
+        order.push(body);
+        return HttpResponse.json({ settings: {}, updatedAt: null }, { status: 200 });
+      })
+    );
+
+    const { result } = setup({}, vi.fn());
+    await waitFor(() => expect(result.current.settingsProbeResolved).toBe(true));
+
+    // First global toggle — its PUT starts and hangs (held open above).
+    act(() => result.current.ignoreEverywhere('aaa'));
+    await waitFor(() => expect(putCount).toBe(1));
+
+    // Second global toggle while the first PUT is still in flight. Its PUT is
+    // chained behind the first and must NOT have started yet (serialized — not
+    // fired concurrently). The optimistic state already reflects both.
+    act(() => result.current.ignoreEverywhere('bbb'));
+    expect(result.current.globalRules).toEqual({ aaa: 'suppress', bbb: 'suppress' });
+    // Still only one PUT in flight; the second is queued behind it.
+    expect(putCount).toBe(1);
+    expect(order).toHaveLength(0); // first hasn't completed, second hasn't started
+
+    // Release the first; now the second proceeds. Both complete in order A→B.
+    releaseFirst();
+    await waitFor(() => expect(order).toHaveLength(2));
+    expect(order[0]).toEqual({ settings: { checkIgnoredWordPairs: { aaa: 'suppress' } } });
+    // Second carries BOTH toggles (state accumulated), proving B persisted last.
+    expect(order[1]).toEqual({
+      settings: { checkIgnoredWordPairs: { aaa: 'suppress', bbb: 'suppress' } },
+    });
+  });
+
   it('purge-local runs for NFC-composed vs decomposed pair in occurrence key', async () => {
     // The occurrence key stores the NFC-normalized pair; global write purges by
     // normalizing the repeated_word. Composed "caf\u00e9" must purge a key that
