@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
 import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import {
@@ -32,6 +33,7 @@ export interface CreateProjectData {
   sourceBible: number;
   books: number[];
   connectivityProfile: ConnectivityProfile | null;
+  pericopeSetId?: number;
 }
 
 interface CreateProjectModalProps {
@@ -49,6 +51,7 @@ interface FormData {
   sourceBible: number | null;
   books: number[];
   connectivityProfile: ConnectivityProfile | null;
+  pericopeSetId: number | null;
 }
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -68,7 +71,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     sourceBible: null,
     books: [],
     connectivityProfile: null,
+    pericopeSetId: null,
   });
+
+  const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const { data: languages, isLoading: languagesLoading, error: languagesError } = useLanguages();
   const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
@@ -85,6 +91,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         sourceBible: null,
         books: [],
         connectivityProfile: null,
+        pericopeSetId: null,
       });
     }
     setIsSubmitting(false);
@@ -116,7 +123,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       formData.targetLanguage &&
       formData.sourceLanguage &&
       formData.sourceBible &&
-      formData.books.length > 0
+      formData.books.length > 0 &&
+      formData.pericopeSetId
     );
   };
 
@@ -136,6 +144,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         sourceBible: formData.sourceBible,
         books: formData.books,
         connectivityProfile: formData.connectivityProfile,
+        pericopeSetId: formData.pericopeSetId ?? undefined,
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -181,7 +190,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className='sm:max-w-[500px]' onInteractOutside={e => e.preventDefault()}>
+      <DialogContent
+        className='max-h-[90vh] overflow-y-auto sm:max-w-[500px]'
+        onInteractOutside={e => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{t('createProject')}</DialogTitle>
         </DialogHeader>
@@ -346,6 +358,34 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
                   <SelectItem key={option.value} value={option.value}>
                     {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className='space-y-2'>
+            <Label className='gap-1' htmlFor='pericopeSet'>
+              <span style={{ color: 'red' }}>*</span>
+              {t('pericopeSet', 'Pericope Set')}
+            </Label>
+            <Select
+              value={formData.pericopeSetId?.toString() ?? ''}
+              onValueChange={value => updateFormData('pericopeSetId', parseInt(value))}
+            >
+              <SelectTrigger className='w-full bg-white' id='pericopeSet'>
+                <SelectValue
+                  placeholder={
+                    pericopeSetsLoading
+                      ? 'Loading pericope sets...'
+                      : 'Select pericope set for the project'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {pericopeSets?.map(set => (
+                  <SelectItem key={set.id} value={set.id.toString()}>
+                    {set.description || set.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -74,11 +74,15 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   const handleTextChange = useCallback(
     (verseId: number, text: string) => {
       if (readOnly) return;
-      setVerses(currentVerses =>
-        currentVerses.map(verse =>
+      setVerses(currentVerses => {
+        const exists = currentVerses.some(v => v.verseNumber === verseId);
+        if (!exists) {
+          return [...currentVerses, { verseNumber: verseId, content: text }];
+        }
+        return currentVerses.map(verse =>
           verse.verseNumber === verseId ? { ...verse, content: text } : verse
-        )
-      );
+        );
+      });
       debouncedSave(verseId, text);
       const textarea = textareaRefs.current[verseId];
       if (textarea) autoResizeTextarea(textarea);
@@ -99,6 +103,11 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
           }
         }
       }
+      const exists = verses.some(v => v.verseNumber === newVerseId);
+      if (!exists) {
+        setInitialContent(newVerseId, '');
+        setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
+      }
       setPreviousActiveVerseId(activeVerseId);
       setActiveVerseId(newVerseId);
       const prevId = Math.max(1, newVerseId - 1);
@@ -112,6 +121,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       getSaveStatus,
       saveImmediately,
       scrollVerseToTop,
+      setInitialContent,
     ]
   );
 
@@ -224,7 +234,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     } else if (!readOnly) {
       verses.forEach(verse => {
         const textarea = textareaRefs.current[verse.verseNumber];
-        if (textarea && verse.content) autoResizeTextarea(textarea);
+        if (textarea) autoResizeTextarea(textarea);
       });
     }
   }, [verses, readOnly, autoResizeTextarea]);

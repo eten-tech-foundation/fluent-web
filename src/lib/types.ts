@@ -39,6 +39,24 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  pericopeSetId?: number | null;
+}
+
+export interface PericopeSet {
+  id: number;
+  name: string;
+  description: string | null;
+}
+
+export interface PericopeVerseRef {
+  chapterNumber: number;
+  verseNumber: number;
+}
+
+export interface PericopeGroup {
+  pericopeNumber: string;
+  pericopeTitle: string | null;
+  verses: PericopeVerseRef[];
 }
 
 export interface CreateProject {
@@ -51,6 +69,7 @@ export interface CreateProject {
   metadata: Record<string, unknown>;
   sourceLanguage: number;
   targetLanguage: number;
+  pericopeSetId?: number;
 }
 
 export interface Chapter {
@@ -90,6 +109,7 @@ export interface Book {
 
 export interface ProjectItem {
   chapterAssignmentId: number;
+  projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;
@@ -221,6 +241,7 @@ export interface DraftingUIProps {
 
 export interface UserChapterAssignment {
   chapterAssignmentId: number;
+  projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;

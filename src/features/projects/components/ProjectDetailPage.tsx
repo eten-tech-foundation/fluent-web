@@ -322,6 +322,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       const projectItem: ProjectItem = {
         chapterAssignmentId: assignment.assignmentId,
+        projectId: projectId ?? 0,
         projectName: projectTitle,
         projectUnitId: assignment.projectUnitId,
         bibleId: assignment.bibleId,
