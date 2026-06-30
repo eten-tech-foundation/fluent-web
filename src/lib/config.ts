@@ -22,6 +22,12 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.string().url({
     message: 'BETTER_AUTH_URL must be a valid URL',
   }),
+  YOUVERSION_API_URL: z.string().url({
+    message: 'YOUVERSION_API_URL must be a valid URL (include http:// or https://)',
+  }),
+  YOUVERSION_API_KEY: z.string().min(1, {
+    message: 'YOUVERSION_API_KEY is required',
+  }),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -35,6 +41,8 @@ const processEnv = {
   ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT as string,
   APPINSIGHTS_CONNECTION_STRING: import.meta.env.VITE_APP_INSIGHTS_CONNECTION_STRING as string,
   AQUIFER_API_KEY: import.meta.env.VITE_AQUIFER_API_KEY as string,
+  YOUVERSION_API_URL: import.meta.env.VITE_YOUVERSION_API_URL as string,
+  YOUVERSION_API_KEY: import.meta.env.VITE_YOUVERSION_API_KEY as string,
   BETTER_AUTH_URL: import.meta.env.VITE_BETTER_AUTH_URL as string,
 };
 
@@ -70,7 +78,9 @@ export const config = {
   api: {
     url: validatedEnv.API_URL,
     aquifer_url: validatedEnv.AQUIFER_API_URL,
+    youversion_url: validatedEnv.YOUVERSION_API_URL,
     aquifer_key: validatedEnv.AQUIFER_API_KEY,
+    youversion_key: validatedEnv.YOUVERSION_API_KEY,
     auth_url: validatedEnv.BETTER_AUTH_URL,
   },
   environment: {
@@ -90,5 +100,12 @@ export const config = {
 export const getApiHeaders = (): HeadersInit => {
   return {
     'api-key': config.api.aquifer_key,
+  };
+};
+
+// Returns headers required for YouVersion API requests
+export const getYouVersionApiHeaders = (): HeadersInit => {
+  return {
+    'x-yvp-app-key': config.api.youversion_key,
   };
 };

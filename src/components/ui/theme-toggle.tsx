@@ -46,11 +46,11 @@ export function ThemeToggle() {
     >
       {theme === 'light' ? (
         <>
-          <Sun className='h-5 w-5' /> Light Mode
+          <Moon className='h-5 w-5' /> Dark Mode
         </>
       ) : (
         <>
-          <Moon className='h-5 w-5' /> Dark Mode
+          <Sun className='h-5 w-5' /> Light Mode
         </>
       )}
     </Button>

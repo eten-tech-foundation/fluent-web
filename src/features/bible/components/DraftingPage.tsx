@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMatch, useNavigate, useRouter } from '@tanstack/react-router';
-import { BookText, ChevronLeft, GripVertical, Loader } from 'lucide-react';
+import { BookText, ChevronLeft, GripVertical, Loader, Loader2, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { ResourcePanel } from '@/features/resources/components/ResourcePanel';
+import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   ChapterAssignmentStatus,
@@ -31,6 +32,7 @@ type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
+  { id: 'Bibles', name: 'Bibles' },
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
   // { id: 'AOSN', name: 'AOSN' }, // Uncomment when AOSN resources are available
@@ -52,8 +54,18 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
   const [resourcePanelWidth, setResourcePanelWidth] = useState(25); // percentage
+
+  // Bible tab state
+  const [selectedPanel, setSelectedPanel] = useState<1 | 2>(1);
+  const [openResourcePanel, setOpenResourcePanel] = useState(false);
+  const [bibleTabLabel, setBibleTabLabel] = useState('');
+  const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
+  const [bibleContentLoading, setBibleContentLoading] = useState(false);
+
   const isDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const clearBibleRef = useRef<(() => void) | null>(null);
 
   const { data: savedResourceState, isFetched } = useResourceState(projectItem.chapterAssignmentId);
 
@@ -151,11 +163,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
         setShowResources(tabStatus);
       }
 
-      if (languageCode) {
-        setCurrentLanguage(languageCode);
-      } else {
-        setCurrentLanguage(projectItem.sourceLangCode);
-      }
+      setCurrentLanguage(languageCode || projectItem.sourceLangCode);
 
       lastSavedStateRef.current = {
         bookCode: projectItem.book,
@@ -288,9 +296,28 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     [moveToNextVerse]
   );
 
-  const toggleResources = useCallback(() => {
-    setShowResources(prev => !prev);
+  const resetBibleState = useCallback(() => {
+    clearBibleRef.current?.();
+    setSelectedPanel(1);
+    setOpenResourcePanel(false);
+    setBibleTabLabel('');
+    setBibleVerses([]);
+    setBibleContentLoading(false);
   }, []);
+
+  const toggleResources = useCallback(() => {
+    setShowResources(prev => {
+      const nextShow = !prev;
+
+      // When hiding the resource panel, ResourcePanel unmounts and loses its
+      // internal hook state (selectedBible resets to null).
+      if (!nextShow) {
+        resetBibleState();
+      }
+
+      return nextShow;
+    });
+  }, [resetBibleState]);
 
   const handleResizeDragStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -315,6 +342,57 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     document.addEventListener('pointerup', onPointerUp);
   }, []);
 
+  // Close Tab 2: reset all bible-related state, revert to panel 1
+  const handleBibleTabClose = useCallback(() => {
+    resetBibleState();
+  }, [resetBibleState]);
+
+  // O(1) verse lookup for the bible panel left column
+  const bibleVerseMap = useMemo<Map<number, string>>(() => {
+    const map = new Map<number, string>();
+    bibleVerses.forEach(v => map.set(v.verseNumber, v.text));
+    return map;
+  }, [bibleVerses]);
+
+  // Shared target column renderer
+  const renderTargetColumn = (verseNumber: number) => {
+    const isActive = !readOnly && activeVerseId === verseNumber;
+    const currentTargetVerse = verses.find(v => v.verseNumber === verseNumber);
+    const shouldShowTarget = readOnly || isActive || revealedVerses.has(verseNumber);
+
+    return (
+      <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
+        {readOnly ? (
+          <div className='bg-card flex-1 rounded-lg border-2 px-4 py-3 shadow-sm'>
+            <p className='min-h-12 leading-snug'>{currentTargetVerse?.content ?? ''}</p>
+          </div>
+        ) : (
+          <div
+            className={`flex-1 rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
+              isActive ? 'border-primary' : ''
+            } ${currentTargetVerse?.content.trim() !== '' && !isActive ? 'bg-card' : ''}`}
+            onClick={() => handleActiveVerseChange(verseNumber)}
+          >
+            <textarea
+              ref={el => (textareaRefs.current[verseNumber] = el)}
+              aria-label={`Translation for verse ${verseNumber}`}
+              autoCapitalize='sentences'
+              autoCorrect='on'
+              className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+              placeholder='Enter translation...'
+              spellCheck={true}
+              value={currentTargetVerse?.content ?? ''}
+              onChange={e => handleTextChange(verseNumber, e.target.value)}
+              onFocus={() => handleActiveVerseChange(verseNumber)}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Back button
   const backButton = (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
@@ -338,6 +416,8 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
       </Tooltip>
     </TooltipProvider>
   );
+
+  // Render
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
@@ -391,7 +471,7 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                     <div
                       className='bg-primary h-full rounded-full transition-all duration-300'
                       style={{ width: `${progressPercentage}%` }}
-                    ></div>
+                    />
                   </div>
                 </div>
               )}
@@ -423,10 +503,18 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
             >
               <ResourcePanel
                 activeVerseId={activeVerseId}
+                bibleResourceName={setBibleTabLabel}
                 initialLanguage={currentLanguage}
                 initialResource={currentResource}
+                openResourceBiblePanel={setOpenResourcePanel}
+                registerClearBible={fn => {
+                  clearBibleRef.current = fn;
+                }}
                 resourceNames={RESOURCE_NAMES}
+                selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
                 sourceData={projectItem}
+                onBibleLoadingChange={setBibleContentLoading}
+                onBibleVersesChange={setBibleVerses}
                 onLanguageChange={setCurrentLanguage}
                 onResourceChange={setCurrentResource}
               />
@@ -455,10 +543,35 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
               scrollbarGutter: 'stable',
             }}
           >
-            <div className='sticky top-0 z-10 w-8 px-4 py-3'></div>
-            <div className='sticky top-0 z-10 px-6 py-3'>
-              <h3 className='text-xl font-semibold'>{projectItem.bibleName}</h3>
+            <div className='sticky top-0 z-10 w-8 px-4 py-3' />
+            <div className='sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
+              <button
+                className={`cursor-pointer text-xl font-semibold transition-colors ${
+                  selectedPanel === 1 ? 'border-primary border-b-2' : 'text-muted-foreground'
+                }`}
+                onClick={() => setSelectedPanel(1)}
+              >
+                {projectItem.bibleName}
+              </button>
+
+              {openResourcePanel && (
+                <>
+                  <button
+                    className={`ml-4 cursor-pointer text-xl font-semibold transition-colors ${
+                      selectedPanel === 2 ? 'border-primary border-b-2' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setSelectedPanel(2)}
+                  >
+                    {bibleTabLabel}
+                  </button>
+                  <X
+                    className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
+                    onClick={handleBibleTabClose}
+                  />
+                </>
+              )}
             </div>
+
             <div className='sticky top-0 z-10 px-6 py-3'>
               <h3 className='text-xl font-semibold'>{projectItem.targetLanguage}</h3>
             </div>
@@ -471,65 +584,102 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
                 style={{ scrollbarGutter: 'stable' }}
                 onScroll={() => !readOnly && updateButtonPosition()}
               >
-                {sourceVerses.map(verse => {
-                  const isActive = !readOnly && activeVerseId === verse.verseNumber;
-                  const currentTargetVerse = verses.find(v => v.verseNumber === verse.verseNumber);
-                  const shouldShowTarget =
-                    readOnly || isActive || revealedVerses.has(verse.verseNumber);
-
-                  return (
-                    <div
-                      key={verse.verseNumber}
-                      ref={el => (verseRefs.current[verse.verseNumber] = el)}
-                      className='grid items-start py-4'
-                      style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
-                    >
-                      <div className='flex w-8 items-start px-4'>
-                        <span className='text-lg font-medium'>{verse.verseNumber}</span>
-                      </div>
-                      <div className='flex flex-col px-6'>
-                        <div
-                          className={`bg-card rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
-                            isActive ? 'border-primary' : ''
-                          }`}
-                        >
-                          <p className='min-h-12 leading-relaxed'>{verse.text}</p>
-                        </div>
-                      </div>
-
-                      <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
-                        {readOnly ? (
-                          <div className='bg-card flex-1 rounded-lg border-2 px-4 py-3 shadow-sm'>
-                            <p className='min-h-12 leading-snug'>
-                              {currentTargetVerse?.content ?? ''}
-                            </p>
-                          </div>
-                        ) : (
-                          <div
-                            className={`flex-1 rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
-                              isActive ? 'border-primary' : ''
-                            } ${currentTargetVerse?.content.trim() !== '' && !isActive ? 'bg-card' : ''}`}
-                            onClick={() => handleActiveVerseChange(verse.verseNumber)}
-                          >
-                            <textarea
-                              ref={el => (textareaRefs.current[verse.verseNumber] = el)}
-                              aria-label={`Translation for verse ${verse.verseNumber}`}
-                              autoCapitalize='sentences'
-                              autoCorrect='on'
-                              className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
-                              placeholder='Enter translation...'
-                              spellCheck={true}
-                              value={currentTargetVerse?.content ?? ''}
-                              onChange={e => handleTextChange(verse.verseNumber, e.target.value)}
-                              onFocus={() => handleActiveVerseChange(verse.verseNumber)}
-                              onKeyDown={handleKeyDown}
-                            />
-                          </div>
-                        )}
+                {selectedPanel === 2 && bibleContentLoading && (
+                  <div
+                    className='grid h-full items-start py-4'
+                    style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+                  >
+                    <div className='w-8' />
+                    <div className='flex h-full items-center justify-center px-6'>
+                      <div className='bg-muted flex h-full w-full items-center justify-center rounded-lg border-2'>
+                        <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
                       </div>
                     </div>
-                  );
-                })}
+                    <div className='flex flex-col px-6'>
+                      {sourceVerses.map(verse => (
+                        <div key={verse.verseNumber} className='py-4'>
+                          {renderTargetColumn(verse.verseNumber)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPanel === 2 && !bibleContentLoading && bibleVerses.length === 0 && (
+                  <div
+                    className='grid h-full items-start py-4'
+                    style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+                  >
+                    <div className='w-8' />
+                    <div className='flex h-full justify-center px-6'>
+                      <div className='bg-muted flex h-full w-full justify-center rounded-lg border-2 pt-10'>
+                        <p className='text-muted-foreground text-sm'>No content available</p>
+                      </div>
+                    </div>
+                    <div className='flex flex-col px-6'>
+                      {sourceVerses.map(verse => (
+                        <div key={verse.verseNumber} className='py-4'>
+                          {renderTargetColumn(verse.verseNumber)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className={
+                    selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)
+                      ? 'hidden'
+                      : undefined
+                  }
+                >
+                  {sourceVerses.map(verse => {
+                    const isActive = !readOnly && activeVerseId === verse.verseNumber;
+
+                    return (
+                      <div
+                        key={verse.verseNumber}
+                        ref={el => (verseRefs.current[verse.verseNumber] = el)}
+                        className='grid items-start py-4'
+                        style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+                      >
+                        <div className='flex w-8 items-start px-4'>
+                          <span className='text-lg font-medium'>{verse.verseNumber}</span>
+                        </div>
+                        <div className='flex flex-col px-6'>
+                          {selectedPanel === 1 ? (
+                            <div
+                              className={`bg-card rounded-lg border-2 px-4 py-1 shadow-sm transition-all ${
+                                isActive ? 'border-primary' : ''
+                              }`}
+                            >
+                              <p className='min-h-12 leading-relaxed'>{verse.text}</p>
+                            </div>
+                          ) : (
+                            <div
+                              className={`bg-muted rounded-lg border-2 px-4 py-1 shadow-sm ${
+                                isActive ? 'border-primary' : ''
+                              }`}
+                            >
+                              {bibleVerseMap.has(verse.verseNumber) ? (
+                                <p className='min-h-12 leading-relaxed'>
+                                  {bibleVerseMap.get(verse.verseNumber)}
+                                </p>
+                              ) : (
+                                <p className='text-muted-foreground min-h-12 leading-relaxed'>
+                                  No content available
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right column — target textarea, always rendered */}
+                        {renderTargetColumn(verse.verseNumber)}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 {!readOnly && revealedVerses.size < totalSourceVerses && (
                   <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
@@ -573,6 +723,8 @@ const DraftingUI: React.FC<DraftingUIProps> = ({
     </div>
   );
 };
+
+// DraftingPage
 
 const DraftingPage: React.FC = () => {
   const { userdetail } = useAppStore();
