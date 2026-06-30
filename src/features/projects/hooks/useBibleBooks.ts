@@ -44,6 +44,7 @@ const fetchBibleBooks = async (bibleId: number): Promise<BibleBook[]> => {
 const fetchBiblesByLanguage = async (languageId: number): Promise<Bible[]> => {
   const res = await fetch(`${config.api.url}/bibles/language/${languageId}`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
