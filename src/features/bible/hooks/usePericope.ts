@@ -14,7 +14,7 @@ interface UsePericopeProps {
   getSaveStatus: (verseNumber: number) => { hasUnsavedChanges: boolean };
   saveImmediately: (verseNumber: number, content: string) => Promise<void>;
   handleActiveVerseChange: (verseNumber: number) => Promise<void>;
-  revealNextVerse: () => Promise<void>;
+  revealNextVerse: () => void;
 }
 
 export const usePericope = ({

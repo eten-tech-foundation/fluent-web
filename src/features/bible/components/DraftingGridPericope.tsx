@@ -19,7 +19,7 @@ interface DraftingGridPericopeProps {
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => Promise<void>;
-  handleKeyDown: (e: React.KeyboardEvent) => Promise<void>;
+  handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
 }
 

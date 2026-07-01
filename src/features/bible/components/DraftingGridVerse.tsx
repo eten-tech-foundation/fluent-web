@@ -11,7 +11,7 @@ interface DraftingTargetColumnProps {
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => Promise<void>;
-  handleKeyDown: (e: React.KeyboardEvent) => Promise<void>;
+  handleKeyDown: (e: React.KeyboardEvent) => void;
 }
 
 export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
@@ -76,7 +76,7 @@ interface DraftingGridVerseProps {
   getPericopeStyle: (verseNumber: number, isActive: boolean, baseClass: string) => string;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => Promise<void>;
-  handleKeyDown: (e: React.KeyboardEvent) => Promise<void>;
+  handleKeyDown: (e: React.KeyboardEvent) => void;
 }
 
 export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
