@@ -126,7 +126,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const advanceToVerse = useCallback(
-    async (nextVerseId: number, verseToSave?: { verseNumber: number; content: string }) => {
+    (nextVerseId: number, verseToSave?: { verseNumber: number; content: string }) => {
       if (readOnly || nextVerseId > sourceVerses.length) return;
       const nextVerseExists = verses.find(v => v.verseNumber === nextVerseId);
       if (!nextVerseExists) {
@@ -136,7 +136,10 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       if (verseToSave) {
         const status = getSaveStatus(verseToSave.verseNumber);
         if (status.hasUnsavedChanges) {
-          await saveImmediately(verseToSave.verseNumber, verseToSave.content);
+          // Flush unsaved changes immediately without blocking navigation.
+          // The cursor moves to the next verse right away; the save completes
+          // in the background and retries automatically on failure.
+          void saveImmediately(verseToSave.verseNumber, verseToSave.content);
         }
       }
       setPreviousActiveVerseId(activeVerseId);
@@ -156,16 +159,16 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     ]
   );
 
-  const moveToNextVerse = useCallback(async () => {
+  const moveToNextVerse = useCallback(() => {
     if (readOnly) return;
     const currentVerse = verses.find(v => v.verseNumber === activeVerseId);
     if (!currentVerse || currentVerse.content.trim() === '') return;
-    await advanceToVerse(activeVerseId + 1, currentVerse);
+    advanceToVerse(activeVerseId + 1, currentVerse);
   }, [activeVerseId, verses, advanceToVerse, readOnly]);
 
-  const revealNextVerse = useCallback(async () => {
+  const revealNextVerse = useCallback(() => {
     if (readOnly || !lastRevealedVerseHasContent || !lastRevealedVerse) return;
-    await advanceToVerse(lastRevealedVerseNumber + 1, lastRevealedVerse);
+    advanceToVerse(lastRevealedVerseNumber + 1, lastRevealedVerse);
   }, [
     lastRevealedVerseNumber,
     lastRevealedVerseHasContent,

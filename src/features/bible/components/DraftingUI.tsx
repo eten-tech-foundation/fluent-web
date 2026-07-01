@@ -142,6 +142,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const {
     pericopes,
     isPericopeMode,
+    isPericopeLoading,
     getPericopeStyle,
     globalNextUntouchedVerse,
     resourceVerseId,
@@ -308,10 +309,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   ]);
 
   const handleKeyDown = useCallback(
-    async (e: React.KeyboardEvent) => {
+    (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        await moveToNextVerse();
+        moveToNextVerse();
       }
     },
     [moveToNextVerse]
@@ -516,7 +517,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                       : undefined
                   }
                 >
-                  {isPericopeMode && pericopes ? (
+                  {displayMode === 'pericope' && isPericopeLoading ? (
+                    <div className='flex h-full items-center justify-center py-12'>
+                      <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                    </div>
+                  ) : isPericopeMode && pericopes ? (
                     <DraftingGridPericope
                       activeVerseId={activeVerseId}
                       bibleVerseMap={bibleVerseMap}
@@ -555,6 +560,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
                 {!readOnly &&
                   !isPericopeMode &&
+                  !isPericopeLoading &&
                   effectiveRevealedVerses.size < totalSourceVerses && (
                     <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
                       <TooltipProvider delayDuration={300}>

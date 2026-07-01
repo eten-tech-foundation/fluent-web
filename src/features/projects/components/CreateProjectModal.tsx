@@ -385,7 +385,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <SelectContent>
                 {pericopeSets?.map(set => (
                   <SelectItem key={set.id} value={set.id.toString()}>
-                    {set.description || set.name}
+                    {set.description ?? set.name} ({set.name})
                   </SelectItem>
                 ))}
               </SelectContent>

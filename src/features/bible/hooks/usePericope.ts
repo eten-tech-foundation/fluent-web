@@ -30,7 +30,7 @@ export const usePericope = ({
   handleActiveVerseChange,
   revealNextVerse,
 }: UsePericopeProps) => {
-  const { data: pericopes } = useChapterPericopes(
+  const { data: pericopes, isLoading: isPericopeLoading } = useChapterPericopes(
     projectItem.projectId,
     projectItem.bookCode,
     projectItem.chapterNumber
@@ -176,6 +176,7 @@ export const usePericope = ({
     pericopes,
     pericopeMap,
     isPericopeMode,
+    isPericopeLoading,
     getPericopeStyle,
     currentPericopeGroup,
     globalNextUntouchedVerse,
