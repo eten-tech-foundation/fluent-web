@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Loader2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,6 +15,7 @@ import {
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
   ChapterAssignmentStatusNextAction,
@@ -43,6 +45,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   userdetail,
   readOnly = false,
 }) => {
+  const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
 
   const addVerseMutation = useAddTranslatedVerse();
@@ -102,13 +105,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const saveVerse = useCallback(
     async (verse: number, text: string) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
+      if (!sourceVerse) {
+        Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
+        return;
+      }
       const trimmedText = text.trim();
 
       await addVerseMutation.mutateAsync({
         verseData: {
           projectUnitId: projectItem.projectUnitId,
           content: trimmedText,
-          bibleTextId: (sourceVerse as Source).id,
+          bibleTextId: sourceVerse.id,
           assignedUserId: userdetail.id,
         },
       });
@@ -353,6 +360,49 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
+  const renderPanelTwoPlaceholder = useCallback(
+    (middleContent: React.ReactNode, isCenter = true) => (
+      <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '2rem 1fr 1fr' }}>
+        <div className='w-8' />
+        <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+          <div
+            className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+          >
+            {middleContent}
+          </div>
+        </div>
+        <div className='flex flex-col px-6'>
+          {sourceVerses.map(verse => (
+            <div key={verse.verseNumber} className='py-4'>
+              <DraftingTargetColumn
+                activeVerseId={activeVerseId}
+                effectiveRevealedVerses={effectiveRevealedVerses}
+                handleActiveVerseChange={handleActiveVerseChange}
+                handleKeyDown={handleKeyDown}
+                handleTextChange={handleTextChange}
+                readOnly={readOnly}
+                textareaRefs={textareaRefs}
+                verseNumber={verse.verseNumber}
+                verses={verses}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    [
+      sourceVerses,
+      activeVerseId,
+      effectiveRevealedVerses,
+      handleActiveVerseChange,
+      handleKeyDown,
+      handleTextChange,
+      readOnly,
+      textareaRefs,
+      verses,
+    ]
+  );
+
   return (
     <div className='flex h-full flex-col overflow-hidden'>
       <DraftingHeader
@@ -448,67 +498,22 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 style={{ scrollbarGutter: 'stable' }}
                 onScroll={() => !readOnly && updateButtonPosition()}
               >
-                {selectedPanel === 2 && bibleContentLoading && (
-                  <div
-                    className='grid h-full items-start py-4'
-                    style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
-                  >
-                    <div className='w-8' />
-                    <div className='flex h-full items-center justify-center px-6'>
-                      <div className='bg-muted flex h-full w-full items-center justify-center rounded-lg border-2'>
-                        <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
-                      </div>
-                    </div>
-                    <div className='flex flex-col px-6'>
-                      {sourceVerses.map(verse => (
-                        <div key={verse.verseNumber} className='py-4'>
-                          <DraftingTargetColumn
-                            activeVerseId={activeVerseId}
-                            effectiveRevealedVerses={effectiveRevealedVerses}
-                            handleActiveVerseChange={handleActiveVerseChange}
-                            handleKeyDown={handleKeyDown}
-                            handleTextChange={handleTextChange}
-                            readOnly={readOnly}
-                            textareaRefs={textareaRefs}
-                            verseNumber={verse.verseNumber}
-                            verses={verses}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {selectedPanel === 2 &&
+                  bibleContentLoading &&
+                  renderPanelTwoPlaceholder(
+                    <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
+                    true
+                  )}
 
-                {selectedPanel === 2 && !bibleContentLoading && bibleVerses.length === 0 && (
-                  <div
-                    className='grid h-full items-start py-4'
-                    style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
-                  >
-                    <div className='w-8' />
-                    <div className='flex h-full justify-center px-6'>
-                      <div className='bg-muted flex h-full w-full justify-center rounded-lg border-2 pt-10'>
-                        <p className='text-muted-foreground text-sm'>No content available</p>
-                      </div>
-                    </div>
-                    <div className='flex flex-col px-6'>
-                      {sourceVerses.map(verse => (
-                        <div key={verse.verseNumber} className='py-4'>
-                          <DraftingTargetColumn
-                            activeVerseId={activeVerseId}
-                            effectiveRevealedVerses={effectiveRevealedVerses}
-                            handleActiveVerseChange={handleActiveVerseChange}
-                            handleKeyDown={handleKeyDown}
-                            handleTextChange={handleTextChange}
-                            readOnly={readOnly}
-                            textareaRefs={textareaRefs}
-                            verseNumber={verse.verseNumber}
-                            verses={verses}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {selectedPanel === 2 &&
+                  !bibleContentLoading &&
+                  bibleVerses.length === 0 &&
+                  renderPanelTwoPlaceholder(
+                    <p className='text-muted-foreground text-sm'>
+                      {t('noContentAvailable', 'No content available')}
+                    </p>,
+                    false
+                  )}
 
                 <div
                   className={
@@ -575,7 +580,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                               disabled={!isNextButtonEnabled}
                               onClick={handleNextClick}
                             >
-                              Next Verse
+                              {t('nextVerse', 'Next Verse')}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent
@@ -585,7 +590,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                             sideOffset={8}
                           >
                             <div className='flex items-center gap-2'>
-                              <span>Next Verse</span>
+                              <span>{t('nextVerse', 'Next Verse')}</span>
                               <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
                                 Enter ↵
                               </span>

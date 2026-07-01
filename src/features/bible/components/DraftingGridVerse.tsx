@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { type Source, type TargetVerse } from '@/lib/types';
 
 interface DraftingTargetColumnProps {
@@ -94,6 +96,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   handleActiveVerseChange,
   handleKeyDown,
 }) => {
+  const { t } = useTranslation();
   return (
     <>
       {sourceVerses.map(verse => {
@@ -123,7 +126,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                     </p>
                   ) : (
                     <p className='text-muted-foreground min-h-12 leading-relaxed'>
-                      No content available
+                      {t('noContentAvailable', 'No content available')}
                     </p>
                   )}
                 </div>

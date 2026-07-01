@@ -127,7 +127,7 @@ export const usePericope = ({
 
   const handleNextClick = useCallback(async () => {
     if (!isPericopeMode) {
-      await revealNextVerse();
+      revealNextVerse();
       return;
     }
     if (!currentPericopeGroup) return;
@@ -143,11 +143,14 @@ export const usePericope = ({
     if (globalNextUntouchedVerse) {
       await handleActiveVerseChange(globalNextUntouchedVerse.verseNumber);
     } else {
-      const lastVerseOfGroup = currentPericopeGroup.verses[currentPericopeGroup.verses.length - 1];
-      const isAtEndOfGroup = activeVerseId === lastVerseOfGroup.verseNumber;
+      const currentVerseIdx = currentPericopeGroup.verses.findIndex(
+        v => v.verseNumber === activeVerseId
+      );
+      const isAtEndOfGroup = currentVerseIdx === currentPericopeGroup.verses.length - 1;
 
-      if (!isAtEndOfGroup) {
-        await handleActiveVerseChange(activeVerseId + 1);
+      if (!isAtEndOfGroup && currentVerseIdx !== -1) {
+        const nextVerse = currentPericopeGroup.verses[currentVerseIdx + 1];
+        await handleActiveVerseChange(nextVerse.verseNumber);
       } else {
         const currentIdx = pericopes.findIndex(
           g => g.pericopeNumber === currentPericopeGroup.pericopeNumber

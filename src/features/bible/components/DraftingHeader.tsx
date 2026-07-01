@@ -49,14 +49,13 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span>
-            <ChevronLeft
-              className='shrink-0 cursor-pointer'
-              size={'24px'}
-              strokeWidth={'2px'}
-              onClick={onBack}
-            />
-          </span>
+          <button
+            aria-label={t('back', 'Back')}
+            className='focus-visible:ring-primary flex shrink-0 cursor-pointer items-center rounded-xs border-none bg-transparent p-0 outline-hidden focus-visible:ring-2'
+            onClick={onBack}
+          >
+            <ChevronLeft className='shrink-0' size={'24px'} strokeWidth={'2px'} />
+          </button>
         </TooltipTrigger>
         <TooltipContent
           align='start'
@@ -89,7 +88,11 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
           <div className='flex flex-1 items-center justify-end gap-4'>
             <div className='flex items-center gap-2'>
               {isAnythingSaving && <Loader className='text-primary h-4 w-4 animate-spin' />}
-              {hasAnyError && <span className='text-sm text-red-500'>Auto-save failed</span>}
+              {hasAnyError && (
+                <span className='text-sm text-red-500'>
+                  {t('autoSaveFailed', 'Auto-save failed')}
+                </span>
+              )}
             </div>
 
             <TooltipProvider delayDuration={300}>

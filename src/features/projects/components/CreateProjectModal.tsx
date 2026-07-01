@@ -33,7 +33,7 @@ export interface CreateProjectData {
   sourceBible: number;
   books: number[];
   connectivityProfile: ConnectivityProfile | null;
-  pericopeSetId?: number;
+  pericopeSetId: number;
 }
 
 interface CreateProjectModalProps {
@@ -133,7 +133,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       return;
     }
     try {
-      if (!formData.targetLanguage || !formData.sourceLanguage || !formData.sourceBible) {
+      if (
+        !formData.targetLanguage ||
+        !formData.sourceLanguage ||
+        !formData.sourceBible ||
+        !formData.pericopeSetId
+      ) {
         return;
       }
       setIsSubmitting(true);
@@ -144,7 +149,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         sourceBible: formData.sourceBible,
         books: formData.books,
         connectivityProfile: formData.connectivityProfile,
-        pericopeSetId: formData.pericopeSetId ?? undefined,
+        pericopeSetId: formData.pericopeSetId,
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -370,6 +375,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               {t('pericopeSet', 'Pericope Set')}
             </Label>
             <Select
+              disabled={pericopeSetsLoading}
               value={formData.pericopeSetId?.toString() ?? ''}
               onValueChange={value => updateFormData('pericopeSetId', parseInt(value))}
             >
