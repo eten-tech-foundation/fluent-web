@@ -13,7 +13,6 @@ interface UseDraftingProps {
 export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: UseDraftingProps) => {
   const [verses, setVerses] = useState<TargetVerse[]>(targetVerses);
   const [activeVerseId, setActiveVerseId] = useState(1);
-  const [previousActiveVerseId, setPreviousActiveVerseId] = useState<number | null>(null);
   const [revealedVerses, setRevealedVerses] = useState<Set<number>>(new Set());
   const [buttonTop, setButtonTop] = useState<number>(0);
 
@@ -92,14 +91,14 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const handleActiveVerseChange = useCallback(
-    async (newVerseId: number) => {
+    (newVerseId: number) => {
       if (readOnly) return;
-      if (previousActiveVerseId !== null && previousActiveVerseId !== newVerseId) {
-        const previousVerse = verses.find(v => v.verseNumber === previousActiveVerseId);
+      if (activeVerseId !== newVerseId) {
+        const previousVerse = verses.find(v => v.verseNumber === activeVerseId);
         if (previousVerse) {
-          const status = getSaveStatus(previousActiveVerseId);
+          const status = getSaveStatus(activeVerseId);
           if (status.hasUnsavedChanges) {
-            await saveImmediately(previousActiveVerseId, previousVerse.content);
+            void saveImmediately(activeVerseId, previousVerse.content);
           }
         }
       }
@@ -108,14 +107,12 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         setInitialContent(newVerseId, '');
         setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
       }
-      setPreviousActiveVerseId(activeVerseId);
       setActiveVerseId(newVerseId);
       const prevId = Math.max(1, newVerseId - 1);
       requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
     [
       readOnly,
-      previousActiveVerseId,
       verses,
       activeVerseId,
       getSaveStatus,
@@ -142,13 +139,11 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
           void saveImmediately(verseToSave.verseNumber, verseToSave.content);
         }
       }
-      setPreviousActiveVerseId(activeVerseId);
       setActiveVerseId(nextVerseId);
       const prevId = Math.max(1, nextVerseId - 1);
       requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
     [
-      activeVerseId,
       verses,
       sourceVerses.length,
       saveImmediately,

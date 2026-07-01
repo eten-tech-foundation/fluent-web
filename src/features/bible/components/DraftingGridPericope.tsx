@@ -18,7 +18,7 @@ interface DraftingGridPericopeProps {
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
-  handleActiveVerseChange: (verseNumber: number) => Promise<void>;
+  handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
 }
@@ -31,7 +31,7 @@ interface TargetVersesGroupProps {
   globalNextUntouchedVerse: Source | null;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
-  handleActiveVerseChange: (verseNumber: number) => Promise<void>;
+  handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
 }

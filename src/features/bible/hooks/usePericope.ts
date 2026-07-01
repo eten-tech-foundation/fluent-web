@@ -13,7 +13,7 @@ interface UsePericopeProps {
   displayMode: string;
   getSaveStatus: (verseNumber: number) => { hasUnsavedChanges: boolean };
   saveImmediately: (verseNumber: number, content: string) => Promise<void>;
-  handleActiveVerseChange: (verseNumber: number) => Promise<void>;
+  handleActiveVerseChange: (verseNumber: number) => void;
   revealNextVerse: () => void;
 }
 
@@ -141,7 +141,7 @@ export const usePericope = ({
     }
 
     if (globalNextUntouchedVerse) {
-      await handleActiveVerseChange(globalNextUntouchedVerse.verseNumber);
+      handleActiveVerseChange(globalNextUntouchedVerse.verseNumber);
     } else {
       const currentVerseIdx = currentPericopeGroup.verses.findIndex(
         v => v.verseNumber === activeVerseId
@@ -150,7 +150,7 @@ export const usePericope = ({
 
       if (!isAtEndOfGroup && currentVerseIdx !== -1) {
         const nextVerse = currentPericopeGroup.verses[currentVerseIdx + 1];
-        await handleActiveVerseChange(nextVerse.verseNumber);
+        handleActiveVerseChange(nextVerse.verseNumber);
       } else {
         const currentIdx = pericopes.findIndex(
           g => g.pericopeNumber === currentPericopeGroup.pericopeNumber
@@ -158,7 +158,7 @@ export const usePericope = ({
         if (currentIdx !== -1 && currentIdx < pericopes.length - 1) {
           const nextGroup = pericopes[currentIdx + 1];
           const nextFirstVerse = nextGroup.verses[0];
-          await handleActiveVerseChange(nextFirstVerse.verseNumber);
+          handleActiveVerseChange(nextFirstVerse.verseNumber);
         }
       }
     }
