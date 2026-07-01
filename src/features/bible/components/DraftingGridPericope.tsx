@@ -78,7 +78,13 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
           <div
             key={v.verseNumber}
             className='relative flex w-full items-start'
-            onClick={e => e.stopPropagation()}
+            onClick={e => {
+              e.stopPropagation();
+              const textarea = textareaRefs.current[v.verseNumber];
+              if (textarea) {
+                textarea.focus();
+              }
+            }}
           >
             <span className='mt-0.5 mr-3 w-4 text-right text-base font-bold text-slate-900 select-none'>
               {v.verseNumber}
@@ -199,11 +205,23 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 }`}
                 role='button'
                 tabIndex={0}
-                onClick={() => void handleActiveVerseChange(groupVerses[0].verseNumber)}
+                onClick={() => {
+                  const isGroupAlreadyActive = groupVerses.some(
+                    gv => gv.verseNumber === activeVerseId
+                  );
+                  if (!isGroupAlreadyActive) {
+                    handleActiveVerseChange(groupVerses[0].verseNumber);
+                  }
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    void handleActiveVerseChange(groupVerses[0].verseNumber);
+                    const isGroupAlreadyActive = groupVerses.some(
+                      gv => gv.verseNumber === activeVerseId
+                    );
+                    if (!isGroupAlreadyActive) {
+                      handleActiveVerseChange(groupVerses[0].verseNumber);
+                    }
                   }
                 }}
               >
@@ -238,7 +256,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 }`}
                 onClick={e => {
                   if (e.target === e.currentTarget) {
-                    void handleActiveVerseChange(groupVerses[0].verseNumber);
+                    const isGroupAlreadyActive = groupVerses.some(
+                      gv => gv.verseNumber === activeVerseId
+                    );
+                    if (!isGroupAlreadyActive) {
+                      handleActiveVerseChange(groupVerses[0].verseNumber);
+                    }
                   }
                 }}
               >

@@ -66,7 +66,15 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     if (!container || !row) return;
     const containerRect = container.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
-    const newScrollTop = container.scrollTop + (rowRect.top - containerRect.top);
+    const rowTopRelative = rowRect.top - containerRect.top;
+    const rowBottomRelative = rowRect.bottom - containerRect.top;
+
+    // If the row is already fully visible inside the scroll container, don't scroll
+    if (rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
+      return;
+    }
+
+    const newScrollTop = container.scrollTop + rowTopRelative;
     container.scrollTo({ top: newScrollTop, behavior: 'smooth' });
   }, []);
 
