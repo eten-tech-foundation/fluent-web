@@ -1,0 +1,11 @@
+{
+  "missingVerse": {
+    "description": "Falta el versículo {{verse}} del capítulo {{chapter}}. Inserta el versículo que falta para arreglarlo.",
+    "moreInfo": "Un capítulo debe contener marcadores de versículos para todos los versículos. Esto puede deberse a un error tipográfico o a la falta de un versículo. Inserte el versículo faltante para corregir este problema.",
+    "fixTitle": "Inserta el versículo que falta"
+  },
+  "verseOutOfOrder": {
+    "description": "El versículo {{verse}} aparece fuera de orden en el capítulo {{chapter}}.",
+    "moreInfo": "Los versículos deben aparecer en orden ascendente en un capítulo. Mueva el marcador de versículo a la ubicación correcta para solucionar este problema."
+  }
+}

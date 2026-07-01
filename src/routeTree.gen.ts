@@ -17,6 +17,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
+import { Route as AuthenticatedLynxUsfmRouteImport } from './routes/_authenticated/lynx-usfm'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './routes/_authenticated/projects/$projectId/index'
@@ -62,6 +63,11 @@ const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => LegalRoute,
 } as any)
+const AuthenticatedLynxUsfmRoute = AuthenticatedLynxUsfmRouteImport.update({
+  id: '/lynx-usfm',
+  path: '/lynx-usfm',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
     | '/projects/'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
     | '/'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/_authenticated/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
     | '/_authenticated/'
@@ -248,6 +260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof LegalRoute
     }
+    '/_authenticated/lynx-usfm': {
+      id: '/_authenticated/lynx-usfm'
+      path: '/lynx-usfm'
+      fullPath: '/lynx-usfm'
+      preLoaderRoute: typeof AuthenticatedLynxUsfmRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
@@ -287,6 +306,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedLynxUsfmRoute: typeof AuthenticatedLynxUsfmRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -296,6 +316,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedLynxUsfmRoute: AuthenticatedLynxUsfmRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
