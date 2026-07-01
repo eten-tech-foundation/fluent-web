@@ -2,11 +2,37 @@ import { DocumentManager, Localizer, Workspace } from '@sillsdev/lynx';
 import { StandardRuleSets } from '@sillsdev/lynx-punctuation-checker';
 import { UsfmDocumentFactory, UsfmEditFactory } from '@sillsdev/lynx-usfm';
 
+import allowedCharactersEn from './locales/allowed-characters.en.json';
+import pairedPunctuationEn from './locales/paired-punctuation.en.json';
+import punctuationContextEn from './locales/punctuation-context.en.json';
+import quotationEn from './locales/quotation.en.json';
+import standardFixesEn from './locales/standard-fixes.en.json';
 import { createBrowserUsfmStylesheet } from './stylesheet';
 import { VerseOrderDiagnosticProvider } from './verse-order-provider';
 
 import type { TextEdit } from '@sillsdev/lynx';
 import type { UsfmDocument } from '@sillsdev/lynx-usfm';
+
+/**
+ * The punctuation-checker package loads its locale JSONs with template-literal
+ * dynamic imports, which Vite's dependency optimizer cannot rewrite — at
+ * runtime the messages fall back to raw i18next keys. `Localizer.addNamespace`
+ * is first-write-wins, so registering the same namespaces here with statically
+ * imported JSON (vendored from the package's dist, MIT) takes precedence.
+ * Upstream ask (sillsdev/lynx): ship locales in a bundler-friendly way.
+ */
+function registerBundlerSafeLocales(localizer: Localizer): void {
+  const namespaces: Array<[string, unknown]> = [
+    ['quotation', quotationEn],
+    ['allowedCharacters', allowedCharactersEn],
+    ['pairedPunctuation', pairedPunctuationEn],
+    ['punctuation-context', punctuationContextEn],
+    ['standardPunctuationFixes', standardFixesEn],
+  ];
+  for (const [namespace, resources] of namespaces) {
+    localizer.addNamespace(namespace, () => resources);
+  }
+}
 
 export interface LynxContext {
   workspace: Workspace<TextEdit>;
@@ -29,6 +55,7 @@ export interface LynxContext {
  */
 export async function createLynxWorkspace(language = 'en'): Promise<LynxContext> {
   const localizer = new Localizer(language);
+  registerBundlerSafeLocales(localizer);
 
   const stylesheet = createBrowserUsfmStylesheet();
   const documentFactory = new UsfmDocumentFactory(stylesheet);
