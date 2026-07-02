@@ -349,7 +349,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         state: { projectItem },
       });
     },
-    [userdetail, projectTitle, projectSource, projectTargetLanguageName, navigate]
+    [userdetail, projectId, projectTitle, projectSource, projectTargetLanguageName, navigate]
   );
 
   const handleAddBook = useCallback(() => {
