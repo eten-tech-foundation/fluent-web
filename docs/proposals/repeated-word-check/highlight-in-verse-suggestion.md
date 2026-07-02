@@ -244,9 +244,13 @@ danger — stated honestly.
   ([`fluent-api/docs/proposals/feature-flags/`](../../../../fluent-api/docs/proposals/feature-flags/feature-flags-suggestion.md));
   if that lands, use it. If not yet available, a local build-time/config flag is acceptable for
   the experiment. Either way the current `<textarea>` stays the default path.
-- **HL5 — Read-only `/view` mode.** In read-only stages the verse is a `<p>`, not a textarea —
-  coloring there (if wanted) is trivial and low-risk and can be delivered independently of the
-  editable-field decision. Confirm whether product wants highlighting in `/view` too.
+- **HL5 — Read-only `/view` mode.** In read-only stages the verse is a `<p>`, not a textarea, so
+  `/view` highlighting is **simpler on the editing-behavior axis** (no caret / IME / auto-resize /
+  editor-engine concerns) and is **independent of the editable-field Option A–D decision**. It is
+  **not**, however, independent of the mapping work: it still relies on the **same
+  `start_position`→rendered-range mapping and grapheme/NFC handling described in HL3 and §4**, so
+  it can't be treated as a zero-cost shortcut past the hard part. Confirm whether product wants
+  highlighting in `/view` too.
 
 ---
 
