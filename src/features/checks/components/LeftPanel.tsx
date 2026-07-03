@@ -24,6 +24,15 @@ export interface LeftPanelProps {
   resourcesContent: ReactNode;
   /** Body for the Checks tab (the `ChecksPanel`, composed by the parent). */
   checksContent: ReactNode;
+  /**
+   * Whether the "Checks" tab is shown at all. When the Repeated Word Check
+   * feature is disabled (feature-flags proposal D6/D7), the tab — and its
+   * notification dot — are hidden entirely so the panel looks as if Checks were
+   * never implemented. The parent (`DraftingUI`) is responsible for also forcing
+   * `activeTab` back to `'resources'` when this is false, so the shared panel
+   * never tries to render an absent tab's body. Defaults to true.
+   */
+  showChecksTab?: boolean;
 }
 
 /**
@@ -93,39 +102,48 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   activeFindingsCount,
   resourcesContent,
   checksContent,
+  showChecksTab = true,
 }) => {
   const hasActiveFindings = activeFindingsCount > 0;
+  // When the Checks tab is hidden, the shared panel must never try to render the
+  // (absent) checks body. The parent forces `activeTab` back to 'resources', but
+  // we also guard here so this component is correct in isolation.
+  const effectiveTab: LeftTab = showChecksTab ? activeTab : 'resources';
 
   return (
     <div className='flex h-full flex-col'>
       <div aria-label='Left panel' className='flex items-center gap-6 px-1 pt-4' role='tablist'>
         <TabButton
           id={TAB_IDS.resources}
-          isActive={activeTab === 'resources'}
+          isActive={effectiveTab === 'resources'}
           label='Resources'
           onClick={() => onTabChange('resources')}
         />
         {/* The notification dot sits to the right of the "Checks" label only,
             and is visible whatever tab is active (mock shows it while the
-            Resources tab is active too) — §5.1, W11. */}
-        <TabButton
-          id={TAB_IDS.checks}
-          isActive={activeTab === 'checks'}
-          label='Checks'
-          showDot={hasActiveFindings}
-          onClick={() => onTabChange('checks')}
-        />
+            Resources tab is active too) — §5.1, W11. The whole tab (and thus the
+            dot) is hidden when the Checks feature is disabled (feature-flags
+            proposal D6/D7), so it looks as if Checks were never implemented. */}
+        {showChecksTab && (
+          <TabButton
+            id={TAB_IDS.checks}
+            isActive={effectiveTab === 'checks'}
+            label='Checks'
+            showDot={hasActiveFindings}
+            onClick={() => onTabChange('checks')}
+          />
+        )}
       </div>
 
       {/* Single shared panel: `aria-labelledby` tracks the active tab so the
           tab/tabpanel relationship is complete for assistive tech (CR-5). */}
       <div
-        aria-labelledby={TAB_IDS[activeTab]}
+        aria-labelledby={TAB_IDS[effectiveTab]}
         className='min-h-0 flex-1'
         id={PANEL_ID}
         role='tabpanel'
       >
-        {activeTab === 'resources' ? resourcesContent : checksContent}
+        {effectiveTab === 'resources' ? resourcesContent : checksContent}
       </div>
     </div>
   );

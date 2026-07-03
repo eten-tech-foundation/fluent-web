@@ -82,4 +82,36 @@ describe('LeftPanel', () => {
     render(<LeftPanel {...baseProps} activeFindingsCount={1} activeTab='checks' />);
     expect(screen.getByTestId('checks-notification-dot')).toBeInTheDocument();
   });
+
+  // --- showChecksTab (feature-flags proposal D6/D7) --------------------------
+  describe('showChecksTab', () => {
+    it('renders the Checks tab by default (prop omitted)', () => {
+      render(<LeftPanel {...baseProps} />);
+      expect(screen.getByRole('tab', { name: /Checks/ })).toBeInTheDocument();
+    });
+
+    it('hides the Checks tab entirely when showChecksTab is false', () => {
+      render(<LeftPanel {...baseProps} showChecksTab={false} />);
+      expect(screen.getByRole('tab', { name: /Resources/ })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: /Checks/ })).not.toBeInTheDocument();
+    });
+
+    it('suppresses the notification dot when the Checks tab is hidden', () => {
+      render(<LeftPanel {...baseProps} activeFindingsCount={5} showChecksTab={false} />);
+      expect(screen.queryByTestId('checks-notification-dot')).not.toBeInTheDocument();
+    });
+
+    it('falls back to the Resources body even if activeTab is checks while hidden', () => {
+      render(<LeftPanel {...baseProps} activeTab='checks' showChecksTab={false} />);
+      expect(screen.getByText('resources-body')).toBeInTheDocument();
+      expect(screen.queryByText('checks-body')).not.toBeInTheDocument();
+    });
+
+    it('labels the tabpanel by the Resources tab when the Checks tab is hidden', () => {
+      render(<LeftPanel {...baseProps} activeTab='checks' showChecksTab={false} />);
+      const resourcesTabId = screen.getByRole('tab', { name: /Resources/ }).getAttribute('id');
+      expect(resourcesTabId).toBeTruthy();
+      expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', resourcesTabId);
+    });
+  });
 });

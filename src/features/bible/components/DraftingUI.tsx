@@ -20,6 +20,7 @@ import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
 import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
+import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -196,6 +197,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
 
+  // Feature flag: is the Repeated Word Check enabled in this environment? The
+  // whole Checks feature depends on fluent-ai, which isn't hosted everywhere,
+  // so the flag lets this code ship hidden until AI is wired (feature-flags
+  // proposal D6/D7). Fail-closed: `useFeatureFlag` returns false while loading
+  // or on endpoint error, so the tab and the AI query stay off by default. This
+  // is the single consumption point — the flag is threaded down as booleans so
+  // the leaf components stay flag-agnostic.
+  const checksEnabled = useFeatureFlag('repeatedWordCheck');
+
   // The single writer for the occurrence-rule map: `useSuppressions` does the
   // read-modify-write and hands the next full map back here; updating state
   // makes it ride the existing debounced editor-state save (one writer, §7.1).
@@ -225,7 +235,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     saveCounter,
     // Wait for the settings probe so the first render is cascade-correct, and
     // never run in read-only `/view` or when the chapter is empty (W10/§9.1).
-    enabled: !readOnly && hasContent && settingsProbeResolved,
+    // Also gate on the feature flag: when the Repeated Word Check is off (or
+    // still loading / errored — fail-closed) we suppress the query entirely so
+    // no known-failing POST to /ai/tools/... fires in environments where
+    // fluent-ai isn't wired (feature-flags proposal D5/D7).
+    enabled: checksEnabled && !readOnly && hasContent && settingsProbeResolved,
   });
 
   const resolved = useResolvedFindings({
@@ -235,8 +249,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   });
 
   // Active-finding count drives both notification dots; computed once here and
-  // threaded to the tab and the closed-panel toggle button (S5, §6.4).
-  const activeFindingsCount = resolved.active.length;
+  // threaded to the tab and the closed-panel toggle button (S5, §6.4). When the
+  // Checks feature is disabled it is forced to 0 so neither dot can flash while
+  // the flag is resolving (the query is already suppressed above; this guards
+  // the count explicitly).
+  const activeFindingsCount = checksEnabled ? resolved.active.length : 0;
+
+  // When the Checks tab is hidden (feature off), a persisted `activeLeftTab ===
+  // 'checks'` must not strand the panel on an empty/absent tab — fall back to
+  // Resources for rendering. The persisted value itself is left untouched, so
+  // if the feature is later enabled the translator's last tab is restored.
+  const effectiveActiveLeftTab: LeftTab = checksEnabled ? activeLeftTab : 'resources';
 
   const handleTabChange = useCallback((tab: LeftTab) => {
     setActiveLeftTab(tab);
@@ -517,7 +540,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         {showResources && isInitializedRef.current && (
           <DraftingResourceSidebar
             activeFindingsCount={activeFindingsCount}
-            activeLeftTab={activeLeftTab}
+            activeLeftTab={effectiveActiveLeftTab}
             checksContent={
               <ChecksPanel
                 globalIgnoresAvailable={globalIgnoresAvailable}
@@ -543,6 +566,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             setCurrentResource={setCurrentResource}
             setOpenResourcePanel={setOpenResourcePanel}
             setSelectedPanel={setSelectedPanel}
+            showChecksTab={checksEnabled}
             onTabChange={handleTabChange}
           />
         )}
