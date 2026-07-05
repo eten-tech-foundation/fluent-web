@@ -222,7 +222,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     ignoreEverywhere,
     undoOccurrence,
     stopIgnoringEverywhere,
-  } = useSuppressions({ occurrenceRules, saveOccurrenceRules });
+    // Gate the once-per-session `GET /self/settings` probe on the same feature
+    // flag as the check query: when the Repeated Word Check is off (or still
+    // loading / errored — fail-closed) the Checks UI is hidden, so there is no
+    // reason to fetch user settings for it (W2, feature-flags proposal D5/D7).
+  } = useSuppressions({ occurrenceRules, saveOccurrenceRules, enabled: checksEnabled });
 
   // What the translator currently sees is what gets checked (§6.2) — feed the
   // live drafting verses, not a refetch.

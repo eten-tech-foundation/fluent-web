@@ -28,8 +28,9 @@ export const FeatureFlagsDiagnostics: React.FC = () => {
 
   // Enumerate whatever the effective map contains rather than a hard-coded list,
   // so a flag added later (API + `FeatureName`) appears here automatically with
-  // no change to this page.
-  const entries = Object.entries(features) as Array<[string, boolean]>;
+  // no change to this page. `features` is `Record<FeatureName, boolean>`, so
+  // `Object.entries` is already `[string, boolean][]` — no cast needed (W4).
+  const entries = Object.entries(features);
 
   return (
     <div className='mx-auto max-w-2xl px-8 py-10'>

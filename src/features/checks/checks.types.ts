@@ -40,7 +40,12 @@ export interface VerseInput {
 export interface RepeatedWordsRequest {
   lang_code: string;
   lang_name: string;
-  project_id: string | number;
+  // fluent-ai declares `project_id: str` (Pydantic v2, strict — it does NOT
+  // coerce an int to a str), so this MUST be a string on the wire. The builder
+  // already sends `String(projectItem.projectUnitId)`; typing it `string` (not
+  // `string | number`) matches that reality and keeps a stray numeric id from
+  // ever compiling through. See W1 and phase-04 manual smoke (2026-06-23).
+  project_id: string;
   project_name: string;
   verses: VerseInput[];
 }

@@ -60,7 +60,7 @@ export const buildRepeatedWordsRequest = (
   // whitelist for an unknown code (duplicates are still flagged) — a safe
   // degradation that keeps the check running instead of crashing.
   // The `?.` here is intentionally defensive against a RUNTIME value the TYPE
-  // says can't happen: `targetLanguageCode` is typed non-optional, but the API
+  // says can't happen: `targetLangCode` is typed non-optional, but the API
   // can still omit it. We keep the type non-optional (so genuinely missing
   // usages elsewhere stay caught) and guard only at this trust boundary, hence
   // the targeted disable of the "unnecessary optional chain" rule.
@@ -70,7 +70,7 @@ export const buildRepeatedWordsRequest = (
   // truthiness on a trimmed copy while forwarding the untrimmed original would
   // silently disable suppression (the BUG #2 failure mode).
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive guard against an undefined runtime value the type does not model
-  const trimmedCode = projectItem.targetLanguageCode?.trim();
+  const trimmedCode = projectItem.targetLangCode?.trim();
   const langCode = trimmedCode ? trimmedCode : null;
 
   return {
@@ -101,7 +101,10 @@ export const postRepeatedWordsCheck = async (
   });
 
   if (!res.ok) {
-    throw new Error('Failed to run repeated-words check');
+    // Include the HTTP status so a failed check is actionable in logs/telemetry
+    // (e.g. fluent-api maps a fluent-ai failure/unreachable to 502) rather than
+    // an opaque generic message (W5).
+    throw new Error(`Failed to run repeated-words check (HTTP ${res.status})`);
   }
 
   return (await res.json()) as RepeatedWordsResponse;

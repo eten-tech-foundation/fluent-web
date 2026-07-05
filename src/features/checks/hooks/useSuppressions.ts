@@ -62,9 +62,20 @@ interface SelfSettings {
   checkIgnoredWordPairs?: GlobalRules;
 }
 
-/** GET response: the server returns `{ settings }`, possibly `null` (W8). */
+/**
+ * GET response shape. The API returns `{ settings, updatedAt }` (see
+ * fluent-api `self-settings.service.ts` `toResponse`), where `settings` is
+ * `null` when the user has no row yet (W8). The client only reads `settings`
+ * — `updatedAt` is modeled here for contract fidelity (the doc §8.1 lists it)
+ * but is deliberately ignored: there is no optimistic-concurrency / ETag path
+ * in v1 (§8.3), so the timestamp has no consumer. Kept optional so an older
+ * deployment that omits it still parses.
+ */
 interface SelfSettingsResponse {
   settings: SelfSettings | null;
+  /** Server-side last-write timestamp (ISO string) or `null`. Unused by the
+   * client today; present only to match the wire contract. */
+  updatedAt?: string | null;
 }
 
 const SELF_SETTINGS_URL = `${config.api.url}/self/settings`;
@@ -228,6 +239,18 @@ export interface UseSuppressionsParams {
    * never opens its own editor-state PUT (the "one writer" rule, §7.1).
    */
   saveOccurrenceRules: (next: OccurrenceRules) => void;
+  /**
+   * Whether the Repeated Word Check feature is enabled in this environment
+   * (the `repeatedWordCheck` flag; feature-flags proposal D5/D7). Defaults to
+   * `true` so existing callers/tests are unaffected. When `false`, the
+   * once-per-session `GET /self/settings` probe is **skipped entirely** — the
+   * whole Checks UI is hidden behind the flag, so there is no reason to fetch
+   * user settings for a feature that can't be seen (W2). The global stores stay
+   * at their fail-closed defaults (empty rules, `globalIgnoresAvailable=false`)
+   * and `settingsProbeResolved` stays `false`, which is consistent with the
+   * check query being suppressed by the same flag upstream.
+   */
+  enabled?: boolean;
 }
 
 export interface UseSuppressionsResult {
@@ -272,6 +295,7 @@ export interface UseSuppressionsResult {
 export const useSuppressions = ({
   occurrenceRules,
   saveOccurrenceRules,
+  enabled = true,
 }: UseSuppressionsParams): UseSuppressionsResult => {
   // --- Global half: probe once per session, then hold the map locally so we
   // can apply optimistic updates and roll them back without a query refetch. ---
@@ -300,7 +324,12 @@ export const useSuppressions = ({
   const committedGlobalRef = useRef<GlobalRules>({});
 
   useEffect(() => {
-    if (probeStarted.current) {
+    // Skip the probe entirely while the feature is off (W2): the Checks UI is
+    // hidden behind the flag, so fetching `/self/settings` for it would be a
+    // wasted request in every environment where fluent-ai isn't wired. The
+    // probe fires once if/when `enabled` becomes true (e.g. the flag resolves
+    // after mount), guarded by `probeStarted` so it still runs at most once.
+    if (!enabled || probeStarted.current) {
       return;
     }
     probeStarted.current = true;
@@ -313,7 +342,7 @@ export const useSuppressions = ({
       committedGlobalRef.current = available ? rules : {};
       setSettingsProbeResolved(true);
     });
-  }, []);
+  }, [enabled]);
 
   // Latest occurrence map for read-modify-write inside callbacks without
   // making the callbacks change identity on every keystroke.

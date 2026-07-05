@@ -41,8 +41,15 @@ export const fetchFeatureFlags = async (): Promise<Features> => {
     throw new Error(`Failed to fetch feature flags (HTTP ${res.status})`);
   }
 
+  // The body is cast, not schema-validated, so a 200 with a malformed/partial
+  // `features` object (missing a known key, or `features` absent entirely) must
+  // NOT be trusted verbatim — that would let an unknown flag read `undefined`
+  // (falsy, but off-contract) and bypass the fail-closed guarantee. Spread the
+  // known-off defaults FIRST, then overlay whatever the API sent: every known
+  // flag is present as a boolean, and only keys the API explicitly reports as
+  // `true` turn on (W3, D7).
   const body = (await res.json()) as FeaturesResponse;
-  return body.features;
+  return { ...failClosedFeatures(), ...body.features };
 };
 
 export interface UseFeatureFlagsResult {

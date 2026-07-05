@@ -44,8 +44,8 @@ const makeProjectItem = (over: Partial<ProjectItem> = {}): ProjectItem => ({
   // `lang_name`, NOT as `lang_code` (greek-room keys its legitimate-duplicate
   // whitelist on the ISO code). See phase-04 manual smoke (BUG #2, 2026-06-23).
   targetLanguage: 'Spanish',
-  // `targetLanguageCode` is the ISO 639-3 code the check must send as `lang_code`.
-  targetLanguageCode: 'spa',
+  // `targetLangCode` is the ISO 639-3 code the check must send as `lang_code`.
+  targetLangCode: 'spa',
   bookId: 7,
   // `book` is the human display name; the check must NOT use it for snt_id.
   book: 'Judges',
@@ -151,7 +151,7 @@ describe('buildRepeatedWordsRequest', () => {
     // silently disables legitimate-duplicate suppression. lang_code MUST be the
     // code, lang_name the name. See phase-04 manual smoke (BUG #2, 2026-06-23).
     const request = buildRepeatedWordsRequest(
-      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: 'eng' }),
+      makeProjectItem({ targetLanguage: 'English', targetLangCode: 'eng' }),
       [{ verseNumber: 3, content: 'truly truly' }]
     );
     expect(request.lang_code).toBe('eng');
@@ -160,13 +160,13 @@ describe('buildRepeatedWordsRequest', () => {
     expect(request.lang_code).not.toBe('English');
   });
 
-  it('falls back to "<unknown>" when targetLanguageCode is empty (no crash)', () => {
-    // `targetLanguageCode` is a required `string` (BUG #3 made it non-optional so
+  it('falls back to "<unknown>" when targetLangCode is empty (no crash)', () => {
+    // `targetLangCode` is a required `string` (BUG #3 made it non-optional so
     // the compiler catches any ProjectItem constructor that omits it). The runtime
     // fallback still degrades gracefully: an empty/whitespace code becomes
     // "<unknown>" on the wire rather than producing undefined/empty.
     const request = buildRepeatedWordsRequest(
-      makeProjectItem({ targetLanguage: 'English', targetLanguageCode: '' }),
+      makeProjectItem({ targetLanguage: 'English', targetLangCode: '' }),
       [{ verseNumber: 3, content: 'truly truly' }]
     );
     // greek-room just won't match any legitimate whitelist for an unknown code.
@@ -190,7 +190,7 @@ describe('buildRepeatedWordsRequest', () => {
 describe('useRepeatedWordsCheck — enabled gating', () => {
   it('does not fire when disabled', async () => {
     const calls = mockPost();
-    renderHook(
+    const { result } = renderHook(
       () =>
         useRepeatedWordsCheck({
           projectItem: makeProjectItem(),
@@ -200,14 +200,17 @@ describe('useRepeatedWordsCheck — enabled gating', () => {
         }),
       { wrapper: makeWrapper() }
     );
-    // Give any rogue request a tick to land.
-    await new Promise(r => setTimeout(r, 50));
+    // A disabled query is `fetchStatus: 'idle'` — assert it stays there instead
+    // of sleeping on a fixed timer to "prove a negative" (W7). If the query
+    // ever fired, `fetchStatus` would flip to 'fetching' and this would fail.
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    expect(result.current.isFetching).toBe(false);
     expect(calls.count).toBe(0);
   });
 
   it('does not fire when no verse has content (even if enabled)', async () => {
     const calls = mockPost();
-    renderHook(
+    const { result } = renderHook(
       () =>
         useRepeatedWordsCheck({
           projectItem: makeProjectItem(),
@@ -217,12 +220,15 @@ describe('useRepeatedWordsCheck — enabled gating', () => {
         }),
       { wrapper: makeWrapper() }
     );
-    await new Promise(r => setTimeout(r, 50));
+    // With no verse content the query is disabled (`enabled && hasContent`), so
+    // it stays `fetchStatus: 'idle'` — assert that rather than a fixed sleep (W7).
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    expect(result.current.isFetching).toBe(false);
     expect(calls.count).toBe(0);
   });
 
   it('fires and returns the completed envelope when enabled with content', async () => {
-    mockPost(makeResponse(2));
+    const calls = mockPost(makeResponse(2));
     const { result } = renderHook(
       () =>
         useRepeatedWordsCheck({
@@ -236,6 +242,19 @@ describe('useRepeatedWordsCheck — enabled gating', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.status).toBe('completed');
     expect(result.current.data?.result?.findings).toHaveLength(2);
+
+    // Assert the request body that actually went on the wire (W6): the hook
+    // must POST the snake_case D8 shape assembled by buildRepeatedWordsRequest
+    // — the ISO code as lang_code, the display name as lang_name, and the
+    // project id as a STRING (fluent-ai's strict `str`).
+    expect(calls.count).toBe(1);
+    expect(calls.lastBody).toMatchObject({
+      lang_code: 'spa',
+      lang_name: 'Spanish',
+      project_id: '7',
+      project_name: 'Test Project',
+      verses: [{ snt_id: 'JDG 4:3', text: 'the the' }],
+    });
   });
 });
 
@@ -304,8 +323,8 @@ describe('buildRepeatedWordsRequest — additional edge cases', () => {
     expect(request.verses[0].snt_id).toBe('JDG 12:5');
   });
 
-  it('uses whitespace-trimmed targetLanguageCode — empty after trim falls back to <unknown>', () => {
-    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLanguageCode: '   ' }), [
+  it('uses whitespace-trimmed targetLangCode — empty after trim falls back to <unknown>', () => {
+    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLangCode: '   ' }), [
       { verseNumber: 1, content: 'text' },
     ]);
     expect(request.lang_code).toBe('<unknown>');
@@ -316,7 +335,7 @@ describe('buildRepeatedWordsRequest — additional edge cases', () => {
     // padded code (" spa ") would match nothing and silently disable suppression
     // (the BUG #2 failure mode). The guard must forward the trimmed value, not
     // just use the trim to test truthiness. See phase-04 manual smoke (BUG #2).
-    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLanguageCode: ' spa ' }), [
+    const request = buildRepeatedWordsRequest(makeProjectItem({ targetLangCode: ' spa ' }), [
       { verseNumber: 1, content: 'text' },
     ]);
     expect(request.lang_code).toBe('spa');

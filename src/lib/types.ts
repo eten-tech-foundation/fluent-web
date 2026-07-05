@@ -89,10 +89,10 @@ export interface ChapterAssignmentProgress {
   /**
    * ISO 639-3 target language CODE, e.g. "eng" (sent as the repeated-words
    * check's `lang_code`). Required so the PM "open chapter" path can populate
-   * `ProjectItem.targetLanguageCode`; if it were optional the field could be
+   * `ProjectItem.targetLangCode`; if it were optional the field could be
    * silently dropped and the check would send "<unknown>" (BUG #3).
    */
-  targetLanguageCode: string;
+  targetLangCode: string;
   bookNameEng: string;
   chapterNumber: number;
   assignedUser: AssignmentUser | null;
@@ -132,7 +132,7 @@ export interface ProjectItem {
    * degrades to "<unknown>" at runtime if the value is somehow empty, rather
    * than crashing.
    */
-  targetLanguageCode: string;
+  targetLangCode: string;
   bookId: number;
   book: string;
   chapterStatus: string;
@@ -268,7 +268,7 @@ export interface UserChapterAssignment {
   /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
   /** ISO 639-3 target language CODE, e.g. "eng" (sent as the check's lang_code). */
-  targetLanguageCode: string;
+  targetLangCode: string;
   sourceLangCode: string;
   bookCode: string;
   bookId: number;
