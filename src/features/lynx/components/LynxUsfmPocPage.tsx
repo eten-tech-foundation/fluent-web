@@ -98,7 +98,9 @@ export function LynxUsfmPocPage() {
   }
 
   return (
-    <div className='mx-auto max-w-7xl space-y-4 pb-10'>
+    // AuthenticatedLayout clips <main> at viewport height (overflow-hidden),
+    // so the page owns its vertical scrolling.
+    <div className='mx-auto h-full max-w-7xl space-y-4 overflow-y-auto pb-10'>
       <div className='flex flex-wrap items-end justify-between gap-3'>
         <div>
           <h2 className='text-2xl font-bold'>Lynx · USFM on the client</h2>
