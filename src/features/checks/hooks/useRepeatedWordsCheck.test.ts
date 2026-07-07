@@ -258,6 +258,39 @@ describe('useRepeatedWordsCheck — enabled gating', () => {
   });
 });
 
+describe('useRepeatedWordsCheck — as-checked verse-text snapshot (hydration)', () => {
+  it('hydrates the settled result with verseTextBySntId keyed by buildSntId (non-empty filter mirrored)', async () => {
+    mockPost(makeResponse(1));
+    const { result } = renderHook(
+      () =>
+        useRepeatedWordsCheck({
+          projectItem: makeProjectItem(),
+          verses: [
+            { verseNumber: 1, content: 'the the cat' },
+            // Empty / whitespace-only verses are NOT sent to the check, so they
+            // must not appear in the snapshot either (keys mirror the request).
+            { verseNumber: 2, content: '   ' },
+            { verseNumber: 3, content: 'more the the' },
+          ],
+          saveCounter: 0,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // The snapshot travels WITH the findings (hydrated onto the same settled
+    // result) and keys the as-checked verse text by the same buildSntId the
+    // findings carry — so the card can window offsets against the exact text
+    // that was checked, never the live drafting text.
+    const snapshot = result.current.data?.verseTextBySntId;
+    expect(snapshot?.get(buildSntId('JDG', 4, 1))).toBe('the the cat');
+    expect(snapshot?.get(buildSntId('JDG', 4, 3))).toBe('more the the');
+    expect(snapshot?.has(buildSntId('JDG', 4, 2))).toBe(false);
+    expect(snapshot?.size).toBe(2);
+  });
+});
+
 describe('useRepeatedWordsCheck — saveCounter re-fires', () => {
   it('re-runs the check when saveCounter changes', async () => {
     const calls = mockPost(makeResponse(1));
