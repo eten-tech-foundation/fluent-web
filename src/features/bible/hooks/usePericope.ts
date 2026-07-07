@@ -98,11 +98,8 @@ export const usePericope = ({
   }, [isPericopeMode, sourceVerses, activeVerseId, verses]);
 
   const resourceVerseId = useMemo(() => {
-    if (isPericopeMode && currentPericopeGroup && currentPericopeGroup.verses.length > 0) {
-      return currentPericopeGroup.verses[0].verseNumber;
-    }
     return activeVerseId;
-  }, [isPericopeMode, currentPericopeGroup, activeVerseId]);
+  }, [activeVerseId]);
 
   const effectiveRevealedVerses = useMemo(() => {
     if (!isPericopeMode) return revealedVerses;
