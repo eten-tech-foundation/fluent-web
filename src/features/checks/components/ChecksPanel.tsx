@@ -166,7 +166,10 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
   const showZeroState = !isError && activeGroups.length === 0 && !showingIgnored;
 
   return (
-    <div className='px-1 py-3'>
+    // Like ResourcePanel, each tab body owns its own scrolling: the LeftPanel
+    // tabpanel is a clipped `min-h-0 flex-1` slot, so without `overflow-y-auto`
+    // here findings past the fold would be unreachable.
+    <div className='h-full overflow-y-auto px-1 py-3' data-testid='checks-panel-scroll'>
       {isError && (
         <p className='mb-2 text-sm text-red-500' role='alert'>
           Checks failed to refresh

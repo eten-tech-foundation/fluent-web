@@ -347,6 +347,16 @@ describe('ChecksPanel — callback wiring', () => {
   });
 });
 
+describe('ChecksPanel — scroll container', () => {
+  it('owns its own vertical scrolling (the LeftPanel tabpanel slot clips overflow)', () => {
+    // Regression: without h-full + overflow-y-auto on the panel root, findings
+    // past the fold were unreachable ("lost to the land of the living").
+    renderPanel({ active: [active('JDG 4:1', 'the the')], inactive: [] });
+    const root = screen.getByTestId('checks-panel-scroll');
+    expect(root).toHaveClass('h-full', 'overflow-y-auto');
+  });
+});
+
 describe('ChecksPanel — verse-context snapshot threading', () => {
   it('threads verseTextBySntId down so rows render the windowed highlight', () => {
     // 'the the' at [4, 11) in the as-checked verse text for JDG 4:1.
