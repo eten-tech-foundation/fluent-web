@@ -93,7 +93,7 @@ const CardProgressBar: React.FC<{
                     <div className='space-y-0.5'>
                       {segment.subSegments.map(sub => (
                         <div key={sub.label}>
-                          {sub.label}: {Math.round(sub.percentage)}%
+                          {sub.label}: {sub.percentage}%
                         </div>
                       ))}
                     </div>

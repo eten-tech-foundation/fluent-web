@@ -65,6 +65,21 @@ const getPhaseDisplayName = (stepId: string, fallbackLabel: string): string =>
   PHASE_DISPLAY_NAMES[stepId as ChapterAssignmentStatus] ??
   (getPhaseKey(stepId) === ADVANCED_CHECK_KEY ? ADVANCED_CHECK_LABEL : fallbackLabel);
 
+const distributeRoundedPercentages = (rawValues: number[], targetTotal: number): number[] => {
+  const floors = rawValues.map(v => Math.floor(v));
+  const remainder = targetTotal - floors.reduce((sum, v) => sum + v, 0);
+
+  const byFraction = rawValues
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+
+  const result = [...floors];
+  for (let k = 0; k < remainder && k < byFraction.length; k++) {
+    result[byFraction[k].i] += 1;
+  }
+  return result;
+};
+
 const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
   const colors = useMemo(() => {
     const colorMap: Record<string, ColorInfo> = {};
@@ -129,11 +144,31 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
           color: stepColor.color,
         });
       });
+
       const advancedSegment = segmentsByKey.get(ADVANCED_CHECK_KEY);
       if (advancedSegment) {
-        advancedSegment.subSegments = ADVANCED_CHECK_SUB_STATUSES.map(subStatus => ({
-          label: ADVANCED_CHECK_SUB_LABELS[subStatus] ?? subStatus,
-          percentage: ((chapterStatusCounts[subStatus] ?? 0) / totalChapters) * 100,
+        const collapsedSteps = reversedConfig.filter(
+          step => getPhaseKey(step.id) === ADVANCED_CHECK_KEY
+        );
+
+        const orderedSteps: WorkflowStep[] = [
+          ...ADVANCED_CHECK_SUB_STATUSES.map(
+            status => collapsedSteps.find(s => s.id === status) ?? { id: status, label: status }
+          ),
+          ...collapsedSteps.filter(
+            s => !ADVANCED_CHECK_SUB_STATUSES.includes(s.id as ChapterAssignmentStatus)
+          ),
+        ];
+
+        const rawPercentages = orderedSteps.map(
+          step => ((chapterStatusCounts[step.id] ?? 0) / totalChapters) * 100
+        );
+        const roundedTotal = Math.round(advancedSegment.widthPercentage);
+        const roundedPercentages = distributeRoundedPercentages(rawPercentages, roundedTotal);
+
+        advancedSegment.subSegments = orderedSteps.map((step, index) => ({
+          label: ADVANCED_CHECK_SUB_LABELS[step.id as ChapterAssignmentStatus] ?? step.label,
+          percentage: roundedPercentages[index],
         }));
       }
 
