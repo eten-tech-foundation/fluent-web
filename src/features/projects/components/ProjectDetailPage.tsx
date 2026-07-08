@@ -70,7 +70,7 @@ const CardProgressBar: React.FC<{
   return (
     <div className='space-y-2'>
       <TooltipProvider delayDuration={100}>
-        <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
+        <div className='flex h-[10px] w-full overflow-hidden rounded-full'>
           {segments.length === 0 ? (
             <div className='bg-primary/10 h-full w-full' />
           ) : (
@@ -89,7 +89,17 @@ const CardProgressBar: React.FC<{
                   className='bg-popover text-popover-foreground border-border rounded-md border px-2.5 py-1 text-xs font-semibold shadow-md'
                   side='top'
                 >
-                  {Math.round(segment.widthPercentage)}%
+                  {segment.subSegments ? (
+                    <div className='space-y-0.5'>
+                      {segment.subSegments.map(sub => (
+                        <div key={sub.label}>
+                          {sub.label}: {sub.percentage}%
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    `${segment.displayName}: ${Math.round(segment.widthPercentage)}%`
+                  )}
                 </TooltipContent>
               </Tooltip>
             ))
