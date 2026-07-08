@@ -15,6 +15,7 @@ interface DraftingGridPericopeProps {
   bibleVerseMap: Map<number, string>;
   globalNextUntouchedVerse: Source | null;
   projectItem: ProjectItem;
+  isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
@@ -29,6 +30,8 @@ interface TargetVersesGroupProps {
   activeVerseId: number;
   readOnly: boolean;
   globalNextUntouchedVerse: Source | null;
+  lastSourceVerseNumber: number;
+  isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
@@ -36,12 +39,14 @@ interface TargetVersesGroupProps {
   handleNextClick: () => Promise<void>;
 }
 
-const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
+export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   groupVerses,
   verses,
   activeVerseId,
   readOnly,
   globalNextUntouchedVerse,
+  lastSourceVerseNumber,
+  isTranslationComplete,
   textareaRefs,
   handleTextChange,
   handleActiveVerseChange,
@@ -58,14 +63,18 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   let buttonVerseNumber: number | null = null;
   let showOutOfBoxButton = false;
 
-  if (isActiveVerseEmpty) {
-    if (isAnyActive) {
-      buttonVerseNumber = activeVerseId;
+  const isLastVerseOfChapter = activeVerseId === lastSourceVerseNumber;
+
+  if (!isTranslationComplete && (!isLastVerseOfChapter || globalNextUntouchedVerse)) {
+    if (isActiveVerseEmpty) {
+      if (isAnyActive) {
+        buttonVerseNumber = activeVerseId;
+      }
+    } else if (globalNextUntouchedVerse) {
+      buttonVerseNumber = globalNextUntouchedVerse.verseNumber;
+    } else if (isAnyActive) {
+      showOutOfBoxButton = true;
     }
-  } else if (globalNextUntouchedVerse) {
-    buttonVerseNumber = globalNextUntouchedVerse.verseNumber;
-  } else if (isAnyActive) {
-    showOutOfBoxButton = true;
   }
 
   return (
@@ -86,12 +95,12 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
               }
             }}
           >
-            <span className='mt-0.5 mr-3 w-4 text-right text-base font-bold text-slate-900 select-none'>
+            <span className='mt-0.5 mr-3 w-4 text-right text-base font-bold text-slate-900 select-none dark:text-slate-100'>
               {v.verseNumber}
             </span>
             <div className='flex min-h-[24px] flex-1 items-center'>
               {readOnly ? (
-                <p className='w-full text-base leading-relaxed text-slate-800 select-text'>
+                <p className='w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                   {currentTargetVerse?.content ?? ''}
                 </p>
               ) : (
@@ -158,6 +167,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   bibleVerseMap,
   globalNextUntouchedVerse,
   projectItem,
+  isTranslationComplete,
   textareaRefs,
   verseRefs,
   handleTextChange,
@@ -166,6 +176,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   handleNextClick,
 }) => {
   const { t } = useTranslation();
+  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
 
   return (
     <>
@@ -196,12 +207,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none'>
-                {projectItem.book} {heading}
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
               </h4>
               <div
-                className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupActive ? 'border-primary' : 'border-[#cfd8e3]'
+                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
                 }`}
                 role='button'
                 tabIndex={0}
@@ -225,7 +236,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   }
                 }}
               >
-                <p className='text-base leading-relaxed text-slate-800 select-text'>
+                <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                   {groupVerses.map(v => {
                     const textToRender =
                       selectedPanel === 1
@@ -234,7 +245,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                           t('noContentAvailable', 'No content available'));
                     return (
                       <React.Fragment key={v.verseNumber}>
-                        <span className='mr-1.5 font-bold text-slate-900'>{v.verseNumber}</span>
+                        <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                          {v.verseNumber}
+                        </span>
                         <span
                           className={`mr-3 ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
                         >
@@ -247,12 +260,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               </div>
             </div>
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none'>
-                {projectItem.book} {heading}
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
               </h4>
               <div
-                className={`w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                  isGroupActive ? 'border-primary' : 'border-[#cfd8e3]'
+                className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
                 }`}
                 onClick={e => {
                   if (e.target === e.currentTarget) {
@@ -273,6 +286,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   handleKeyDown={handleKeyDown}
                   handleNextClick={handleNextClick}
                   handleTextChange={handleTextChange}
+                  isTranslationComplete={isTranslationComplete}
+                  lastSourceVerseNumber={lastSourceVerseNumber}
                   readOnly={readOnly}
                   textareaRefs={textareaRefs}
                   verses={verses}
