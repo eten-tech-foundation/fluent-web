@@ -25,7 +25,8 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const handleModalClose = (): void => {
     void navigate({
       to: location.pathname,
-      search: { modal: undefined },
+      search: prev => ({ ...prev, modal: undefined }),
+      state: location.state,
       replace: true,
     });
   };

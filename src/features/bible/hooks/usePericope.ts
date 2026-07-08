@@ -102,7 +102,15 @@ export const usePericope = ({
   }, [activeVerseId]);
 
   const effectiveRevealedVerses = useMemo(() => {
-    if (!isPericopeMode) return revealedVerses;
+    if (!isPericopeMode) {
+      if (revealedVerses.size === 0) return revealedVerses;
+      const maxRevealed = Math.max(...Array.from(revealedVerses));
+      const nextSet = new Set<number>();
+      for (let i = 1; i <= maxRevealed; i++) {
+        nextSet.add(i);
+      }
+      return nextSet;
+    }
     const nextSet = new Set(revealedVerses);
     for (const group of pericopes) {
       const hasAny = group.verses.some(v => revealedVerses.has(v.verseNumber));

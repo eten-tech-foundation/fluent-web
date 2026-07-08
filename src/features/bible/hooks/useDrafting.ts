@@ -19,6 +19,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   const targetScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const verseRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const initializedRef = useRef(false);
 
   const { debouncedSave, saveImmediately, getSaveStatus, setInitialContent } = useBibleTextDebounce(
     {
@@ -116,18 +117,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
       }
       setActiveVerseId(newVerseId);
-      const prevId = Math.max(1, newVerseId - 1);
-      requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
-    [
-      readOnly,
-      verses,
-      activeVerseId,
-      getSaveStatus,
-      saveImmediately,
-      scrollVerseToTop,
-      setInitialContent,
-    ]
+    [readOnly, verses, activeVerseId, getSaveStatus, saveImmediately, setInitialContent]
   );
 
   const advanceToVerse = useCallback(
@@ -182,7 +173,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
 
   // Initialize verses and revealed state
   useEffect(() => {
-    if (targetVerses.length === 0) return;
+    if (targetVerses.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
     if (!readOnly) {
       targetVerses.forEach(verse => setInitialContent(verse.verseNumber, verse.content));
     }
@@ -267,6 +259,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     revealedVerses,
     buttonTop,
     lastRevealedVerseHasContent,
+    lastRevealedVerseNumber,
     targetScrollRef,
     textareaRefs,
     verseRefs,

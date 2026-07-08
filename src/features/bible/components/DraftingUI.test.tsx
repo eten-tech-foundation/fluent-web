@@ -132,6 +132,7 @@ const defaultDraftingHookResult = (overrides = {}) => ({
   revealedVerses: new Set([1]),
   buttonTop: 150,
   lastRevealedVerseHasContent: true,
+  lastRevealedVerseNumber: 1,
   targetScrollRef: { current: null },
   textareaRefs: { current: {} },
   verseRefs: { current: {} },
@@ -278,7 +279,7 @@ describe('DraftingUI', () => {
     );
 
     // Should display the Pericope Header
-    expect(screen.getAllByText('Genesis 1:1-2')).toHaveLength(2);
+    expect(screen.getAllByText('1:1-2')).toHaveLength(2);
     expect(
       screen.getByText('In the beginning God created the heaven and the earth.')
     ).toBeInTheDocument();
