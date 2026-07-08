@@ -23,6 +23,10 @@ interface DraftingHeaderProps {
   isComplete: boolean;
   isDraft: boolean;
   buttonText: string | undefined;
+  /** Cascade-resolved active-finding count (Repeated Word Check, §6.4). Drives
+   *  the S5 mirror notification dot on the resource-toggle button while the
+   *  left panel is closed (#277). */
+  activeFindingsCount: number;
   onBack: () => void;
   onToggleResources: () => void;
   onSubmit: () => Promise<void>;
@@ -39,6 +43,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   isComplete,
   isDraft,
   buttonText,
+  activeFindingsCount,
   onBack,
   onToggleResources,
   onSubmit,
@@ -99,12 +104,29 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    aria-label={
+                      showResources
+                        ? t('hideResources', 'Hide Resources')
+                        : t('showResources', 'Show Resources')
+                    }
                     aria-pressed={showResources}
-                    className='bg-primary flex cursor-pointer items-center gap-2'
+                    className='bg-primary relative flex cursor-pointer items-center gap-2'
                     type='button'
                     onClick={onToggleResources}
                   >
                     <BookText color='#ffffff' />
+                    {/* S5: mirror the active-checks notification dot on the
+                        panel-toggle button while the panel is closed, so the
+                        translator is still notified (#277). The dot is
+                        decorative (aria-hidden) so a screen reader announces the
+                        button action, not the dot (CR-10). */}
+                    {!showResources && activeFindingsCount > 0 && (
+                      <span
+                        aria-hidden='true'
+                        className='absolute -top-1 -right-1 inline-block h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white'
+                        data-testid='checks-toggle-notification-dot'
+                      />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent

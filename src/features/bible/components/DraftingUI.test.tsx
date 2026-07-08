@@ -64,6 +64,44 @@ vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: (props: unknown) => mockUsePericope(props) as unknown,
 }));
 
+// Mock the Repeated Word Check hooks (Phase 4). These wrap TanStack Query /
+// fetch; this suite exercises drafting/pericope/resource behavior, not the
+// check itself (which is unit-tested in `useRepeatedWordsCheck.test.ts` and the
+// checks-feature component tests). Mocking them keeps DraftingUI renderable
+// without a QueryClientProvider and with no network I/O.
+vi.mock('@/features/checks/hooks/useSuppressions', () => ({
+  useSuppressions: () => ({
+    occurrenceRules: {},
+    globalRules: {},
+    globalIgnoresAvailable: false,
+    settingsProbeResolved: true,
+    ignoreHere: vi.fn(),
+    ignoreEverywhere: vi.fn(),
+    undoOccurrence: vi.fn(),
+    stopIgnoringEverywhere: vi.fn(),
+  }),
+}));
+
+vi.mock('@/features/checks/hooks/useRepeatedWordsCheck', () => ({
+  useRepeatedWordsCheck: () => ({ data: undefined, isError: false }),
+}));
+
+vi.mock('@/features/checks/hooks/useResolvedFindings', () => ({
+  useResolvedFindings: () => ({ active: [], inactive: [] }),
+}));
+
+// Mock the feature-flags selector. The Repeated Word Check tab/query are gated
+// on `useFeatureFlag('repeatedWordCheck')` (feature-flags proposal D5–D7); this
+// hook wraps TanStack Query / fetch, so mocking it keeps DraftingUI renderable
+// with no network I/O. Default: feature ON, so the existing tests exercise the
+// full Checks surface; individual tests flip `mockFeatureFlag` to false to
+// assert the hidden state.
+const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
+
+vi.mock('@/features/flags', () => ({
+  useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
+}));
+
 // Mock ResourcePanel
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
@@ -105,6 +143,7 @@ const mockProjectItem: ProjectItem = {
   bibleId: 1,
   bibleName: 'WEB',
   targetLanguage: 'Spanish',
+  targetLangCode: 'spa',
   bookId: 1,
   book: 'Genesis',
   chapterStatus: ChapterAssignmentStatus.DRAFT,
@@ -176,6 +215,9 @@ const defaultPericopeHookResult = (overrides = {}) => ({
 describe('DraftingUI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Default: Repeated Word Check feature ON (see mock definition above).
+    mockFeatureFlag.mockReturnValue(true);
 
     mockUseAddTranslatedVerse.mockReturnValue({
       mutateAsync: vi.fn(),
@@ -392,5 +434,65 @@ describe('DraftingUI', () => {
     await user.click(nextBtn);
 
     expect(handleNextClickMock).toHaveBeenCalled();
+  });
+
+  // --- Repeated Word Check feature flag (feature-flags proposal D5–D7) -------
+  describe('Repeated Word Check feature flag', () => {
+    const openResourcePanel = async (user: ReturnType<typeof userEvent.setup>) => {
+      const toggleButton = screen.getByRole('button', { pressed: false });
+      await user.click(toggleButton);
+    };
+
+    it('shows the Checks tab when the feature is enabled', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockReturnValue(true);
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await openResourcePanel(user);
+
+      expect(screen.getByRole('tab', { name: 'Resources' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Checks' })).toBeInTheDocument();
+    });
+
+    it('hides the Checks tab (feature looks unimplemented) when the feature is disabled', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockReturnValue(false);
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await openResourcePanel(user);
+
+      // Resources tab remains; the Checks tab is gone entirely.
+      expect(screen.getByRole('tab', { name: 'Resources' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Checks' })).not.toBeInTheDocument();
+    });
+
+    it('only queries the flag for the repeatedWordCheck feature', () => {
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      expect(mockFeatureFlag).toHaveBeenCalledWith('repeatedWordCheck');
+    });
   });
 });
