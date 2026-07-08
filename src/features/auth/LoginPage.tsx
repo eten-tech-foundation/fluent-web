@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Link, useSearch } from '@tanstack/react-router';
 import { Eye, EyeOff, Mail } from 'lucide-react';
 
+import { resolveReturnTo } from '@/features/auth/return-to';
 import { authClient } from '@/lib/auth-client';
 import { Logger } from '@/lib/services/logger';
 
@@ -30,7 +31,17 @@ export function LoginPage() {
   const [isSendingReset, setIsSendingReset] = useState(false);
 
   const search = useSearch({ strict: false });
-  const returnTo = (search as { returnTo?: string }).returnTo ?? '/';
+  const returnTo = resolveReturnTo((search as { returnTo?: string }).returnTo);
+
+  // The /login route guard covers in-app navigation, but on a hard load it
+  // runs before the session has resolved. Once the session is known, send an
+  // already-authenticated visitor into the app instead of showing the form.
+  const { data: session, isPending: isSessionLoading } = authClient.useSession();
+  useEffect(() => {
+    if (!isSessionLoading && session) {
+      window.location.replace(returnTo);
+    }
+  }, [isSessionLoading, session, returnTo]);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -73,9 +84,10 @@ export function LoginPage() {
       if (signInError) {
         setGlobalLoginError(signInError.message ?? 'Wrong email or password');
       } else {
-        // Fix for redirect bug: perform a hard navigation to guarantee
-        // the session cookie is correctly validated by the new page load
-        window.location.href = returnTo;
+        // Hard navigation so the new page load validates the session cookie.
+        // replace() keeps /login out of history, so Back from the app never
+        // lands on the login form again.
+        window.location.replace(returnTo);
       }
     } catch (err) {
       Logger.logException(err instanceof Error ? err : new Error(String(err)), {

@@ -57,14 +57,53 @@ export interface FetchResourcesResponse {
   items: unknown[];
 }
 
+export interface PassageAssociation {
+  startBookCode: string;
+  startChapter: number;
+  startVerse: number;
+  endBookCode: string;
+  endChapter: number;
+  endVerse: number;
+}
+
 export interface AssociationResponse {
   resourceAssociations?: Array<{
     referenceId: number;
     contentId: number;
   }>;
+  passageAssociations?: PassageAssociation[];
 }
 
-// Fetch functions
+// Aquifer Bible Types
+
+export interface AquiferBible {
+  id: number;
+  name: string;
+  abbreviation: string;
+  languageCode: string;
+}
+
+export interface AquiferVerse {
+  number: number;
+  text: string;
+}
+
+export interface AquiferChapter {
+  number: number;
+  verses: AquiferVerse[];
+}
+
+export interface AquiferBibleTextResponse {
+  bibleId: number;
+  bibleName: string;
+  bibleAbbreviation: string;
+  bookName: string;
+  bookCode: string;
+  chapters: AquiferChapter[];
+}
+
+// Fetch Functions
+
 const fetchAllLanguages = async (): Promise<Language[]> => {
   const response = await fetch(`${API_BASE_URL}/languages`, {
     method: 'GET',
@@ -231,6 +270,62 @@ const fetchResourceWithAssociation = async (
   return fetchGuideContent(matchingAssociation.contentId);
 };
 
+// Aquifer Bible Fetch Functions
+
+const fetchAquiferBibles = async (languageCode: string): Promise<AquiferBible[]> => {
+  const response = await fetch(`${API_BASE_URL}/bibles?languageCode=${languageCode}`, {
+    method: 'GET',
+    mode: 'cors',
+    headers: getApiHeaders(),
+  });
+
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch Aquifer bibles'), {
+      context: `status=${response.status} languageCode=${languageCode}`,
+    });
+    return [];
+  }
+
+  return (await response.json()) as AquiferBible[];
+};
+
+const fetchAquiferBibleText = async (
+  bibleId: number,
+  bookCode: string,
+  chapter: number
+): Promise<AquiferBibleTextResponse> => {
+  const emptyResponse: AquiferBibleTextResponse = {
+    bibleId,
+    bibleName: '',
+    bibleAbbreviation: '',
+    bookName: '',
+    bookCode,
+    chapters: [],
+  };
+
+  const response = await fetch(
+    `${API_BASE_URL}/bibles/${bibleId}/texts?BookCode=${bookCode}&StartChapter=${chapter}&EndChapter=${chapter}`,
+    {
+      method: 'GET',
+      mode: 'cors',
+      headers: getApiHeaders(),
+    }
+  );
+
+  if (response.status === 404) {
+    return emptyResponse;
+  }
+
+  if (!response.ok) {
+    Logger.logException(new Error('Failed to fetch Aquifer bible text'), {
+      context: `status=${response.status} bibleId=${bibleId} bookCode=${bookCode} chapter=${chapter}`,
+    });
+    return emptyResponse;
+  }
+
+  return (await response.json()) as AquiferBibleTextResponse;
+};
+
 // React Query Hooks
 export const useAllLanguages = () => {
   return useQuery({
@@ -340,5 +435,41 @@ export const useResourceWithAssociation = (
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     retry: 1,
+  });
+};
+
+// Aquifer Bible React Query Hooks
+
+export const useAquiferBibles = (languageCode: string, enabled: boolean = true) => {
+  return useQuery({
+    queryKey: ['aquifer-bibles', languageCode],
+    queryFn: () => fetchAquiferBibles(languageCode),
+    enabled: enabled && !!languageCode,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
+  });
+};
+
+export const useAquiferBibleText = (
+  bibleId: number | null,
+  bookCode: string,
+  chapter: number,
+  enabled: boolean = true
+) => {
+  return useQuery({
+    queryKey: ['aquifer-bible-text', bibleId, bookCode, chapter],
+    queryFn: () => {
+      if (bibleId === null) {
+        throw new Error('useAquiferBibleText called with null bibleId');
+      }
+      return fetchAquiferBibleText(bibleId, bookCode, chapter);
+    },
+    enabled: enabled && bibleId !== null,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    retry: false,
+    throwOnError: false,
   });
 };

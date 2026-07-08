@@ -1,0 +1,744 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { useNavigate, useRouter } from '@tanstack/react-router';
+import { Loader2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
+import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
+import { useDrafting } from '@/features/bible/hooks/useDrafting';
+import { usePericope } from '@/features/bible/hooks/usePericope';
+import {
+  type LeftTab,
+  useResourceState,
+  useSaveResourceState,
+} from '@/features/bible/hooks/useResourceStatePersistence';
+import { type OccurrenceRules } from '@/features/checks/checks.types';
+import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
+import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
+import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
+import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
+import { useFeatureFlag } from '@/features/flags';
+import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { Logger } from '@/lib/services/logger';
+import {
+  ChapterAssignmentStatus,
+  ChapterAssignmentStatusNextAction,
+  type DraftingUIProps,
+  type ResourceName,
+  type Source,
+} from '@/lib/types';
+import { useAppStore } from '@/store/store';
+
+import { DraftingGridPericope } from './DraftingGridPericope';
+import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
+import { DraftingHeader } from './DraftingHeader';
+import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+
+const RESOURCE_NAMES: ResourceName[] = [
+  { id: 'UWTranslationNotes', name: 'TN' },
+  { id: 'Images', name: 'Images & Maps' },
+  { id: 'Bibles', name: 'Bibles' },
+  { id: 'UWTranslationQuestions', name: 'TQ' },
+  { id: 'UWTranslationWords', name: 'TW' },
+];
+
+export const DraftingUI: React.FC<DraftingUIProps> = ({
+  projectItem,
+  sourceVerses,
+  targetVerses,
+  userdetail,
+  readOnly = false,
+}) => {
+  const { t } = useTranslation();
+  const displayMode = useAppStore(state => state.displayMode);
+
+  const addVerseMutation = useAddTranslatedVerse();
+  const submitChapterMutation = useSubmitChapter();
+  const navigate = useNavigate();
+  const router = useRouter();
+
+  const [showResources, setShowResources] = useState(false);
+  const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
+  const [currentLanguage, setCurrentLanguage] = useState('');
+
+  // Bible tab state
+  const [selectedPanel, setSelectedPanel] = useState<1 | 2>(1);
+  const [openResourcePanel, setOpenResourcePanel] = useState(false);
+  const [bibleTabLabel, setBibleTabLabel] = useState('');
+  const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
+  const [bibleContentLoading, setBibleContentLoading] = useState(false);
+
+  // Which left-panel tab is showing (Resources | Checks). Persisted in the
+  // editor-state blob as `activeLeftTab` (W11, §6.6).
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftTab>('resources');
+  // Occurrence-level suppression rules for the Repeated Word Check (cascade
+  // layer 2). Held here so they ride the existing debounced editor-state save
+  // — the single writer for the blob (§7.1).
+  const [occurrenceRules, setOccurrenceRules] = useState<OccurrenceRules>({});
+  // Increments on every successful verse auto-save; part of the check query key
+  // so the check re-fires exactly on the auto-save event (W3, card #172).
+  const [saveCounter, setSaveCounter] = useState(0);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const clearBibleRef = useRef<(() => void) | null>(null);
+
+  const { data: savedResourceState, isFetched } = useResourceState(projectItem.chapterAssignmentId);
+  const saveResourceStateMutation = useSaveResourceState();
+
+  const isInitializedRef = useRef(false);
+  const lastSavedStateRef = useRef<{
+    bookCode: string;
+    chapterNumber: number;
+    verseNumber: number;
+    activeResource: string;
+    languageCode: string;
+    tabStatus: boolean;
+    activeLeftTab: LeftTab;
+    checkOccurrenceRules: OccurrenceRules;
+  } | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearCurrentProjectItem = useAppStore(state => state.clearCurrentProjectItem);
+  const setPresenceWarning = useAppStore(state => state.setPresenceWarning);
+
+  const isDraft = projectItem.chapterStatus === ChapterAssignmentStatus.DRAFT;
+  const isCommunityReview = projectItem.chapterStatus === ChapterAssignmentStatus.COMMUNITY_REVIEW;
+  const isLinguistCheck = projectItem.chapterStatus === ChapterAssignmentStatus.LINGUIST_CHECK;
+  const isTheologicalCheck =
+    projectItem.chapterStatus === ChapterAssignmentStatus.THEOLOGICAL_CHECK;
+  const isConsultantCheck = projectItem.chapterStatus === ChapterAssignmentStatus.CONSULTANT_CHECK;
+  const isComplete = projectItem.chapterStatus === ChapterAssignmentStatus.COMPLETE;
+
+  const { editorName } = useChapterPresence(
+    projectItem.chapterAssignmentId,
+    isCommunityReview || isLinguistCheck || isTheologicalCheck || isConsultantCheck
+  );
+
+  useEffect(() => {
+    setPresenceWarning(editorName);
+    return () => setPresenceWarning(null);
+  }, [editorName, setPresenceWarning]);
+
+  const saveVerse = useCallback(
+    async (verse: number, text: string) => {
+      const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
+      if (!sourceVerse) {
+        Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
+        return;
+      }
+      const trimmedText = text.trim();
+
+      await addVerseMutation.mutateAsync({
+        verseData: {
+          projectUnitId: projectItem.projectUnitId,
+          content: trimmedText,
+          bibleTextId: sourceVerse.id,
+          assignedUserId: userdetail.id,
+        },
+      });
+
+      // Bump on the successful auto-save event so the Repeated Word Check
+      // re-fires (W3, card #172). `useAddTranslatedVerse` doesn't forward
+      // mutate-time `onSuccess`, so we bump after the awaited resolve.
+      setSaveCounter(c => c + 1);
+    },
+    [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
+  );
+
+  const {
+    verses,
+    activeVerseId,
+    revealedVerses,
+    buttonTop,
+    lastRevealedVerseHasContent,
+    targetScrollRef,
+    textareaRefs,
+    verseRefs,
+    getSaveStatus,
+    saveImmediately,
+    handleTextChange,
+    handleActiveVerseChange,
+    moveToNextVerse,
+    revealNextVerse,
+    updateButtonPosition,
+  } = useDrafting({
+    sourceVerses,
+    targetVerses,
+    readOnly,
+    onSave: saveVerse,
+  });
+
+  const {
+    pericopes,
+    isPericopeMode,
+    isPericopeLoading,
+    getPericopeStyle,
+    globalNextUntouchedVerse,
+    resourceVerseId,
+    effectiveRevealedVerses,
+    isNextButtonEnabled,
+    handleNextClick,
+  } = usePericope({
+    projectItem,
+    sourceVerses,
+    verses,
+    activeVerseId,
+    revealedVerses,
+    lastRevealedVerseHasContent,
+    displayMode,
+    getSaveStatus,
+    saveImmediately,
+    handleActiveVerseChange,
+    revealNextVerse,
+  });
+
+  // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
+
+  // Feature flag: is the Repeated Word Check enabled in this environment? The
+  // whole Checks feature depends on fluent-ai, which isn't hosted everywhere,
+  // so the flag lets this code ship hidden until AI is wired (feature-flags
+  // proposal D6/D7). Fail-closed: `useFeatureFlag` returns false while loading
+  // or on endpoint error, so the tab and the AI query stay off by default. This
+  // is the single consumption point — the flag is threaded down as booleans so
+  // the leaf components stay flag-agnostic.
+  const checksEnabled = useFeatureFlag('repeatedWordCheck');
+
+  // The single writer for the occurrence-rule map: `useSuppressions` does the
+  // read-modify-write and hands the next full map back here; updating state
+  // makes it ride the existing debounced editor-state save (one writer, §7.1).
+  const saveOccurrenceRules = useCallback((next: OccurrenceRules) => {
+    setOccurrenceRules(next);
+  }, []);
+
+  const {
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+    globalIgnoresAvailable,
+    settingsProbeResolved,
+    ignoreHere,
+    ignoreEverywhere,
+    undoOccurrence,
+    stopIgnoringEverywhere,
+    // Gate the once-per-session `GET /self/settings` probe on the same feature
+    // flag as the check query: when the Repeated Word Check is off (or still
+    // loading / errored — fail-closed) the Checks UI is hidden, so there is no
+    // reason to fetch user settings for it (W2, feature-flags proposal D5/D7).
+  } = useSuppressions({ occurrenceRules, saveOccurrenceRules, enabled: checksEnabled });
+
+  // What the translator currently sees is what gets checked (§6.2) — feed the
+  // live drafting verses, not a refetch.
+  const checkVerses = verses.map(v => ({ verseNumber: v.verseNumber, content: v.content }));
+  const hasContent = checkVerses.some(v => v.content.trim() !== '');
+
+  const checkQuery = useRepeatedWordsCheck({
+    projectItem,
+    verses: checkVerses,
+    saveCounter,
+    // Wait for the settings probe so the first render is cascade-correct, and
+    // never run in read-only `/view` or when the chapter is empty (W10/§9.1).
+    // Also gate on the feature flag: when the Repeated Word Check is off (or
+    // still loading / errored — fail-closed) we suppress the query entirely so
+    // no known-failing POST to /ai/tools/... fires in environments where
+    // fluent-ai isn't wired (feature-flags proposal D5/D7).
+    enabled: checksEnabled && !readOnly && hasContent && settingsProbeResolved,
+  });
+
+  const resolved = useResolvedFindings({
+    findings: checkQuery.data?.result?.findings ?? [],
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+  });
+
+  // Active-finding count drives both notification dots; computed once here and
+  // threaded to the tab and the closed-panel toggle button (S5, §6.4). When the
+  // Checks feature is disabled it is forced to 0 so neither dot can flash while
+  // the flag is resolving (the query is already suppressed above; this guards
+  // the count explicitly).
+  const activeFindingsCount = checksEnabled ? resolved.active.length : 0;
+
+  // When the Checks tab is hidden (feature off), a persisted `activeLeftTab ===
+  // 'checks'` must not strand the panel on an empty/absent tab — fall back to
+  // Resources for rendering. The persisted value itself is left untouched, so
+  // if the feature is later enabled the translator's last tab is restored.
+  const effectiveActiveLeftTab: LeftTab = checksEnabled ? activeLeftTab : 'resources';
+
+  const handleTabChange = useCallback((tab: LeftTab) => {
+    setActiveLeftTab(tab);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    clearCurrentProjectItem();
+
+    if (window.history.length <= 2) {
+      void navigate({ to: '/' });
+      return;
+    }
+
+    router.history.back();
+  }, [clearCurrentProjectItem, navigate, router]);
+
+  // Initialize resource state from saved data
+  useEffect(() => {
+    if (!isFetched || isInitializedRef.current) return;
+
+    if (savedResourceState) {
+      const { languageCode, tabStatus, activeLeftTab: savedTab } = savedResourceState;
+      const savedOccurrenceRules = savedResourceState.checkOccurrenceRules ?? {};
+
+      if (typeof tabStatus === 'boolean') {
+        setShowResources(tabStatus);
+      }
+
+      if (savedTab === 'resources' || savedTab === 'checks') {
+        setActiveLeftTab(savedTab);
+      }
+
+      setOccurrenceRules(savedOccurrenceRules);
+
+      setCurrentLanguage(languageCode || projectItem.sourceLangCode);
+
+      lastSavedStateRef.current = {
+        bookCode: projectItem.book,
+        chapterNumber: projectItem.chapterNumber,
+        verseNumber: activeVerseId,
+        activeResource: RESOURCE_NAMES[0].id,
+        languageCode: languageCode || projectItem.sourceLangCode,
+        tabStatus: typeof tabStatus === 'boolean' ? tabStatus : false,
+        activeLeftTab: savedTab === 'checks' ? 'checks' : 'resources',
+        checkOccurrenceRules: savedOccurrenceRules,
+      };
+    } else {
+      setCurrentLanguage(projectItem.sourceLangCode);
+
+      lastSavedStateRef.current = {
+        bookCode: projectItem.book,
+        chapterNumber: projectItem.chapterNumber,
+        verseNumber: activeVerseId,
+        activeResource: RESOURCE_NAMES[0].id,
+        languageCode: projectItem.sourceLangCode,
+        tabStatus: false,
+        activeLeftTab: 'resources',
+        checkOccurrenceRules: {},
+      };
+    }
+
+    isInitializedRef.current = true;
+  }, [
+    isFetched,
+    savedResourceState,
+    projectItem.sourceLangCode,
+    projectItem.book,
+    projectItem.chapterNumber,
+    activeVerseId,
+  ]);
+
+  // Save resource state with debouncing
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+
+    const currentState = {
+      bookCode: projectItem.book,
+      chapterNumber: projectItem.chapterNumber,
+      verseNumber: activeVerseId,
+      activeResource: currentResource.id,
+      languageCode: currentLanguage || projectItem.sourceLangCode,
+      tabStatus: showResources,
+      activeLeftTab,
+      checkOccurrenceRules: occurrenceRules,
+    };
+
+    if (lastSavedStateRef.current) {
+      const hasChanged =
+        lastSavedStateRef.current.bookCode !== currentState.bookCode ||
+        lastSavedStateRef.current.chapterNumber !== currentState.chapterNumber ||
+        lastSavedStateRef.current.verseNumber !== currentState.verseNumber ||
+        lastSavedStateRef.current.activeResource !== currentState.activeResource ||
+        lastSavedStateRef.current.languageCode !== currentState.languageCode ||
+        lastSavedStateRef.current.tabStatus !== currentState.tabStatus ||
+        lastSavedStateRef.current.activeLeftTab !== currentState.activeLeftTab ||
+        // Occurrence rules are replaced by-reference on every write (the hook
+        // returns a fresh map), so an identity check is sufficient and cheap.
+        lastSavedStateRef.current.checkOccurrenceRules !== currentState.checkOccurrenceRules;
+
+      if (!hasChanged) return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      saveResourceStateMutation.mutate({
+        chapterAssignmentId: projectItem.chapterAssignmentId,
+        resourceState: { resources: currentState },
+      });
+      lastSavedStateRef.current = currentState;
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [
+    currentResource.id,
+    currentLanguage,
+    showResources,
+    activeLeftTab,
+    occurrenceRules,
+    activeVerseId,
+    projectItem.chapterAssignmentId,
+    projectItem.book,
+    projectItem.chapterNumber,
+    projectItem.sourceLangCode,
+    saveResourceStateMutation,
+  ]);
+
+  const totalSourceVerses = sourceVerses.length;
+  const versesWithText = verses.filter(v => v.content.trim() !== '').length;
+  const progressPercentage = (versesWithText / totalSourceVerses) * 100;
+  const isTranslationComplete = versesWithText === totalSourceVerses;
+
+  const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
+  const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);
+
+  const buttonText =
+    ChapterAssignmentStatusNextAction[projectItem.chapterStatus as ChapterAssignmentStatus];
+
+  const handleSubmit = useCallback(async () => {
+    if (!isTranslationComplete) return;
+
+    const savePromises = verses
+      .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
+      .map(verse => saveImmediately(verse.verseNumber, verse.content));
+
+    await Promise.all(savePromises);
+
+    await submitChapterMutation.mutateAsync({
+      chapterAssignmentId: projectItem.chapterAssignmentId,
+    });
+    clearCurrentProjectItem();
+    router.history.back();
+  }, [
+    isTranslationComplete,
+    verses,
+    getSaveStatus,
+    saveImmediately,
+    submitChapterMutation,
+    projectItem.chapterAssignmentId,
+    clearCurrentProjectItem,
+    router,
+  ]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        moveToNextVerse();
+      }
+    },
+    [moveToNextVerse]
+  );
+
+  const resetBibleState = useCallback(() => {
+    clearBibleRef.current?.();
+    setSelectedPanel(1);
+    setOpenResourcePanel(false);
+    setBibleTabLabel('');
+    setBibleVerses([]);
+    setBibleContentLoading(false);
+  }, []);
+
+  const toggleResources = useCallback(() => {
+    setShowResources(prev => {
+      const nextShow = !prev;
+
+      // When hiding the resource panel, ResourcePanel unmounts and loses its
+      // internal hook state (selectedBible resets to null).
+      if (!nextShow) {
+        resetBibleState();
+      }
+
+      return nextShow;
+    });
+  }, [resetBibleState]);
+
+  // Close Tab 2: reset all bible-related state, revert to panel 1
+  const handleBibleTabClose = useCallback(() => {
+    resetBibleState();
+  }, [resetBibleState]);
+
+  // O(1) verse lookup for the bible panel left column
+  const bibleVerseMap = useMemo<Map<number, string>>(() => {
+    const map = new Map<number, string>();
+    bibleVerses.forEach(v => map.set(v.verseNumber, v.text));
+    return map;
+  }, [bibleVerses]);
+
+  const renderPanelTwoPlaceholder = useCallback(
+    (middleContent: React.ReactNode, isCenter = true) => (
+      <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '2rem 1fr 1fr' }}>
+        <div className='w-8' />
+        <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+          <div
+            className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+          >
+            {middleContent}
+          </div>
+        </div>
+        <div className='flex flex-col px-6'>
+          {sourceVerses.map(verse => (
+            <div key={verse.verseNumber} className='py-4'>
+              <DraftingTargetColumn
+                activeVerseId={activeVerseId}
+                effectiveRevealedVerses={effectiveRevealedVerses}
+                handleActiveVerseChange={handleActiveVerseChange}
+                handleKeyDown={handleKeyDown}
+                handleTextChange={handleTextChange}
+                readOnly={readOnly}
+                textareaRefs={textareaRefs}
+                verseNumber={verse.verseNumber}
+                verses={verses}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    [
+      sourceVerses,
+      activeVerseId,
+      effectiveRevealedVerses,
+      handleActiveVerseChange,
+      handleKeyDown,
+      handleTextChange,
+      readOnly,
+      textareaRefs,
+      verses,
+    ]
+  );
+
+  return (
+    <div className='flex h-full flex-col overflow-hidden'>
+      <DraftingHeader
+        activeFindingsCount={activeFindingsCount}
+        buttonText={buttonText}
+        hasAnyError={hasAnyError}
+        isAnythingSaving={isAnythingSaving}
+        isComplete={isComplete}
+        isDraft={isDraft}
+        isTranslationComplete={isTranslationComplete}
+        progressPercentage={progressPercentage}
+        projectItem={projectItem}
+        readOnly={readOnly}
+        showResources={showResources}
+        onBack={handleBack}
+        onSubmit={handleSubmit}
+        onToggleResources={toggleResources}
+      />
+
+      <div ref={containerRef} className='flex h-full overflow-hidden'>
+        {showResources && isInitializedRef.current && (
+          <DraftingResourceSidebar
+            activeFindingsCount={activeFindingsCount}
+            activeLeftTab={effectiveActiveLeftTab}
+            checksContent={
+              <ChecksPanel
+                globalIgnoresAvailable={globalIgnoresAvailable}
+                isError={checkQuery.isError}
+                resolved={resolved}
+                onIgnoreEverywhere={ignoreEverywhere}
+                onIgnoreHere={ignoreHere}
+                onStopIgnoringEverywhere={stopIgnoringEverywhere}
+                onUndo={undoOccurrence}
+              />
+            }
+            clearBibleRef={clearBibleRef}
+            containerRef={containerRef}
+            currentLanguage={currentLanguage}
+            currentResource={currentResource}
+            projectItem={projectItem}
+            resourceNames={RESOURCE_NAMES}
+            resourceVerseId={resourceVerseId}
+            setBibleContentLoading={setBibleContentLoading}
+            setBibleTabLabel={setBibleTabLabel}
+            setBibleVerses={setBibleVerses}
+            setCurrentLanguage={setCurrentLanguage}
+            setCurrentResource={setCurrentResource}
+            setOpenResourcePanel={setOpenResourcePanel}
+            setSelectedPanel={setSelectedPanel}
+            showChecksTab={checksEnabled}
+            onTabChange={handleTabChange}
+          />
+        )}
+
+        <div className='w-full flex-1 overflow-hidden px-8'>
+          <div
+            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full content-start`}
+            style={{
+              gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
+              gridTemplateRows: 'auto 1fr',
+              scrollbarGutter: 'stable',
+            }}
+          >
+            {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
+            <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
+              <button
+                className={`cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
+                  openResourcePanel
+                    ? selectedPanel === 1
+                      ? 'border-primary border-b-2 pb-1'
+                      : 'text-muted-foreground'
+                    : ''
+                }`}
+                disabled={!openResourcePanel}
+                onClick={() => setSelectedPanel(1)}
+              >
+                {projectItem.bibleName}
+              </button>
+
+              {openResourcePanel && (
+                <>
+                  <button
+                    className={`ml-4 cursor-pointer text-2xl font-bold transition-colors ${
+                      selectedPanel === 2
+                        ? 'border-primary border-b-2 pb-1'
+                        : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setSelectedPanel(2)}
+                  >
+                    {bibleTabLabel}
+                  </button>
+                  <X
+                    className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
+                    onClick={handleBibleTabClose}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className='bg-background sticky top-0 z-10 px-6 py-3'>
+              <h3 className='text-2xl font-bold text-slate-800'>{projectItem.targetLanguage}</h3>
+            </div>
+            <div
+              className={`col-span-3 flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
+            >
+              <div
+                ref={targetScrollRef}
+                className='relative flex h-full flex-col overflow-y-auto'
+                style={{ scrollbarGutter: 'stable' }}
+                onScroll={() => !readOnly && updateButtonPosition()}
+              >
+                {selectedPanel === 2 &&
+                  bibleContentLoading &&
+                  renderPanelTwoPlaceholder(
+                    <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
+                    true
+                  )}
+
+                {selectedPanel === 2 &&
+                  !bibleContentLoading &&
+                  bibleVerses.length === 0 &&
+                  renderPanelTwoPlaceholder(
+                    <p className='text-muted-foreground text-sm'>
+                      {t('noContentAvailable', 'No content available')}
+                    </p>,
+                    false
+                  )}
+
+                <div
+                  className={
+                    selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)
+                      ? 'hidden'
+                      : undefined
+                  }
+                >
+                  {displayMode === 'pericope' && isPericopeLoading ? (
+                    <div className='flex h-full items-center justify-center py-12'>
+                      <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                    </div>
+                  ) : isPericopeMode && pericopes ? (
+                    <DraftingGridPericope
+                      activeVerseId={activeVerseId}
+                      bibleVerseMap={bibleVerseMap}
+                      globalNextUntouchedVerse={globalNextUntouchedVerse}
+                      handleActiveVerseChange={handleActiveVerseChange}
+                      handleKeyDown={handleKeyDown}
+                      handleNextClick={handleNextClick}
+                      handleTextChange={handleTextChange}
+                      pericopes={pericopes}
+                      projectItem={projectItem}
+                      readOnly={readOnly}
+                      selectedPanel={selectedPanel}
+                      sourceVerses={sourceVerses}
+                      textareaRefs={textareaRefs}
+                      verseRefs={verseRefs}
+                      verses={verses}
+                    />
+                  ) : (
+                    <DraftingGridVerse
+                      activeVerseId={activeVerseId}
+                      bibleVerseMap={bibleVerseMap}
+                      effectiveRevealedVerses={effectiveRevealedVerses}
+                      getPericopeStyle={getPericopeStyle}
+                      handleActiveVerseChange={handleActiveVerseChange}
+                      handleKeyDown={handleKeyDown}
+                      handleTextChange={handleTextChange}
+                      readOnly={readOnly}
+                      selectedPanel={selectedPanel}
+                      sourceVerses={sourceVerses}
+                      textareaRefs={textareaRefs}
+                      verseRefs={verseRefs}
+                      verses={verses}
+                    />
+                  )}
+                </div>
+
+                {!readOnly &&
+                  !isPericopeMode &&
+                  !isPericopeLoading &&
+                  effectiveRevealedVerses.size < totalSourceVerses && (
+                    <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
+                                isNextButtonEnabled
+                                  ? 'hover:bg-primary-hover cursor-pointer text-white'
+                                  : 'cursor-not-allowed bg-gray-300 text-gray-500'
+                              }`}
+                              disabled={!isNextButtonEnabled}
+                              onClick={handleNextClick}
+                            >
+                              {t('nextVerse', 'Next Verse')}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            align='center'
+                            className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
+                            side='top'
+                            sideOffset={8}
+                          >
+                            <div className='flex items-center gap-2'>
+                              <span>{t('nextVerse', 'Next Verse')}</span>
+                              <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
+                                Enter ↵
+                              </span>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

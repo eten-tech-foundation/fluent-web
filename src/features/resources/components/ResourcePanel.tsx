@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Loader2 } from 'lucide-react';
+import { ChevronRightIcon, Loader2 } from 'lucide-react';
 
+import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item';
 import { type ItemWithUrl, type ProjectItem, type ResourceName } from '@/lib/types';
 
 import {
+  type BibleVerse,
+  type UnifiedBible,
+  useBibleResources,
   useGuideContent,
   useResourceDialog,
   useResourceFetch,
@@ -12,7 +16,7 @@ import {
 } from '../hooks/hooks';
 
 import { LanguageDropdown } from './LanguageDropdown';
-import { ResourceDropdown } from './ResourceComponents';
+import { ResourceChipRow } from './ResourceChipRow';
 import { ImageDialog, ImageGrid, ResourceDialog } from './ResourceDialog';
 import { TextResourceAccordion } from './TextResourceAccordion';
 
@@ -22,6 +26,12 @@ interface ResourcePanelProps {
   resourceNames: ResourceName[];
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
+  onBibleVersesChange?: (verses: BibleVerse[]) => void;
+  onBibleLoadingChange?: (loading: boolean) => void;
+  openResourceBiblePanel?: (open: boolean) => void;
+  selectPanel?: (panel: number) => void;
+  bibleResourceName: (name: string) => void;
+  registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
   initialLanguage?: string;
 }
@@ -32,6 +42,12 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   resourceNames,
   onResourceChange,
   onLanguageChange,
+  onBibleVersesChange,
+  onBibleLoadingChange,
+  openResourceBiblePanel,
+  selectPanel,
+  bibleResourceName,
+  registerClearBible,
   initialResource,
   initialLanguage,
 }) => {
@@ -41,6 +57,8 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   const isLanguageInitializedRef = useRef(false);
   const hasAutoSelectedRef = useRef(false);
+
+  const isBibleResource = selectedResource.id === 'Bibles';
 
   const {
     availableLanguages,
@@ -70,32 +88,43 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
         return;
       }
     }
-    // Auto-select source language if available
-    const sourceLanguageExists = availableLanguages.some(l => l.code === sourceData.sourceLangCode);
 
-    if (sourceLanguageExists && !hasAutoSelectedRef.current) {
-      handleLanguageChange(sourceData.sourceLangCode);
-      hasAutoSelectedRef.current = true;
-      isLanguageInitializedRef.current = true;
-    } else {
-      // No source language available, leave empty for user selection
+    if (isBibleResource) {
+      // Bibles: leave the dropdown empty — no auto-selection per requirements.
+      // The user must pick a language before the bible list loads.
       handleLanguageChange('');
       isLanguageInitializedRef.current = true;
+    } else {
+      // Non-Bible resources: auto-select source language for convenience
+      const sourceLanguageExists = availableLanguages.some(
+        l => l.code === sourceData.sourceLangCode
+      );
+
+      if (sourceLanguageExists && !hasAutoSelectedRef.current) {
+        handleLanguageChange(sourceData.sourceLangCode);
+        hasAutoSelectedRef.current = true;
+        isLanguageInitializedRef.current = true;
+      } else {
+        handleLanguageChange('');
+        isLanguageInitializedRef.current = true;
+      }
     }
   }, [
     availableLanguages,
+    isBibleResource,
     loadingLanguages,
     initialLanguage,
     sourceData.sourceLangCode,
     handleLanguageChange,
   ]);
 
-  // Reset initialization flag when resource changes
+  // Reset initialization when switching resource chips
   useEffect(() => {
     isLanguageInitializedRef.current = false;
     hasAutoSelectedRef.current = false;
   }, [selectedResource.id]);
 
+  // Propagate language changes upward (debounced by the ref guard)
   const prevLanguageRef = useRef(selectedLanguage);
   useEffect(() => {
     if (
@@ -110,7 +139,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   const shouldFetchResources = isLanguageInitializedRef.current && selectedLanguage !== '';
 
-  // Fetch resources (ONLY this hook depends on activeVerseId for content)
+  // Non-Bible resource content
   const { localizeRefName, imageItems, loadingImages } = useResourceFetch(
     selectedResource,
     activeVerseId,
@@ -127,9 +156,50 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     fetchRelatedAudio,
   } = useGuideContent();
 
+  const pendingPrefetchIds = useRef<Set<number>>(new Set());
+
   const { resourceDialog, loadingResourceDialog, handleResourceClick, resourceError, closeDialog } =
     useResourceDialog();
 
+  // Bible resource content
+  const {
+    unifiedBibles,
+    loadingBibles,
+    loadingBibleContent,
+    selectedBible,
+    handleBibleChange,
+    clearSelectedBible,
+    bibleVerses,
+  } = useBibleResources(
+    selectedLanguage,
+    sourceData.bookCode,
+    sourceData.chapterNumber,
+    isBibleResource && shouldFetchResources
+  );
+
+  // Register clearSelectedBible with DraftingUI once on mount so the × button
+  // and toggleResources can call it directly to reset hook-level bible state.
+  useEffect(() => {
+    registerClearBible?.(clearSelectedBible);
+  }, [registerClearBible, clearSelectedBible]);
+
+  // Propagate bible verses to DraftingUI — stringify comparison avoids firing
+  // on reference changes that carry identical content.
+  const prevBibleVersesStringRef = useRef<string>('');
+  useEffect(() => {
+    if (!isBibleResource) return;
+    const versesString = JSON.stringify(bibleVerses);
+    if (prevBibleVersesStringRef.current === versesString) return;
+    prevBibleVersesStringRef.current = versesString;
+    onBibleVersesChange?.(bibleVerses);
+  }, [isBibleResource, bibleVerses, onBibleVersesChange]);
+
+  useEffect(() => {
+    if (!isBibleResource) return;
+    onBibleLoadingChange?.(loadingBibleContent);
+  }, [isBibleResource, loadingBibleContent, onBibleLoadingChange]);
+
+  // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {
     setSelectedResource(resource);
     onResourceChange?.(resource);
@@ -139,6 +209,16 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const handleLanguageSelect = (languageCode: string) => {
     handleLanguageChange(languageCode);
   };
+
+  const handleBibleSelect = useCallback(
+    (bible: UnifiedBible) => {
+      handleBibleChange(bible.id);
+      openResourceBiblePanel?.(true);
+      selectPanel?.(2);
+      bibleResourceName(bible.abbreviation);
+    },
+    [handleBibleChange, openResourceBiblePanel, selectPanel, bibleResourceName]
+  );
 
   const handleAccordionChange = async (value: string[]) => {
     setOpenItem(value);
@@ -167,75 +247,186 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   useEffect(() => {
     if (localizeRefName.length > 0 && shouldFetchResources) {
       const firstItemId = localizeRefName[0].id.toString();
-      setOpenItem([firstItemId]);
+      setOpenItem(prev => {
+        if (prev.length === 1 && prev[0] === firstItemId) return prev;
+        return [firstItemId];
+      });
       void handleAccordionChange([firstItemId]);
     } else {
-      setOpenItem([]);
+      setOpenItem(prev => (prev.length === 0 ? prev : []));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localizeRefName, shouldFetchResources]);
 
+  useEffect(() => {
+    if (
+      selectedResource.id === 'UWTranslationQuestions' &&
+      localizeRefName.length > 0 &&
+      shouldFetchResources
+    ) {
+      localizeRefName.forEach(item => {
+        if (!(item.id in guideContents) && !pendingPrefetchIds.current.has(item.id)) {
+          pendingPrefetchIds.current.add(item.id);
+          fetchGuideContent(item.id)
+            .then(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            })
+            .catch(() => {
+              pendingPrefetchIds.current.delete(item.id);
+            });
+        }
+      });
+    }
+  }, [
+    selectedResource.id,
+    localizeRefName,
+    shouldFetchResources,
+    guideContents,
+    fetchGuideContent,
+  ]);
+
   // Show loading state while initializing
   const isInitializing = !isLanguageInitializedRef.current && loadingLanguages;
 
-  const isLanguageDropdownEnabled =
-    selectedResource.id === 'UWTranslationNotes' || selectedResource.name === 'Images';
+  const renderBibleContent = () => {
+    // Gate: language must be selected first
+    if (!shouldFetchResources) {
+      return (
+        <div className='flex h-full items-center justify-center'>
+          <p className='text-muted-foreground text-sm'>Select a language to view resources</p>
+        </div>
+      );
+    }
+
+    // Loading both lists before showing anything prevents a flash of empty state
+    if (loadingBibles) {
+      return (
+        <div className='flex h-full items-center justify-center'>
+          <Loader2 className='h-8 w-8 animate-spin text-blue-600' />
+        </div>
+      );
+    }
+
+    // Requirement: "No Bibles are currently available." empty state
+    if (unifiedBibles.length === 0) {
+      return (
+        <div className='flex h-full items-center justify-center'>
+          <p className='text-muted-foreground text-sm'>No Bibles are currently available.</p>
+        </div>
+      );
+    }
+
+    // Bible list — clicking a row opens Tab 2 and highlights the selected entry.
+    // Sorted alphabetically (done in useBibleResources).
+    return (
+      <div className='flex flex-col gap-2'>
+        {unifiedBibles.map(bible => {
+          const isSelected = selectedBible?.id === bible.id;
+
+          return (
+            <Item
+              key={bible.id}
+              className={`cursor-pointer transition-colors ${
+                isSelected ? 'bg-primary/10 ring-primary ring-1' : ''
+              }`}
+              size='sm'
+              onClick={() => handleBibleSelect(bible)}
+            >
+              <ItemContent>
+                <ItemTitle className={isSelected ? 'text-primary font-semibold' : ''}>
+                  {bible.abbreviation} — {bible.name}
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions>
+                {loadingBibleContent && isSelected ? (
+                  <Loader2 className='h-4 w-4 animate-spin text-blue-600' />
+                ) : (
+                  <ChevronRightIcon className='size-4' />
+                )}
+              </ItemActions>
+            </Item>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderResourceContent = () => {
+    if (isBibleResource) {
+      return renderBibleContent();
+    }
+
+    if (isInitializing || loadingImages) {
+      return (
+        <div className='flex h-full items-center justify-center'>
+          <Loader2 className='h-8 w-8 animate-spin text-blue-600' />
+        </div>
+      );
+    }
+
+    if (!shouldFetchResources) {
+      return (
+        <div className='flex h-full items-center justify-center'>
+          <p className='text-sm'>Select a language to view resources</p>
+        </div>
+      );
+    }
+
+    if (imageItems.length > 0) {
+      return (
+        <ImageGrid
+          activeVerseId={activeVerseId}
+          items={imageItems}
+          sourceData={sourceData}
+          onImageClick={setSelectedImage}
+        />
+      );
+    }
+
+    if (localizeRefName.length > 0) {
+      return (
+        <TextResourceAccordion
+          direction={currentLanguageDirection}
+          guideContents={guideContents}
+          loadingGuides={loadingGuides}
+          openItem={openItem}
+          relatedAudioIds={relatedAudioIds}
+          resourceId={selectedResource.id}
+          resources={localizeRefName}
+          selectedLanguage={selectedLanguage}
+          sourceData={sourceData}
+          onAccordionChange={handleAccordionChange}
+          onResourceClick={handleResourceClick}
+        />
+      );
+    }
+
+    return (
+      <div className='flex h-full items-center justify-center'>
+        <p className='text-sm'>No resources available</p>
+      </div>
+    );
+  };
 
   return (
     <aside className='bg-background flex h-full flex-col'>
+      {/* The "Resources" heading was removed: the shared LeftPanel tab row
+          ("Resources | Checks") now serves as this panel's header (W11, §6.6). */}
       <div className='bg-background top-0 py-4'>
-        <div className='flex items-center gap-2'>
-          <h3 className='text-foreground text-xl font-semibold'>Resources</h3>
-        </div>
-        <ResourceDropdown
+        <ResourceChipRow
           resourceNames={resourceNames}
           selectedResource={selectedResource}
           onSelect={handleResourceSelect}
         />
-
-        {isLanguageDropdownEnabled && (
-          <LanguageDropdown
-            availableLanguages={availableLanguages}
-            loading={loadingLanguages}
-            selectedLanguage={selectedLanguage}
-            onSelect={handleLanguageSelect}
-          />
-        )}
+        <LanguageDropdown
+          availableLanguages={availableLanguages}
+          loading={loadingLanguages}
+          selectedLanguage={selectedLanguage}
+          onSelect={handleLanguageSelect}
+        />
       </div>
       <div className='flex flex-1 flex-col overflow-hidden rounded-md border p-2'>
-        <div className='flex-1 overflow-y-auto px-4 pt-2'>
-          {isInitializing || loadingImages ? (
-            <div className='flex h-full items-center justify-center'>
-              <Loader2 className='h-8 w-8 animate-spin text-blue-600' />
-            </div>
-          ) : !shouldFetchResources && isLanguageDropdownEnabled ? (
-            <div className='flex h-full items-center justify-center'>
-              <p className='text-sm'>Select a language to view resources</p>
-            </div>
-          ) : imageItems.length > 0 ? (
-            <ImageGrid
-              activeVerseId={activeVerseId}
-              items={imageItems}
-              sourceData={sourceData}
-              onImageClick={setSelectedImage}
-            />
-          ) : localizeRefName.length > 0 ? (
-            <TextResourceAccordion
-              direction={currentLanguageDirection}
-              guideContents={guideContents}
-              loadingGuides={loadingGuides}
-              openItem={openItem}
-              relatedAudioIds={relatedAudioIds}
-              resources={localizeRefName}
-              onAccordionChange={handleAccordionChange}
-              onResourceClick={handleResourceClick}
-            />
-          ) : (
-            <div className='flex h-full items-center justify-center'>
-              <p className='text-sm'>No resources available</p>
-            </div>
-          )}
-        </div>
+        <div className='flex-1 overflow-y-auto px-4 pt-2'>{renderResourceContent()}</div>
       </div>
 
       <ImageDialog image={selectedImage} onClose={() => setSelectedImage(null)} />

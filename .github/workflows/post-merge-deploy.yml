@@ -19,11 +19,11 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'development' }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           submodules: true
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.0
 
@@ -48,3 +48,5 @@ jobs:
           VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
           VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
           VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
+          VITE_YOUVERSION_API_URL: ${{ secrets.VITE_YOUVERSION_API_URL }}
+          VITE_YOUVERSION_API_KEY: ${{ secrets.VITE_YOUVERSION_API_KEY }}

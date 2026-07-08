@@ -28,7 +28,7 @@ import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBoo
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getStatusDisplay } from '@/lib/formatters';
+import { getConnectivityProfileDisplay, getStatusDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -50,6 +50,7 @@ interface ProjectDetailPageProps {
   projectSourceLanguageName: string;
   projectTargetLanguageName: string;
   projectSource: string;
+  projectConnectivityProfile?: string | null;
   projectChapterStatusCounts: ChapterStatusCounts;
   projectWorkflowConfig: WorkflowStep[];
   isAddUserOpen?: boolean;
@@ -63,13 +64,13 @@ const CardProgressBar: React.FC<{
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
 }> = ({ chapterStatusCounts, workflowConfig }) => {
-  const { colors, calculateProgressSegments } = useProgressBar(workflowConfig);
+  const { legendItems, calculateProgressSegments } = useProgressBar(workflowConfig);
   const segments = calculateProgressSegments(chapterStatusCounts);
 
   return (
     <div className='space-y-2'>
       <TooltipProvider delayDuration={100}>
-        <div className='border-border flex h-6 w-full overflow-hidden border'>
+        <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
           {segments.length === 0 ? (
             <div className='bg-primary/10 h-full w-full' />
           ) : (
@@ -96,19 +97,16 @@ const CardProgressBar: React.FC<{
         </div>
       </TooltipProvider>
 
-      <div className='flex flex-wrap gap-x-2 gap-y-1.5 pt-1'>
-        {[...workflowConfig].reverse().map(step => {
-          const colorInfo = colors[step.id];
-          return (
-            <div key={step.id} className='flex items-center gap-2'>
-              <div
-                className='h-4 w-4 shrink-0 rounded-none'
-                style={{ backgroundColor: colorInfo.rgba }}
-              />
-              <span className='text-muted-foreground text-xs'>{step.label}</span>
-            </div>
-          );
-        })}
+      <div className='grid grid-cols-2 gap-x-8 gap-y-2 pt-1'>
+        {legendItems.map(item => (
+          <div key={item.key} className='flex items-center gap-2'>
+            <div
+              className='h-4 w-4 shrink-0 rounded-none'
+              style={{ backgroundColor: item.color }}
+            />
+            <span className='text-muted-foreground text-xs'>{item.displayName}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -219,6 +217,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   projectSourceLanguageName,
   projectTargetLanguageName,
   projectSource,
+  projectConnectivityProfile,
   projectChapterStatusCounts,
   projectWorkflowConfig,
   isAddUserOpen = false,
@@ -323,11 +322,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       const projectItem: ProjectItem = {
         chapterAssignmentId: assignment.assignmentId,
+        projectId: projectId ?? 0,
         projectName: projectTitle,
         projectUnitId: assignment.projectUnitId,
         bibleId: assignment.bibleId,
         bibleName: projectSource,
         targetLanguage: projectTargetLanguageName,
+        // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
+        // the progress endpoint now surfaces this so the PM path no longer
+        // sends "<unknown>".
+        targetLangCode: assignment.targetLangCode,
         bookId: assignment.bookId,
         book: assignment.bookNameEng,
         chapterStatus: assignment.status,
@@ -349,7 +353,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         state: { projectItem },
       });
     },
-    [userdetail, projectTitle, projectSource, projectTargetLanguageName, navigate]
+    [userdetail, projectId, projectTitle, projectSource, projectTargetLanguageName, navigate]
   );
 
   const handleAddBook = useCallback(() => {
@@ -479,6 +483,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <label className='text-base font-bold'>Source Bible</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {projectSource}
+                </p>
+
+                <label className='text-base font-bold'>Connectivity Profile</label>
+                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
+                  {getConnectivityProfileDisplay(projectConnectivityProfile)}
                 </p>
               </div>
               <CardProgressBar

@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { config } from '@/lib/config';
 import { type ChapterStatusCounts, type WorkflowStep } from '@/lib/types';
 
+export interface ProjectMetadata {
+  connectivityProfile?: string;
+}
 export interface ProjectDetails {
   id: number;
   name: string;
@@ -11,12 +14,13 @@ export interface ProjectDetails {
   createdBy: number | null;
   createdAt: string | null;
   updatedAt: string | null;
-  metadata: string;
+  metadata: ProjectMetadata;
   sourceLanguageName: string;
   targetLanguageName: string;
   sourceName: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  pericopeSetId?: number | null;
 }
 
 const fetchProjectDetails = async (projectId: string): Promise<ProjectDetails> => {

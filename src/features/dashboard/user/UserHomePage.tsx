@@ -1,8 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
+import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import {
   Table,
   TableBody,
@@ -15,7 +16,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useChapterAssignmentsByUserId } from '@/hooks/useChapterAssignment';
 import { getStatusDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
-import { type ChapterAssignmentStatus, type User, type UserChapterAssignment } from '@/lib/types';
+import {
+  CHAPTER_STATUS_ORDER,
+  type ChapterAssignmentStatus as ChapterAssignmentStatusType,
+  type User,
+  type UserChapterAssignment,
+} from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 const TruncatedProjectCell = ({ text, isNavigating }: { text: string; isNavigating: boolean }) => {
@@ -35,9 +41,7 @@ const TruncatedProjectCell = ({ text, isNavigating }: { text: string; isNavigati
 
   const content = (
     <div className='inline-flex max-w-full items-center gap-2'>
-      {isNavigating && (
-        <Loader2 className='h-4 w-4 flex-shrink-0 animate-spin text-[var(--primary)]' />
-      )}
+      {isNavigating && <Loader2 className='text-primary h-4 w-4 shrink-0 animate-spin' />}
       <span ref={textRef} className='truncate'>
         {text}
       </span>
@@ -111,11 +115,25 @@ const getStatusText = (item: UserChapterAssignment) => {
 
 export function UserHomePage() {
   const [navigatingToProject, setNavigatingToProject] = useState<string | null>(null);
-  const { userdetail, userDashboardTab, setUserDashboardTab } = useAppStore();
+  const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const lastCloseTime = useRef(0);
+
+  const { userdetail } = useAppStore();
   const navigate = useNavigate();
+  // The active tab lives in the URL so each switch is a browser history
+  // entry — Back from My History lands on My Work instead of leaving the page.
+  const { tab } = useSearch({ from: '/_authenticated/' });
+  const isHistory = tab === 'my-history';
   const { data: chapterAssignmentsData, isLoading: loading } = useChapterAssignmentsByUserId(
     (userdetail as User).id
   );
+
+  // Reset filters when switching tabs
+  useEffect(() => {
+    setSelectedBooks([]);
+    setSelectedStatuses([]);
+  }, [isHistory]);
 
   const myWorkData: UserChapterAssignment[] = useMemo(() => {
     if (!chapterAssignmentsData) return [];
@@ -149,13 +167,65 @@ export function UserHomePage() {
       });
   }, [chapterAssignmentsData]);
 
-  const handleRowClick = async (item: UserChapterAssignment, isHistory: boolean) => {
+  const currentData = isHistory ? historyData : myWorkData;
+
+  const bookOptions = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const item of currentData) {
+      if (!seen.has(item.book)) {
+        seen.set(item.book, item.bookId);
+      }
+    }
+    return Array.from(seen.entries())
+      .sort(([, aId], [, bId]) => aId - bId)
+      .map(([name]) => ({ value: name, label: name }));
+  }, [currentData]);
+
+  const statusOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const item of currentData) seen.add(item.chapterStatus);
+    return CHAPTER_STATUS_ORDER.filter((s): s is ChapterAssignmentStatusType => seen.has(s)).map(
+      s => ({
+        value: s,
+        label: getStatusDisplay(s),
+      })
+    );
+  }, [currentData]);
+
+  const filteredData = useMemo(() => {
+    let result = currentData;
+    if (selectedBooks.length > 0) {
+      result = result.filter(item => selectedBooks.includes(item.book));
+      result = [...result].sort((a, b) => {
+        if (a.bookId !== b.bookId) return a.bookId - b.bookId;
+        return a.chapterNumber - b.chapterNumber;
+      });
+    }
+    if (selectedStatuses.length > 0) {
+      result = result.filter(item => selectedStatuses.includes(item.chapterStatus));
+    }
+    return result;
+  }, [currentData, selectedBooks, selectedStatuses]);
+
+  const hasActiveFilters = selectedBooks.length > 0 || selectedStatuses.length > 0;
+  const isFilteredEmpty = hasActiveFilters && filteredData.length === 0 && currentData.length > 0;
+  const emptyMessage = isFilteredEmpty
+    ? 'Change or remove the filters to view resources'
+    : isHistory
+      ? 'No completed work found'
+      : 'No work assigned';
+
+  const handleRowClick = async (item: UserChapterAssignment) => {
+    if (Date.now() - lastCloseTime.current < 300) return;
     const projectKey = `${item.projectUnitId}-${item.bookId}-${item.chapterNumber}`;
     setNavigatingToProject(projectKey);
 
     try {
       await navigate({
-        to: isHistory ? '/view/$bookId/$chapterNumber' : '/translation/$bookId/$chapterNumber',
+        to:
+          isHistory && (item.chapterStatus === 'peer_check' || item.chapterStatus === 'complete')
+            ? '/view/$bookId/$chapterNumber'
+            : '/translation/$bookId/$chapterNumber',
         params: {
           bookId: item.bookId.toString(),
           chapterNumber: item.chapterNumber.toString(),
@@ -178,38 +248,65 @@ export function UserHomePage() {
     }
   };
 
-  const currentData = userDashboardTab === 'my-work' ? myWorkData : historyData;
-  const isHistory = userDashboardTab === 'my-history';
-  const emptyMessage = isHistory ? 'No completed work found' : 'No work assigned';
-
   return (
     <div className='flex h-[calc(100vh-80px)] flex-col'>
-      <h2 className='text-foreground mb-6 flex-shrink-0 text-3xl font-bold'>
-        Translator Dashboard
-      </h2>
+      <h2 className='text-foreground mb-6 shrink-0 text-3xl font-bold'>Translator Dashboard</h2>
 
-      <div className='mb-6 flex-shrink-0'>
+      {/* Tab bar */}
+      <div className='mb-6 shrink-0'>
         <button
           className={`cursor-pointer border-b-3 px-1 pb-3 text-sm font-medium transition-colors ${
-            userDashboardTab === 'my-work'
+            !isHistory
               ? 'border-primary text-foreground'
               : 'text-foreground border-transparent hover:text-gray-700'
           }`}
-          onClick={() => setUserDashboardTab('my-work')}
+          onClick={() => void navigate({ to: '/', search: {} })}
         >
           My Work ({myWorkData.length})
         </button>
         <button
           className={`ml-6 cursor-pointer border-b-3 px-1 pb-3 text-sm font-medium transition-colors ${
-            userDashboardTab === 'my-history'
+            isHistory
               ? 'border-primary text-foreground'
               : 'text-foreground border-transparent hover:text-gray-700'
           }`}
-          onClick={() => setUserDashboardTab('my-history')}
+          onClick={() => void navigate({ to: '/', search: { tab: 'my-history' } })}
         >
           My History ({historyData.length})
         </button>
       </div>
+
+      {/* Filter controls */}
+      {!loading && (
+        <div className='mb-4 flex shrink-0 gap-3'>
+          <MultiSelectFilter
+            className='w-[200px] lg:w-[250px]'
+            contentClassName='w-[200px] lg:w-[250px]'
+            label='Book'
+            options={bookOptions}
+            selected={selectedBooks}
+            onChange={setSelectedBooks}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                lastCloseTime.current = Date.now();
+              }
+            }}
+          />
+          <MultiSelectFilter
+            className='w-48'
+            contentClassName='w-48'
+            label='Status'
+            options={statusOptions}
+            selected={selectedStatuses}
+            onChange={setSelectedStatuses}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                lastCloseTime.current = Date.now();
+              }
+            }}
+          />
+        </div>
+      )}
 
       <div className='bg-card flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (
@@ -241,14 +338,14 @@ export function UserHomePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className='divide-border bg-background divide-y'>
-                  {currentData.length === 0 ? (
+                  {filteredData.length === 0 ? (
                     <TableRow>
                       <TableCell className='p-8 text-center' colSpan={5}>
                         {emptyMessage}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    currentData.map(item => {
+                    filteredData.map(item => {
                       const projectKey = `${item.projectUnitId}-${item.bookId}-${item.chapterNumber}`;
                       const isNavigating = navigatingToProject === projectKey;
 
@@ -256,7 +353,7 @@ export function UserHomePage() {
                         <TableRow
                           key={projectKey}
                           className='cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
-                          onClick={() => handleRowClick(item, isHistory)}
+                          onClick={() => handleRowClick(item)}
                         >
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
                             <TruncatedProjectCell
@@ -271,7 +368,7 @@ export function UserHomePage() {
                             {item.chapterNumber}
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
-                            {getStatusDisplay(item.chapterStatus as ChapterAssignmentStatus)}
+                            {getStatusDisplay(item.chapterStatus as ChapterAssignmentStatusType)}
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
                             <TruncatedTextCell

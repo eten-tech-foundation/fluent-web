@@ -4,6 +4,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
+import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
 import { Logger } from '@/lib/services/logger';
 import { UserRole, type CreateProject } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -53,7 +54,8 @@ export const ProjectsWrapper: React.FC = () => {
         bookId: projectData.books,
         organization: Number(userdetail?.organization),
         createdBy: Number(userdetail?.id),
-        metadata: {},
+        metadata: buildProjectMetadata(projectData.connectivityProfile),
+        pericopeSetId: projectData.pericopeSetId,
       };
 
       await createProjectMutation.mutateAsync({

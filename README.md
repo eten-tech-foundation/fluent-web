@@ -4,7 +4,7 @@ A modern web application built with React, TypeScript, and TanStack Router.
 
 ## Features
 
-- **Authentication**: Complete Auth0 integration with login, signup, and user management
+- **Authentication**: better-auth integration with email/password login, password reset, and invitation-based onboarding
 - **Modern UI**: Beautiful, responsive design with Tailwind CSS
 - **Type Safety**: Full TypeScript support
 - **Routing**: TanStack Router for type-safe routing
@@ -16,44 +16,35 @@ A modern web application built with React, TypeScript, and TanStack Router.
 
 ## Authentication
 
-This application includes a complete authentication system powered by Auth0:
+Authentication is powered by [better-auth](https://www.better-auth.com/). The browser client lives in `src/lib/auth-client.ts` and talks to the better-auth server exposed by the Fluent API (configured via `VITE_BETTER_AUTH_URL`).
 
-- **Login Page**: Beautiful sign-in interface at `/login`
-- **User Profile**: Dropdown menu with user information and logout
-- **Protected Routes**: Easy-to-use `ProtectedRoute` component
-- **Dashboard**: Example protected page showing user information
-- **Account Creation**: Seamless signup flow integrated with login
+- **Login** (`/login`): email and password sign-in.
+- **Password reset** (`/reset-password`): request a reset email, then set a new password.
+- **Invitation onboarding** (`/accept-invitation`): new users join by accepting an emailed invitation — there is no self-service signup.
+- **Sessions**: read the current session with `authClient.useSession()`, or use the `useAuth()` hook (`src/hooks/useAuth.ts`), which exposes `user`, `isAuthenticated`, `isLoading`, `login`, and `logout`.
+- **Protected routes**: pages under the `_authenticated` layout route are guarded — unauthenticated visitors are redirected to `/login?returnTo=<url>`, where `returnTo` is the full URL they were trying to reach.
 
-### Quick Start with Auth0
+### Quick Start
 
-1. Create a `.env` file with your Auth0 credentials:
+1. Create a `.env` file with the required variables. At minimum you must set `VITE_API_URL`, `VITE_ENVIRONMENT`, `VITE_AQUIFER_API_URL`, `VITE_AQUIFER_API_KEY`, `VITE_YOUVERSION_API_URL`, `VITE_YOUVERSION_API_KEY` and `VITE_BETTER_AUTH_URL` — they are all validated at startup, and missing any of them fails with an "Invalid environment configuration" error. See [Environment Configuration](docs/environment-config.md) for the full list and how to manage per-environment files. To point the app at a better-auth server, set:
 
    ```env
-   VITE_AUTH0_DOMAIN=your-tenant.auth0.com
-   VITE_AUTH0_CLIENT_ID=your-client-id
-   VITE_AUTH0_AUDIENCE=your-api-audience
+   VITE_BETTER_AUTH_URL=http://localhost:9999/api/auth
    ```
 
-2. Configure your Auth0 application:
-   - Allowed Callback URLs: `http://localhost:5173/callback`
-   - Allowed Logout URLs: `http://localhost:5173`
-   - Allowed Web Origins: `http://localhost:5173`
-
-3. Start the development server:
+2. Start the development server:
 
    ```bash
    pnpm dev
    ```
 
-4. Visit `/login` to test the authentication flow
-
-For detailed setup instructions, see [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md).
+3. Visit `/login` to sign in.
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 22.15.x
+- Node.js 24.13.x
 - pnpm
 
 ### Installation
@@ -108,7 +99,7 @@ src/
 - **TypeScript** - Type safety
 - **TanStack Router** - Type-safe routing
 - **Tailwind CSS** - Styling
-- **Auth0** - Authentication
+- **better-auth** - Authentication
 - **Zustand** - State management
 - **Zod** - Schema validation
 - **i18next** - Internationalization
@@ -121,7 +112,7 @@ src/
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js**: This project requires Node.js version 22.15.x
+- **Node.js**: This project requires Node.js version 24.13.x
   - We recommend using [nvm (Node Version Manager)](https://github.com/nvm-sh/nvm) to manage Node.js versions
 - **pnpm**: This project uses pnpm as the package manager
 
@@ -138,7 +129,7 @@ cd fluent-web
 
 ### 2. Set up Node.js version
 
-The project uses Node.js 22.15.0 as specified in the `.nvmrc` file. If you're using nvm, run:
+The project uses Node.js 24.13.0 as specified in the `.nvmrc` file. If you're using nvm, run:
 
 ```bash
 nvm install  # This will read the .nvmrc file and install the specified version

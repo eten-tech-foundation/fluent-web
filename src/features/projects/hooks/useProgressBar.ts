@@ -1,12 +1,9 @@
 import { useCallback, useMemo } from 'react';
 
-import { type WorkflowStep } from '@/lib/types';
+import { ChapterAssignmentStatus, type WorkflowStep } from '@/lib/types';
 
 interface ColorInfo {
   color: string;
-  opacity: number;
-  rgba: string;
-  percentage: number;
   displayName: string;
 }
 
@@ -16,33 +13,78 @@ interface ProgressSegment {
   count: number;
   widthPercentage: number;
   color: string;
-  opacity: number;
 }
+
+interface LegendItem {
+  key: string;
+  color: string;
+  displayName: string;
+}
+
+const PHASE_COLORS: Partial<Record<ChapterAssignmentStatus, string>> = {
+  [ChapterAssignmentStatus.NOT_STARTED]: 'var(--workflow-not-started)',
+  [ChapterAssignmentStatus.DRAFT]: 'var(--workflow-drafting)',
+  [ChapterAssignmentStatus.PEER_CHECK]: 'var(--workflow-peer-check)',
+  [ChapterAssignmentStatus.COMMUNITY_REVIEW]: 'var(--workflow-community-review)',
+  [ChapterAssignmentStatus.COMPLETE]: 'var(--workflow-complete)',
+};
+
+// Display names for the bar/legend. Kept separate from each step's own
+// `label` so that multiple advanced-check sub-stages (linguist check,
+// theological check, consultant check, etc.) collapse into a single
+// "Advanced Check" entry instead of one row per configured step.
+const PHASE_DISPLAY_NAMES: Partial<Record<ChapterAssignmentStatus, string>> = {
+  [ChapterAssignmentStatus.NOT_STARTED]: 'Not Started',
+  [ChapterAssignmentStatus.DRAFT]: 'Drafting',
+  [ChapterAssignmentStatus.PEER_CHECK]: 'Peer Check',
+  [ChapterAssignmentStatus.COMMUNITY_REVIEW]: 'Community Review',
+  [ChapterAssignmentStatus.COMPLETE]: 'Complete',
+};
+
+const ADVANCED_CHECK_COLOR = 'var(--workflow-advanced-check)';
+const ADVANCED_CHECK_KEY = 'advanced_check';
+const ADVANCED_CHECK_LABEL = 'Advanced Check';
+const getPhaseKey = (stepId: string): string =>
+  stepId in PHASE_COLORS ? stepId : ADVANCED_CHECK_KEY;
+
+const getPhaseColor = (stepId: string): string =>
+  PHASE_COLORS[stepId as ChapterAssignmentStatus] ?? ADVANCED_CHECK_COLOR;
+
+const getPhaseDisplayName = (stepId: string, fallbackLabel: string): string =>
+  PHASE_DISPLAY_NAMES[stepId as ChapterAssignmentStatus] ??
+  (getPhaseKey(stepId) === ADVANCED_CHECK_KEY ? ADVANCED_CHECK_LABEL : fallbackLabel);
 
 const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
   const colors = useMemo(() => {
-    const totalSteps = workflowConfig.length;
     const colorMap: Record<string, ColorInfo> = {};
-    const minOpacity = 0.1;
-    const maxOpacity = 1.0;
-    const opacityRange = maxOpacity - minOpacity;
-    const denominator = Math.max(totalSteps - 1, 1);
-    const increment = opacityRange / denominator;
 
-    workflowConfig.forEach((step, index) => {
-      const opacity = minOpacity + increment * index;
-      const percentage = Math.round(opacity * 100);
-
+    workflowConfig.forEach(step => {
       colorMap[step.id] = {
-        color: 'var(--primary)',
-        opacity,
-        rgba: `color-mix(in srgb, var(--primary) ${percentage}%, transparent)`,
-        percentage,
-        displayName: step.label,
+        color: getPhaseColor(step.id),
+        displayName: getPhaseDisplayName(step.id, step.label),
       };
     });
 
     return colorMap;
+  }, [workflowConfig]);
+
+  const legendItems = useMemo<LegendItem[]>(() => {
+    const seenKeys = new Set<string>();
+    const items: LegendItem[] = [];
+
+    [...workflowConfig].reverse().forEach(step => {
+      const key = getPhaseKey(step.id);
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
+
+      items.push({
+        key,
+        color: getPhaseColor(step.id),
+        displayName: getPhaseDisplayName(step.id, step.label),
+      });
+    });
+
+    return items;
   }, [workflowConfig]);
 
   const calculateProgressSegments = useCallback(
@@ -67,8 +109,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
             displayName: stepColor.displayName,
             count,
             widthPercentage,
-            color: stepColor.rgba,
-            opacity: stepColor.opacity,
+            color: stepColor.color,
           };
         })
         .filter((segment): segment is ProgressSegment => segment.count > 0);
@@ -78,6 +119,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
 
   return {
     colors,
+    legendItems,
     calculateProgressSegments,
   };
 };
