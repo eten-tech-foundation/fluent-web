@@ -220,7 +220,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         )}
         {/* Users table */}
         <div
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-t lg:flex-none lg:rounded-lg lg:border lg:shadow-sm ${
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-t lg:mx-3 lg:flex-none lg:rounded-lg lg:border lg:shadow-sm ${
             error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
           }`}
         >
