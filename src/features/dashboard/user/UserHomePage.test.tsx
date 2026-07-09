@@ -30,12 +30,14 @@ vi.mock('@/hooks/useChapterAssignment', () => ({
 
 const assignment = (overrides: Partial<UserChapterAssignment>): UserChapterAssignment => ({
   chapterAssignmentId: 1,
+  projectId: 1,
   projectName: 'Project A',
   projectUnitId: 10,
   bibleId: 1,
   bibleName: 'Test Bible',
   chapterStatus: 'draft',
   targetLanguage: 'Spanish',
+  targetLangCode: 'spa',
   sourceLangCode: 'eng',
   bookCode: 'GEN',
   bookId: 1,

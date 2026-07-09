@@ -55,6 +55,7 @@ export const ProjectsWrapper: React.FC = () => {
         organization: Number(userdetail?.organization),
         createdBy: Number(userdetail?.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),
+        pericopeSetId: projectData.pericopeSetId,
       };
 
       await createProjectMutation.mutateAsync({

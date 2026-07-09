@@ -39,18 +39,17 @@ export function ThemeToggle() {
   return (
     <Button
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-      // className='rounded-full'
-      // size='icon'
+      className='border-primary bg-background hover:bg-primary/10 text-foreground flex h-auto w-full items-center justify-start gap-3 rounded-[12px] border p-4 font-semibold shadow-sm transition-colors hover:cursor-pointer'
       variant='ghost'
       onClick={toggleTheme}
     >
       {theme === 'light' ? (
         <>
-          <Sun className='h-5 w-5' /> Light Mode
+          <Moon className='text-primary h-5 w-5' /> Dark Mode
         </>
       ) : (
         <>
-          <Moon className='h-5 w-5' /> Dark Mode
+          <Sun className='text-primary h-5 w-5' /> Light Mode
         </>
       )}
     </Button>
