@@ -37,6 +37,14 @@ import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
 
+/**
+ * Stable empty snapshot for renders before the first check result settles —
+ * a module-level constant so the `ChecksPanel` prop reference doesn't change
+ * (and re-render) on every DraftingUI render. FindingRow falls back to
+ * `finding.surf` on a miss, so "empty" is always safe.
+ */
+const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
+
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
@@ -252,6 +260,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     occurrenceRules: liveOccurrenceRules,
     globalRules,
   });
+
+  // As-checked verse-text snapshot, hydrated onto the settled check result by
+  // useRepeatedWordsCheck (NOT derived from live `verses` — the findings'
+  // offsets are relative to the text as it was checked, so the two must travel
+  // together and update only when a new result arrives). `checkQuery.data` is
+  // referentially stable per settled result, so this reference only changes
+  // when new findings do.
+  const verseTextBySntId = checkQuery.data?.verseTextBySntId ?? EMPTY_VERSE_TEXT_SNAPSHOT;
 
   // Active-finding count drives both notification dots; computed once here and
   // threaded to the tab and the closed-panel toggle button (S5, §6.4). When the
@@ -634,6 +650,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 globalIgnoresAvailable={globalIgnoresAvailable}
                 isError={checkQuery.isError}
                 resolved={resolved}
+                verseTextBySntId={verseTextBySntId}
                 onIgnoreEverywhere={ignoreEverywhere}
                 onIgnoreHere={ignoreHere}
                 onStopIgnoringEverywhere={stopIgnoringEverywhere}

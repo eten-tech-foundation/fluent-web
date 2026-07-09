@@ -17,6 +17,13 @@ import { FindingRow } from './FindingRow';
 export interface ChecksPanelProps {
   /** Cascade output: `{ active[], inactive[] }` from `useResolvedFindings`. */
   resolved: ResolvedFindings;
+  /**
+   * As-checked verse text keyed by `snt_id` — the hydrated snapshot that
+   * travels with the check result (captured in `useRepeatedWordsCheck`), NOT
+   * the live drafting text. Each row windows its finding against this so the
+   * offsets always line up and the cards hold still between checks.
+   */
+  verseTextBySntId: ReadonlyMap<string, string>;
   /** The check query errored — show the inline red line (W9). */
   isError: boolean;
   /** Hide the global "Ignore Everywhere" affordance when unavailable (W8). */
@@ -97,6 +104,7 @@ const groupByVerse = (findings: ResolvedFinding[]): VerseGroup[] => {
 const renderGroups = (
   groups: VerseGroup[],
   globalIgnoresAvailable: boolean,
+  verseTextBySntId: ReadonlyMap<string, string>,
   handlers: Pick<
     ChecksPanelProps,
     'onIgnoreHere' | 'onIgnoreEverywhere' | 'onUndo' | 'onStopIgnoringEverywhere'
@@ -111,6 +119,7 @@ const renderGroups = (
           key={row.occurrenceKey}
           globalIgnoresAvailable={globalIgnoresAvailable}
           resolved={row}
+          verseTextBySntId={verseTextBySntId}
           onIgnoreEverywhere={handlers.onIgnoreEverywhere}
           onIgnoreHere={handlers.onIgnoreHere}
           onStopIgnoringEverywhere={handlers.onStopIgnoringEverywhere}
@@ -135,6 +144,7 @@ const renderGroups = (
  */
 export const ChecksPanel: React.FC<ChecksPanelProps> = ({
   resolved,
+  verseTextBySntId,
   isError,
   globalIgnoresAvailable,
   onIgnoreHere,
@@ -156,7 +166,10 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
   const showZeroState = !isError && activeGroups.length === 0 && !showingIgnored;
 
   return (
-    <div className='px-1 py-3'>
+    // Like ResourcePanel, each tab body owns its own scrolling: the LeftPanel
+    // tabpanel is a clipped `min-h-0 flex-1` slot, so without `overflow-y-auto`
+    // here findings past the fold would be unreachable.
+    <div className='h-full overflow-y-auto px-1 py-3' data-testid='checks-panel-scroll'>
       {isError && (
         <p className='mb-2 text-sm text-red-500' role='alert'>
           Checks failed to refresh
@@ -171,7 +184,9 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
               {showZeroState ? (
                 <p className='py-4 text-center text-sm font-bold'>No issues found</p>
               ) : (
-                <div>{renderGroups(activeGroups, globalIgnoresAvailable, handlers)}</div>
+                <div>
+                  {renderGroups(activeGroups, globalIgnoresAvailable, verseTextBySntId, handlers)}
+                </div>
               )}
 
               {hasIgnored && (
@@ -189,7 +204,7 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
 
               {showingIgnored && (
                 <div className='mt-3' data-testid='ignored-section'>
-                  {renderGroups(ignoredGroups, globalIgnoresAvailable, handlers)}
+                  {renderGroups(ignoredGroups, globalIgnoresAvailable, verseTextBySntId, handlers)}
                 </div>
               )}
             </AccordionContent>

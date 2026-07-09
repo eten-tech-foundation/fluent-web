@@ -19,7 +19,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
-import { type InactiveReason, type ResolvedFinding } from '../checks.types';
+import {
+  type InactiveReason,
+  type RepeatedWordsFinding,
+  type ResolvedFinding,
+} from '../checks.types';
+import { buildVerseWindow } from '../highlight/verse-window';
 
 /**
  * Human-readable ignore-type label for an inactive finding (§6.4, revised #278).
@@ -38,6 +43,13 @@ const INACTIVE_LABEL: Record<InactiveReason, string> = {
 export interface FindingRowProps {
   /** The cascade-resolved finding to render. */
   resolved: ResolvedFinding;
+  /**
+   * As-checked verse text keyed by `snt_id` (the hydrated snapshot captured by
+   * `useRepeatedWordsCheck` — the exact text the finding's offsets are relative
+   * to, NOT the live drafting text). Used to render the verse window around
+   * the repeated word; a missing entry falls back to `finding.surf`.
+   */
+  verseTextBySntId: ReadonlyMap<string, string>;
   /** Hide the global "Ignore Everywhere" affordance when the backend half is
    *  absent (feature detection, W8). */
   globalIgnoresAvailable: boolean;
@@ -52,6 +64,65 @@ export interface FindingRowProps {
    *  everywhere (only offered when `globalIgnoresAvailable`). */
   onStopIgnoringEverywhere: (repeatedWord: string) => void;
 }
+
+interface VerseContextProps {
+  /** The raw wire finding (offsets are relative to the snapshot text). */
+  finding: RepeatedWordsFinding;
+  /** As-checked `snt_id → verseText` snapshot (see FindingRowProps). */
+  verseTextBySntId: ReadonlyMap<string, string>;
+  /** Active rows flag the word in red + bold; dimmed rows use bold alone. */
+  isActive?: boolean;
+}
+
+/**
+ * The verse-context snippet shared by BOTH the active and the inactive row
+ * branches: the verse text windowed around the match (Task 1's
+ * `buildVerseWindow`), with the repeated word emphasized in place.
+ *
+ * - Highlights `w.match` — the actual slice of the verse text — NOT
+ *   `finding.surf` (the util is surf-agnostic; `surf` contributes only its
+ *   length, so casing/whitespace always render as they appear in the verse).
+ * - Active rows: `text-red-600 font-semibold` (red flags "this is the flagged
+ *   repeated word"). Dimmed/ignored rows: `font-semibold` only — ignored means
+ *   "designated not a problem", so the alarm-red is deliberately dropped.
+ *   NOTE: the dimmed card's `opacity-50` wrapper creates a stacking context
+ *   descendants cannot escape (a child `opacity-100`/near-black is still
+ *   washed to 50%), so bold — not color — is the reliable distinguisher there.
+ * - A leading/trailing `…` renders only for a real (non-boundary) cut; the
+ *   spaces around the `…` are purely presentational (Task 1 already strips
+ *   boundary whitespace from `before`/`after`).
+ */
+const VerseContext: React.FC<VerseContextProps> = ({
+  finding,
+  verseTextBySntId,
+  isActive = false,
+}) => {
+  const verseText = verseTextBySntId.get(finding.snt_id);
+
+  // Fallback: no snapshot text for this snt_id (should be rare — findings and
+  // their verse text are hydrated together, so a miss signals a malformed or
+  // absent snapshot rather than a routine race). Render the bare surface text
+  // exactly as before this feature: never crash, never render an empty card.
+  if (verseText === undefined) {
+    return <p className='text-sm'>{finding.surf}</p>;
+  }
+
+  const w = buildVerseWindow(verseText, finding.start_position, finding.surf.length);
+  const highlightClass = isActive ? 'text-red-600 font-semibold' : 'font-semibold';
+
+  return (
+    <p className='text-sm'>
+      {w.truncatedStart && '… '}
+      {w.before}
+      {/* highlight w.match — the actual verse slice — NOT finding.surf */}
+      <span className={highlightClass} data-testid='verse-highlight'>
+        {w.match}
+      </span>
+      {w.after}
+      {w.truncatedEnd && ' …'}
+    </p>
+  );
+};
 
 /**
  * One repeated-word finding row (§5.1, §6.4–§6.5).
@@ -70,6 +141,7 @@ export interface FindingRowProps {
  */
 export const FindingRow: React.FC<FindingRowProps> = ({
   resolved,
+  verseTextBySntId,
   globalIgnoresAvailable,
   onIgnoreHere,
   onIgnoreEverywhere,
@@ -78,14 +150,11 @@ export const FindingRow: React.FC<FindingRowProps> = ({
 }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { finding, isActive, inactiveReason, occurrenceKey } = resolved;
-  // Display the original surface text (preserves casing); never compare on it —
-  // all matching already happened in the cascade (conventions §C).
-  const snippet = finding.surf;
 
   if (isActive) {
     return (
       <div className='py-2' data-testid='finding-row'>
-        <p className='text-sm'>{snippet}</p>
+        <VerseContext isActive finding={finding} verseTextBySntId={verseTextBySntId} />
         <div className='mt-2 flex flex-wrap gap-2'>
           <Button size='sm' type='button' onClick={() => onIgnoreHere(occurrenceKey)}>
             Ignore Here
@@ -130,7 +199,7 @@ export const FindingRow: React.FC<FindingRowProps> = ({
 
   return (
     <div className='py-2 opacity-50' data-testid='finding-row'>
-      <p className='text-sm'>{snippet}</p>
+      <VerseContext finding={finding} verseTextBySntId={verseTextBySntId} />
       <div className='mt-2 flex flex-wrap items-center justify-between gap-2'>
         <span className='text-muted-foreground text-xs font-medium' data-testid='inactive-label'>
           {label}
