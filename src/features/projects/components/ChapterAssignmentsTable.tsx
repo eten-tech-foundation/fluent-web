@@ -1,5 +1,3 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-
 import { Loader2 } from 'lucide-react';
 
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,60 +9,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   type ChapterAssignmentProgress,
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
 } from '@/lib/types';
 
-export const TruncatedTableText = ({ text }: { text: string }) => {
-  const textRef = useRef<HTMLDivElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const checkTruncation = () => {
-      if (textRef.current) {
-        setIsTruncated(textRef.current.scrollWidth > textRef.current.clientWidth);
-      }
-    };
-
-    checkTruncation();
-    let timeoutId: NodeJS.Timeout;
-    const debouncedCheck = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkTruncation, 150);
-    };
-    window.addEventListener('resize', debouncedCheck);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', debouncedCheck);
-    };
-  }, [text]);
-
-  const content = (
-    <div ref={textRef} className='max-w-full cursor-default truncate' title=''>
-      {text}
-    </div>
-  );
-
-  if (!isTruncated) return content;
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent
-          align='center'
-          className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
-          side='top'
-        >
-          {text}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
+import { TruncatedTableText } from './TruncatedText';
 
 interface ChapterAssignmentsTableProps {
   assignments: ChapterAssignmentProgress[];
@@ -77,6 +29,9 @@ interface ChapterAssignmentsTableProps {
   onCheckboxChange: (assignmentId: number, checked: boolean) => void;
 }
 
+const formatProgress = (completedVerses: number, totalVerses: number): string =>
+  `${completedVerses} of ${totalVerses}`;
+
 export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = ({
   assignments,
   isLoading,
@@ -87,9 +42,6 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   onRowClick,
   onCheckboxChange,
 }) => {
-  const formatProgress = (completedVerses: number, totalVerses: number) =>
-    `${completedVerses} of ${totalVerses}`;
-
   return (
     <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border'>
       {isLoading ? (
@@ -157,9 +109,6 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                         <Checkbox
                           checked={selectedAssignments.includes(assignment.assignmentId)}
                           disabled={isRowActionsDisabled}
-                          onCheckedChange={checked =>
-                            onCheckboxChange(assignment.assignmentId, !!checked)
-                          }
                         />
                       )}
                     </TableCell>

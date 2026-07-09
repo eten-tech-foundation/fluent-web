@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChapterAssignmentsTable } from '@/features/projects/components/ChapterAssignmentsTable';
 import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
 import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
@@ -35,6 +34,8 @@ import { useAppStore } from '@/store/store';
 
 import { AssignProjectUsers } from './AssignProjectUsers';
 import { AssignUsersDialog } from './AssignUsersDialog';
+import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
+import { TruncatedCardText } from './TruncatedText';
 
 interface ProjectDetailPageProps {
   projectId?: number | null;
@@ -111,57 +112,6 @@ const CardProgressBar: React.FC<{
         ))}
       </div>
     </div>
-  );
-};
-
-const TruncatedCardText = ({ text }: { text: string }) => {
-  const textRef = useRef<HTMLDivElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const checkTruncation = () => {
-      if (textRef.current) {
-        setIsTruncated(textRef.current.scrollWidth > textRef.current.clientWidth);
-      }
-    };
-
-    checkTruncation();
-    let timeoutId: NodeJS.Timeout;
-    const debouncedCheck = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkTruncation, 150);
-    };
-    window.addEventListener('resize', debouncedCheck);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', debouncedCheck);
-    };
-  }, [text]);
-
-  const content = (
-    <div
-      ref={textRef}
-      className='max-w-full cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400'
-    >
-      {text}
-    </div>
-  );
-
-  if (!isTruncated) return content;
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent
-          align='center'
-          className='bg-popover text-popover-foreground border-border max-w-[350px] rounded-md border px-4 py-2.5 text-sm font-semibold break-all shadow-lg'
-          side='bottom'
-        >
-          {text}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 };
 

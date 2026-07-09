@@ -205,7 +205,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
             </Tooltip>
           </TooltipProvider>
         </div>
-
         {/*Error banner — only shown when the fetch itself failed */}
         {projectUsersError && (
           <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
@@ -213,25 +212,19 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
             <span>Error: Loading users failed.</span>
           </div>
         )}
-
         {error && (
           <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
             <TriangleAlert className='h-4 w-4 shrink-0' />
             <span>{error}</span>
           </div>
         )}
-
         {/* Users table */}
         <div
           className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-t lg:flex-none lg:rounded-lg lg:border lg:shadow-sm ${
             error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
           }`}
         >
-          <div
-            className={`min-h-0 flex-1 overflow-y-auto rounded-lg lg:flex-none ${
-              error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
-            }`}
-          >
+          <div className='min-h-0 flex-1 overflow-y-auto rounded-lg'>
             <Table>
               <TableHeader className='sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
