@@ -31,6 +31,7 @@ interface ResourcePanelProps {
   openResourceBiblePanel?: (open: boolean) => void;
   selectPanel?: (panel: number) => void;
   bibleResourceName: (name: string) => void;
+  registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
   initialLanguage?: string;
 }
@@ -46,6 +47,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   openResourceBiblePanel,
   selectPanel,
   bibleResourceName,
+  registerClearBible,
   initialResource,
   initialLanguage,
 }) => {
@@ -166,6 +168,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     loadingBibleContent,
     selectedBible,
     handleBibleChange,
+    clearSelectedBible,
     bibleVerses,
   } = useBibleResources(
     selectedLanguage,
@@ -173,6 +176,12 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     sourceData.chapterNumber,
     isBibleResource && shouldFetchResources
   );
+
+  // Register clearSelectedBible with DraftingUI once on mount so the × button
+  // and toggleResources can call it directly to reset hook-level bible state.
+  useEffect(() => {
+    registerClearBible?.(clearSelectedBible);
+  }, [registerClearBible, clearSelectedBible]);
 
   // Propagate bible verses to DraftingUI — stringify comparison avoids firing
   // on reference changes that carry identical content.
@@ -401,10 +410,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   return (
     <aside className='bg-background flex h-full flex-col'>
+      {/* The "Resources" heading was removed: the shared LeftPanel tab row
+          ("Resources | Checks") now serves as this panel's header (W11, §6.6). */}
       <div className='bg-background top-0 py-4'>
-        <div className='flex items-center gap-2'>
-          <h3 className='text-foreground text-xl font-semibold'>Resources</h3>
-        </div>
         <ResourceChipRow
           resourceNames={resourceNames}
           selectedResource={selectedResource}
