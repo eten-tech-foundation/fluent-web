@@ -64,7 +64,7 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
               <TableHeader className='sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
                   <TableHead className='w-12 px-3 py-2 md:px-4 md:py-2.5 lg:px-6 lg:py-3'>
-                    <></>
+                    <span className='sr-only'>Select</span>
                   </TableHead>
                   <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Book
