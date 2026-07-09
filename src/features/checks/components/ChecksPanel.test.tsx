@@ -38,12 +38,23 @@ const handlers = () => ({
   onStopIgnoringEverywhere: vi.fn(),
 });
 
-const renderPanel = (resolved: ResolvedFindings, over: Partial<{ isError: boolean }> = {}) =>
+/**
+ * Empty as-checked snapshot: the pre-existing grouping/toggle/wiring tests
+ * exercise the fallback path (rows render `finding.surf` bare), which keeps
+ * their text assertions unchanged.
+ */
+const emptySnapshot: ReadonlyMap<string, string> = new Map();
+
+const renderPanel = (
+  resolved: ResolvedFindings,
+  over: Partial<{ isError: boolean; verseTextBySntId: ReadonlyMap<string, string> }> = {}
+) =>
   renderWithProviders(
     <ChecksPanel
       globalIgnoresAvailable
       isError={over.isError ?? false}
       resolved={resolved}
+      verseTextBySntId={over.verseTextBySntId ?? emptySnapshot}
       {...handlers()}
     />
   );
@@ -105,7 +116,13 @@ describe('ChecksPanel — Show Ignored toggle', () => {
       inactive: [inactive('JDG 4:1', 'and and', 'occurrence')],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
 
     // Default OFF: the inactive snippet is not shown.
@@ -127,7 +144,13 @@ describe('ChecksPanel — Show Ignored toggle', () => {
       inactive: [inactive('JDG 4:2', 'and and', 'occurrence')],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
 
     await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
@@ -150,7 +173,13 @@ describe('ChecksPanel — Show Ignored toggle', () => {
       inactive: [inactive('JDG 4:1', 'and and', 'global')],
     };
     const { user, unmount } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
     expect(screen.getByText('and and (in JDG 4:1)')).toBeInTheDocument();
@@ -158,7 +187,13 @@ describe('ChecksPanel — Show Ignored toggle', () => {
 
     // Fresh mount = fresh session: toggle is OFF again.
     renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     expect(screen.queryByText('and and (in JDG 4:1)')).not.toBeInTheDocument();
   });
@@ -188,7 +223,13 @@ describe('ChecksPanel — "Show Ignored" toggle visibility', () => {
       inactive: [inactive('JDG 4:1', 'the the', 'legitimate')],
     };
     renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     expect(screen.queryByTestId('ignored-section')).not.toBeInTheDocument();
   });
@@ -201,7 +242,13 @@ describe('ChecksPanel — "Show Ignored" toggle visibility', () => {
       inactive: [inactive('JDG 4:1', 'the the', 'occurrence')],
     };
     renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     expect(screen.getByText('No issues found')).toBeInTheDocument();
     expect(screen.queryByTestId('ignored-section')).not.toBeInTheDocument();
@@ -213,7 +260,13 @@ describe('ChecksPanel — "Show Ignored" toggle visibility', () => {
       inactive: [inactive('JDG 4:1', 'the the', 'occurrence')],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     // Toggle is OFF: zero state is visible.
     expect(screen.getByText('No issues found')).toBeInTheDocument();
@@ -235,7 +288,13 @@ describe('ChecksPanel — "Show Ignored" toggle visibility', () => {
       ],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...handlers()} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...handlers()}
+      />
     );
     await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
 
@@ -254,7 +313,13 @@ describe('ChecksPanel — callback wiring', () => {
       inactive: [],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...h} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...h}
+      />
     );
     await user.click(screen.getByRole('button', { name: 'Ignore Here' }));
     expect(h.onIgnoreHere).toHaveBeenCalledWith('JDG 4:1|the the|0');
@@ -268,10 +333,98 @@ describe('ChecksPanel — callback wiring', () => {
       inactive: [inactiveFinding],
     };
     const { user } = renderWithProviders(
-      <ChecksPanel globalIgnoresAvailable isError={false} resolved={resolved} {...h} />
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={resolved}
+        verseTextBySntId={emptySnapshot}
+        {...h}
+      />
     );
     await user.click(screen.getByRole('switch', { name: 'Show Ignored' }));
     await user.click(screen.getByRole('button', { name: 'Undo Ignore' }));
     expect(h.onUndo).toHaveBeenCalledWith(inactiveFinding);
+  });
+});
+
+describe('ChecksPanel — scroll container', () => {
+  it('owns its own vertical scrolling (the LeftPanel tabpanel slot clips overflow)', () => {
+    // Regression: without h-full + overflow-y-auto on the panel root, findings
+    // past the fold were unreachable ("lost to the land of the living").
+    renderPanel({ active: [active('JDG 4:1', 'the the')], inactive: [] });
+    const root = screen.getByTestId('checks-panel-scroll');
+    expect(root).toHaveClass('h-full', 'overflow-y-auto');
+  });
+});
+
+describe('ChecksPanel — verse-context snapshot threading', () => {
+  it('threads verseTextBySntId down so rows render the windowed highlight', () => {
+    // 'the the' at [4, 11) in the as-checked verse text for JDG 4:1.
+    const verse = 'And the the light was made';
+    const finding: ResolvedFinding = {
+      ...active('JDG 4:1', 'the the'),
+      finding: { ...active('JDG 4:1', 'the the').finding, surf: 'the the', start_position: 4 },
+    };
+    renderPanel(
+      { active: [finding], inactive: [] },
+      { verseTextBySntId: new Map([['JDG 4:1', verse]]) }
+    );
+    const highlight = screen.getByTestId('verse-highlight');
+    expect(highlight.textContent).toBe('the the');
+    expect(highlight.parentElement?.textContent).toBe('And the the light was made');
+  });
+
+  it('overlapping triple: two findings in one verse each render their own window', () => {
+    // "the the the" produces TWO findings (ordinals 0 and 1) with their own
+    // start_positions; each card highlights its own span independently.
+    const verse = 'And the the the light';
+    const base = active('JDG 4:1', 'the the');
+    const first: ResolvedFinding = {
+      ...base,
+      finding: { ...base.finding, surf: 'the the', start_position: 4 },
+      ordinal: 0,
+      occurrenceKey: 'JDG 4:1|the the|0',
+    };
+    const second: ResolvedFinding = {
+      ...base,
+      finding: { ...base.finding, surf: 'the the', start_position: 8 },
+      ordinal: 1,
+      occurrenceKey: 'JDG 4:1|the the|1',
+    };
+    renderPanel(
+      { active: [first, second], inactive: [] },
+      { verseTextBySntId: new Map([['JDG 4:1', verse]]) }
+    );
+    const highlights = screen.getAllByTestId('verse-highlight');
+    expect(highlights).toHaveLength(2);
+    // Both highlight a 'the the' span; the windows around them differ by offset.
+    const rows = highlights.map(h => h.parentElement?.textContent);
+    expect(rows).toEqual(['And the the the light', 'And the the the light']);
+    expect(highlights[0].textContent).toBe('the the');
+    expect(highlights[1].textContent).toBe('the the');
+  });
+
+  it('ignoring one occurrence of an overlapping pair leaves the other card active', async () => {
+    // Reuses the cascade contract: "Ignore Here" is keyed by the FULL
+    // occurrence key including the ordinal, so ignoring card 0 must not ignore
+    // card 1 (the panel simply forwards the row's own occurrenceKey).
+    const base = active('JDG 4:1', 'the the');
+    const first: ResolvedFinding = { ...base, ordinal: 0, occurrenceKey: 'JDG 4:1|the the|0' };
+    const second: ResolvedFinding = { ...base, ordinal: 1, occurrenceKey: 'JDG 4:1|the the|1' };
+    const h = handlers();
+    const { user } = renderWithProviders(
+      <ChecksPanel
+        globalIgnoresAvailable
+        isError={false}
+        resolved={{ active: [first, second], inactive: [] }}
+        verseTextBySntId={emptySnapshot}
+        {...h}
+      />
+    );
+    const buttons = screen.getAllByRole('button', { name: 'Ignore Here' });
+    expect(buttons).toHaveLength(2);
+    await user.click(buttons[0]);
+    expect(h.onIgnoreHere).toHaveBeenCalledTimes(1);
+    expect(h.onIgnoreHere).toHaveBeenCalledWith('JDG 4:1|the the|0');
   });
 });

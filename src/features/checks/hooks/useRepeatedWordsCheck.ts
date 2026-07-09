@@ -110,6 +110,29 @@ export const postRepeatedWordsCheck = async (
   return (await res.json()) as RepeatedWordsResponse;
 };
 
+/**
+ * The wire envelope **hydrated** with a web-only, as-checked verse-text
+ * snapshot (`snt_id → verseText`).
+ *
+ * The findings' offsets (`start_position`, `surf.length`) are relative to the
+ * exact verse text sent in the check request — NOT the live drafting text,
+ * which can drift between a save and the response landing. Capturing the
+ * snapshot here (the one place that both builds the request and receives the
+ * response) means it moves in lockstep with the findings: it changes only when
+ * a new settled result arrives, never on keystrokes, and every future arrival
+ * path (e.g. an async queued/running → poll flow) flows through the same
+ * hydration.
+ *
+ * This is a **post-hydration, web-only** layer on top of the untouched
+ * snake_case wire contract (`RepeatedWordsResponse` — fluent-ai pass-through,
+ * fluent-api D8). It is deliberately NOT part of the protocol; do not fold it
+ * into the wire types.
+ */
+export interface HydratedRepeatedWordsResponse extends RepeatedWordsResponse {
+  /** As-checked verse text keyed by the same `buildSntId` the findings carry. */
+  verseTextBySntId: ReadonlyMap<string, string>;
+}
+
 export interface UseRepeatedWordsCheckParams {
   projectItem: ProjectItem;
   /** All currently drafted verses of the chapter (content from drafting state). */
@@ -155,12 +178,22 @@ export const useRepeatedWordsCheck = ({
 }: UseRepeatedWordsCheckParams) => {
   const hasContent = verses.some(v => v.content.trim() !== '');
 
-  return useQuery<RepeatedWordsResponse>({
+  return useQuery<HydratedRepeatedWordsResponse>({
     queryKey: ['repeated-words', projectItem.chapterAssignmentId, saveCounter],
     queryFn: async () => {
       const request = buildRepeatedWordsRequest(projectItem, verses);
+      // Snapshot the verses-as-checked, keyed exactly like the findings'
+      // snt_id, so the card can window each finding against the text it was
+      // actually checked against. Built from `request.verses` (the same
+      // buildSntId keys + the same non-empty filter the wire request uses), so
+      // keys match the findings byte-for-byte and the snapshot can never drift
+      // from the offsets.
+      const verseTextBySntId = new Map<string, string>(request.verses.map(v => [v.snt_id, v.text]));
       try {
-        return await postRepeatedWordsCheck(request);
+        const response = await postRepeatedWordsCheck(request);
+        // Hydrate: the findings and the snapshot they were computed against
+        // travel together (see HydratedRepeatedWordsResponse).
+        return { ...response, verseTextBySntId };
       } catch (error) {
         Logger.logException(error, { context: 'Repeated-words check failed' });
         throw error;
