@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Table,
@@ -29,6 +28,7 @@ interface AssignProjectUsersProps {
   isAddUserOpen?: boolean;
   onAddUser?: () => void;
   onCloseAddUser?: () => void;
+  referenceHeight?: number;
 }
 
 export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
@@ -38,6 +38,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   isAddUserOpen = false,
   onAddUser,
   onCloseAddUser,
+  referenceHeight,
 }) => {
   const [selectedUsersToAdd, setSelectedUsersToAdd] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -182,9 +183,12 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
   return (
     <>
-      <div className='flex flex-col'>
+      <div
+        className='flex flex-col overflow-hidden rounded-lg border lg:overflow-visible lg:rounded-none lg:border-0'
+        style={referenceHeight ? { height: referenceHeight } : undefined}
+      >
         {/* Title row */}
-        <div className='mb-3 flex items-center justify-between'>
+        <div className='flex shrink-0 items-center justify-between p-3 pb-3'>
           <h3 className='text-lg font-bold'>Project Users</h3>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -204,37 +208,41 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/*Error banner — only shown when the fetch itself failed */}
         {projectUsersError && (
-          <div className='mb-2 flex items-center gap-1.5 text-sm text-red-500'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
             <TriangleAlert className='h-4 w-4 shrink-0' />
             <span>Error: Loading users failed.</span>
           </div>
         )}
 
         {error && (
-          <div className='mb-2 flex items-center gap-1.5 text-sm text-red-500'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
             <TriangleAlert className='h-4 w-4 shrink-0' />
             <span>{error}</span>
           </div>
         )}
 
         {/* Users table */}
-        <Card>
-          <CardContent className='p-0'>
-            <div
-              className={`overflow-y-auto rounded-lg ${error || projectUsersError ? 'max-h-[165px]' : 'max-h-[188px]'}`}
-            >
-              <Table>
-                <TableHeader className='sticky top-0 z-10'>
-                  <TableRow className='hover:bg-transparent'>
-                    <TableHead className='py-2 pl-3 text-sm font-semibold'>Name</TableHead>
-                    <TableHead className='w-10 py-2 pr-3' />
-                  </TableRow>
-                </TableHeader>
-                <TableBody className='bg-background'>{renderTableBody()}</TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-t lg:flex-none lg:rounded-lg lg:border lg:shadow-sm ${
+            error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
+          }`}
+        >
+          <div
+            className={`min-h-0 flex-1 overflow-y-auto rounded-lg lg:flex-none ${
+              error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
+            }`}
+          >
+            <Table>
+              <TableHeader className='sticky top-0 z-10'>
+                <TableRow className='hover:bg-transparent'>
+                  <TableHead className='py-2 pl-3 text-sm font-semibold'>Name</TableHead>
+                  <TableHead className='w-10 py-2 pr-3' />
+                </TableRow>
+              </TableHeader>
+              <TableBody className='bg-background'>{renderTableBody()}</TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
 
       {/* Add Project User Dialog */}
