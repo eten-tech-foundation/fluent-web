@@ -49,18 +49,34 @@ interface SnapCandidate {
 
 /**
  * Pick the nearest candidate to `rawCut` (smallest `|index - rawCut|`),
- * breaking ties toward the outward side. For the START cut the outward side is
- * the smaller index (`preferSmaller = true`); for the END cut it is the larger
- * index (`preferSmaller = false`). Returns `null` when no candidate exists.
+ * breaking ties first toward the verse-boundary candidate (reaching the
+ * boundary is NOT a real cut, so it must beat a whitespace candidate at the
+ * same distance — e.g. whitespace at index 0), then toward the outward side.
+ * For the START cut the outward side is the smaller index
+ * (`preferSmaller = true`); for the END cut it is the larger index
+ * (`preferSmaller = false`). Returns `null` when no candidate exists.
  */
 const pickNearest = (candidates: SnapCandidate[], preferSmaller: boolean): SnapCandidate | null =>
   candidates.reduce<SnapCandidate | null>((best, c) => {
     if (best === null) return c;
     if (c.distance < best.distance) return c;
     if (c.distance > best.distance) return best;
-    // Tie on distance → break toward the outward side.
+    // Tie on distance → prefer the boundary candidate over whitespace.
+    if (c.isBoundary !== best.isBoundary) return c.isBoundary ? c : best;
+    // Then break toward the outward side.
     return preferSmaller ? (c.index < best.index ? c : best) : c.index > best.index ? c : best;
   }, null);
+
+/**
+ * Index just past the whitespace run starting at `index` (identity when the
+ * character there is not whitespace). Used so `before` never starts with
+ * whitespace, even when the window reaches the true verse start.
+ */
+const skipWhitespaceRun = (text: string, index: number): number => {
+  let i = index;
+  while (i < text.length && isWhitespace(text[i])) i++;
+  return i;
+};
 
 /**
  * Build a windowed, highlight-split view of `verseText` around the match at
@@ -94,7 +110,8 @@ export function buildVerseWindow(
   let windowStart: number;
   let truncatedStart: boolean;
   if (rawStart <= 0) {
-    windowStart = 0;
+    // Boundary reach — still strip any leading-whitespace run (not a real cut).
+    windowStart = skipWhitespaceRun(verseText, 0);
     truncatedStart = false;
   } else {
     const candidates: SnapCandidate[] = [];
@@ -117,14 +134,13 @@ export function buildVerseWindow(
       windowStart = rawStart;
       truncatedStart = true;
     } else if (chosen.isBoundary) {
-      windowStart = 0;
+      // Boundary reach — still strip any leading-whitespace run (not a real cut).
+      windowStart = skipWhitespaceRun(verseText, 0);
       truncatedStart = false;
     } else {
       // Whitespace candidate: skip the ENTIRE run starting there so `before`
       // has no leading whitespace.
-      let ws = chosen.index;
-      while (ws < len && isWhitespace(verseText[ws])) ws++;
-      windowStart = ws;
+      windowStart = skipWhitespaceRun(verseText, chosen.index);
       truncatedStart = true;
     }
   }

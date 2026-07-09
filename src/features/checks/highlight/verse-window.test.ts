@@ -179,6 +179,38 @@ describe('buildVerseWindow — verse boundary as an in-range candidate', () => {
   });
 });
 
+describe('buildVerseWindow — leading-whitespace verse start (boundary beats whitespace on ties)', () => {
+  it('prefers the verse-start boundary over a whitespace candidate at the same index 0', () => {
+    // Single leading space at index 0; rawStart within the radius; no other
+    // whitespace near the cut. The whitespace candidate (index 0) and boundary
+    // candidate (index 0) tie exactly — boundary must win → no leading ellipsis.
+    const rawStart = Math.min(5, maxSpaceSearchDistance); // ≤ radius so boundary is in range
+    const matchStart = contextCharsBefore + rawStart;
+    const verse = ` ${'a'.repeat(matchStart - 1)}the the${'b'.repeat(60)}`;
+    const result = buildVerseWindow(verse, matchStart, 'the the'.length);
+
+    expect(result.truncatedStart).toBe(false);
+    // The leading-whitespace run is still stripped from `before`.
+    expect(result.before).toBe('a'.repeat(matchStart - 1));
+    expect(/^\s/.test(result.before)).toBe(false);
+    // Highlight did not shift: match is the exact original slice.
+    expect(result.match).toBe(verse.slice(matchStart, matchStart + 'the the'.length));
+    expect(result.match).toBe('the the');
+  });
+
+  it('strips a leading-whitespace run without an ellipsis when the window reaches verse start (rawStart <= 0)', () => {
+    const verse = '   the the and plenty of trailing context for the window';
+    const matchStart = 3; // rawStart = 3 - contextCharsBefore < 0 → boundary reach
+    const result = buildVerseWindow(verse, matchStart, 'the the'.length);
+
+    expect(result.truncatedStart).toBe(false);
+    expect(result.before).toBe(''); // the 3-space run is stripped, not shown
+    // Highlight did not shift despite the strip.
+    expect(result.match).toBe(verse.slice(matchStart, matchStart + 'the the'.length));
+    expect(result.match).toBe('the the');
+  });
+});
+
 describe('buildVerseWindow — whitespace-run stripping', () => {
   it('strips an entire multi-char whitespace run at the START cut', () => {
     const matchStart = contextCharsBefore + 20;
