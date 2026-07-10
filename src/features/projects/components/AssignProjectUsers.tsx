@@ -224,7 +224,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
             error || projectUsersError ? 'lg:max-h-[165px]' : 'lg:max-h-[188px]'
           }`}
         >
-          <div className='min-h-0 flex-1 overflow-y-auto rounded-lg'>
+          <div className='min-h-0 flex-1 overflow-y-auto lg:rounded-lg'>
             <Table>
               <TableHeader className='sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
