@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
+import { useAiSuggestions } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
@@ -170,6 +172,32 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     readOnly,
     onSave: saveVerse,
   });
+
+  const verseMapping = useMemo(() => {
+    const mapping: Record<number, number> = {};
+    sourceVerses.forEach((v: Source) => {
+      mapping[v.id] = v.verseNumber;
+    });
+    return mapping;
+  }, [sourceVerses]);
+
+  const { suggestions: aiSuggestions, isAiThresholdMet } = useAiSuggestions(
+    projectItem.projectUnitId,
+    projectItem.bibleId,
+    projectItem.bookCode,
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    projectItem.isAiEnabled
+  );
+
+  const fireToast = useAiSuggestionToast();
+
+  useEffect(() => {
+    if (isAiThresholdMet) {
+      fireToast(projectItem.targetLanguage);
+    }
+  }, [isAiThresholdMet, fireToast, projectItem.targetLanguage]);
 
   const {
     pericopes,
@@ -433,6 +461,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router,
   ]);
 
+  // Keep track of verses that have already been auto-populated so we don't snap back
+  // if the user intentionally deletes the text.
+  const autoPopulatedVersesRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!projectItem.isAiEnabled || readOnly) return;
+
+    // Check if the current active verse is empty and we have a new AI suggestion for it
+    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
+    if (
+      activeTargetVerse &&
+      !activeTargetVerse.content.trim() &&
+      aiSuggestions[activeVerseId] &&
+      !autoPopulatedVersesRef.current.has(activeVerseId)
+    ) {
+      autoPopulatedVersesRef.current.add(activeVerseId);
+      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
+    }
+  }, [activeVerseId, aiSuggestions, verses, handleTextChange, projectItem.isAiEnabled, readOnly]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -494,10 +542,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             <div key={verse.verseNumber} className='py-4'>
               <DraftingTargetColumn
                 activeVerseId={activeVerseId}
+                aiSuggestions={aiSuggestions}
                 effectiveRevealedVerses={effectiveRevealedVerses}
                 handleActiveVerseChange={handleActiveVerseChange}
                 handleKeyDown={handleKeyDown}
                 handleTextChange={handleTextChange}
+                isAiThresholdMet={isAiThresholdMet}
                 readOnly={readOnly}
                 textareaRefs={textareaRefs}
                 verseNumber={verse.verseNumber}
@@ -518,13 +568,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       readOnly,
       textareaRefs,
       verses,
+      aiSuggestions,
+      isAiThresholdMet,
     ]
   );
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
       <DraftingHeader
-        activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}
         hasAnyError={hasAnyError}
         isAnythingSaving={isAnythingSaving}
@@ -663,12 +714,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   ) : isPericopeMode && pericopes ? (
                     <DraftingGridPericope
                       activeVerseId={activeVerseId}
+                      aiSuggestions={aiSuggestions}
                       bibleVerseMap={bibleVerseMap}
                       globalNextUntouchedVerse={globalNextUntouchedVerse}
                       handleActiveVerseChange={handleActiveVerseChange}
                       handleKeyDown={handleKeyDown}
                       handleNextClick={handleNextClick}
                       handleTextChange={handleTextChange}
+                      isAiThresholdMet={isAiThresholdMet}
                       pericopes={pericopes}
                       projectItem={projectItem}
                       readOnly={readOnly}
@@ -681,12 +734,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   ) : (
                     <DraftingGridVerse
                       activeVerseId={activeVerseId}
+                      aiSuggestions={aiSuggestions}
                       bibleVerseMap={bibleVerseMap}
                       effectiveRevealedVerses={effectiveRevealedVerses}
                       getPericopeStyle={getPericopeStyle}
                       handleActiveVerseChange={handleActiveVerseChange}
                       handleKeyDown={handleKeyDown}
                       handleTextChange={handleTextChange}
+                      isAiThresholdMet={isAiThresholdMet}
                       readOnly={readOnly}
                       selectedPanel={selectedPanel}
                       sourceVerses={sourceVerses}

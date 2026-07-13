@@ -1,0 +1,93 @@
+import React from 'react';
+
+import { X } from 'lucide-react';
+import { toast } from 'sonner';
+
+const TOAST_ID = 'ai-suggestion-onboarding';
+
+// ─── Inner content ────────────────────────────────────────────────────────────
+
+interface AiSuggestionToastContentProps {
+  targetLanguageName: string;
+  onTellMeMore: () => void;
+  onDismiss: () => void;
+}
+
+export const AiSuggestionToastContent: React.FC<AiSuggestionToastContentProps> = ({
+  targetLanguageName,
+  onTellMeMore,
+  onDismiss,
+}) => {
+  return (
+    <div className='border-border bg-background relative flex w-full items-center gap-4 rounded-xl border px-5 py-4 shadow-lg sm:w-[580px] sm:max-w-[580px]'>
+      {/* Text block */}
+      <div className='min-w-0 flex-1'>
+        <p className='text-foreground text-sm leading-snug font-bold sm:whitespace-nowrap'>
+          AI Suggestions now available for {targetLanguageName}!
+        </p>
+        <p className='text-muted-foreground mt-0.5 text-sm'>
+          You can view more information later in the Settings menu.
+        </p>
+      </div>
+
+      {/* "Tell me more" outlined button */}
+      <button
+        className='flex-shrink-0 rounded-lg border border-[#0B50D0] px-4 py-2 text-sm font-medium text-[#0B50D0] transition-colors hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B50D0] dark:hover:bg-blue-950'
+        type='button'
+        onClick={onTellMeMore}
+      >
+        Tell me more
+      </button>
+
+      {/* X close button — top-right */}
+      <button
+        aria-label='Dismiss'
+        className='text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 right-3 rounded p-0.5 transition-colors'
+        type='button'
+        onClick={onDismiss}
+      >
+        <X className='h-3.5 w-3.5' />
+      </button>
+    </div>
+  );
+};
+
+// ─── Function that fires the toast ───────────────────────────────────────────
+
+interface ShowAiSuggestionToastOptions {
+  targetLanguageName: string;
+  onTellMeMore: () => void;
+  onDismiss: () => void;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function showAiSuggestionToast({
+  targetLanguageName,
+  onTellMeMore,
+  onDismiss,
+}: ShowAiSuggestionToastOptions): void {
+  const handleDismiss = (): void => {
+    toast.dismiss(TOAST_ID);
+    onDismiss();
+  };
+
+  const handleTellMeMore = (): void => {
+    toast.dismiss(TOAST_ID);
+    onTellMeMore();
+  };
+
+  toast.custom(
+    () => (
+      <AiSuggestionToastContent
+        targetLanguageName={targetLanguageName}
+        onDismiss={handleDismiss}
+        onTellMeMore={handleTellMeMore}
+      />
+    ),
+    {
+      id: TOAST_ID,
+      duration: Infinity,
+      closeButton: false,
+    }
+  );
+}

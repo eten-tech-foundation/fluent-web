@@ -10,6 +10,9 @@ import { type RouterContext } from '@/lib/router-context';
 export const Route = createRootRouteWithContext<RouterContext>()({
   validateSearch: z.object({
     modal: modalSchema.optional(),
+    // Added for issue #75: tells SettingsModal to pre-expand the AI accordion
+    // when the user arrives from the onboarding toast "Tell me more" button
+    openAiInfo: z.boolean().optional(),
   }),
   component: RootComponent,
   errorComponent: RootErrorComponent,

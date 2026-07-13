@@ -3,6 +3,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { type Source, type TargetVerse } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 interface DraftingTargetColumnProps {
   verseNumber: number;
@@ -14,6 +15,8 @@ interface DraftingTargetColumnProps {
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
 }
 
 export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
@@ -26,10 +29,14 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
+  aiSuggestions,
+  isAiThresholdMet,
 }) => {
   const isActive = !readOnly && activeVerseId === verseNumber;
   const currentTargetVerse = verses.find(v => v.verseNumber === verseNumber);
   const shouldShowTarget = readOnly || isActive || effectiveRevealedVerses.has(verseNumber);
+  const currentProjectItem = useAppStore(state => state.currentProjectItem);
+  const { t } = useTranslation();
 
   return (
     <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
@@ -52,7 +59,14 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             autoCapitalize='sentences'
             autoCorrect='on'
             className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
-            placeholder='Enter translation...'
+            placeholder={
+              isActive &&
+              currentProjectItem?.isAiEnabled &&
+              isAiThresholdMet &&
+              !aiSuggestions[verseNumber]
+                ? t('generatingAiSuggestion', 'Generating...')
+                : t('enterTranslation', 'Enter translation...')
+            }
             spellCheck={true}
             value={currentTargetVerse?.content ?? ''}
             onChange={e => handleTextChange(verseNumber, e.target.value)}
@@ -79,6 +93,8 @@ interface DraftingGridVerseProps {
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
 }
 
 export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
@@ -95,6 +111,8 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
+  aiSuggestions,
+  isAiThresholdMet,
 }) => {
   const { t } = useTranslation();
   return (
@@ -134,10 +152,12 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             </div>
             <DraftingTargetColumn
               activeVerseId={activeVerseId}
+              aiSuggestions={aiSuggestions}
               effectiveRevealedVerses={effectiveRevealedVerses}
               handleActiveVerseChange={handleActiveVerseChange}
               handleKeyDown={handleKeyDown}
               handleTextChange={handleTextChange}
+              isAiThresholdMet={isAiThresholdMet}
               readOnly={readOnly}
               textareaRefs={textareaRefs}
               verseNumber={verse.verseNumber}

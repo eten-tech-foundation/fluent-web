@@ -17,13 +17,15 @@ export function useAiSuggestions(
   bookCode: string,
   chapterNumber: number,
   verseMapping: Record<number, number>, // bibleTextId -> verseNumber
-  activeVerseNumber: number
+  activeVerseNumber: number,
+  isAiEnabled = false
 ) {
   const [suggestions, setSuggestions] = useState<Record<number, string>>({});
   const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
   const lastQueuedVerseRef = useRef<number>(-1);
 
   const fetchSuggestions = useCallback(async () => {
+    if (!isAiEnabled) return;
     const bibleTextIds = Object.keys(verseMapping);
     if (bibleTextIds.length === 0) return;
 
@@ -55,7 +57,7 @@ export function useAiSuggestions(
         data.data.forEach((item: AiSuggestion) => {
           if (item.bibleTextId in verseMapping) {
             const vNum = verseMapping[item.bibleTextId];
-            newSuggestions[vNum!] = item.suggestedText;
+            newSuggestions[vNum] = item.suggestedText;
           }
         });
 
@@ -76,19 +78,23 @@ export function useAiSuggestions(
       // eslint-disable-next-line no-console
       console.error('Failed to fetch AI suggestions', e);
     }
-  }, [projectUnitId, verseMapping]);
+  }, [projectUnitId, verseMapping, isAiEnabled]);
 
   // Initial fetch and polling
   useEffect(() => {
+    if (!isAiEnabled) return;
+
     void fetchSuggestions();
     const interval = setInterval(() => {
       void fetchSuggestions();
     }, 5000);
     return () => clearInterval(interval);
-  }, [fetchSuggestions]);
+  }, [fetchSuggestions, isAiEnabled]);
 
   // Queue next verses when active verse changes
   useEffect(() => {
+    if (!isAiEnabled) return;
+
     if (activeVerseNumber > lastQueuedVerseRef.current) {
       lastQueuedVerseRef.current = activeVerseNumber;
 
@@ -121,7 +127,7 @@ export function useAiSuggestions(
           } else {
             // eslint-disable-next-line no-console
             console.debug('[AI Suggestions] POST queue-next OK', { status: res.status });
-            const data = await res.json().catch(() => null);
+            const data = (await res.json().catch(() => null)) as { thresholdMet?: boolean } | null;
             if (data?.thresholdMet) {
               setIsAiThresholdMet(true);
             }
@@ -132,7 +138,7 @@ export function useAiSuggestions(
           console.error('Failed to queue AI suggestions', e);
         });
     }
-  }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber]);
+  }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber, isAiEnabled]);
 
   return { suggestions, isAiThresholdMet };
 }
