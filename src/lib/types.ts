@@ -51,6 +51,24 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  pericopeSetId?: number | null;
+}
+
+export interface PericopeSet {
+  id: number;
+  name: string;
+  description: string | null;
+}
+
+export interface PericopeVerseRef {
+  chapterNumber: number;
+  verseNumber: number;
+}
+
+export interface PericopeGroup {
+  pericopeNumber: string;
+  pericopeTitle: string | null;
+  verses: PericopeVerseRef[];
 }
 
 export interface CreateProject {
@@ -63,6 +81,7 @@ export interface CreateProject {
   metadata: Record<string, unknown>;
   sourceLanguage: number;
   targetLanguage: number;
+  pericopeSetId?: number;
 }
 
 export interface Chapter {
@@ -79,6 +98,13 @@ export interface ChapterAssignmentProgress {
   bookId: number;
   bookCode: string;
   sourceLangCode: string;
+  /**
+   * ISO 639-3 target language CODE, e.g. "eng" (sent as the repeated-words
+   * check's `lang_code`). Required so the PM "open chapter" path can populate
+   * `ProjectItem.targetLangCode`; if it were optional the field could be
+   * silently dropped and the check would send "<unknown>" (BUG #3).
+   */
+  targetLangCode: string;
   bookNameEng: string;
   chapterNumber: number;
   assignedUser: AssignmentUser | null;
@@ -102,11 +128,23 @@ export interface Book {
 
 export interface ProjectItem {
   chapterAssignmentId: number;
+  projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /**
+   * ISO 639-3 target language CODE, e.g. "eng". Sent as the check's `lang_code`
+   * — greek-room keys its legitimate-duplicate whitelist on this code, so the
+   * display name must NOT be used here. See phase-04 manual smoke (BUG #2).
+   * Required so the compiler forces every `ProjectItem` builder to supply it
+   * (the PM "open chapter" path silently omitted it — BUG #3). The check still
+   * degrades to "<unknown>" at runtime if the value is somehow empty, rather
+   * than crashing.
+   */
+  targetLangCode: string;
   bookId: number;
   book: string;
   chapterStatus: string;
@@ -233,12 +271,16 @@ export interface DraftingUIProps {
 
 export interface UserChapterAssignment {
   chapterAssignmentId: number;
+  projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
   chapterStatus: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /** ISO 639-3 target language CODE, e.g. "eng" (sent as the check's lang_code). */
+  targetLangCode: string;
   sourceLangCode: string;
   bookCode: string;
   bookId: number;
@@ -284,6 +326,18 @@ export const ChapterAssignmentStatusNextAction: Partial<Record<ChapterAssignment
   [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Mark as Complete',
 };
 
+export const ADVANCED_CHECK_SUB_STATUSES: ChapterAssignmentStatus[] = [
+  ChapterAssignmentStatus.LINGUIST_CHECK,
+  ChapterAssignmentStatus.THEOLOGICAL_CHECK,
+  ChapterAssignmentStatus.CONSULTANT_CHECK,
+];
+
+export const ADVANCED_CHECK_SUB_LABELS: Partial<Record<ChapterAssignmentStatus, string>> = {
+  [ChapterAssignmentStatus.LINGUIST_CHECK]: 'Linguist Check',
+  [ChapterAssignmentStatus.THEOLOGICAL_CHECK]: 'Theologian Check',
+  [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Consultant Check',
+};
+
 export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
   ChapterAssignmentStatus.NOT_STARTED,
   ChapterAssignmentStatus.DRAFT,
@@ -298,3 +352,11 @@ export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
 export type SortOption = 'recent' | 'title' | 'targetLanguage';
 
 export type StatusFilter = 'all' | 'potentially_stalled' | 'not_assigned';
+
+export type ConnectivityProfile = 'usually_connected' | 'sometimes_connected' | 'rarely_connected';
+
+export const ConnectivityProfileDisplay: Record<ConnectivityProfile, string> = {
+  usually_connected: 'Usually Connected',
+  sometimes_connected: 'Sometimes Connected',
+  rarely_connected: 'Rarely Connected',
+};

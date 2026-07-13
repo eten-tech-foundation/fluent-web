@@ -13,13 +13,13 @@ interface UseDraftingProps {
 export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: UseDraftingProps) => {
   const [verses, setVerses] = useState<TargetVerse[]>(targetVerses);
   const [activeVerseId, setActiveVerseId] = useState(1);
-  const [previousActiveVerseId, setPreviousActiveVerseId] = useState<number | null>(null);
   const [revealedVerses, setRevealedVerses] = useState<Set<number>>(new Set());
   const [buttonTop, setButtonTop] = useState<number>(0);
 
   const targetScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const verseRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const initializedRef = useRef(false);
 
   const { debouncedSave, saveImmediately, getSaveStatus, setInitialContent } = useBibleTextDebounce(
     {
@@ -67,18 +67,30 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     if (!container || !row) return;
     const containerRect = container.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
-    const newScrollTop = container.scrollTop + (rowRect.top - containerRect.top);
+    const rowTopRelative = rowRect.top - containerRect.top;
+    const rowBottomRelative = rowRect.bottom - containerRect.top;
+
+    // If the row is already fully visible inside the scroll container, don't scroll
+    if (rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
+      return;
+    }
+
+    const newScrollTop = container.scrollTop + rowTopRelative;
     container.scrollTo({ top: newScrollTop, behavior: 'smooth' });
   }, []);
 
   const handleTextChange = useCallback(
     (verseId: number, text: string) => {
       if (readOnly) return;
-      setVerses(currentVerses =>
-        currentVerses.map(verse =>
+      setVerses(currentVerses => {
+        const exists = currentVerses.some(v => v.verseNumber === verseId);
+        if (!exists) {
+          return [...currentVerses, { verseNumber: verseId, content: text }];
+        }
+        return currentVerses.map(verse =>
           verse.verseNumber === verseId ? { ...verse, content: text } : verse
-        )
-      );
+        );
+      });
       debouncedSave(verseId, text);
       const textarea = textareaRefs.current[verseId];
       if (textarea) autoResizeTextarea(textarea);
@@ -88,35 +100,29 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const handleActiveVerseChange = useCallback(
-    async (newVerseId: number) => {
+    (newVerseId: number) => {
       if (readOnly) return;
-      if (previousActiveVerseId !== null && previousActiveVerseId !== newVerseId) {
-        const previousVerse = verses.find(v => v.verseNumber === previousActiveVerseId);
+      if (activeVerseId !== newVerseId) {
+        const previousVerse = verses.find(v => v.verseNumber === activeVerseId);
         if (previousVerse) {
-          const status = getSaveStatus(previousActiveVerseId);
+          const status = getSaveStatus(activeVerseId);
           if (status.hasUnsavedChanges) {
-            await saveImmediately(previousActiveVerseId, previousVerse.content);
+            void saveImmediately(activeVerseId, previousVerse.content);
           }
         }
       }
-      setPreviousActiveVerseId(activeVerseId);
+      const exists = verses.some(v => v.verseNumber === newVerseId);
+      if (!exists) {
+        setInitialContent(newVerseId, '');
+        setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
+      }
       setActiveVerseId(newVerseId);
-      const prevId = Math.max(1, newVerseId - 1);
-      requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
-    [
-      readOnly,
-      previousActiveVerseId,
-      verses,
-      activeVerseId,
-      getSaveStatus,
-      saveImmediately,
-      scrollVerseToTop,
-    ]
+    [readOnly, verses, activeVerseId, getSaveStatus, saveImmediately, setInitialContent]
   );
 
   const advanceToVerse = useCallback(
-    async (nextVerseId: number, verseToSave?: { verseNumber: number; content: string }) => {
+    (nextVerseId: number, verseToSave?: { verseNumber: number; content: string }) => {
       if (readOnly || nextVerseId > sourceVerses.length) return;
       const nextVerseExists = verses.find(v => v.verseNumber === nextVerseId);
       if (!nextVerseExists) {
@@ -126,16 +132,17 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       if (verseToSave) {
         const status = getSaveStatus(verseToSave.verseNumber);
         if (status.hasUnsavedChanges) {
-          await saveImmediately(verseToSave.verseNumber, verseToSave.content);
+          // Flush unsaved changes immediately without blocking navigation.
+          // The cursor moves to the next verse right away; the save completes
+          // in the background and retries automatically on failure.
+          void saveImmediately(verseToSave.verseNumber, verseToSave.content);
         }
       }
-      setPreviousActiveVerseId(activeVerseId);
       setActiveVerseId(nextVerseId);
       const prevId = Math.max(1, nextVerseId - 1);
       requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
     [
-      activeVerseId,
       verses,
       sourceVerses.length,
       saveImmediately,
@@ -146,16 +153,16 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     ]
   );
 
-  const moveToNextVerse = useCallback(async () => {
+  const moveToNextVerse = useCallback(() => {
     if (readOnly) return;
     const currentVerse = verses.find(v => v.verseNumber === activeVerseId);
     if (!currentVerse || currentVerse.content.trim() === '') return;
-    await advanceToVerse(activeVerseId + 1, currentVerse);
+    advanceToVerse(activeVerseId + 1, currentVerse);
   }, [activeVerseId, verses, advanceToVerse, readOnly]);
 
-  const revealNextVerse = useCallback(async () => {
+  const revealNextVerse = useCallback(() => {
     if (readOnly || !lastRevealedVerseHasContent || !lastRevealedVerse) return;
-    await advanceToVerse(lastRevealedVerseNumber + 1, lastRevealedVerse);
+    advanceToVerse(lastRevealedVerseNumber + 1, lastRevealedVerse);
   }, [
     lastRevealedVerseNumber,
     lastRevealedVerseHasContent,
@@ -166,7 +173,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
 
   // Initialize verses and revealed state
   useEffect(() => {
-    if (targetVerses.length === 0) return;
+    if (targetVerses.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
     if (!readOnly) {
       targetVerses.forEach(verse => setInitialContent(verse.verseNumber, verse.content));
     }
@@ -224,7 +232,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     } else if (!readOnly) {
       verses.forEach(verse => {
         const textarea = textareaRefs.current[verse.verseNumber];
-        if (textarea && verse.content) autoResizeTextarea(textarea);
+        if (textarea) autoResizeTextarea(textarea);
       });
     }
   }, [verses, readOnly, autoResizeTextarea]);
@@ -251,6 +259,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     revealedVerses,
     buttonTop,
     lastRevealedVerseHasContent,
+    lastRevealedVerseNumber,
     targetScrollRef,
     textareaRefs,
     verseRefs,

@@ -29,14 +29,18 @@ const Header: React.FC = () => {
   const handleEditProfile = () => {
     void navigate({
       to: location.pathname,
-      search: { modal: 'profile' as const },
+      search: prev => ({ ...prev, modal: 'profile' as const }),
+      state: location.state,
+      replace: true,
     });
   };
 
   const onNavigateToSettings = () => {
     void navigate({
       to: location.pathname,
-      search: { modal: 'settings' as const },
+      search: prev => ({ ...prev, modal: 'settings' as const }),
+      state: location.state,
+      replace: true,
     });
   };
 
