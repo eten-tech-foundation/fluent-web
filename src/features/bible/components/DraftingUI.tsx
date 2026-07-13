@@ -703,8 +703,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
               {openResourcePanel && (
                 <>
+                  <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
+                    |
+                  </span>
                   <button
-                    className={`ml-4 cursor-pointer text-2xl font-bold transition-colors ${
+                    className={`cursor-pointer text-2xl font-bold transition-colors ${
                       selectedPanel === 2
                         ? 'border-primary border-b-2 pb-1'
                         : 'text-muted-foreground'
@@ -747,7 +750,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   bibleVerses.length === 0 &&
                   renderPanelTwoPlaceholder(
                     <p className='text-muted-foreground text-sm'>
-                      {t('noContentAvailable', 'No content available')}
+                      {t(
+                        'noContentAvailable',
+                        "This Bible version doesn't have content in this passage."
+                      )}
                     </p>,
                     false
                   )}
@@ -805,7 +811,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   !isPericopeMode &&
                   !isPericopeLoading &&
                   lastRevealedVerseNumber < totalSourceVerses && (
-                    <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
+                    <div className='absolute right-10 z-10' style={{ top: buttonTop }}>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>

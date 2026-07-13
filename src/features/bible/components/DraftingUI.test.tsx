@@ -369,6 +369,34 @@ describe('DraftingUI', () => {
     expect(screen.queryByRole('button', { name: 'Alternative Bible' })).not.toBeInTheDocument();
   });
 
+  it('renders a vertical divider between the tabs on the Source side when the second tab is open', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+
+    // Open resource sidebar
+    const toggleButton = screen.getByRole('button', { pressed: false });
+    await user.click(toggleButton);
+
+    // Select alternative bible
+    const selectBibleBtn = screen.getByRole('button', { name: 'Select Alternative Bible' });
+    await user.click(selectBibleBtn);
+
+    // Verify the primary tab and alternative tab are both rendered
+    expect(screen.getByRole('button', { name: 'WEB' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alternative Bible' })).toBeInTheDocument();
+
+    // Verify the divider is rendered between them
+    expect(screen.getByText('|')).toBeInTheDocument();
+  });
+
   it('triggers submit workflow when translation is complete and submit button is clicked', async () => {
     const user = userEvent.setup();
     const mutateAsyncMock = vi.fn();

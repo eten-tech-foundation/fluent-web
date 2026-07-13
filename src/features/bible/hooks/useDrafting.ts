@@ -45,6 +45,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    if (textarea.offsetParent === null) return;
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(20, textarea.scrollHeight) + 'px';
   }, []);
@@ -236,6 +237,38 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       });
     }
   }, [verses, readOnly, autoResizeTextarea]);
+
+  useEffect(() => {
+    if (readOnly) return;
+
+    const resizeAll = () => {
+      Object.values(textareaRefs.current).forEach(textarea => {
+        if (textarea) {
+          autoResizeTextarea(textarea);
+        }
+      });
+      updateButtonPosition();
+    };
+
+    const timer = setTimeout(resizeAll, 100);
+    window.addEventListener('resize', resizeAll);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && targetScrollRef.current) {
+      observer = new ResizeObserver(() => {
+        requestAnimationFrame(resizeAll);
+      });
+      observer.observe(targetScrollRef.current);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', resizeAll);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [readOnly, autoResizeTextarea, updateButtonPosition]);
 
   useLayoutEffect(() => {
     if (readOnly) return;
