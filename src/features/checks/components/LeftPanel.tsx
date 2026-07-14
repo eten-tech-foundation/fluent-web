@@ -62,7 +62,7 @@ const TabButton: React.FC<TabButtonProps> = ({ id, label, isActive, onClick, sho
     className={cn(
       'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-base font-semibold transition-colors',
       isActive
-        ? 'border-blue-600 text-blue-600'
+        ? 'border-primary text-foreground'
         : 'text-muted-foreground hover:text-foreground border-transparent'
     )}
     id={id}
@@ -74,7 +74,7 @@ const TabButton: React.FC<TabButtonProps> = ({ id, label, isActive, onClick, sho
     {showDot && (
       <span
         aria-label='Active checks present'
-        className='inline-block h-2 w-2 shrink-0 rounded-full bg-blue-600'
+        className='bg-primary inline-block h-2 w-2 shrink-0 rounded-full'
         data-testid='checks-notification-dot'
       />
     )}
