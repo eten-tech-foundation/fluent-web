@@ -315,6 +315,18 @@ export const ChapterAssignmentStatusNextAction: Partial<Record<ChapterAssignment
   [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Mark as Complete',
 };
 
+export const ADVANCED_CHECK_SUB_STATUSES: ChapterAssignmentStatus[] = [
+  ChapterAssignmentStatus.LINGUIST_CHECK,
+  ChapterAssignmentStatus.THEOLOGICAL_CHECK,
+  ChapterAssignmentStatus.CONSULTANT_CHECK,
+];
+
+export const ADVANCED_CHECK_SUB_LABELS: Partial<Record<ChapterAssignmentStatus, string>> = {
+  [ChapterAssignmentStatus.LINGUIST_CHECK]: 'Linguist Check',
+  [ChapterAssignmentStatus.THEOLOGICAL_CHECK]: 'Theologian Check',
+  [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Consultant Check',
+};
+
 export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
   ChapterAssignmentStatus.NOT_STARTED,
   ChapterAssignmentStatus.DRAFT,

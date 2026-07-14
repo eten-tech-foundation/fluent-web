@@ -34,10 +34,18 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope } from './DraftingGridPericope';
+import { DraftingGridPericope, TargetVersesGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+
+/**
+ * Stable empty snapshot for renders before the first check result settles —
+ * a module-level constant so the `ChecksPanel` prop reference doesn't change
+ * (and re-render) on every DraftingUI render. FindingRow falls back to
+ * `finding.surf` on a miss, so "empty" is always safe.
+ */
+const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
 
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
@@ -156,6 +164,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealedVerses,
     buttonTop,
     lastRevealedVerseHasContent,
+    lastRevealedVerseNumber,
     targetScrollRef,
     textareaRefs,
     verseRefs,
@@ -279,6 +288,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     occurrenceRules: liveOccurrenceRules,
     globalRules,
   });
+
+  // As-checked verse-text snapshot, hydrated onto the settled check result by
+  // useRepeatedWordsCheck (NOT derived from live `verses` — the findings'
+  // offsets are relative to the text as it was checked, so the two must travel
+  // together and update only when a new result arrives). `checkQuery.data` is
+  // referentially stable per settled result, so this reference only changes
+  // when new findings do.
+  const verseTextBySntId = checkQuery.data?.verseTextBySntId ?? EMPTY_VERSE_TEXT_SNAPSHOT;
 
   // Active-finding count drives both notification dots; computed once here and
   // threaded to the tab and the closed-panel toggle button (S5, §6.4). When the
@@ -526,49 +543,134 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
+  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
+
   const renderPanelTwoPlaceholder = useCallback(
-    (middleContent: React.ReactNode, isCenter = true) => (
-      <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '2rem 1fr 1fr' }}>
-        <div className='w-8' />
-        <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
-          <div
-            className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
-          >
-            {middleContent}
+    (middleContent: React.ReactNode, isCenter = true) => {
+      if (isPericopeMode && pericopes) {
+        return (
+          <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+              <div
+                className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+              >
+                {middleContent}
+              </div>
+            </div>
+            <div className='flex flex-col space-y-4 px-6'>
+              {pericopes.map(group => {
+                const groupVerses = sourceVerses.filter(sv =>
+                  group.verses.some(gv => gv.verseNumber === sv.verseNumber)
+                );
+                if (groupVerses.length === 0) return null;
+                const verseNumbers = groupVerses.map(gv => gv.verseNumber);
+                const minVerse = Math.min(...verseNumbers);
+                const maxVerse = Math.max(...verseNumbers);
+                const heading =
+                  minVerse === maxVerse
+                    ? `${projectItem.chapterNumber}:${minVerse}`
+                    : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
+
+                const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+
+                return (
+                  <div key={group.pericopeNumber} className='flex w-full flex-col space-y-2'>
+                    <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                      {heading}
+                    </h4>
+                    <div
+                      className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                        isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                      }`}
+                      onClick={e => {
+                        if (e.target === e.currentTarget) {
+                          const isGroupAlreadyActive = groupVerses.some(
+                            gv => gv.verseNumber === activeVerseId
+                          );
+                          if (!isGroupAlreadyActive) {
+                            handleActiveVerseChange(groupVerses[0].verseNumber);
+                          }
+                        }
+                      }}
+                    >
+                      <TargetVersesGroup
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        groupVerses={groupVerses}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleNextClick={handleNextClick}
+                        handleTextChange={handleTextChange}
+                        isAiThresholdMet={isAiThresholdMet}
+                        isTranslationComplete={isTranslationComplete}
+                        lastSourceVerseNumber={lastSourceVerseNumber}
+                        readOnly={readOnly}
+                        textareaRefs={textareaRefs}
+                        verses={verses}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          className='grid h-full items-start py-4'
+          style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+        >
+          <div className='w-8' />
+          <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+            <div
+              className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+            >
+              {middleContent}
+            </div>
+          </div>
+          <div className='flex flex-col px-6'>
+            {sourceVerses.map(verse => (
+              <div key={verse.verseNumber} className='py-4'>
+                <DraftingTargetColumn
+                  activeVerseId={activeVerseId}
+                  aiSuggestions={aiSuggestions}
+                  effectiveRevealedVerses={effectiveRevealedVerses}
+                  handleActiveVerseChange={handleActiveVerseChange}
+                  handleKeyDown={handleKeyDown}
+                  handleTextChange={handleTextChange}
+                  isAiThresholdMet={isAiThresholdMet}
+                  readOnly={readOnly}
+                  textareaRefs={textareaRefs}
+                  verseNumber={verse.verseNumber}
+                  verses={verses}
+                />
+              </div>
+            ))}
           </div>
         </div>
-        <div className='flex flex-col px-6'>
-          {sourceVerses.map(verse => (
-            <div key={verse.verseNumber} className='py-4'>
-              <DraftingTargetColumn
-                activeVerseId={activeVerseId}
-                aiSuggestions={aiSuggestions}
-                effectiveRevealedVerses={effectiveRevealedVerses}
-                handleActiveVerseChange={handleActiveVerseChange}
-                handleKeyDown={handleKeyDown}
-                handleTextChange={handleTextChange}
-                isAiThresholdMet={isAiThresholdMet}
-                readOnly={readOnly}
-                textareaRefs={textareaRefs}
-                verseNumber={verse.verseNumber}
-                verses={verses}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
+      );
+    },
     [
+      isPericopeMode,
+      pericopes,
       sourceVerses,
+      projectItem,
       activeVerseId,
-      effectiveRevealedVerses,
+      globalNextUntouchedVerse,
       handleActiveVerseChange,
       handleKeyDown,
+      handleNextClick,
       handleTextChange,
+      isTranslationComplete,
+      lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
       aiSuggestions,
+      effectiveRevealedVerses,
       isAiThresholdMet,
     ]
   );
@@ -601,6 +703,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 globalIgnoresAvailable={globalIgnoresAvailable}
                 isError={checkQuery.isError}
                 resolved={resolved}
+                verseTextBySntId={verseTextBySntId}
                 onIgnoreEverywhere={ignoreEverywhere}
                 onIgnoreHere={ignoreHere}
                 onStopIgnoringEverywhere={stopIgnoringEverywhere}
@@ -638,7 +741,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
             <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
               <button
-                className={`cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
+                className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
                   openResourcePanel
                     ? selectedPanel === 1
                       ? 'border-primary border-b-2 pb-1'
@@ -672,7 +775,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             </div>
 
             <div className='bg-background sticky top-0 z-10 px-6 py-3'>
-              <h3 className='text-2xl font-bold text-slate-800'>{projectItem.targetLanguage}</h3>
+              <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
+                {projectItem.targetLanguage}
+              </h3>
             </div>
             <div
               className={`col-span-3 flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
@@ -722,6 +827,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                       handleNextClick={handleNextClick}
                       handleTextChange={handleTextChange}
                       isAiThresholdMet={isAiThresholdMet}
+                      isTranslationComplete={isTranslationComplete}
                       pericopes={pericopes}
                       projectItem={projectItem}
                       readOnly={readOnly}
@@ -755,7 +861,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 {!readOnly &&
                   !isPericopeMode &&
                   !isPericopeLoading &&
-                  effectiveRevealedVerses.size < totalSourceVerses && (
+                  lastRevealedVerseNumber < totalSourceVerses && (
                     <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>

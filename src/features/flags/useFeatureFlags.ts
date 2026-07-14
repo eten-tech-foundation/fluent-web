@@ -26,8 +26,10 @@ const FLAGS_STALE_TIME_MS = 5 * 60 * 1000; // 5 minutes
 
 /** GET the published feature map from fluent-api. Follows the fetch pattern in
  *  `features/bible/hooks/useBibleTarget.ts` (plain fetch + credentials). The
- *  endpoint is unauthenticated (proposal Q1), but we still send credentials for
- *  consistency and so it keeps working if the reviewer decides to gate it. */
+ *  endpoint is login-gated (proposal Q1, reviewer-confirmed 2026-07-07), so
+ *  `credentials: 'include'` sends the session cookie; a not-yet-authenticated
+ *  request gets a 401, which throws below → the query fails closed (every flag
+ *  off) until the session + flags resolve, keeping gated UI hidden. */
 export const fetchFeatureFlags = async (): Promise<Features> => {
   const res = await fetch(`${config.api.url}/config/features`, {
     method: 'GET',
