@@ -51,7 +51,7 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             aria-label={`Translation for verse ${verseNumber}`}
             autoCapitalize='sentences'
             autoCorrect='on'
-            className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+            className='w-full resize-none overflow-hidden border-none bg-transparent text-base leading-snug outline-none'
             placeholder='Enter translation...'
             spellCheck={true}
             value={currentTargetVerse?.content ?? ''}
@@ -126,7 +126,10 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                     </p>
                   ) : (
                     <p className='text-muted-foreground min-h-12 leading-relaxed'>
-                      {t('noContentAvailable', 'No content available')}
+                      {t(
+                        'noContentAvailable',
+                        "This Bible version doesn't have content in this passage."
+                      )}
                     </p>
                   )}
                 </div>
