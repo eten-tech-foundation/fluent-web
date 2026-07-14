@@ -60,7 +60,7 @@ const TabButton: React.FC<TabButtonProps> = ({ id, label, isActive, onClick, sho
     aria-controls={PANEL_ID}
     aria-selected={isActive}
     className={cn(
-      'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-base font-semibold transition-colors',
+      'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-xl font-bold transition-colors',
       isActive
         ? 'border-primary text-foreground'
         : 'text-muted-foreground hover:text-foreground border-transparent'
