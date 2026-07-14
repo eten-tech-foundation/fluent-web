@@ -15,7 +15,7 @@ Add two source-side controls to each visible verse:
 
 A shared Stop action appears whenever audio is loading or playing. Controls are keyboard-first, touch-target sized, reusable outside drafting, and read either visible source panel: project source or selected reference Bible. At a drafting chapter boundary, playback pauses and asks before navigating.
 
-Version 1 uses Gemini TTS directly from fluent-api. Generated clips are compressed once, cached by content in Postgres, and delivered through immutable browser-cacheable audio URLs. The frontend and backend each have an abstraction seam so browser-local speech or a custom fluent-ai model can replace the first engine without changing the controls or public endpoint.
+Version 1 uses Gemini TTS directly from fluent-api. Generated clips are compressed once, cached by content in Postgres, and delivered through immutable browser-cacheable audio URLs. The frontend and backend each have an abstraction seam so browser-local speech or a custom fluent-ai model can replace the first engine without changing the controls or public endpoint. Looking ahead, the playback queue is deliberately shaped so that once target-side recordings exist, a single play action could alternate between the synthesized source verse and the recorded target verse — a fully audio-driven review pass.
 
 ## Core decisions
 
