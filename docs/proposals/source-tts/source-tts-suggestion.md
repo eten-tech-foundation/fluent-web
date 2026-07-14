@@ -251,12 +251,13 @@ The endpoint is session-authenticated and guarded by `requirePermission(PERMISSI
 ```json
 {
   "text": "In the beginning…",
-  "voice": "Kore",
   "format": "ogg-opus",
   "langCode": "en",
   "pacing": null
 }
 ```
+
+The example shows a v1 frontend request; the protocol additionally accepts the optional fields below.
 
 Proposed request fields:
 
@@ -272,7 +273,7 @@ Success response:
 
 ```json
 {
-  "audioUrl": "https://fluent.example/ai/tts/audio/sha256-…-salted.ogg",
+  "audioUrl": "https://fluent.example/ai/tts/audio/9f2ac1d47b…e03.ogg",
   "durationMs": 4380,
   "format": "ogg-opus",
   "contentType": "audio/ogg"
@@ -347,34 +348,32 @@ Encoding and caching remain outside the provider. This prevents Gemini’s raw-a
 
 Google currently documents Gemini TTS as **Preview**. Preview models may change before stability and can carry more restrictive rate limits. Current supported TTS names include:
 
-- `gemini-3.1-flash-tts-preview` — current Flash TTS preview; supports single/multi-speaker output and streaming;
-- `gemini-2.5-flash-preview-tts` — price-oriented Flash TTS preview;
-- `gemini-2.5-pro-preview-tts` — higher-cost Pro TTS preview.
+- `gemini-3.1-flash-tts-preview` — current Flash TTS preview; supports single/multi-speaker output and streaming; the model in Google’s current-surface examples;
+- `gemini-2.5-flash-preview-tts` — cheaper Flash TTS preview, documented under the older Generate Content surface;
+- `gemini-2.5-pro-preview-tts` — higher-cost Pro TTS preview, likewise on the older surface.
 
-The proposed v1 default is **`TTS_MODEL=gemini-2.5-flash-preview-tts`**, flagged for review. It has explicit published paid-tier pricing of **$0.50 per million text-input tokens and $10 per million audio-output tokens** (standard, non-batch) at the time of verification. Pro is $1 input / $20 audio per million tokens. The model name and prices are not protocol constants; operations must be able to change `TTS_MODEL` without a frontend release.
+The proposed v1 default is **`TTS_MODEL=gemini-3.1-flash-tts-preview`**, flagged for review. Published paid-tier pricing at verification is **$1 per million text-input tokens and $20 per million audio-output tokens** (standard, non-batch; audio is billed at 25 tokens per second, ≈ $0.0005 per generated second before cache reuse). The older `gemini-2.5-flash-preview-tts` is cheaper ($0.50 input / $10 audio per million tokens) but lives on the API surface Google now labels Legacy (see the note below). The model name and prices are not protocol constants; operations must be able to change `TTS_MODEL` without a frontend release.
 
-Google’s current `@google/genai` Generate Content JavaScript shape is:
+The recommended call uses Google’s current **Interactions API** surface of `@google/genai` (exact property casing should follow the SDK typings at implementation time):
 
 ```ts
 const ai = new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY });
 
-const response = await ai.models.generateContent({
-  model: env.TTS_MODEL,
-  contents: [{ parts: [{ text: request.text }] }],
-  config: {
-    responseModalities: ['AUDIO'],
-    speechConfig: {
-      voiceConfig: {
-        prebuiltVoiceConfig: { voiceName: request.voice },
-      },
-    },
+const interaction = await ai.interactions.create({
+  model: env.TTS_MODEL, // gemini-3.1-flash-tts-preview
+  input: request.text,
+  response_format: { type: 'audio' },
+  generation_config: {
+    speech_config: [{ voice: request.voice }],
   },
 });
 
-const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+const base64 = interaction.output_audio?.data;
 ```
 
-The returned audio data is raw **24 kHz, mono, 16-bit PCM** encoded as base64. fluent-api must validate that a candidate/audio part exists, decode it to a `Buffer`, and pass explicit PCM metadata to the encoder. The SDK also documents the newer Interactions API, but the provider seam makes that an implementation swap; the proposal recommends the documented Generate Content call above because it is direct and sufficient for one-shot verse clips.
+The returned audio data is raw **24 kHz, mono, 16-bit PCM** encoded as base64. fluent-api must validate that the audio output exists, decode it to a `Buffer`, and pass explicit PCM metadata to the encoder.
+
+**API-surface caveat found while verifying:** Google’s TTS documentation is mid-transition. The older Generate Content TTS surface (`models.generateContent` with `responseModalities: ['AUDIO']`) is now explicitly titled **Legacy**, and Google recommends the Interactions API “for access to all the latest features and models.” The Interactions surface is itself labeled **Beta**, so the recommendation above knowingly pairs a preview model with a beta API — acceptable for a flag-gated, non-critical feature, and this proposal does not build on a surface the vendor has already deprecated. Implementation should re-check the current documentation when the provider is built and follow whatever surface Google then recommends for the configured `TTS_MODEL`. This is exactly the kind of vendor churn the `TtsProvider` seam exists to absorb: the surface choice lives inside `GeminiTtsProvider` and never reaches the route, cache, or fluent-web.
 
 Language is usually auto-detected. `langCode` remains advisory input for Gemini—potentially incorporated into a short instruction only where that does not compromise exact recitation—and remains a first-class provider field because a future low-resource engine may require it.
 
@@ -396,7 +395,7 @@ The recommended path is therefore direct Gemini access from fluent-api for v1, n
 | Variable                | Proposed default/purpose                                                                   |
 | ----------------------- | ------------------------------------------------------------------------------------------ |
 | `GOOGLE_AI_API_KEY`     | New required secret when source TTS is enabled.                                            |
-| `TTS_MODEL`             | `gemini-2.5-flash-preview-tts`; configurable because preview names can change.             |
+| `TTS_MODEL`             | `gemini-3.1-flash-tts-preview`; configurable because preview names can change.             |
 | `TTS_VOICE`             | `Kore`; one deployment-wide voice in v1.                                                   |
 | `TTS_MAX_TEXT_LENGTH`   | `20000`; generous tripwire.                                                                |
 | `TTS_CACHE_MAX_BYTES`   | Deployment-selected byte cap; no universal number proposed without database capacity data. |
@@ -417,7 +416,7 @@ The cache is standalone and has no foreign key to scripture tables. A canonical 
   "schemaVersion": 1,
   "text": "exact request text",
   "voice": "Kore",
-  "model": "gemini-2.5-flash-preview-tts",
+  "model": "gemini-3.1-flash-tts-preview",
   "langCode": "en",
   "pacing": null,
   "actualFormat": "ogg-opus",
@@ -554,7 +553,7 @@ A provider integration smoke test should synthesize a short non-sensitive fixtur
 5. **Voice picker and synthesis-time pacing:** activate already-reserved request fields; both become cache-key inputs when they affect generated bytes. Client `playbackRate` remains the cheap speed control.
 6. **R2/CDN/signed delivery:** move compressed bytes out of Postgres when scale or recordings infrastructure justifies it. Continue returning a full `audioUrl`; use signed URLs/CORS policy where direct cross-origin delivery requires them.
 7. **Read-only and source-Bible listening surfaces:** reuse `features/tts/`; those surfaces may choose continuous playback across page breaks because boundary policy is frontend-owned.
-8. **Gemini streaming:** the current 3.1 Flash TTS preview supports streaming. It may reduce first-audio latency later, but complicates immutable whole-clip caching and is not needed for the verse-sized v1 contract.
+8. **Gemini streaming:** the proposed 3.1 Flash TTS preview supports streaming. It may reduce first-audio latency later, but complicates immutable whole-clip caching and is not needed for the verse-sized v1 contract.
 9. **Rate limiting and budget controls:** add only with usage evidence, using metrics collected from v1 rather than guessing quotas now.
 
 ---
@@ -565,7 +564,7 @@ The design decisions T1–T20 are the recommended path. Review input is particul
 
 | #      | Item for review                 | Proposed resolution                                                                                                                                                                                                                                                                 |
 | ------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **R1** | Env/model/voice names           | `GOOGLE_AI_API_KEY`, `TTS_MODEL=gemini-2.5-flash-preview-tts`, `TTS_VOICE=Kore`, `TTS_MAX_TEXT_LENGTH=20000`, `TTS_CACHE_MAX_BYTES`.                                                                                                                                                |
+| **R1** | Env/model/voice names           | `GOOGLE_AI_API_KEY`, `TTS_MODEL=gemini-3.1-flash-tts-preview`, `TTS_VOICE=Kore`, `TTS_MAX_TEXT_LENGTH=20000`, `TTS_CACHE_MAX_BYTES`.                                                                                                                                                |
 | **R2** | Loading/error UX                | Spinner on activated play control, persistent Stop for local intent, non-blocking editor, established toast on failure.                                                                                                                                                             |
 | **R3** | Native encoder availability     | Prefer probed system ffmpeg/libopus; evaluate `ffmpeg-static`; retain pure-JS MP3 as floor.                                                                                                                                                                                         |
 | **R4** | New Google secret on fluent-api | Accept the duplicate app-setting placement for v1 because it avoids an unhosted service dependency, a proxy-only hop, and audio through a JSON tool envelope, and keeps the cache table with fluent-api’s drizzle-owned schema; preserve later consolidation through `TtsProvider`. |
@@ -579,9 +578,9 @@ No PR should implement the roadmap items in §13 as part of v1. Review approval 
 
 External facts in §§8 and 10 were rechecked while drafting on July 14, 2026:
 
-- [Google Gemini TTS documentation](https://ai.google.dev/gemini-api/docs/speech-generation) — Preview status, supported model family, JavaScript calls, voices, and raw PCM characteristics.
-- [Google Generate Content TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) — `@google/genai` `models.generateContent` / streaming request and response shape.
-- [Google Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) — current 2.5 Flash/Pro preview TTS token prices and preview caveat.
+- [Google Gemini TTS documentation](https://ai.google.dev/gemini-api/docs/speech-generation) — Preview status, supported model family, the Interactions API call shape shown in §8.2, voices, and raw PCM characteristics.
+- [Google Generate Content TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) — the older `models.generateContent` TTS surface; the page is now titled **Legacy**, which is why this proposal recommends the Interactions API instead (see the §8.2 caveat).
+- [Google Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) — current TTS token prices for the 3.1 Flash and 2.5 Flash/Pro previews and the preview caveat.
 - [`@google/genai` repository](https://github.com/googleapis/js-genai) — supported server-side SDK and API-key initialization.
 - [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) — platform-specific packaged binary feasibility and licensing/packaging caveats.
 - [`lamejs`](https://www.npmjs.com/package/lamejs) — pure-JavaScript Node/browser MP3 encoding feasibility.

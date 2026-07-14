@@ -35,9 +35,9 @@ Version 1 uses Gemini TTS directly from fluent-api. Generated clips are compress
 
 ## Gemini facts rechecked while drafting (July 14, 2026)
 
-Google currently labels Gemini TTS **Preview**. The full proposal records current names including `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, and `gemini-2.5-pro-preview-tts`. The proposed v1 default is configurable `TTS_MODEL=gemini-2.5-flash-preview-tts`; published paid-tier standard pricing is currently $0.50 per million text tokens and $10 per million audio tokens (Pro: $1/$20).
+Google currently labels Gemini TTS **Preview**. The proposed v1 default is configurable `TTS_MODEL=gemini-3.1-flash-tts-preview`, the model in Google’s current-surface examples; published paid-tier standard pricing is currently $1 per million text tokens and $20 per million audio tokens (audio bills at 25 tokens per second, ≈ $0.0005 per generated second before cache reuse). Older, cheaper 2.5 TTS previews exist but sit on an API surface Google now labels Legacy.
 
-The current `@google/genai` server-side call uses `ai.models.generateContent({ model, contents, config: { responseModalities: ['AUDIO'], speechConfig: ... } })`; audio arrives in `candidates[0].content.parts[0].inlineData.data` as base64 raw 24 kHz mono 16-bit PCM. fluent-api decodes PCM, then encodes and stores the negotiated compressed format. Preview names/prices stay in configuration and documentation, never the public protocol.
+The recommended `@google/genai` server-side call uses the current Interactions API; audio arrives as base64 raw 24 kHz mono 16-bit PCM. fluent-api decodes PCM, then encodes and stores the negotiated compressed format. Preview names/prices stay in configuration and documentation, never the public protocol, so a later pivot is a config/provider change only.
 
 ## Why duplicate the Google key on fluent-api
 
@@ -54,7 +54,7 @@ This is a v1 simplification, not a permanent exclusion of fluent-ai.
 
 ## Proposed defaults needing review
 
-1. **Environment/model names:** `GOOGLE_AI_API_KEY`; `TTS_MODEL=gemini-2.5-flash-preview-tts`; `TTS_VOICE=Kore`; `TTS_MAX_TEXT_LENGTH=20000`; hosting-selected `TTS_CACHE_MAX_BYTES`; unset `EN_FEATURE_SOURCE_TTS` derives true only when the key exists.
+1. **Environment/model names:** `GOOGLE_AI_API_KEY`; `TTS_MODEL=gemini-3.1-flash-tts-preview`; `TTS_VOICE=Kore`; `TTS_MAX_TEXT_LENGTH=20000`; hosting-selected `TTS_CACHE_MAX_BYTES`; unset `EN_FEATURE_SOURCE_TTS` derives true only when the key exists.
 2. **Loading/error UX:** activated play button becomes a spinner during synthesis; editor remains usable; Stop cancels local playback intent; failures use the established toast pattern and clear stale playback state.
 3. **Encoder packaging:** prefer probed native ffmpeg/libopus; evaluate `ffmpeg-static`; guarantee a pure-JS MP3 floor.
 4. **Cache capacity:** hosting selects `TTS_CACHE_MAX_BYTES` after checking database, backup, and deployment constraints.
