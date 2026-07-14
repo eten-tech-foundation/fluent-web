@@ -65,6 +65,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
 
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
   useAiSuggestions: () => ({ suggestions: [], isAiThresholdMet: false }),
+  useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock('@/features/bible/hooks/usePericope', () => ({

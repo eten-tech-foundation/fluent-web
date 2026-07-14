@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useMutation } from '@tanstack/react-query';
+
 import { config } from '@/lib/config';
+import { Logger } from '@/lib/services/logger';
 
 interface AiSuggestion {
   bibleTextId: number;
@@ -23,6 +26,15 @@ export function useAiSuggestions(
   const [suggestions, setSuggestions] = useState<Record<number, string>>({});
   const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
   const lastQueuedVerseRef = useRef<number>(-1);
+  const hasCheckedThresholdRef = useRef(false);
+  const currentChapterRef = useRef<number>(chapterNumber);
+
+  // Reset refs when chapter changes
+  if (currentChapterRef.current !== chapterNumber) {
+    lastQueuedVerseRef.current = -1;
+    hasCheckedThresholdRef.current = false;
+    currentChapterRef.current = chapterNumber;
+  }
 
   const fetchSuggestions = useCallback(async () => {
     if (!isAiEnabled) return;
@@ -93,9 +105,13 @@ export function useAiSuggestions(
 
   // Queue next verses when active verse changes
   useEffect(() => {
-    if (!isAiEnabled) return;
+    // If AI is disabled, we only want to ping the backend ONCE per chapter to discover if the threshold is met
+    if (!isAiEnabled && hasCheckedThresholdRef.current) return;
 
     if (activeVerseNumber > lastQueuedVerseRef.current) {
+      if (!isAiEnabled) {
+        hasCheckedThresholdRef.current = true;
+      }
       lastQueuedVerseRef.current = activeVerseNumber;
 
       const requestBody = {
@@ -142,3 +158,32 @@ export function useAiSuggestions(
 
   return { suggestions, isAiThresholdMet };
 }
+
+export const useTrackAiUsage = () => {
+  return useMutation({
+    mutationFn: async ({
+      bibleTextId,
+      projectUnitId,
+      wasUsed,
+    }: {
+      bibleTextId: number;
+      projectUnitId: number;
+      wasUsed: boolean;
+    }) => {
+      const res = await fetch(`${config.api.url}/ai-suggestions/usage`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ bibleTextId, projectUnitId, wasUsed }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to track AI usage');
+      }
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error tracking AI suggestion usage' });
+    },
+  });
+};

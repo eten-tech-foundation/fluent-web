@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
-import { useAiSuggestions } from '@/features/bible/hooks/useAiSuggestions';
+import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
@@ -132,6 +132,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return () => setPresenceWarning(null);
   }, [editorName, setPresenceWarning]);
 
+  const trackAiUsageMutation = useTrackAiUsage();
+
   const saveVerse = useCallback(
     async (verse: number, text: string) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
@@ -150,12 +152,27 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         },
       });
 
+      if (projectItem.isAiEnabled) {
+        trackAiUsageMutation.mutate({
+          bibleTextId: sourceVerse.id,
+          projectUnitId: projectItem.projectUnitId,
+          wasUsed: true,
+        });
+      }
+
       // Bump on the successful auto-save event so the Repeated Word Check
       // re-fires (W3, card #172). `useAddTranslatedVerse` doesn't forward
       // mutate-time `onSuccess`, so we bump after the awaited resolve.
       setSaveCounter(c => c + 1);
     },
-    [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
+    [
+      addVerseMutation,
+      projectItem.projectUnitId,
+      sourceVerses,
+      userdetail,
+      projectItem.isAiEnabled,
+      trackAiUsageMutation,
+    ]
   );
 
   const {
@@ -203,10 +220,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const fireToast = useAiSuggestionToast();
 
   useEffect(() => {
-    if (isAiThresholdMet) {
+    if (isAiThresholdMet && !projectItem.isAiEnabled) {
       fireToast(projectItem.targetLanguage);
     }
-  }, [isAiThresholdMet, fireToast, projectItem.targetLanguage]);
+  }, [isAiThresholdMet, fireToast, projectItem.targetLanguage, projectItem.isAiEnabled]);
 
   const {
     pericopes,
