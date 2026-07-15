@@ -61,12 +61,19 @@ export const UsersWrapper: React.FC = () => {
           userData: userData as User,
         });
         if (selectedUser.email === userdetail?.email) {
+          const grants = res.orgGrants ?? res.grants ?? [];
+          const activeOrgId =
+            userdetail.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
+          const activeGrant = grants.find(g => g.orgId === activeOrgId);
+
           setUserDetail({
             id: res.id,
             email: res.email,
             username: res.username,
-            role: res.role,
-            organization: res.organization,
+            role: activeGrant?.roleId ?? res.role,
+            organization: activeOrgId ?? res.organization,
+            lastActiveOrgId: res.lastActiveOrgId ?? userdetail.lastActiveOrgId,
+            grants: grants,
             firstName: res.firstName,
             lastName: res.lastName,
             status: res.status,
@@ -75,7 +82,7 @@ export const UsersWrapper: React.FC = () => {
       } else {
         const newUser: Omit<User, 'id'> = {
           ...(userData as Omit<User, 'id'>),
-          organization: userdetail?.organization ?? 0,
+          organization: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
           createdBy: userdetail?.id ?? 0,
           isActive: true,
         };

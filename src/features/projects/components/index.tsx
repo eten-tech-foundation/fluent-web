@@ -5,8 +5,9 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
 import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
+import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { UserRole, type CreateProject } from '@/lib/types';
+import { type CreateProject } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { CreateProjectModal, type CreateProjectData } from './CreateProjectModal';
@@ -21,7 +22,10 @@ export const ProjectsWrapper: React.FC = () => {
   const { data: projects = [], isLoading } = useProjectsByRole(userdetail);
   const createProjectMutation = useCreateProject();
 
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
+  const activeOrgId = userdetail?.lastActiveOrgId;
+  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+  // All manager roles (including Project Manager) can create projects.
+  const canCreate = isManager(activeGrants);
 
   const handleOpenCreate = () => {
     void navigate({
@@ -52,7 +56,7 @@ export const ProjectsWrapper: React.FC = () => {
         sourceLanguage: projectData.sourceLanguage,
         bibleId: projectData.sourceBible,
         bookId: projectData.books,
-        organization: Number(userdetail?.organization),
+        organization: Number(activeOrgId ?? userdetail?.organization),
         createdBy: Number(userdetail?.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),
         pericopeSetId: projectData.pericopeSetId,
@@ -73,14 +77,14 @@ export const ProjectsWrapper: React.FC = () => {
   return (
     <>
       <ProjectsPage
-        isManager={isManager}
+        isManager={canCreate}
         loading={isLoading}
         projects={projects}
         onCreateProject={handleOpenCreate}
         onProjectSelect={handleProjectSelect}
       />
 
-      {isManager && (
+      {canCreate && (
         <CreateProjectModal
           error={createProjectMutation.error?.message}
           isLoading={createProjectMutation.isPending}

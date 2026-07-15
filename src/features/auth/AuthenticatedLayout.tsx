@@ -64,12 +64,19 @@ export function AuthenticatedLayout(): React.JSX.Element {
               userData: userDetails as User,
             });
           }
+          const grants = userDetails.orgGrants ?? userDetails.grants ?? [];
+          const activeOrgId =
+            userDetails.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
+          const activeGrant = grants.find(g => g.orgId === activeOrgId);
+
           setUserDetail({
             id: userDetails.id,
             email: userDetails.email,
             username: userDetails.username,
-            role: userDetails.role,
-            organization: userDetails.organization,
+            role: activeGrant?.roleId ?? userDetails.role,
+            organization: activeOrgId ?? userDetails.organization,
+            lastActiveOrgId: activeOrgId,
+            grants: grants,
             firstName: userDetails.firstName,
             lastName: userDetails.lastName,
             status: userDetails.status,

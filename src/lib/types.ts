@@ -1,3 +1,12 @@
+export interface UserGrant {
+  orgId: number | null;
+  projectId?: number | null;
+  roleId: number;
+  roleName: string;
+  permissions: string[];
+  orgName?: string | null;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -5,9 +14,12 @@ export interface User {
   lastName?: string;
   displayName?: string;
   email: string;
-  role: number;
+  grants?: UserGrant[];
+  orgGrants?: UserGrant[];
+  role?: number;
   status?: string;
-  organization: number;
+  organization?: number;
+  lastActiveOrgId?: number | null;
   createdBy?: number;
   isActive?: boolean;
 }

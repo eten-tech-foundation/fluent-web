@@ -145,3 +145,31 @@ export const useGetUserDetailsMutation = () => {
     },
   });
 };
+
+const updateActiveOrg = async (orgId: number): Promise<void> => {
+  const response = await fetch(`${config.api.url}/users/me/active-org`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orgId }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || 'Failed to update active org');
+  }
+};
+
+export const useUpdateActiveOrg = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orgId }: { orgId: number }) => updateActiveOrg(orgId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['userDetails'] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error updating active org' });
+    },
+  });
+};
