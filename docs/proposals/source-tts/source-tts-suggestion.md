@@ -1,17 +1,29 @@
 # Source-Text Text-to-Speech — Proposal
 
-**Status:** Draft for product and engineering review.
+**Status:** Revised after engineering review (PR #356, kaseywright, 2026-07-15). Draft for re-review.
 
 **Reviewer shortcut:** A condensed, stands-on-its-own summary lives in [`source-tts-summary.md`](source-tts-summary.md).
 
-**Scope:** Add source-text listening to Fluent, beginning in the drafting grid. The user-facing controls belong to fluent-web; synthesis, caching, and immutable audio delivery belong to fluent-api. **This proposal intentionally lives in fluent-web only even though the endpoint is implemented in fluent-api**, so reviewers can evaluate the interaction and its supporting contract as one design.
+**Scope:** Add source-text listening to Fluent, beginning in the drafting grid. The user-facing controls belong to fluent-web; synthesis, artifact storage, and audio delivery belong to **fluent-ai**, with fluent-api keeping its established role as the authenticated passthrough for AI tooling. **This proposal intentionally lives in fluent-web only even though endpoints are implemented in fluent-ai and fluent-api**, so reviewers can evaluate the interaction and its supporting contract as one design.
+
+## Revision history
+
+Changes in response to the 2026-07-15 review (all three review comments addressed):
+
+- **TTS synthesis moved from fluent-api into fluent-ai.** fluent-api no longer calls Gemini or holds a Google key; it keeps only the authenticated proxy hop it already provides for other AI tools. One place owns external AI integrations, as requested.
+- **The Postgres cache is eliminated entirely.** Generated audio is now a content-addressed artifact: staged on fluent-ai's local filesystem during synthesis, then transcoded and uploaded to Cloudflare R2 for durable serving. No database table anywhere.
+- **Cache identity refined per review:** the artifact hash is an HMAC over a canonical versioned recipe, and each provider declares which fields do not affect output bytes — for Gemini, `langCode` is normalized out of the hash input, so hinted and unhinted requests for the same text share one artifact and one billing event.
+- **Transcoding:** a Python package bundling ffmpeg is the suggested path (pip wheels ship the binary); the team's planned containerized ffmpeg (klappy/transcode-mcp) is documented as a workable alternative. The former format-negotiation ladder is gone.
+- **Gemini facts refreshed (2026-07-16):** the Interactions API is now **GA** (previously noted as Beta), and TTS streaming is verified available for models ≥ 3.1 including the proposed default.
+- **Feature-flag semantics aligned with the repeated-word-check precedent:** the flag only hides frontend UI; the backend never disables the service; a hidden frontend override supports pre-release demos.
 
 **Related work:**
 
 - The Fluent project board contains an empty draft card titled **“Text to Speech”** (project item `PVTI_lADOB8vK1s4A34c5zgfByGU`). This proposal supplies the design substance for that item; the draft can be converted into implementation cards when the work is scheduled.
 - [fluent-web#84 — Audio Recording](https://github.com/eten-tech-foundation/fluent-web/issues/84) is the existing placeholder for the target-side recording capability that should eventually mirror these source-side controls (§5.4, §13).
+- fluent-mobile’s recording work (its R2 sync contract) establishes the team precedent this revision now follows: audio artifacts live in Cloudflare R2, not Postgres.
 
-The proposal decisions are numbered **T1–T20**.
+The proposal decisions are numbered **T1–T24**. Decisions revised in this round are marked **(revised)**; T21–T24 are new pillars introduced by the redesign.
 
 ---
 
@@ -19,15 +31,16 @@ The proposal decisions are numbered **T1–T20**.
 
 Fluent translators often work from source scripture in a language of wider communication. Listening can reveal phrasing, rhythm, punctuation, and missed words that visual reading alone does not. A source-text TTS control should therefore be fast to reach, comfortable to repeat, useful on touch devices, and able to read either source text visible in Fluent’s drafting grid.
 
-The target language is often low-resource and may not have a suitable hosted voice. Version 1 consequently reads **source text only**. The design still separates UI, transport, and provider concerns so a future custom target-language model can be hosted in fluent-ai without rewriting fluent-web.
+The target language is often low-resource and may not have a suitable hosted voice. Version 1 consequently reads **source text only**. The design still separates UI, transport, and provider concerns so a future custom target-language model can be added inside fluent-ai without rewriting fluent-web.
 
 The governing principles are:
 
 1. **Text, not scripture identity, is the backend resource.** The server synthesizes text and has no knowledge of projects, Bibles, books, chapters, or verses.
 2. **The frontend owns playback sequencing.** Chapter and page behavior remain presentation concerns; the server stays one-text-in/one-clip-out.
 3. **The protocol is much harder to change than the frontend presentation.** The first contract carries fields that future engines may need even when v1 exposes no corresponding knobs.
-4. **Generated speech is a regenerable cache artifact.** User recordings are irreplaceable media and require a different storage posture.
+4. **Generated speech is a regenerable artifact, and the artifact either exists or it does not.** Content-addressed storage is the single source of truth; there is no tracking database whose state could disagree with the bytes. User recordings are irreplaceable media and require a different storage posture.
 5. **The visible text is the authority.** Both source-panel texts can be spoken, and playback always uses the panel’s current text.
+6. **AI integrations live in one place.** fluent-ai owns every external AI-service call; fluent-api remains an authenticated passthrough for AI tooling, per the established service split.
 
 ## 2. Scope
 
@@ -37,12 +50,12 @@ The governing principles are:
 2. Continuous verse-by-verse playback with synchronized active highlighting, auto-scroll, one-clip-ahead prefetch, stop, and an explicit chapter-boundary prompt.
 3. Keyboard shortcuts acting on the active verse and touch-target-sized controls.
 4. A reusable fluent-web TTS feature module with a frontend `TtsEngine` seam.
-5. A vendor-neutral fluent-api `TtsProvider` seam with Gemini TTS as the first provider.
-6. `POST /ai/tts/synthesize` plus immutable, browser-cacheable audio `GET` delivery with HTTP Range support.
-7. A standalone content-hash Postgres cache, storing compressed bytes and trimming least-recently-used entries beyond a configurable size cap.
-8. Opus-in-Ogg preference, MP3 compatibility floor, and server-side format negotiation based on encoder capability.
-9. A narrow `sourceTts` deployment flag, a view-level `TTS_USE` permission alias, one generous text-length tripwire, and loading/error UX.
-10. Design seams for recording, alternating review playback, browser-local speech, fluent-ai custom models, and eventual R2/CDN storage without implementing those roadmap items now.
+5. A `generate` endpoint in fluent-ai (reached through fluent-api’s existing authenticated AI proxy) and a `get-audio` endpoint in fluent-ai that serves or redirects to audio bytes.
+6. Content-addressed artifact identity: an HMAC over a canonical, versioned synthesis recipe, with provider-declared normalization of non-byte-affecting fields.
+7. Local filesystem staging in fluent-ai with atomic single-writer creation, streaming playback of in-progress synthesis, and a serving waterfall that falls back to R2.
+8. An in-process compression worker in fluent-ai that transcodes finished WAV artifacts with ffmpeg and uploads them (plus a JSON metadata sidecar) to Cloudflare R2.
+9. A narrow `sourceTts` frontend-visibility flag, a view-level `TTS_USE` permission alias on the fluent-api proxy, one generous text-length tripwire, and loading/error UX.
+10. Design seams for recording, alternating review playback, browser-local speech, and custom fluent-ai models without implementing those roadmap items now.
 
 ### 2.2 Explicitly out of scope for v1
 
@@ -51,36 +64,40 @@ The governing principles are:
 - A voice picker, synthesis-time speed/pacing control, or user-facing engine preference.
 - Silent navigation across chapter/page boundaries in drafting.
 - Per-user quotas or rate limiting beyond the maximum-text-length tripwire.
-- A fluent-ai dependency for the Gemini v1 provider.
-- R2 storage, CDN delivery, signed URLs, or direct vendor delivery.
-- Adoption of `ffmpeg.wasm` without a separate team decision.
+- Any Postgres/database storage for generated audio or its metadata.
+- Artifact eviction or lifecycle deletion from R2 (growth is consciously accepted; §11.4).
+- Adoption of a remote/shared transcoding service as a v1 dependency (documented as an alternative; §10).
 
 ---
 
 ## 3. Decisions summary
 
-| #       | Decision                                                                                                                                                                                               | Short rationale                                                                                                               |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| **T1**  | Render **play verse**, **play from here**, and a shared stop action while audio is active. Continuous mode advances verse by verse with synchronized highlight and auto-scroll.                        | Matches the two listening tasks: inspect one verse or continue reviewing from a point.                                        |
-| **T2**  | Make playback keyboard-first and use touch-target-sized controls. Shortcuts operate on the active verse.                                                                                               | Playback is repetitive and must not depend on small pointer targets.                                                          |
-| **T3**  | Place reusable controls and queue logic under `features/tts/`, not inside the Bible feature.                                                                                                           | Other source-scripture surfaces should be able to adopt TTS later.                                                            |
-| **T4**  | Reserve a symmetric target-side recording affordance using the same visual language and shared stop state; do not implement it in v1.                                                                  | Creates a coherent “listen here, record there” path aligned with fluent-web#84.                                               |
-| **T5**  | Gemini TTS is called directly from fluent-api through `@google/genai`. A frontend `TtsEngine` and backend `TtsProvider` isolate the UI and vendor.                                                     | Avoids blocking on fluent-ai hosting and preserves a zero-web-change path to a future fluent-ai provider.                     |
-| **T6**  | The synthesis request is text-addressed. The cache identity derives from normalized synthesis inputs, not verse/project IDs.                                                                           | Keeps the backend domain-neutral and enables cross-project cache hits.                                                        |
-| **T7**  | fluent-web owns continuous sequencing and prefetches the next verse while the current clip plays.                                                                                                      | The client already owns highlight, scroll, stop, and boundary behavior.                                                       |
-| **T8**  | `POST /ai/tts/synthesize` returns a full `audioUrl`, duration, and actual format; the browser then performs an immutable audio `GET` with Range support.                                               | Native `<audio>` playback, browser caching, seeking, and future CDN re-pointing come without returning large base64 payloads. |
-| **T9**  | Compress once at synthesis time and store compressed bytes. Prefer Opus-in-Ogg; support MP3.                                                                                                           | Audio is substantially smaller than raw PCM, reducing Postgres cache pressure.                                                |
-| **T10** | Keep same-origin cookie auth on the v1 audio GET, but do not make secrecy of the salted content URL a load-bearing control.                                                                            | The artifact is generated scripture audio; future signed/CDN URLs remain possible.                                            |
-| **T11** | Expose no v1 synthesis knobs. Use one configured voice and client-side `playbackRate`; carry `voice`, `format`, optional `langCode`, and reserved pacing in the protocol.                              | One cached clip serves all playback speeds while the protocol remains extensible.                                             |
-| **T12** | Add the narrow `sourceTts` flag backed by `EN_FEATURE_SOURCE_TTS`; ship dark until provider and encoder hosting are ready.                                                                             | Avoids an awkward generic `tts` flag that later conflicts with target TTS, recording, or local speech.                        |
-| **T13** | Add `TTS_USE` as an alias of `project:view`, using the existing permission-alias pattern.                                                                                                              | Hearing follows seeing; edit-level gating would exclude reviewers and future read-only review flows.                          |
-| **T14** | Enforce an env-configured maximum input length, proposed default 20,000 characters, returning a clear 400 error code. Defer rate limiting.                                                             | The cap is a generous misuse/integration tripwire, not an ordinary verse limit.                                               |
-| **T15** | Store generated clips in a standalone Postgres cache and trim LRU entries beyond `TTS_CACHE_MAX_BYTES`.                                                                                                | TTS is cheap and regenerable; Postgres keeps v1 operationally simple. R2 remains a springable option.                         |
-| **T16** | At the last verse in drafting, pause and ask whether to continue on the next page; never navigate silently.                                                                                            | Navigation can have commit/state side effects and needs conscious confirmation.                                               |
-| **T17** | Make both source-panel texts listenable: the project source and the selected reference Bible.                                                                                                          | Either visible source may be the translator’s current reference, potentially in a different language.                         |
-| **T18** | Carry optional `langCode` from day one and send it whenever known. Include it in cache identity.                                                                                                       | Gemini can treat it as a hint; a future custom provider may require it.                                                       |
-| **T19** | Keep the paired suggestion and summary proposal documents in fluent-web only; implementation still spans fluent-web and fluent-api.                                                                    | One review surface presents the user experience and the contract that supports it.                                            |
-| **T20** | Treat requested `format` as a preference. Probe native ffmpeg capability, fall back to a pure-JS MP3 encoder, and key/cache the actual format. Mention `ffmpeg.wasm` only as a development experiment. | Deployment capability must not turn a supported request into a dead feature.                                                  |
+| #                 | Decision                                                                                                                                                                                                                                         | Short rationale                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **T1**            | Render **play verse**, **play from here**, and a shared stop action while audio is active. Continuous mode advances verse by verse with synchronized highlight and auto-scroll.                                                                  | Matches the two listening tasks: inspect one verse or continue reviewing from a point.                                        |
+| **T2**            | Make playback keyboard-first and use touch-target-sized controls. Shortcuts operate on the active verse.                                                                                                                                         | Playback is repetitive and must not depend on small pointer targets.                                                          |
+| **T3**            | Place reusable controls and queue logic under `features/tts/`, not inside the Bible feature.                                                                                                                                                     | Other source-scripture surfaces should be able to adopt TTS later.                                                            |
+| **T4**            | Reserve a symmetric target-side recording affordance using the same visual language and shared stop state; do not implement it in v1.                                                                                                            | Creates a coherent “listen here, record there” path aligned with fluent-web#84.                                               |
+| **T5 (revised)**  | Gemini TTS is called from **fluent-ai**, which owns all external AI integrations. fluent-web reaches it through fluent-api’s existing authenticated AI proxy. A frontend `TtsEngine` seam still isolates the UI from transport.                  | Review outcome: one home for AI logic; fluent-api stays a passthrough; no duplicate Google key.                               |
+| **T6 (revised)**  | The synthesis request is text-addressed. Artifact identity is an **HMAC (server secret) over a canonical, versioned recipe** of byte-affecting inputs; each provider declares which protocol fields do not affect bytes.                         | Keeps the backend domain-neutral, enables cross-project reuse, and prevents duplicate billing for equivalent requests.        |
+| **T7**            | fluent-web owns continuous sequencing and prefetches the next verse while the current clip plays.                                                                                                                                                | The client already owns highlight, scroll, stop, and boundary behavior.                                                       |
+| **T8 (revised)**  | `generate` returns a full `audioUrl`; the browser then performs an audio `GET` against fluent-ai’s `get-audio`, which streams in-progress synthesis, serves finished local files, or redirects to R2.                                            | Native `<audio>` playback plus immediate streaming of fresh synthesis; delivery location stays a server-side decision.        |
+| **T9 (revised)**  | Synthesis stages uncompressed WAV locally; a background worker compresses once (Opus-in-Ogg preferred, MP3 fallback) and uploads to R2.                                                                                                          | The user hears audio immediately; compression happens off the request path; R2 stores only compressed bytes.                  |
+| **T10 (revised)** | Serving is floated as two options (§7.3): (a) unauthenticated `get-audio` where **authentication is knowing the hash** (HMAC with a server secret makes URLs unguessable) — suggested; (b) fluent-api proxies all audio.                         | The artifact is generated scripture audio; worst case of a leaked URL is hearing scripture. Future recordings will need auth. |
+| **T11**           | Expose no v1 synthesis knobs. Use one configured voice and client-side `playbackRate`; carry `voice`, optional `langCode`, and reserved pacing in the protocol.                                                                                  | One artifact serves all playback speeds while the protocol remains extensible.                                                |
+| **T12 (revised)** | Add the narrow `sourceTts` flag backed by `EN_FEATURE_SOURCE_TTS`. The flag only tells the frontend to hide the UI; the backend never disables the service. A hidden frontend override shows the UI for pre-release demos.                       | Mirrors the repeated-word-check flag semantics; a missing provider key plus the override is itself a valid error-path test.   |
+| **T13**           | Add `TTS_USE` as an alias of `project:view`, using the existing permission-alias pattern, enforced at the fluent-api proxy.                                                                                                                      | Hearing follows seeing; edit-level gating would exclude reviewers and future read-only review flows.                          |
+| **T14**           | Enforce an env-configured maximum input length, proposed default 20,000 characters, returning a clear 400 error code. Defer rate limiting. Note: Gemini output caps near 655 seconds of audio, an effective provider ceiling below the tripwire. | The cap is a generous misuse/integration tripwire, not an ordinary verse limit.                                               |
+| **T15 (revised)** | **No Postgres cache.** Generated clips are content-addressed artifacts: local staging during synthesis, Cloudflare R2 afterward. The artifact store is the only source of truth.                                                                 | Review outcome: eliminates a DB-ownership question and a whole class of tracking-state bugs; follows the team’s R2 direction. |
+| **T16**           | At the last verse in drafting, pause and ask whether to continue on the next page; never navigate silently.                                                                                                                                      | Navigation can have commit/state side effects and needs conscious confirmation.                                               |
+| **T17**           | Make both source-panel texts listenable: the project source and the selected reference Bible.                                                                                                                                                    | Either visible source may be the translator’s current reference, potentially in a different language.                         |
+| **T18 (revised)** | Carry optional `langCode` from day one and send it whenever known. The provider declares whether it affects bytes; **Gemini normalizes it out of the hash input**, so it does not fragment artifact identity.                                    | Review outcome (K1): protocol keeps the field; identity ignores fields that cannot change the audio.                          |
+| **T19**           | Keep the paired suggestion and summary proposal documents in fluent-web only; implementation spans fluent-web, fluent-api, and fluent-ai.                                                                                                        | One review surface presents the user experience and the contract that supports it.                                            |
+| **T20 (revised)** | Transcoding runs in fluent-ai’s compression worker via ffmpeg — suggested packaging is a Python pip package that bundles the ffmpeg binary; the team’s containerized ffmpeg (klappy/transcode-mcp) is a workable alternative.                    | Review outcome (K3): the former probe-and-negotiate encoder ladder collapses; Python packaging effectively ships ffmpeg.      |
+| **T21 (new)**     | **Single-writer staging lock:** `{hash}.wav.incomplete` is created with `O_EXCL`; the winner synthesizes, everyone else streams the same file. The lock is load-bearing as the guard against parallel duplicate provider billing.                | A double-clicked play button or duplicate React effect must never bill Gemini twice for the same artifact.                    |
+| **T22 (new)**     | **Tail-follow streaming:** `get-audio` streams a `.incomplete` file as it grows (read to EOF → wait 250 ms → loop; rename/removal signals completion), using a streaming WAV header with `0xFFFFFFFF` sizes that is never backfilled.            | The user hears the first verse while the rest is still being synthesized; no torn header reads for concurrent listeners.      |
+| **T23 (new)**     | **JSON sidecar as receipt and commit marker:** metadata (recipe fields, actual format, duration, sizes) travels with the artifact to R2 and is uploaded **last**; its presence means the artifact is complete. Never updated afterward.          | Resolves format ambiguity on R2, gives duration a home without a DB, and makes worker crashes idempotently retryable.         |
+| **T24 (new)**     | **In-process compression worker:** an asyncio background task started from fluent-ai’s FastAPI lifespan, running ffmpeg through `asyncio.subprocess`. No new service, container, or startup change for fluent-ai.                                | Fits fluent-ai’s observed single-process `fastapi run` runtime as-is; transcoding never blocks the event loop.                |
 
 ---
 
@@ -90,39 +107,49 @@ The governing principles are:
 sequenceDiagram
   participant U as User
   participant W as fluent-web TtsEngine
-  participant A as fluent-api
-  participant C as Postgres TTS cache
-  participant G as Gemini TtsProvider
+  participant A as fluent-api (auth proxy)
+  participant I as fluent-ai
+  participant G as Gemini TTS
+  participant R as Cloudflare R2
 
   U->>W: Play verse / play from here
   W->>W: Select visible panel text + langCode
-  W->>A: POST /ai/tts/synthesize
-  A->>A: Authorize, validate, derive candidate hash
-  A->>C: Lookup compatible cached clip
-  alt cache hit
-    C-->>A: metadata + compressed bytes identity
-  else cache miss
-    A->>G: synthesize(text, voice, langCode, model)
-    G-->>A: raw PCM audio
-    A->>A: encode preferred available format
-    A->>C: insert clip + trim LRU if over cap
+  W->>A: POST /ai/tts/generate (cookie session)
+  A->>A: Authorize (TTS_USE), validate length
+  A->>I: POST generate (X-API-Key)
+  I->>I: Compute HMAC hash, run artifact waterfall
+  alt artifact exists (staging or R2)
+    I-->>A: audioUrl
+  else new synthesis
+    I->>I: Create {hash}.wav.incomplete (O_EXCL)
+    I->>G: synthesize (streaming)
+    G-->>I: audio chunks → append to .incomplete
+    I-->>A: audioUrl (immediately)
   end
-  A-->>W: audioUrl + durationMs + actual format
-  W->>A: GET immutable audioUrl (Range supported)
-  A-->>W: compressed audio bytes
-  W->>W: Play, highlight, prefetch next verse
+  A-->>W: audioUrl
+  W->>I: GET get-audio/{hash}
+  alt still synthesizing
+    I-->>W: tail-follow stream of .incomplete
+  else finished locally
+    I-->>W: complete .wav
+  else on R2
+    I-->>W: 302 redirect to R2 object
+    W->>R: GET {hash}.ogg
+    R-->>W: compressed audio
+  end
+  Note over I,R: background worker: transcode finished .wav → upload audio then sidecar to R2 → delete local files
 ```
 
 ### 4.1 Repository responsibilities
 
-| Repo                | Implementation responsibility                                                                                                                                                                             |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **fluent-web**      | Controls, keyboard handling, active-verse behavior, queue/sequencing, prefetch, highlight/scroll, source-panel text selection, format preference, playback rate, chapter-boundary prompt, feature gating. |
-| **fluent-api**      | Auth/permission, provider configuration, Gemini SDK call, input cap, content hashing, encoder negotiation, Postgres cache/LRU, synthesis response, immutable audio GET/Range handling.                    |
-| **fluent-ai**       | No v1 change. A later custom model can become another `TtsProvider` behind the same fluent-api endpoint.                                                                                                  |
-| **fluent-platform** | Eventual secret/env and encoder packaging changes for deployment; no new service is required by the proposed architecture.                                                                                |
+| Repo                | Implementation responsibility                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **fluent-web**      | Controls, keyboard handling, active-verse behavior, queue/sequencing, prefetch, highlight/scroll, source-panel text selection, playback rate, chapter-boundary prompt, feature gating.                        |
+| **fluent-api**      | Authenticated proxy for `generate` only: session cookie auth, `requirePermission(PERMISSIONS.TTS_USE)`, input-length validation, forward to fluent-ai with `X-API-Key`. No Google key, no audio bytes, no DB. |
+| **fluent-ai**       | Everything AI and artifact: Gemini provider, HMAC recipe hashing, staging filesystem, `O_EXCL` locking, tail-follow streaming, `get-audio` waterfall, compression worker, R2 upload, sidecar receipts.        |
+| **fluent-platform** | R2 bucket/credentials provisioning and fluent-ai env additions at deployment time; no new service and no fluent-ai startup change is required.                                                                |
 
-The endpoint’s location does not change the document location: **the proposal pair is intentionally committed only to fluent-web** (T19). The feature is experienced and sequenced in fluent-web, while this document records the fluent-api contract reviewers must approve before implementation is split into repo-specific PRs.
+The endpoint’s location does not change the document location: **the proposal pair is intentionally committed only to fluent-web** (T19). The feature is experienced and sequenced in fluent-web, while this document records the fluent-api and fluent-ai contracts reviewers must approve before implementation is split into repo-specific PRs.
 
 ---
 
@@ -147,11 +174,11 @@ A missing panel-2 verse has no playable text, so controls are disabled or omitte
 
 ### 5.2 Loading, failure, and non-blocking behavior — proposed default for review
 
-On a cache miss, synthesis can take seconds. The proposed default is:
+On a first-listen miss, synthesis begins streaming within a couple of seconds rather than waiting for the whole clip. The proposed default is:
 
-- replace the activated play icon with a spinner while synthesis resolves;
+- replace the activated play icon with a spinner until playback actually starts;
 - keep target-text typing and navigation usable;
-- allow Stop to cancel local playback intent even though aborting the HTTP request may not cancel billable provider work;
+- allow Stop to cancel local playback intent even though aborting the HTTP request may not cancel billable provider work already underway;
 - show synthesis/playback failures through the project’s established toast pattern, with a concise retryable message;
 - return the control to its idle state after failure, without leaving a stale highlight.
 
@@ -181,7 +208,7 @@ Source text                         Target text
                  [■ Stop]            shared active-session stop
 ```
 
-Recording is not part of this implementation. The purpose is to avoid a TTS layout that later makes fluent-web#84 feel bolted on. Generated source audio and recorded target audio can share playback-state presentation and queue items while retaining different storage/lifecycle rules.
+Recording is not part of this implementation. The purpose is to avoid a TTS layout that later makes fluent-web#84 feel bolted on. Generated source audio and recorded target audio can share playback-state presentation and queue items while retaining different storage/lifecycle rules — and, notably, different access rules: recordings carry a user’s voice and will need authenticated serving, a tension §7.3 records explicitly.
 
 ---
 
@@ -195,15 +222,14 @@ The control must depend on an engine interface rather than fetch or Web Speech d
 interface TtsRequest {
   text: string;
   voice?: string;
-  format: TtsFormat;
+  format: TtsFormat; // 'ogg-opus' | 'mp3'
   langCode?: string;
   pacing?: { mode?: string }; // reserved; no v1 UI
 }
 
 interface TtsClip {
   audioUrl: string;
-  durationMs: number;
-  format: TtsFormat;
+  durationMs?: number; // known only once the artifact is complete
 }
 
 interface TtsEngine {
@@ -222,42 +248,43 @@ src/features/tts/
 └── index.ts
 ```
 
-`ServerTtsEngine` calls fluent-api. A future `WebSpeechTtsEngine` can implement the same UI-facing role even if its internal behavior is streaming/local rather than URL-returning; if that mismatch proves material, the interface can return a generic playable source rather than exposing vendor concepts to the component. The key requirement is that buttons and queue orchestration do not know whether audio is browser-local, fetched from Fluent, or ultimately produced by Gemini/fluent-ai.
+`ServerTtsEngine` calls fluent-api’s `generate` proxy. A future `WebSpeechTtsEngine` can implement the same UI-facing role even if its internal behavior is streaming/local rather than URL-returning; if that mismatch proves material, the interface can return a generic playable source rather than exposing vendor concepts to the component. The key requirement is that buttons and queue orchestration do not know whether audio is browser-local, streamed from fluent-ai, or served from R2.
 
-### 6.2 Format preference and playback speed (T9, T11, T20)
+fluent-web selects `format` at runtime with `HTMLAudioElement.canPlayType()`: request `ogg-opus` when the browser reports confident support, otherwise `mp3`. The requested format is recorded in the artifact’s sidecar (§9.3) and honored by the compression worker, and it participates in artifact identity — an mp3 request is a separate artifact from an opus one (§9.1). Even if the v1 frontend only ever asks for one format in practice, keeping the field means supporting an older browser later (or any client that cannot play Opus) is a frontend-only change. The browser plays WAV while an artifact is fresh and the requested compressed format once it lives on R2, transparently; the response’s `Content-Type` always declares what was actually served.
 
-At runtime, fluent-web selects a preferred request format using `HTMLAudioElement.canPlayType()`:
+### 6.2 Playback speed and duration (T11, T22)
 
-1. request `ogg-opus` when the browser reports confident support;
-2. otherwise request `mp3`;
-3. trust the response’s actual `format` and `Content-Type`, because format is negotiated rather than demanded.
+Playback speed is applied through `audio.playbackRate`. It is deliberately absent from artifact identity and does not trigger new synthesis. The protocol reserves pacing for a future synthesis-time option where cadence itself must change.
 
-Playback speed is applied through `audio.playbackRate`. It is deliberately absent from cache identity and does not trigger new synthesis. The protocol reserves pacing for a future synthesis-time option where cadence itself must change.
+While a clip is still being tail-follow streamed, its total duration is unknown and seeking is unavailable; the native `<audio>` element handles this gracefully (a growing progress position without a fixed end). Once the artifact is served from R2, ordinary `Content-Length` and HTTP Range behavior return and scrubbing works normally. For verse-sized clips the degraded window lasts seconds and only on the first listen.
 
-### 6.3 Feature gate (T12)
+### 6.3 Feature gate (T12, revised)
 
 Add the camel-case wire flag `sourceTts`, backed by `EN_FEATURE_SOURCE_TTS`, to the existing feature registry and fail-closed frontend mirror. The flag follows the current four-edit discipline: fluent-api env schema, `FLAGS` registry, OpenAPI feature response, and `.env.example`, plus fluent-web’s named flag type/default.
 
-Proposed derived default: when `EN_FEATURE_SOURCE_TTS` is unset, publish `sourceTts: true` only when `GOOGLE_AI_API_KEY` is non-empty; otherwise publish false. An explicit flag value overrides the derived default. This is a **proposed default for review** and lets deployments ship code safely before the secret and encoder story are ready.
+The semantics mirror the repeated-word-check flag exactly:
+
+- **The backend never disables the service.** fluent-api’s proxy and fluent-ai’s endpoints stay live regardless of the flag; the flag only tells the frontend whether to render the controls.
+- **A hidden frontend override** (same mechanism the checks UI uses) can show the controls anyway, for demos before public enablement. If the deployment lacks a Gemini key, the override surfaces the resulting provider error — which is itself a valid error-path test rather than a misconfiguration to hide.
+
+Proposed derived default: when `EN_FEATURE_SOURCE_TTS` is unset, publish `sourceTts: true` only when `FLUENT_AI_URL` and its API key are configured; otherwise publish false. An explicit flag value overrides the derived default. This is a **proposed default for review**.
 
 ---
 
-## 7. fluent-api contract
+## 7. Service contract
 
-### 7.1 `POST /ai/tts/synthesize` (T6, T8, T11, T14, T18, T20)
+### 7.1 `generate` — fluent-web → fluent-api → fluent-ai (T5, T6, T8, T11, T14, T18)
 
-The endpoint is session-authenticated and guarded by `requirePermission(PERMISSIONS.TTS_USE)`. It accepts text rather than a verse identity:
+The money path stays authenticated end to end. fluent-web calls fluent-api with the session cookie; fluent-api enforces `requirePermission(PERMISSIONS.TTS_USE)` and the length tripwire, then forwards to fluent-ai’s `generate` endpoint with the existing `X-API-Key` service credential — the same shape as the other AI-tool proxies.
 
 ```json
 {
   "text": "In the beginning…",
   "format": "ogg-opus",
-  "langCode": "en",
+  "langCode": "eng",
   "pacing": null
 }
 ```
-
-The example shows a v1 frontend request; the protocol additionally accepts the optional fields below.
 
 Proposed request fields:
 
@@ -265,220 +292,230 @@ Proposed request fields:
 | ---------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `text`     | required, non-empty | Exact visible text to recite; rejected beyond `TTS_MAX_TEXT_LENGTH`.                                                                                             |
 | `voice`    | optional            | Requested logical/provider voice; v1 frontend omits it and the configured default is used.                                                                       |
-| `format`   | required            | Preference: `ogg-opus` or `mp3`; server may return another supported actual format.                                                                              |
-| `langCode` | optional            | Language hint sent whenever fluent-web knows it; use a documented BCP-47/ISO-compatible representation.                                                          |
+| `format`   | required            | Compressed format the worker should produce: `ogg-opus` or `mp3`. Chosen by the client via `canPlayType()`; participates in artifact identity (§9.1).            |
+| `langCode` | optional            | Language hint sent whenever fluent-web knows it (ISO 639-3 codes are available for all Fluent source languages, and should be for targets). Advisory for Gemini. |
 | `pacing`   | optional/reserved   | Accepted protocol slot for future synthesis-time pacing; v1 should reject unsupported non-null values or define a no-op policy explicitly before implementation. |
+
+`format` is honored, not negotiated: the worker always has ffmpeg (§10), so a request for `mp3` produces an mp3 artifact — a distinct hash that does not collide with an opus artifact for the same text. Keeping the field in the protocol means a client that cannot play Opus (an older browser, a future non-web consumer) is served without any backend change, even though the v1 frontend may only ever request one format in practice.
+
+On receiving the request, fluent-ai computes the artifact hash (§9.1) and runs the same waterfall `get-audio` uses (§7.2). If the artifact already exists in any form — in-progress, staged, or on R2 — no synthesis happens and the URL is returned immediately; this is the deduplication path. Otherwise fluent-ai creates the staging lock and starts Gemini synthesis (§8), returning the URL **without waiting for synthesis to finish** — the browser starts streaming right away.
 
 Success response:
 
 ```json
 {
-  "audioUrl": "https://fluent.example/ai/tts/audio/9f2ac1d47b…e03.ogg",
-  "durationMs": 4380,
-  "format": "ogg-opus",
-  "contentType": "audio/ogg"
+  "audioUrl": "https://fluent-ai.example/tts/audio/9f2ac1d47b…e03",
+  "durationMs": null
 }
 ```
 
-The response reports the **actual** encoded format. A requested `ogg-opus` may return MP3 when no Opus encoder is available. `audioUrl` is a full URL, not a bare database id, so later R2/CDN/fluent-ai delivery can be selected entirely server-side.
+`durationMs` is populated only when the artifact is already complete (its sidecar exists); for fresh synthesis it is null because the stream’s length is genuinely unknown. `audioUrl` is a full URL, not a bare id, so the serving choice in §7.3 — and any later change to it — is entirely server-side.
 
 Validation/error outline:
 
-- `400 TTS_TEXT_TOO_LONG` with the configured maximum when `text` exceeds the tripwire;
+- `400 TTS_TEXT_TOO_LONG` with the configured maximum when `text` exceeds the tripwire (enforced at the fluent-api proxy);
 - `400 TTS_INVALID_REQUEST` for malformed/empty input;
 - `403` through existing permission middleware;
-- `502 TTS_PROVIDER_UNAVAILABLE` for provider failure after retry policy, without exposing vendor secrets;
-- `500 TTS_ENCODING_FAILED` only if no supported encoder path succeeds (the pure-JS MP3 floor is intended to make this rare).
+- `502 TTS_PROVIDER_UNAVAILABLE` when the provider fails after the bounded retry policy (§8.3), without exposing vendor detail.
 
-The proposed default `TTS_MAX_TEXT_LENGTH=20000` is intentionally far above a verse. It catches accidental chapter/book submission or abuse without acting as a normal product limit. Rate limiting and user quotas are deferred until usage data justifies them.
+The proposed default `TTS_MAX_TEXT_LENGTH=20000` is intentionally far above a verse. It catches accidental chapter/book submission or abuse without acting as a normal product limit. It is worth noting that Gemini itself caps generated output near 655 seconds of audio, so the provider is an effective ceiling below the tripwire for extreme inputs. Rate limiting and user quotas are deferred until usage data justifies them.
 
-### 7.2 Immutable audio `GET` (T8, T10, T15)
-
-The returned URL resolves to an immutable representation, for example:
+### 7.2 `get-audio` — the serving waterfall (T8, T15, T21–T23)
 
 ```http
-GET /ai/tts/audio/{opaqueContentToken}
+GET /tts/audio/{hash}
 ```
 
-Required behavior:
+fluent-ai resolves the hash through an ordered waterfall, attempting each open directly rather than checking existence first (avoids races with the worker moving files):
 
-- same-origin cookie authentication in v1;
-- `requirePermission(PERMISSIONS.TTS_USE)` where practical, while URL secrecy/auth is not treated as the sole protection boundary;
-- correct `Content-Type` and `Content-Length`;
-- `Accept-Ranges: bytes`, `206 Partial Content`, and valid `Content-Range` handling;
-- long-lived immutable cache headers because the token identifies encoded content;
-- `404` after eviction;
-- no synthesis side effect on GET.
+1. **`{hash}.wav.incomplete`** — synthesis in progress: tail-follow stream it (§7.2.1). If the file’s mtime is stale beyond the configured threshold, treat it as an abandoned write: delete it inline and continue down the waterfall (this replaces any separate janitor process).
+2. **`{hash}.wav`** — finished locally, not yet transcoded: serve the complete file with real `Content-Length`.
+3. **R2 `{hash}.ogg`**, then **R2 `{hash}.mp3`** — transcoded artifact: respond `302 Found` to the R2 object URL (option (a)) or proxy the bytes (option (b)); §7.3.
+4. **`404`** — the artifact does not exist anywhere. fluent-web treats this as self-healing: repeat `generate`, which recreates the artifact and returns a fresh URL.
 
-A stale URL is self-healing: fluent-web treats a 404 as an evicted cache entry, repeats the POST, and receives a current URL. The opaque token should be derived with a server-held salt/HMAC rather than exposing an unsalted hash of text inputs. Defeating it is still low impact—the result is listening to generated scripture—but signed URLs remain the designated future path for cross-origin/CDN delivery.
+Serving behavior:
+
+- correct `Content-Type` per representation (`audio/wav` staging, `audio/ogg`/`audio/mpeg` from R2);
+- `Content-Length` and HTTP Range support whenever the representation is complete (local `.wav` and R2 objects); chunked transfer without length while tail-following;
+- long-lived immutable cache headers on R2 responses (content-addressed names never change meaning); `no-store` on tail-follow streams;
+- no synthesis side effect on GET — creation happens only through `generate`.
+
+#### 7.2.1 Tail-follow streaming (T22)
+
+While a `.incomplete` file grows, `get-audio` streams it live: read to EOF → wait 250 ms → if more bytes appeared, continue; if the file was renamed to `.wav` (or is gone), read any remainder from the renamed file and complete the stream. Multiple concurrent listeners can follow the same file; only the request that won the `O_EXCL` lock is synthesizing.
+
+An overall timeout bounds the loop: if the writer stops making progress for the configured window, the stream completes with whatever bytes were delivered. A truncated clip is indistinguishable from a complete one to the player (there is no length header), which is an accepted v1 rough edge — the mtime-staleness rule in the waterfall deletes the abandoned `.incomplete` so the next play attempt regenerates cleanly.
+
+The staged WAV begins with a **streaming WAV header whose RIFF/data sizes are `0xFFFFFFFF`**. Players and ffmpeg treat these as “very large; read to end of stream.” The header is written once and **never backfilled** after completion, so a concurrent reader can never observe a torn half-updated header; raw headerless PCM was rejected because `<audio>` cannot play it.
+
+### 7.3 Serving and authentication — two options (T10, revised)
+
+The `generate` path is always authenticated (cookie at fluent-api, `X-API-Key` to fluent-ai): it is the path that spends money. The question is `get-audio` and R2. Two coherent options, with (a) suggested:
+
+**Option (a) — unauthenticated serving; authentication is knowing the hash (suggested).** The hash is an HMAC keyed by a server secret (§9.1), so URLs are unguessable without having already been authorized through `generate`; possessing one lets a client hear generated scripture audio — a deliberately accepted low-stakes outcome. `get-audio` is public on fluent-ai; R2 objects are public behind their content-addressed names; the `302` works natively and CDN caching comes free. This is the low-complication path.
+
+**Option (b) — fluent-api proxies everything.** All audio flows fluent-web → fluent-api (cookie auth) → fluent-ai/R2. Uniform access control and no publicly reachable audio endpoints, at the cost of pushing every audio byte through two services, buffering concerns for the streaming path, and losing free CDN behavior.
+
+**A tension to record either way:** future target-side _recordings_ carry a real user’s voice and will require authenticated serving. If option (a) is chosen for the TTS cache, recordings must not inherit it — the access postures of the two artifact classes are expected to diverge.
+
+One deployment note for option (a): plain `<audio src>` playback is CORS-exempt, so cross-origin serving from fluent-ai or R2 works as-is; only a future Web Audio API consumer (waveforms, precise scheduling) would need CORS headers on the audio responses.
 
 ---
 
-## 8. Provider seam and Gemini implementation
+## 8. Provider seam and Gemini implementation (in fluent-ai)
 
-### 8.1 Backend seam (T5)
+### 8.1 Provider seam (T5, revised)
 
-fluent-api owns a small provider-neutral interface:
+fluent-ai owns a small provider-neutral Python interface:
 
-```ts
-interface TtsProviderRequest {
-  text: string;
-  voice: string;
-  model: string;
-  langCode?: string;
-  pacing?: { mode?: string };
-}
+```python
+@dataclass
+class TtsProviderRequest:
+    text: str
+    voice: str
+    model: str
+    lang_code: str | None = None
+    pacing: dict | None = None
 
-interface PcmAudio {
-  bytes: Buffer;
-  sampleRateHz: number;
-  channels: number;
-  bitDepth: number;
-  providerMetadata?: Record<string, unknown>;
-}
+class TtsProvider(Protocol):
+    def synthesize_stream(
+        self, request: TtsProviderRequest
+    ) -> AsyncIterator[bytes]:
+        """Yield PCM audio chunks as the provider produces them."""
 
-interface TtsProvider {
-  synthesize(request: TtsProviderRequest): Promise<PcmAudio>;
-}
+    def non_byte_affecting_fields(self) -> set[str]:
+        """Protocol fields this provider ignores for output bytes (§9.1)."""
 ```
 
-Encoding and caching remain outside the provider. This prevents Gemini’s raw-audio shape, model names, and SDK types from leaking into route/cache code. A later `FluentAiTtsProvider` can call a custom fluent-ai endpoint and return the same internal PCM result; provider selection may then be config-based or language-routed with no fluent-web contract change.
+Staging, hashing, and transcoding remain outside the provider. This keeps Gemini’s SDK types, model names, and streaming quirks inside one module; a future custom low-resource model is another `TtsProvider` selected by config or language routing, with no fluent-web or fluent-api change.
 
-### 8.2 Current Gemini API facts (verified July 14, 2026)
+### 8.2 Current Gemini API facts (verified July 14–16, 2026)
 
-Google currently documents Gemini TTS as **Preview**. Preview models may change before stability and can carry more restrictive rate limits. Current supported TTS names include:
+Google documents Gemini TTS models as **Preview**, while the **Interactions API surface is now GA** (it was Beta when this proposal was first drafted). Current supported TTS names include:
 
-- `gemini-3.1-flash-tts-preview` — current Flash TTS preview; supports single/multi-speaker output and streaming; the model in Google’s current-surface examples;
-- `gemini-2.5-flash-preview-tts` — cheaper Flash TTS preview, documented under the older Generate Content surface;
-- `gemini-2.5-pro-preview-tts` — higher-cost Pro TTS preview, likewise on the older surface.
+- `gemini-3.1-flash-tts-preview` — current Flash TTS preview; single/multi-speaker; **streaming supported**; the model in Google’s current-surface examples;
+- `gemini-2.5-flash-preview-tts` / `gemini-2.5-pro-preview-tts` — older previews on the Generate Content surface Google now labels Legacy; they do not stream.
 
-The proposed v1 default is **`TTS_MODEL=gemini-3.1-flash-tts-preview`**, flagged for review. Published paid-tier pricing at verification is **$1 per million text-input tokens and $20 per million audio-output tokens** (standard, non-batch; audio is billed at 25 tokens per second, ≈ $0.0005 per generated second before cache reuse). The older `gemini-2.5-flash-preview-tts` is cheaper ($0.50 input / $10 audio per million tokens) but lives on the API surface Google now labels Legacy (see the note below). The model name and prices are not protocol constants; operations must be able to change `TTS_MODEL` without a frontend release.
+The proposed v1 default is **`TTS_MODEL=gemini-3.1-flash-tts-preview`**, flagged for review. Published paid-tier pricing at verification is $1 per million text-input tokens and $20 per million audio-output tokens (audio bills at 25 tokens per second, ≈ $0.0005 per generated second before artifact reuse). Model names and prices are configuration and documentation, never protocol constants.
 
-The recommended call uses Google’s current **Interactions API** surface of `@google/genai` (exact property casing should follow the SDK typings at implementation time):
+**Streaming is the primary path:** TTS models from 3.1 up support `stream: true` on Interactions, verified in current documentation. Chunks are appended to the staging file as they arrive, which is what makes tail-follow playback (§7.2.1) work. Two documented behaviors shape the implementation:
 
-```ts
-const ai = new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY });
+- the model occasionally emits text tokens into an audio response, which surfaces as a request failure — covered by the bounded retry in §8.3;
+- generated output caps near **655 seconds of audio**, an effective per-request ceiling (see T14).
 
-const interaction = await ai.interactions.create({
-  model: env.TTS_MODEL, // gemini-3.1-flash-tts-preview
-  input: request.text,
-  response_format: { type: 'audio' },
-  generation_config: {
-    speech_config: [{ voice: request.voice }],
-  },
-});
+**Non-streaming fallback:** if a configured provider or model cannot stream, nothing structural changes — the `.incomplete` file still serves as the existence marker and single-writer lock; it simply receives the whole clip at once. `get-audio` waits for the rename and serves the complete file with a real `Content-Length`. Streaming is an experience optimization, not a correctness requirement.
 
-const base64 = interaction.output_audio?.data;
-```
+The returned audio is raw 24 kHz, mono, 16-bit PCM; fluent-ai writes the streaming WAV header (§7.2.1) and appends decoded chunks. Language is usually auto-detected; `langCode` remains advisory input for Gemini and a first-class provider field because a future low-resource engine may require it.
 
-The returned audio data is raw **24 kHz, mono, 16-bit PCM** encoded as base64. fluent-api must validate that the audio output exists, decode it to a `Buffer`, and pass explicit PCM metadata to the encoder.
+### 8.3 Failure handling and retries (T21)
 
-**API-surface caveat found while verifying:** Google’s TTS documentation is mid-transition. The older Generate Content TTS surface (`models.generateContent` with `responseModalities: ['AUDIO']`) is now explicitly titled **Legacy**, and Google recommends the Interactions API “for access to all the latest features and models.” The Interactions surface is itself labeled **Beta**, so the recommendation above knowingly pairs a preview model with a beta API — acceptable for a flag-gated, non-critical feature, and this proposal does not build on a surface the vendor has already deprecated. Implementation should re-check the current documentation when the provider is built and follow whatever surface Google then recommends for the configured `TTS_MODEL`. This is exactly the kind of vendor churn the `TtsProvider` seam exists to absorb: the surface choice lives inside `GeminiTtsProvider` and never reaches the route, cache, or fluent-web.
+The Gemini call runs inside a try/except that owns the staging lock’s lifecycle:
 
-Language is usually auto-detected. `langCode` remains advisory input for Gemini—potentially incorporated into a short instruction only where that does not compromise exact recitation—and remains a first-class provider field because a future low-resource engine may require it.
+1. On failure (including the text-token glitch), retry automatically a small bounded number of times (2–3) while continuing to hold the `.incomplete` lock — the file is truncated back to the header between attempts.
+2. Only after final failure is the `.incomplete` deleted, releasing the hash for a later attempt, and the error surfaced as `502 TTS_PROVIDER_UNAVAILABLE`.
+3. A crash that orphans a `.incomplete` (process kill, disk hiccup) is cleaned by the waterfall’s mtime-staleness rule (§7.2) on the next access — there is no separate janitor process to deploy or monitor.
 
-### 8.3 Why the Google key belongs on fluent-api in v1
+### 8.4 Proposed environment additions — flagged for review
 
-This introduces `GOOGLE_AI_API_KEY` to fluent-api even though fluent-ai may also hold a Google key. That duplication is the cheaper and simpler side of the trade:
+All TTS configuration lives in **fluent-ai** (which already holds the Google key for its other tools):
 
-1. Routing v1 TTS through fluent-ai would block the feature on fluent-ai being hosted at all.
-2. The extra service would add a pure HTTP-proxy hop with no Python-specific value.
-3. Raw or encoded audio would have to be pushed through fluent-ai’s JSON `ToolJobResponse`-oriented path or require a second media contract there before TTS could ship.
-4. The content cache belongs with the database owner. The Fluent Postgres schema is defined and migrated by fluent-api (drizzle); adding the `tts_audio_cache` table there is one ordinary migration. Placing the cache in fluent-ai would either tie a deliberately generic, multi-consumer service into a database whose schema another service controls, or require duplicating migration tooling on the Python side — both awkward couplings and best reserved for future complexity of a custom TTS model.
-5. The same secret in two app settings is operationally small compared with another runtime dependency and audio proxy layer.
-6. The `TtsProvider` seam preserves consolidation: once a custom model belongs in fluent-ai, fluent-api can switch providers without changing `POST /ai/tts/synthesize` or fluent-web. The cache and its drizzle-managed table stay in fluent-api either way, keeping fluent-ai stateless and consumer-agnostic.
+| Variable (fluent-ai)  | Proposed default/purpose                                                                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TTS_MODEL`           | `gemini-3.1-flash-tts-preview`; configurable because preview names change.                                                                                             |
+| `TTS_VOICE`           | `Kore`; one deployment-wide voice in v1.                                                                                                                               |
+| `TTS_MAX_TEXT_LENGTH` | `20000`; generous tripwire (mirrored at the fluent-api proxy).                                                                                                         |
+| `TTS_HASH_SECRET`     | New secret keying the artifact HMAC (§9.1).                                                                                                                            |
+| `TTS_STAGING_DIR`     | Local staging directory for `.incomplete`/`.wav` files.                                                                                                                |
+| `TTS_DEFAULT_FORMAT`  | Format used when a request omits `format` (`ogg-opus` proposed); requests normally choose.                                                                             |
+| `TTS_R2_PREFIX`       | Folder path (key prefix) inside the R2 bucket for TTS artifacts, e.g. `tts/` — keeps them separate from other artifact classes (future recordings) sharing the bucket. |
+| R2 credentials/bucket | Standard Cloudflare R2 binding for the worker’s uploads and `get-audio` redirects.                                                                                     |
 
-The recommended path is therefore direct Gemini access from fluent-api for v1, not because fluent-ai is permanently excluded, but because requiring it now adds deployment and transport complexity without adding capability.
-
-### 8.4 Proposed environment defaults — flagged for review
-
-| Variable                | Proposed default/purpose                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| `GOOGLE_AI_API_KEY`     | New required secret when source TTS is enabled.                                            |
-| `TTS_MODEL`             | `gemini-3.1-flash-tts-preview`; configurable because preview names can change.             |
-| `TTS_VOICE`             | `Kore`; one deployment-wide voice in v1.                                                   |
-| `TTS_MAX_TEXT_LENGTH`   | `20000`; generous tripwire.                                                                |
-| `TTS_CACHE_MAX_BYTES`   | Deployment-selected byte cap; no universal number proposed without database capacity data. |
-| `EN_FEATURE_SOURCE_TTS` | Optional explicit on/off; unset derives true only from a present Google key.               |
-
-The model/env names above are **proposed defaults for operator and hosting review**, not settled external contracts.
+fluent-api needs only what it already has for AI tools (`FLUENT_AI_URL`, service API key) plus the `EN_FEATURE_SOURCE_TTS` flag entry. **No Google key is added to fluent-api** — the previous draft’s duplicate-key argument (old §8.3) is withdrawn along with the architecture that required it.
 
 ---
 
-## 9. Content-hash Postgres cache (T6, T9, T15, T18, T20)
+## 9. Content-addressed artifact store (T6, T15, T21–T23, revised)
 
-### 9.1 Identity and lookup
+There is no database. An artifact exists on the staging filesystem, exists on R2, or does not exist — the store itself is the only record, so no tracking state can ever disagree with the bytes.
 
-The cache is standalone and has no foreign key to scripture tables. A canonical identity document should include all inputs that can change generated or encoded bytes:
+### 9.1 Identity: HMAC over a canonical recipe (T6, T18)
+
+The artifact name is an HMAC (server secret `TTS_HASH_SECRET`, SHA-256) over a canonical recipe string with an explicit version prefix:
+
+```text
+v1:{text}\x1f{voice}\x1f{model}\x1f{format}\x1f{langCode-normalized}\x1f{pacing-normalized}
+```
+
+- **Version prefix** (`v1:`): injected server-side by fluent-ai when it builds the recipe — it is not a request field and never appears in the API. Any future change to the recipe’s composition (or any server-side change that should invalidate existing artifacts wholesale) bumps the version, cleanly separating old and new artifact namespaces. Costs nothing now; saves a migration headache later.
+- **Provider-declared normalization:** each provider lists the protocol fields that cannot affect its output bytes (`non_byte_affecting_fields()`, §8.1); those are blanked to `-` in the recipe before hashing. For Gemini, `langCode` is normalized out — the hint is advisory and does not change the audio — so `en`, `eng`, and absent all resolve to the same artifact and the same single billing event. A future provider for which `langCode` _does_ change output simply omits it from the declaration and it participates in the hash. This mechanism keeps the protocol field (T18) while the identity tracks byte-level reality.
+- **Format is in the hash.** The requested compressed format is part of what the client asked for, so an `mp3` request is a distinct artifact from an `ogg-opus` request for the same text — the two never collide, and each hash resolves to exactly one R2 object. (The staged WAV is a lifecycle stage of that one artifact, not a separate identity.)
+- **HMAC, not a bare hash:** scripture text is public, so a plain content hash would be computable by anyone; the server secret is what makes “knowing the hash” meaningful as an access token under serving option (a) (§7.3).
+- Spoken text is never trimmed, case-folded, or otherwise altered before hashing — only structurally absent optional fields normalize to a canonical placeholder.
+
+### 9.2 Staging lifecycle (T21, T22)
+
+```text
+{hash}.wav.incomplete   created O_EXCL; streaming WAV header; Gemini chunks appended
+        │ atomic rename on verified stream completion
+{hash}.wav              complete, playable, awaiting transcode
+        │ worker: transcode → upload audio → upload sidecar → delete local
+R2: {hash}.ogg + {hash}.json      (or .mp3, per the request's format)
+```
+
+The `O_EXCL` create is **load-bearing and must not be simplified away**: it is the single-writer lock that prevents two simultaneous requests for the same text (a double-clicked play button, a duplicated React effect) from each paying Gemini for the same audio. Losers of the race — and all other listeners — stream the winner’s file.
+
+The rename to `{hash}.wav` happens only after the provider stream terminates normally; an abnormal end follows §8.3 instead. Staging disk is transient (files leave after transcode), so a simple free-space guard that refuses new synthesis under pressure is an acceptable implementation addition; multi-replica deployments would at worst duplicate synthesis cost across replicas, never corrupt an artifact.
+
+### 9.3 The JSON sidecar: receipt and commit marker (T23)
+
+Each artifact gets a small JSON sidecar recording what it is:
 
 ```json
 {
-  "schemaVersion": 1,
-  "text": "exact request text",
-  "voice": "Kore",
+  "recipeVersion": "v1",
   "model": "gemini-3.1-flash-tts-preview",
-  "langCode": "en",
-  "pacing": null,
-  "actualFormat": "ogg-opus",
-  "encoderProfile": "opus-speech-v1"
+  "voice": "Kore",
+  "langCode": "eng",
+  "format": "ogg-opus",
+  "contentType": "audio/ogg",
+  "durationMs": 4380,
+  "sizeBytes": 31240,
+  "createdAt": "2026-07-16T18:00:00Z"
 }
 ```
 
-Hash a stable serialization with SHA-256 for internal lookup. Normalize only contractually irrelevant representation (for example, absent optional fields to a canonical null); do **not** trim, case-fold, or otherwise alter spoken text. Including `langCode` avoids treating differently hinted synthesis as identical and relies on fluent-web sending known language codes consistently.
+- Locally, it carries the worker’s target-format hint alongside the finished `.wav`.
+- On R2, the worker uploads the **audio object first, sidecar last** — the sidecar’s presence is the commit marker meaning “complete artifact here.” A worker crash between the two uploads leaves no sidecar, and the retried transcode/upload is idempotent (same content-addressed names, same bytes).
+- It answers what would otherwise need a database row: which format this hash resolved to, its duration, and when it was made.
+- It is a **receipt, never a ledger**: it is not updated afterward — in particular, not for access tracking, which would turn every read into a write for no v1 benefit.
 
-Format negotiation means lookup may consider the preferred format first and the always-available MP3 representation second. The stored key is always based on **actual format**, not merely requested format. Multiple encodings may coexist for the same speech inputs.
+### 9.4 No eviction (revised from LRU trimming)
 
-### 9.2 Proposed table
-
-```text
-tts_audio_cache
-- id / opaque token source
-- content_hash (unique with actual format/profile)
-- model
-- voice
-- lang_code nullable
-- format
-- content_type
-- audio_bytes (bytea)
-- duration_ms
-- size_bytes
-- last_accessed_at
-- created_at
-```
-
-`last_accessed_at` updates on a successful POST cache hit and may also update on GET using a write-throttled strategy. Exact per-GET writes would create unnecessary database churn; implementation can coalesce touches (for example, update only when the stored timestamp is older than a threshold) while preserving approximate LRU ordering.
-
-### 9.3 LRU trimming and concurrency
-
-After insertion, trim oldest entries until total `size_bytes <= TTS_CACHE_MAX_BYTES`. The first implementation can perform bounded deletion in the request path or enqueue a lightweight cleanup without introducing another service. Insert races on the same hash use a unique constraint plus conflict-safe readback, so concurrent first requests pay at most an avoidable duplicate provider call but store one row.
-
-Cache deletion is safe and self-healing. Generated clips cost money but are reproducible; target recordings are human-created, irreplaceable artifacts and must not inherit this eviction policy. R2 is a natural future destination for either a larger TTS cache or direct immutable delivery—especially alongside recording work—but Postgres is the recommended v1 simplification.
+v1 has **no eviction policy**. Compressed verse-sized clips are small; a whole Bible per voice/model lands in the hundreds of megabytes on R2, i.e. cents per month at R2 pricing. Unbounded growth is consciously accepted and revisited only if usage proves the arithmetic wrong. (The staging directory does not grow: the worker deletes local files after upload.) Generated clips remain reproducible for fractions of a cent; target recordings are irreplaceable human artifacts and must never inherit any future TTS deletion policy.
 
 ---
 
-## 10. Encoding and format negotiation (T9, T20)
+## 10. Compression worker and transcoding (T9, T20, T24, revised)
 
-Gemini returns raw PCM, so a browser-efficient format must be produced before storage.
+### 10.1 Worker model (T24)
 
-### 10.1 Capability order
+The compression worker is an **asyncio background task started from fluent-ai’s FastAPI lifespan** — the service’s observed runtime is `fastapi run` (a single uvicorn async process), and the worker is designed to fit that as-is: no new process, container, queue, or startup change is asked of the fluent-ai owners.
 
-At startup or first use, fluent-api probes encoder capability:
+Loop shape:
 
-1. **Native/system ffmpeg:** execute an available binary and confirm the needed encoder/muxer rather than assuming installation. For Opus-in-Ogg, verify a usable Opus encoder (prefer `libopus`) and Ogg output.
-2. **Packaged `ffmpeg-static`:** a possible deployment convenience if system ffmpeg is unavailable. It provides platform-specific static binaries, but package/binary licensing and target-platform packaging must be reviewed with hosting before adoption.
-3. **Pure-JavaScript MP3 floor:** keep an encoder such as `lamejs` available so Node can encode mono PCM without a native binary. This is the reliability floor, not necessarily the preferred long-term library; maintenance/security suitability should be checked during implementation.
-4. **`ffmpeg.wasm` reference-only experiment:** it demonstrates that FFmpeg can run through WebAssembly without a native install, but official project documentation describes browser-only support, slower-than-native performance, a substantial core payload, and codec-dependent licensing. It may be tested in development for broader Fluent audio needs, but is **not adopted by this proposal**.
+1. Poll `TTS_STAGING_DIR` for completed `{hash}.wav` files with a sidecar hint.
+2. Transcode with ffmpeg via `asyncio.subprocess` (the subprocess does the CPU work; the event loop never blocks). Target format comes from the sidecar’s hint — i.e., what the client requested (`ogg-opus` or `mp3`), with `TTS_DEFAULT_FORMAT` covering requests that omitted it.
+3. Upload the audio object to R2, then the sidecar (§9.3 commit ordering).
+4. Delete the local `.wav` and local sidecar; sleep briefly; repeat.
 
-### 10.2 Negotiation behavior
+Every step is idempotent under crash/restart: a half-done artifact is re-transcoded from the still-present `.wav`; a re-upload overwrites identical bytes at the same content-addressed key.
 
-- If the client requests `ogg-opus` and native ffmpeg can produce the approved profile, encode/store/return Ogg Opus.
-- If Opus is unavailable, encode/store/return MP3 silently through the available MP3 path.
-- If the client requests MP3, use native ffmpeg or the pure-JS encoder according to the selected implementation policy.
-- Declare the actual `format` and `Content-Type` in POST metadata and GET headers.
-- Include encoder profile/version in cache identity when changing it could change bytes or compatibility.
-- Log the detected encoder matrix at startup and expose it in diagnostics/health detail without leaking secrets.
+### 10.2 ffmpeg packaging (T20, revised)
 
-The fallback is silent from the user’s perspective because both results satisfy “play this text.” It must not be silent operationally: logs and diagnostics should make an unexpected all-MP3 deployment visible.
+- **Suggested: a Python package that bundles the ffmpeg binary.** Being in Python effectively gets ffmpeg for free — pip wheels ship platform binaries (e.g. the static-ffmpeg family), so the dependency is an ordinary `pyproject` entry with no image or hosting change. This keeps transcoding in-process-adjacent, with no network hop inside the pipeline.
+- **Workable alternative: the team’s planned containerized ffmpeg** ([klappy/transcode-mcp](https://github.com/klappy/transcode-mcp/tree/main/container)), raised in review as a shared transcoding resource. If that service is provisioned and the team prefers one shared transcoder, the worker’s step 2 becomes a call to it instead of a local subprocess. The trade is a runtime dependency on an external service (latency, availability, auth) inside the artifact pipeline — reasonable once the service exists and is operated, but this proposal does not make v1 wait on it.
+
+The previous draft’s format-negotiation ladder (probe native ffmpeg → `ffmpeg-static` → pure-JS MP3 floor → `ffmpeg.wasm`) is **gone**: it existed because a Node service couldn’t assume an encoder. The worker always has ffmpeg by construction, so both requestable formats (`ogg-opus`, `mp3`) are always encodable — the request’s `format` is honored as-is (§7.1), never renegotiated.
 
 ---
 
@@ -486,33 +523,40 @@ The fallback is silent from the user’s perspective because both results satisf
 
 ### 11.1 View-level permission alias (T13)
 
-Add a documented alias alongside `AI_TOOLS_USE`:
+Add a documented alias alongside `AI_TOOLS_USE` in fluent-api:
 
 ```ts
 TTS_USE: 'project:view',
 ```
 
-Both POST and same-origin GET use `PERMISSIONS.TTS_USE`. This names the capability at route call sites while reusing the existing RBAC row. Promotion to a distinct permission later requires a new permission row/role mappings and one string-value change, not route rewrites.
+The `generate` proxy uses `PERMISSIONS.TTS_USE`. This names the capability at route call sites while reusing the existing RBAC row; promotion to a distinct permission later requires a new permission row/role mappings and one string-value change, not route rewrites.
 
 The view-level alias is deliberate: anyone allowed to see source scripture should be allowed to hear it. Reusing `content:update` would exclude reviewers and undermine the planned alternating review mode.
 
+`get-audio` authentication is the option (a)/(b) choice in §7.3 — under the suggested option (a) it is unauthenticated by design, with the HMAC-secret URL as the access token and generation (the money path) fully authenticated.
+
 ### 11.2 Security and abuse controls
 
-- Never expose `GOOGLE_AI_API_KEY` to fluent-web.
-- Validate text length before hashing/provider work.
+- The Google key lives only in fluent-ai and is never exposed to fluent-web or fluent-api.
+- `TTS_HASH_SECRET` must be treated as a secret: it is what makes artifact URLs unguessable under option (a).
+- Validate text length at the fluent-api proxy before any fluent-ai work.
 - Avoid logging full source text or provider payloads at ordinary log levels.
 - Return stable Fluent error codes rather than raw SDK errors.
-- Keep same-origin session auth in v1 and validate normal project access at the UI surface; the TTS route’s coarse permission remains view-level because the text-addressed backend intentionally has no project id.
-- Monitor cache misses, generated seconds/bytes, provider failures, and encoder fallback rates.
+- The `O_EXCL` staging lock (T21) is the anti-double-billing guard; treat it as a security-adjacent invariant in review.
+- Monitor artifact misses, generated seconds, provider failures/retries, transcode failures, and staging-disk usage.
 - Defer rate limits until observed use warrants them; the 20,000-character cap is the only v1 request guardrail beyond normal auth.
 
 ### 11.3 Rollout
 
-1. Merge implementation dark behind `sourceTts`.
-2. Provision `GOOGLE_AI_API_KEY`, model/voice, and cache limits in a non-production environment.
-3. Confirm actual encoder capability and browser playback across supported platforms.
-4. Enable for internal testing and inspect latency, cache-hit rate, provider cost, and Postgres growth.
-5. Enable more broadly only after preview-model behavior and hosting packaging are accepted.
+1. Merge implementation dark behind `sourceTts` (frontend-hide semantics; backend always live — §6.3).
+2. Provision fluent-ai’s TTS env (§8.4) and the R2 bucket in a non-production environment.
+3. Confirm streaming playback, waterfall fallbacks, and worker upload against real browsers.
+4. Demo via the hidden frontend override before public enablement; a missing Gemini key with the override on is a valid error-path check, not a blocker.
+5. Enable the flag broadly once provider behavior and R2 serving are accepted.
+
+### 11.4 Cost posture
+
+Synthesis costs fractions of a cent per verse and is paid once per artifact thanks to content addressing and the single-writer lock. R2 storage of compressed clips is cents per month even at whole-Bible scale (§9.4), and R2 egress is free. The conscious v1 trade is unbounded-but-tiny storage growth in exchange for zero lifecycle machinery.
 
 ---
 
@@ -525,67 +569,75 @@ The view-level alias is deliberate: anyone allowed to see source scripture shoul
 | Controls    | Both play actions use visible panel text; missing reference verse is not playable; spinner/stop/error states; accessible labels and touch targets.             |
 | Keyboard    | Shortcuts act on active verse and do not collide with typing/editor shortcuts; stop is global to active playback.                                              |
 | Queue       | Play-one stops; play-from-here advances, highlights, scrolls, prefetches; stop clears queue; network gap state; chapter-end confirmation/no silent navigation. |
-| Engine seam | Server engine request includes format and known `langCode`; cancellation is local-safe; 404 audio triggers one re-POST.                                        |
-| Format      | `canPlayType()` preference; actual response format accepted when different; playback rate does not resynthesize.                                               |
-| Flags       | `sourceTts=false` hides controls; loading/failure remains fail-closed.                                                                                         |
+| Engine seam | Server engine request includes known `langCode`; cancellation is local-safe; 404 audio triggers one re-`generate`.                                             |
+| Playback    | WAV stream plays while synthesizing; Ogg/MP3 plays from R2 redirect; playback rate does not resynthesize; unknown-duration stream degrades gracefully.         |
+| Flags       | `sourceTts=false` hides controls; hidden override shows them; loading/failure remains fail-closed.                                                             |
 
-### 12.2 fluent-api
+### 12.2 fluent-api (proxy)
 
-| Area            | Representative cases                                                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Route/auth      | 401 unauthenticated, 403 without view permission, input validation, stable errors, 20k-default boundary.                                          |
-| Provider        | Mock `TtsProvider`; decode documented Gemini base64 PCM shape; absent/malformed candidate handling; secret never returned/logged.                 |
-| Cache           | Canonical hash, cross-project same-text hit, language/model/voice/format separation, insert race, LRU order/trim, stale URL 404 and re-synthesis. |
-| Negotiation     | Opus available, requested Opus unavailable→MP3, requested MP3, actual metadata/key correctness, total encoder failure.                            |
-| Audio GET       | Correct MIME/length, immutable caching, valid/invalid/suffix Range requests, 206/416 behavior, no synthesis on GET.                               |
-| Feature default | unset flag + key ⇒ on; unset + no key ⇒ off; explicit true/false wins.                                                                            |
+| Area       | Representative cases                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| Route/auth | 401 unauthenticated, 403 without view permission, input validation, stable errors, 20k-default boundary.  |
+| Proxy      | Forwards to fluent-ai with `X-API-Key`; passes through `audioUrl`; maps fluent-ai errors to Fluent codes. |
 
-A provider integration smoke test should synthesize a short non-sensitive fixture against the configured preview model, verify PCM metadata, encode both available output profiles, and play/probe the resulting files. It should be opt-in so ordinary tests never incur provider cost.
+### 12.3 fluent-ai
+
+| Area        | Representative cases                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity    | HMAC recipe stability across field orderings; version prefix present; Gemini `langCode` normalization (`en`/`eng`/absent → one hash); text never altered.          |
+| Locking     | Concurrent `generate` for one text → exactly one `.incomplete` created (O_EXCL), one provider call; loser streams the winner’s file.                               |
+| Waterfall   | Each rung resolves in order; attempt-open behavior under worker delete race; stale `.incomplete` (mtime) deleted inline and waterfall continues; total miss 404.   |
+| Tail-follow | Stream grows with the file; rename mid-stream completes cleanly; writer stall hits timeout and completes with delivered bytes; FF-size WAV header never rewritten. |
+| Provider    | Mock provider stream; text-token glitch → bounded retry (2–3) then `.incomplete` cleanup and 502; non-streaming provider fallback (whole-file then rename).        |
+| Worker      | Transcode via subprocess; audio-then-sidecar upload order; crash between uploads → idempotent retry; local files deleted after commit; loop survives bad input.    |
+| Serving     | Correct Content-Type per representation; Range on complete files; 302 target correctness; immutable cache headers on R2 path, `no-store` while streaming.          |
+
+A provider integration smoke test should synthesize a short non-sensitive fixture against the configured preview model, verify streamed PCM arrives and the staged WAV plays, run one real transcode, and confirm the R2 round trip. It should be opt-in so ordinary tests never incur provider cost.
 
 ---
 
 ## 13. Future roadmap (designed for, not built)
 
-1. **Target-side recording dovetail (fluent-web#84):** mirrored record controls, shared playback/recording stop presentation, and durable recording storage. Recordings should follow the mobile precedent toward R2, never the evictable TTS cache policy.
+1. **Target-side recording dovetail (fluent-web#84):** mirrored record controls, shared playback/recording stop presentation, and durable recording storage — R2 like the mobile precedent, but behind **authenticated serving**, since recordings carry a user’s voice (§7.3 tension).
 2. **Alternating review mode:** queue source TTS verse 1 → recorded target verse 1 → source TTS verse 2 → recorded target verse 2. Queue items should therefore pair a verse reference with a generic audio source, not assume every item comes from `TtsEngine`.
 3. **Browser-local Web Speech option:** a future per-user `server | local` preference can trade voice consistency for zero provider cost and better behavior on weak connections. Voice availability/quality remains device-dependent.
-4. **Custom low-resource engine in fluent-ai:** add `FluentAiTtsProvider`, select by config or language, retain the fluent-web contract and controls unchanged.
-5. **Voice picker and synthesis-time pacing:** activate already-reserved request fields; both become cache-key inputs when they affect generated bytes. Client `playbackRate` remains the cheap speed control.
-6. **R2/CDN/signed delivery:** move compressed bytes out of Postgres when scale or recordings infrastructure justifies it. Continue returning a full `audioUrl`; use signed URLs/CORS policy where direct cross-origin delivery requires them.
+4. **Custom low-resource engine in fluent-ai:** another `TtsProvider` behind the same endpoints, selected by config or language; it declares its own byte-affecting fields (where `langCode` likely _does_ join the hash).
+5. **Voice picker and synthesis-time pacing:** activate already-reserved request fields; both join the recipe when they affect generated bytes. Client `playbackRate` remains the cheap speed control.
+6. **CDN in front of R2 / signed URLs:** content-addressed public objects are already CDN-friendly under option (a); signed URLs become relevant if the serving posture tightens or recordings share infrastructure.
 7. **Read-only and source-Bible listening surfaces:** reuse `features/tts/`; those surfaces may choose continuous playback across page breaks because boundary policy is frontend-owned.
-8. **Gemini streaming:** the proposed 3.1 Flash TTS preview supports streaming. It may reduce first-audio latency later, but complicates immutable whole-clip caching and is not needed for the verse-sized v1 contract.
+8. **Artifact lifecycle policy:** only if R2 growth ever escapes the cents-per-month arithmetic; age-based expiry via R2 lifecycle rules would be the natural tool (there is no LRU state to consult, by design).
 9. **Rate limiting and budget controls:** add only with usage evidence, using metrics collected from v1 rather than guessing quotas now.
 
 ---
 
 ## 14. Review checklist
 
-The design decisions T1–T20 are the recommended path. Review input is particularly valuable on the two proposed-default areas and deployment feasibility:
+The design decisions T1–T24 are the recommended path. Review input is particularly valuable on:
 
-| #      | Item for review                 | Proposed resolution                                                                                                                                                                                                                                                                 |
-| ------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **R1** | Env/model/voice names           | `GOOGLE_AI_API_KEY`, `TTS_MODEL=gemini-3.1-flash-tts-preview`, `TTS_VOICE=Kore`, `TTS_MAX_TEXT_LENGTH=20000`, `TTS_CACHE_MAX_BYTES`.                                                                                                                                                |
-| **R2** | Loading/error UX                | Spinner on activated play control, persistent Stop for local intent, non-blocking editor, established toast on failure.                                                                                                                                                             |
-| **R3** | Native encoder availability     | Prefer probed system ffmpeg/libopus; evaluate `ffmpeg-static`; retain pure-JS MP3 as floor.                                                                                                                                                                                         |
-| **R4** | New Google secret on fluent-api | Accept the duplicate app-setting placement for v1 because it avoids an unhosted service dependency, a proxy-only hop, and audio through a JSON tool envelope, and keeps the cache table with fluent-api’s drizzle-owned schema; preserve later consolidation through `TtsProvider`. |
-| **R5** | Postgres cache capacity         | Hosting selects `TTS_CACHE_MAX_BYTES`; verify expected database/storage/back-up impact before enablement.                                                                                                                                                                           |
+| #      | Item for review        | Proposed resolution                                                                                                                                                                        |
+| ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **R1** | Serving/auth option    | Option (a): unauthenticated `get-audio`/public R2, HMAC-secret URLs as access token; option (b) full fluent-api proxy documented as the alternative (§7.3).                                |
+| **R2** | Env/model/voice names  | fluent-ai: `TTS_MODEL=gemini-3.1-flash-tts-preview`, `TTS_VOICE=Kore`, `TTS_MAX_TEXT_LENGTH=20000`, `TTS_HASH_SECRET`, `TTS_STAGING_DIR`, `TTS_DEFAULT_FORMAT`, `TTS_R2_PREFIX`, R2 creds. |
+| **R3** | Transcode packaging    | Python pip package bundling ffmpeg (suggested) vs the shared transcode-mcp container (workable alternative) (§10.2).                                                                       |
+| **R4** | Loading/error UX       | Spinner until playback starts, persistent Stop for local intent, non-blocking editor, established toast on failure (§5.2).                                                                 |
+| **R5** | Cost/growth acceptance | No eviction in v1; unbounded R2 growth consciously accepted at cents/month (§9.4, §11.4).                                                                                                  |
 
-No PR should implement the roadmap items in §13 as part of v1. Review approval should confirm the core contract, seams, cache posture, and proposed defaults before repo-specific implementation cards/PRs are opened.
+No PR should implement the roadmap items in §13 as part of v1. Review approval should confirm the service split, the content-addressed artifact design, the serving option, and the proposed defaults before repo-specific implementation cards/PRs are opened.
 
 ---
 
 ## 15. Verification sources
 
-External facts in §§8 and 10 were rechecked while drafting on July 14, 2026:
+External facts in §§8 and 10 were rechecked on July 14 and July 16, 2026:
 
-- [Google Gemini TTS documentation](https://ai.google.dev/gemini-api/docs/speech-generation) — Preview status, supported model family, the Interactions API call shape shown in §8.2, voices, and raw PCM characteristics.
-- [Google Generate Content TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) — the older `models.generateContent` TTS surface; the page is now titled **Legacy**, which is why this proposal recommends the Interactions API instead (see the §8.2 caveat).
-- [Google Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) — current TTS token prices for the 3.1 Flash and 2.5 Flash/Pro previews and the preview caveat.
-- [`@google/genai` repository](https://github.com/googleapis/js-genai) — supported server-side SDK and API-key initialization.
-- [`ffmpeg-static`](https://github.com/eugeneware/ffmpeg-static) — platform-specific packaged binary feasibility and licensing/packaging caveats.
-- [`lamejs`](https://www.npmjs.com/package/lamejs) — pure-JavaScript Node/browser MP3 encoding feasibility.
-- [`ffmpeg.wasm` documentation](https://ffmpegwasm.netlify.app/docs/overview/) — browser-focused WebAssembly option; its performance, installation, and licensing notes are why it remains reference-only.
+- [Google Gemini TTS documentation](https://ai.google.dev/gemini-api/docs/speech-generation) — Preview model status, supported model family, streaming support for ≥ 3.1 TTS models, raw PCM characteristics, and the ~655-second output cap.
+- [Google Interactions API documentation](https://ai.google.dev/gemini-api/docs) — the Interactions surface, now **GA** (re-verified 2026-07-16; it was Beta at first drafting).
+- [Google Generate Content TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) — the older `models.generateContent` TTS surface, now titled **Legacy**.
+- [Google Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) — current TTS token prices and the preview caveat.
+- [klappy/transcode-mcp container](https://github.com/klappy/transcode-mcp/tree/main/container) — the team-referenced containerized ffmpeg alternative for transcoding (§10.2).
+- [Cloudflare R2 documentation](https://developers.cloudflare.com/r2/) — object storage pricing model (free egress) and lifecycle-rule capability referenced in §9.4/§13.
+- WAV/RIFF streaming convention — `0xFFFFFFFF` chunk sizes as the established “unknown length, read to EOF” streaming-header practice tolerated by players and ffmpeg (§7.2.1).
 
 ---
 
-_Prepared against fluent-web `main` and the current Gemini/encoding documentation on 2026-07-14. Author: Joshua Lansford._
+_Originally prepared 2026-07-14; revised 2026-07-16 after engineering review of PR #356. Author: Joshua Lansford._
