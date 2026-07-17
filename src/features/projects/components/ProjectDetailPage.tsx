@@ -20,7 +20,6 @@ import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
 import { getConnectivityProfileDisplay } from '@/lib/formatters';
-import { getActiveGrants, isManager as isManagerCheck } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -153,8 +152,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   );
 
   const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
-  const isManager = isManagerCheck(activeGrants);
+  const activeProjectGrant = (userdetail?.grants ?? []).find(
+    g => g.orgId === activeOrgId && g.projectId === projectId
+  );
+  const isManager = activeProjectGrant?.roleId === UserRole.PROJECT_MANAGER;
 
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
@@ -433,6 +434,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
+                chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
                 projectId={projectId}
                 referenceHeight={detailsHeight}

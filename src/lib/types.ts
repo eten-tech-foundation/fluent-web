@@ -304,7 +304,49 @@ export enum ChapterAssignmentStatus {
 export enum UserRole {
   PROJECT_MANAGER = 1,
   TRANSLATOR = 2,
+  SUPER_ADMIN = 3,
+  ORG_OWNER = 4,
+  ORG_MANAGER = 5,
+  PROJECT_OBSERVER = 6,
 }
+
+export const ROLES = {
+  SUPER_ADMIN: 'SuperAdmin',
+  ORG_OWNER: 'Org Owner',
+  ORG_MANAGER: 'Org Manager',
+  PROJECT_MANAGER: 'Project Manager',
+  PROJECT_TRANSLATOR: 'Translator',
+  PROJECT_OBSERVER: 'Observer',
+} as const;
+
+const roleDisplayMap: Partial<Record<UserRole, string>> = {
+  [UserRole.PROJECT_MANAGER]: ROLES.PROJECT_MANAGER,
+  [UserRole.TRANSLATOR]: ROLES.PROJECT_TRANSLATOR,
+  [UserRole.SUPER_ADMIN]: ROLES.SUPER_ADMIN,
+  [UserRole.ORG_OWNER]: ROLES.ORG_OWNER,
+  [UserRole.ORG_MANAGER]: ROLES.ORG_MANAGER,
+  [UserRole.PROJECT_OBSERVER]: ROLES.PROJECT_OBSERVER,
+};
+
+export function getDisplayRole(role: number): string {
+  return roleDisplayMap[role as UserRole] ?? 'Unknown';
+}
+
+export interface RoleOption {
+  value: UserRole;
+  label: string;
+}
+
+export const ROLE_OPTIONS: RoleOption[] = (
+  Object.entries(roleDisplayMap) as Array<[string, string]>
+).map(([value, label]) => ({
+  value: Number(value) as UserRole,
+  label,
+}));
+
+export const PROJECT_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(r =>
+  [UserRole.PROJECT_MANAGER, UserRole.TRANSLATOR, UserRole.PROJECT_OBSERVER].includes(r.value)
+);
 
 export const ChapterAssignmentStatusDisplay: Record<ChapterAssignmentStatus, string> = {
   [ChapterAssignmentStatus.NOT_STARTED]: 'Not Started',
