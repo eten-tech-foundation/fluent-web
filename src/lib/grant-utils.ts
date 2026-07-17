@@ -34,10 +34,11 @@ export function isManager(activeGrants: UserGrant[]): boolean {
   return activeGrants.some(g => MANAGER_ROLES.includes(g.roleName));
 }
 
+const ROLES_WITH_USER_VIEW = ['Org Manager', 'Org Owner', 'SuperAdmin'];
 /**
  * Alias: can the user view the /users table?
- * Same as isManager — all manager roles have USER_VIEW.
+ * Same as canViewUsers — all manager roles have USER_VIEW.
  */
 export function canViewUsers(activeGrants: UserGrant[]): boolean {
-  return isManager(activeGrants);
+  return activeGrants.some(g => ROLES_WITH_USER_VIEW.includes(g.roleName));
 }

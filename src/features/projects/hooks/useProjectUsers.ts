@@ -35,14 +35,18 @@ const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
 
   return (await res.json()) as ProjectUser[];
 };
-const addProjectUsers = async (projectId: number, userIds: number[]): Promise<ProjectUser[]> => {
+const addProjectUsers = async (
+  projectId: number,
+  userIds: number[],
+  roleId: number
+): Promise<ProjectUser[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ userIds }),
+    body: JSON.stringify({ userIds, roleId }),
   });
 
   if (!res.ok) await parseErrorMessage(res, 'Failed to add users to project');
@@ -79,7 +83,8 @@ export const useAddProjectUsers = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userIds }: { userIds: number[] }) => addProjectUsers(projectId, userIds),
+    mutationFn: ({ userIds, roleId }: { userIds: number[]; roleId: number }) =>
+      addProjectUsers(projectId, userIds, roleId),
     onSuccess: newUsers => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev => {
         const existing = prev ?? [];
@@ -103,6 +108,41 @@ export const useRemoveProjectUser = (projectId: number) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.filter(u => u.userId !== userId) : []
       );
+    },
+  });
+};
+
+const updateProjectUserRole = async (
+  projectId: number,
+  userId: number,
+  roleId: number
+): Promise<ProjectUser> => {
+  const res = await fetch(`${config.api.url}/projects/${projectId}/users/${userId}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ roleId }),
+  });
+
+  if (!res.ok) await parseErrorMessage(res, 'Failed to update user role');
+  return (await res.json()) as ProjectUser;
+};
+
+export const useUpdateProjectUserRole = (projectId: number) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, roleId }: { userId: number; roleId: number }) =>
+      updateProjectUserRole(projectId, userId, roleId),
+    onSuccess: (_updatedUser, { userId, roleId }) => {
+      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
+        prev ? prev.map(u => (u.userId === userId ? { ...u, roleID: roleId } : u)) : []
+      );
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId] });
     },
   });
 };
