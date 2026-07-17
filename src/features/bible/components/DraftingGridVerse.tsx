@@ -126,10 +126,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                     </p>
                   ) : (
                     <p className='text-muted-foreground min-h-12 leading-relaxed'>
-                      {t(
-                        'noContentAvailable',
-                        "This Bible version doesn't have content in this passage."
-                      )}
+                      {t('noContentAvailable')}
                     </p>
                   )}
                 </div>
