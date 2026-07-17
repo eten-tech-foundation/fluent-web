@@ -1,8 +1,29 @@
+import { useEffect, useState } from 'react';
+
 import { CircleCheck, Info, LoaderCircle, OctagonX, TriangleAlert } from 'lucide-react';
-import { useTheme } from 'next-themes';
 import { Toaster as Sonner } from 'sonner';
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
+
+const useTheme = () => {
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateTheme = () => {
+      setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return { theme };
+};
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = 'system' } = useTheme();

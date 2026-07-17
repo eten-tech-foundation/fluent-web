@@ -23,6 +23,7 @@ interface DraftingHeaderProps {
   isComplete: boolean;
   isDraft: boolean;
   buttonText: string | undefined;
+  activeFindingsCount?: number;
   onBack: () => void;
   onToggleResources: () => void;
   onSubmit: () => Promise<void>;
@@ -39,6 +40,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   isComplete,
   isDraft,
   buttonText,
+  activeFindingsCount,
   onBack,
   onToggleResources,
   onSubmit,
@@ -100,11 +102,14 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
                 <TooltipTrigger asChild>
                   <Button
                     aria-pressed={showResources}
-                    className='bg-primary flex cursor-pointer items-center gap-2'
+                    className='bg-primary relative flex cursor-pointer items-center gap-2'
                     type='button'
                     onClick={onToggleResources}
                   >
                     <BookText color='#ffffff' />
+                    {activeFindingsCount !== undefined && activeFindingsCount > 0 && (
+                      <span className='absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 ring-2 ring-white'></span>
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent

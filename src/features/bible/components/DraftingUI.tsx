@@ -709,6 +709,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   return (
     <div className='flex h-full flex-col overflow-hidden'>
       <DraftingHeader
+        activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}
         hasAnyError={hasAnyError}
         isAnythingSaving={isAnythingSaving}

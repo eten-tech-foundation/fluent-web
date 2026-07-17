@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
@@ -23,7 +23,6 @@ export function useAiSuggestions(
   activeVerseNumber: number,
   isAiEnabled = false
 ) {
-  const [suggestions, setSuggestions] = useState<Record<number, string>>({});
   const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
   const lastQueuedVerseRef = useRef<number>(-1);
   const hasCheckedThresholdRef = useRef(false);
@@ -36,13 +35,12 @@ export function useAiSuggestions(
     currentChapterRef.current = chapterNumber;
   }
 
-  const fetchSuggestions = useCallback(async () => {
-    if (!isAiEnabled) return;
-    const bibleTextIds = Object.keys(verseMapping);
-    if (bibleTextIds.length === 0) return;
+  const bibleTextIds = Object.keys(verseMapping);
+  const idsStr = bibleTextIds.join(',');
 
-    try {
-      const idsStr = bibleTextIds.join(',');
+  const { data: fetchedSuggestions } = useQuery({
+    queryKey: ['ai-suggestions', projectUnitId, idsStr],
+    queryFn: async () => {
       const url = `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}`;
       // eslint-disable-next-line no-console
       console.debug('[AI Suggestions] GET', {
@@ -56,52 +54,43 @@ export function useAiSuggestions(
           'Content-Type': 'application/json',
         },
       });
-      if (res.ok) {
-        const data = (await res.json()) as { data: AiSuggestion[] };
-        // eslint-disable-next-line no-console
-        console.debug('[AI Suggestions] GET response', {
-          status: res.status,
-          suggestionsCount: data.data.length,
-          data: data.data,
-        });
-        const newSuggestions: Record<number, string> = {};
-
-        data.data.forEach((item: AiSuggestion) => {
-          if (item.bibleTextId in verseMapping) {
-            const vNum = verseMapping[item.bibleTextId];
-            newSuggestions[vNum] = item.suggestedText;
-          }
-        });
-
-        setSuggestions(prev => {
-          // Only update if changed
-          const isChanged = Object.entries(newSuggestions).some(([k, v]) => prev[Number(k)] !== v);
-          if (isChanged) return { ...prev, ...newSuggestions };
-          return prev;
-        });
-      } else {
+      if (!res.ok) {
         // eslint-disable-next-line no-console
         console.debug('[AI Suggestions] GET failed', {
           status: res.status,
           statusText: res.statusText,
         });
+        throw new Error('Failed to fetch AI suggestions');
       }
-    } catch (e) {
+      const data = (await res.json()) as { data: AiSuggestion[] };
       // eslint-disable-next-line no-console
-      console.error('Failed to fetch AI suggestions', e);
+      console.debug('[AI Suggestions] GET response', {
+        status: res.status,
+        suggestionsCount: data.data.length,
+      });
+      return data.data;
+    },
+    enabled: isAiEnabled && bibleTextIds.length > 0,
+    refetchInterval: query => {
+      const data = query.state.data as AiSuggestion[] | undefined;
+      if (!data) return 5000;
+      // Stop polling once we have suggestions for all requested text IDs
+      if (data.length >= bibleTextIds.length) return false;
+      return 5000;
+    },
+  });
+
+  const suggestions = useMemo(() => {
+    const map: Record<number, string> = {};
+    if (fetchedSuggestions) {
+      fetchedSuggestions.forEach(item => {
+        if (item.bibleTextId in verseMapping) {
+          map[verseMapping[item.bibleTextId]] = item.suggestedText;
+        }
+      });
     }
-  }, [projectUnitId, verseMapping, isAiEnabled]);
-
-  // Initial fetch and polling
-  useEffect(() => {
-    if (!isAiEnabled) return;
-
-    void fetchSuggestions();
-    const interval = setInterval(() => {
-      void fetchSuggestions();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchSuggestions, isAiEnabled]);
+    return map;
+  }, [fetchedSuggestions, verseMapping]);
 
   // Queue next verses when active verse changes
   useEffect(() => {
