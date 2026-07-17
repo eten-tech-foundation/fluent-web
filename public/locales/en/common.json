@@ -39,5 +39,5 @@
   "connectivityTooltipUsually": "Usually Connected — Resources load on demand when chapters open; no download preparation is required.",
   "connectivityTooltipSometimes": "Sometimes Connected — The app silently caches assigned chapters in the background when WiFi is detected; assigned translators take no action.",
   "connectivityTooltipRarely": "Rarely Connected — The app prompts translators to prepare their device each time WiFi is detected before going offline.",
-  "noContentAvailable": "This Bible version doesn't have content in this passage."
+  "noContentAvailable": "This Bible version doesn't have content for this passage."
 }
