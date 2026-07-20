@@ -258,11 +258,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                     const textToRender =
                       selectedPanel === 1
                         ? v.text
-                        : (bibleVerseMap.get(v.verseNumber) ??
-                          t(
-                            'noContentAvailable',
-                            "This Bible version doesn't have content in this passage."
-                          ));
+                        : (bibleVerseMap.get(v.verseNumber) ?? t('noContentAvailable'));
                     return (
                       <React.Fragment key={v.verseNumber}>
                         <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>

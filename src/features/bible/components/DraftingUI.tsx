@@ -761,175 +761,173 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           />
         )}
 
-        <div className='w-full flex-1 overflow-hidden px-8'>
+        <div className='w-full flex-1 overflow-hidden'>
           <div
-            className={`${showResources ? 'ml-0' : 'ml-2'} flex h-full flex-col overflow-hidden ${showResources ? 'rounded-md border' : ''}`}
+            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full w-full content-start`}
+            style={{
+              gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
+              gridTemplateRows: 'auto 1fr',
+              scrollbarGutter: 'stable',
+            }}
           >
-            <div
-              ref={targetScrollRef}
-              className='relative flex h-full flex-col overflow-y-auto'
-              style={{ scrollbarGutter: 'stable' }}
-              onScroll={() => !readOnly && updateButtonPosition()}
-            >
-              <div className='bg-background sticky top-0 z-10 shrink-0'>
-                <div
-                  className='grid'
-                  style={{
-                    gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
-                  }}
-                >
-                  {!isPericopeMode && <div className='bg-background w-8 px-4 py-3' />}
-                  <div className='bg-background flex items-center gap-1 px-6 py-3'>
-                    <button
-                      className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
-                        openResourcePanel
-                          ? selectedPanel === 1
-                            ? 'border-primary border-b-2 pb-1'
-                            : 'text-muted-foreground'
-                          : ''
-                      }`}
-                      disabled={!openResourcePanel}
-                      onClick={() => setSelectedPanel(1)}
-                    >
-                      {projectItem.bibleName}
-                    </button>
+            {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
+            <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
+              <button
+                className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
+                  openResourcePanel
+                    ? selectedPanel === 1
+                      ? 'border-primary border-b-2 pb-1'
+                      : 'text-muted-foreground'
+                    : ''
+                }`}
+                disabled={!openResourcePanel}
+                onClick={() => setSelectedPanel(1)}
+              >
+                {projectItem.bibleName}
+              </button>
 
-                    {openResourcePanel && (
-                      <>
-                        <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
-                          |
-                        </span>
-                        <button
-                          className={`cursor-pointer text-2xl font-bold transition-colors ${
-                            selectedPanel === 2
-                              ? 'border-primary border-b-2 pb-1'
-                              : 'text-muted-foreground'
-                          }`}
-                          onClick={() => setSelectedPanel(2)}
-                        >
-                          {bibleTabLabel}
-                        </button>
-                        <X
-                          className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
-                          onClick={handleBibleTabClose}
-                        />
-                      </>
-                    )}
-                  </div>
-
-                  <div className='bg-background px-6 py-3'>
-                    <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
-                      {projectItem.targetLanguage}
-                    </h3>
-                  </div>
-                </div>
-              </div>
-              {selectedPanel === 2 &&
-                bibleContentLoading &&
-                renderPanelTwoPlaceholder(
-                  <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
-                  true
-                )}
-
-              {selectedPanel === 2 &&
-                !bibleContentLoading &&
-                bibleVerses.length === 0 &&
-                renderPanelTwoPlaceholder(
-                  <p className='text-muted-foreground px-6 text-center text-sm'>
-                    {t(
-                      'noContentAvailable',
-                      "This Bible version doesn't have content in this passage."
-                    )}
-                  </p>,
-                  false
-                )}
-
-              {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+              {openResourcePanel && (
                 <>
-                  {displayMode === 'pericope' && isPericopeLoading ? (
-                    <div className='flex h-full items-center justify-center py-12'>
-                      <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
-                    </div>
-                  ) : isPericopeMode && pericopes ? (
-                    <DraftingGridPericope
-                      activeVerseId={activeVerseId}
-                      aiSuggestions={aiSuggestions}
-                      bibleVerseMap={bibleVerseMap}
-                      globalNextUntouchedVerse={globalNextUntouchedVerse}
-                      handleActiveVerseChange={handleActiveVerseChange}
-                      handleKeyDown={handleKeyDown}
-                      handleNextClick={handleNextClick}
-                      handleTextChange={handleTextChange}
-                      isAiThresholdMet={isAiThresholdMet}
-                      isTranslationComplete={isTranslationComplete}
-                      pericopes={pericopes}
-                      projectItem={projectItem}
-                      readOnly={readOnly}
-                      selectedPanel={selectedPanel}
-                      sourceVerses={sourceVerses}
-                      textareaRefs={textareaRefs}
-                      verseRefs={verseRefs}
-                      verses={verses}
-                    />
-                  ) : (
-                    <DraftingGridVerse
-                      activeVerseId={activeVerseId}
-                      aiSuggestions={aiSuggestions}
-                      bibleVerseMap={bibleVerseMap}
-                      effectiveRevealedVerses={effectiveRevealedVerses}
-                      getPericopeStyle={getPericopeStyle}
-                      handleActiveVerseChange={handleActiveVerseChange}
-                      handleKeyDown={handleKeyDown}
-                      handleTextChange={handleTextChange}
-                      isAiThresholdMet={isAiThresholdMet}
-                      readOnly={readOnly}
-                      selectedPanel={selectedPanel}
-                      sourceVerses={sourceVerses}
-                      textareaRefs={textareaRefs}
-                      verseRefs={verseRefs}
-                      verses={verses}
-                    />
-                  )}
+                  <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
+                    |
+                  </span>
+                  <button
+                    className={`cursor-pointer text-2xl font-bold transition-colors ${
+                      selectedPanel === 2
+                        ? 'border-primary border-b-2 pb-1'
+                        : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setSelectedPanel(2)}
+                  >
+                    {bibleTabLabel}
+                  </button>
+                  <X
+                    className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
+                    onClick={handleBibleTabClose}
+                  />
                 </>
               )}
+            </div>
 
-              {!readOnly &&
-                !isPericopeMode &&
-                !isPericopeLoading &&
-                lastRevealedVerseNumber < totalSourceVerses && (
-                  <div className='absolute right-10 z-10' style={{ top: buttonTop }}>
-                    <TooltipProvider delayDuration={300}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
-                              isNextButtonEnabled
-                                ? 'hover:bg-primary-hover cursor-pointer text-white'
-                                : 'cursor-not-allowed bg-gray-300 text-gray-500'
-                            }`}
-                            disabled={!isNextButtonEnabled}
-                            onClick={handleNextClick}
-                          >
-                            {t('nextVerse', 'Next Verse')}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          align='center'
-                          className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
-                          side='top'
-                          sideOffset={8}
-                        >
-                          <div className='flex items-center gap-2'>
-                            <span>{t('nextVerse', 'Next Verse')}</span>
-                            <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
-                              Enter ↵
-                            </span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
+            <div className='bg-background sticky top-0 z-10 px-6 py-3'>
+              <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
+                {projectItem.targetLanguage}
+              </h3>
+            </div>
+
+            <div
+              className={`col-span-full flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
+            >
+              <div
+                ref={targetScrollRef}
+                className='relative flex h-full flex-col overflow-y-auto'
+                style={{ scrollbarGutter: 'stable' }}
+                onScroll={() => !readOnly && updateButtonPosition()}
+              >
+                {selectedPanel === 2 &&
+                  bibleContentLoading &&
+                  renderPanelTwoPlaceholder(
+                    <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
+                    true
+                  )}
+
+                {selectedPanel === 2 &&
+                  !bibleContentLoading &&
+                  bibleVerses.length === 0 &&
+                  renderPanelTwoPlaceholder(
+                    <p className='text-muted-foreground px-6 text-center text-sm'>
+                      {t('noContentAvailable')}
+                    </p>,
+                    false
+                  )}
+
+                {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                  <>
+                    {displayMode === 'pericope' && isPericopeLoading ? (
+                      <div className='flex h-full items-center justify-center py-12'>
+                        <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                      </div>
+                    ) : isPericopeMode && pericopes ? (
+                      <DraftingGridPericope
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        bibleVerseMap={bibleVerseMap}
+                        globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleNextClick={handleNextClick}
+                        handleTextChange={handleTextChange}
+                        isAiThresholdMet={isAiThresholdMet}
+                        isTranslationComplete={isTranslationComplete}
+                        pericopes={pericopes}
+                        projectItem={projectItem}
+                        readOnly={readOnly}
+                        selectedPanel={selectedPanel}
+                        sourceVerses={sourceVerses}
+                        textareaRefs={textareaRefs}
+                        verseRefs={verseRefs}
+                        verses={verses}
+                      />
+                    ) : (
+                      <DraftingGridVerse
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        bibleVerseMap={bibleVerseMap}
+                        effectiveRevealedVerses={effectiveRevealedVerses}
+                        getPericopeStyle={getPericopeStyle}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleTextChange={handleTextChange}
+                        isAiThresholdMet={isAiThresholdMet}
+                        readOnly={readOnly}
+                        selectedPanel={selectedPanel}
+                        sourceVerses={sourceVerses}
+                        textareaRefs={textareaRefs}
+                        verseRefs={verseRefs}
+                        verses={verses}
+                      />
+                    )}
+                  </>
                 )}
+
+                {!readOnly &&
+                  !isPericopeMode &&
+                  !isPericopeLoading &&
+                  lastRevealedVerseNumber < totalSourceVerses && (
+                    <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
+                                isNextButtonEnabled
+                                  ? 'hover:bg-primary-hover cursor-pointer text-white'
+                                  : 'cursor-not-allowed bg-gray-300 text-gray-500'
+                              }`}
+                              disabled={!isNextButtonEnabled}
+                              onClick={handleNextClick}
+                            >
+                              {t('nextVerse', 'Next Verse')}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            align='center'
+                            className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
+                            side='top'
+                            sideOffset={8}
+                          >
+                            <div className='flex items-center gap-2'>
+                              <span>{t('nextVerse', 'Next Verse')}</span>
+                              <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
+                                Enter ↵
+                              </span>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
+              </div>
             </div>
           </div>
         </div>
