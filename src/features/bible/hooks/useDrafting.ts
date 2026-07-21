@@ -20,6 +20,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const verseRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const initializedRef = useRef(false);
+  const pendingInitScrollRef = useRef<number | null>(null);
 
   const { debouncedSave, saveImmediately, getSaveStatus, setInitialContent } = useBibleTextDebounce(
     {
@@ -192,8 +193,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const activeVerseNumber = allVersesCompleted ? 1 : lastVerseWithContent.verseNumber;
     setActiveVerseId(activeVerseNumber);
     if (!allVersesCompleted && activeVerseNumber > 1 && !readOnly) {
-      const prevId = Math.max(1, activeVerseNumber - 1);
-      setTimeout(() => requestAnimationFrame(() => scrollVerseToTop(prevId, true)), 100);
+      pendingInitScrollRef.current = Math.max(1, activeVerseNumber - 1);
     }
     const initiallyRevealed = new Set<number>();
     if (readOnly) {
@@ -248,6 +248,10 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         }
       });
       updateButtonPosition();
+      if (pendingInitScrollRef.current !== null) {
+        scrollVerseToTop(pendingInitScrollRef.current, true);
+        pendingInitScrollRef.current = null;
+      }
     };
 
     const timer = setTimeout(resizeAll, 100);
@@ -268,7 +272,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         observer.disconnect();
       }
     };
-  }, [readOnly, autoResizeTextarea, updateButtonPosition]);
+  }, [readOnly, autoResizeTextarea, updateButtonPosition, scrollVerseToTop]);
 
   useLayoutEffect(() => {
     if (readOnly) return;
