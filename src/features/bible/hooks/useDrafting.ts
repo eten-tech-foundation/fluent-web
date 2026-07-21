@@ -62,7 +62,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     setButtonTop(top);
   }, [lastRevealedVerseNumber, readOnly]);
 
-  const scrollVerseToTop = useCallback((verseNumber: number) => {
+  const scrollVerseToTop = useCallback((verseNumber: number, force = false) => {
     const container = targetScrollRef.current;
     const row = verseRefs.current[verseNumber];
     if (!container || !row) return;
@@ -72,7 +72,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const rowBottomRelative = rowRect.bottom - containerRect.top;
 
     // If the row is already fully visible inside the scroll container, don't scroll
-    if (rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
+    if (!force && rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
       return;
     }
 
@@ -192,8 +192,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const activeVerseNumber = allVersesCompleted ? 1 : lastVerseWithContent.verseNumber;
     setActiveVerseId(activeVerseNumber);
     if (!allVersesCompleted && activeVerseNumber > 1 && !readOnly) {
-      const verseDiv = verseRefs.current[activeVerseNumber];
-      if (verseDiv) verseDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prevId = Math.max(1, activeVerseNumber - 1);
+      setTimeout(() => requestAnimationFrame(() => scrollVerseToTop(prevId, true)), 100);
     }
     const initiallyRevealed = new Set<number>();
     if (readOnly) {
