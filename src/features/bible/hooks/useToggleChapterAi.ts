@@ -28,9 +28,15 @@ export function useToggleChapterAi(chapterAssignmentId: number, projectId: strin
       return (await res.json()) as unknown;
     },
     onSuccess: () => {
-      // Invalidate the project details so the updated `isAiEnabled` status is fetched
+      // Invalidate the project details and assignments so the updated `isAiEnabled` status is fetched
       void queryClient.invalidateQueries({
         queryKey: ['projectDetails', String(projectId)],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['chapterAssignments', String(projectId)],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['userChapterAssignments'],
       });
     },
   });

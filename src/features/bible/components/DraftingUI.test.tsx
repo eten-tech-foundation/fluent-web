@@ -64,7 +64,11 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
 }));
 
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
-  useAiSuggestions: () => ({ suggestions: [], isAiThresholdMet: false }),
+  useAiSuggestions: () => ({
+    suggestions: [],
+    isAiThresholdMet: false,
+    isSuggestionsFetched: false,
+  }),
   useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 

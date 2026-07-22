@@ -38,10 +38,19 @@ export const translationLoader = async ({
   if (!userdetail) {
     throw new Error('User details are missing.');
   }
-  let projectItem =
-    (location.state as { projectItem?: ProjectItem }).projectItem ??
-    currentProjectItem ??
-    undefined;
+  const locationStateItem = (location.state as { projectItem?: ProjectItem }).projectItem;
+  let projectItem = currentProjectItem;
+
+  // Only use the location state if it's a different assignment than what we have in the store
+  if (
+    locationStateItem &&
+    locationStateItem.chapterAssignmentId !== currentProjectItem?.chapterAssignmentId
+  ) {
+    projectItem = locationStateItem;
+  } else if (!projectItem && locationStateItem) {
+    projectItem = locationStateItem;
+  }
+
   if (!projectItem) {
     throw new Error('Project item is missing. Please navigate from the project list.');
   }

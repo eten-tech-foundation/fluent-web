@@ -11,9 +11,20 @@ interface AiSuggestion {
   modelInfo?: string | null;
 }
 
+interface QueueNextPayload {
+  projectUnitId: number;
+  bibleId: number;
+  bookCode: string;
+  chapterNumber: number;
+  currentVerse: number;
+}
+
+// How long to wait before retrying a fetch when the active verse has no suggestion.
+const RETRY_DELAY_MS = 5000;
+
 // Custom hook that orchestrates the "Stay Ahead" workflow on the frontend.
-// It silently queues upcoming verses in the background when the drafter moves,
-// and periodically polls the API to fetch completed AI translations.
+// It queues upcoming verses in the background when the drafter moves,
+// and fetches suggestions on-demand when the active verse changes.
 export function useAiSuggestions(
   projectUnitId: number,
   bibleId: number,
@@ -24,30 +35,32 @@ export function useAiSuggestions(
   isAiEnabled = false
 ) {
   const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
+  const [settledVerse, setSettledVerse] = useState<number | null>(null);
+  const isSuggestionsFetched = settledVerse === activeVerseNumber;
   const lastQueuedVerseRef = useRef<number>(-1);
   const hasCheckedThresholdRef = useRef(false);
   const currentChapterRef = useRef<number>(chapterNumber);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset refs when chapter changes
   if (currentChapterRef.current !== chapterNumber) {
     lastQueuedVerseRef.current = -1;
     hasCheckedThresholdRef.current = false;
+    setSettledVerse(null);
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     currentChapterRef.current = chapterNumber;
   }
 
   const bibleTextIds = Object.keys(verseMapping);
   const idsStr = bibleTextIds.join(',');
 
-  const { data: fetchedSuggestions } = useQuery({
+  const { data: fetchedSuggestions, refetch } = useQuery({
     queryKey: ['ai-suggestions', projectUnitId, idsStr],
     queryFn: async () => {
       const url = `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}`;
-      // eslint-disable-next-line no-console
-      console.debug('[AI Suggestions] GET', {
-        url,
-        projectUnitId,
-        bibleTextIdCount: bibleTextIds.length,
-      });
       const res = await fetch(url, {
         credentials: 'include',
         headers: {
@@ -55,29 +68,13 @@ export function useAiSuggestions(
         },
       });
       if (!res.ok) {
-        // eslint-disable-next-line no-console
-        console.debug('[AI Suggestions] GET failed', {
-          status: res.status,
-          statusText: res.statusText,
-        });
         throw new Error('Failed to fetch AI suggestions');
       }
       const data = (await res.json()) as { data: AiSuggestion[] };
-      // eslint-disable-next-line no-console
-      console.debug('[AI Suggestions] GET response', {
-        status: res.status,
-        suggestionsCount: data.data.length,
-      });
       return data.data;
     },
     enabled: isAiEnabled && bibleTextIds.length > 0,
-    refetchInterval: query => {
-      const data = query.state.data as AiSuggestion[] | undefined;
-      if (!data) return 5000;
-      // Stop polling once we have suggestions for all requested text IDs
-      if (data.length >= bibleTextIds.length) return false;
-      return 5000;
-    },
+    // No refetchInterval — fetches are triggered on-demand by verse navigation.
   });
 
   const suggestions = useMemo(() => {
@@ -92,62 +89,112 @@ export function useAiSuggestions(
     return map;
   }, [fetchedSuggestions, verseMapping]);
 
-  // Queue next verses when active verse changes
+  // Refetch suggestions when the active verse changes. If the active verse has
+  // no suggestion after the initial fetch, retry once after RETRY_DELAY_MS.
+  // After the retry, if still no suggestion, mark as settled ("not available").
   useEffect(() => {
-    // If AI is disabled, we only want to ping the backend ONCE per chapter to discover if the threshold is met
-    if (!isAiEnabled && hasCheckedThresholdRef.current) return;
+    if (!isAiEnabled) return;
 
-    if (activeVerseNumber > lastQueuedVerseRef.current) {
-      if (!isAiEnabled) {
-        hasCheckedThresholdRef.current = true;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
+    void refetch().then(result => {
+      const data = result.data;
+      const hasActiveSuggestion = data?.some(item => {
+        const verseNum = verseMapping[item.bibleTextId];
+        return verseNum === activeVerseNumber;
+      });
+
+      if (hasActiveSuggestion) {
+        // Suggestion already available — nothing more to do
+        return;
       }
-      lastQueuedVerseRef.current = activeVerseNumber;
 
-      const requestBody = {
-        projectUnitId,
-        bibleId,
-        bookCode,
-        chapterNumber,
-        currentVerse: activeVerseNumber,
-      };
-      // eslint-disable-next-line no-console
-      console.debug('[AI Suggestions] POST queue-next', requestBody);
+      // No suggestion yet — schedule a single retry
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        void refetch().then(() => {
+          // After retry, mark as settled regardless of result
+          setSettledVerse(activeVerseNumber);
+        });
+      }, RETRY_DELAY_MS);
+    });
 
-      fetch(`${config.api.url}/ai-suggestions/queue-next`, {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeVerseNumber, isAiEnabled]);
+
+  // Mutation for queuing upcoming verses for AI translation
+  const queueNextMutation = useMutation({
+    mutationFn: async (payload: QueueNextPayload) => {
+      const res = await fetch(`${config.api.url}/ai-suggestions/queue-next`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
-      })
-        .then(async res => {
-          if (!res.ok) {
-            const errorBody = await res.text().catch(() => 'no body');
-            // eslint-disable-next-line no-console
-            console.debug('[AI Suggestions] POST queue-next FAILED', {
-              status: res.status,
-              body: errorBody,
-            });
-          } else {
-            // eslint-disable-next-line no-console
-            console.debug('[AI Suggestions] POST queue-next OK', { status: res.status });
-            const data = (await res.json().catch(() => null)) as { thresholdMet?: boolean } | null;
-            if (data?.thresholdMet) {
-              setIsAiThresholdMet(true);
-            }
-          }
-        })
-        .catch(e => {
-          // eslint-disable-next-line no-console
-          console.error('Failed to queue AI suggestions', e);
-        });
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to queue AI suggestions');
+      }
+      return (await res.json()) as { thresholdMet?: boolean };
+    },
+    onSuccess: data => {
+      if (data.thresholdMet) {
+        setIsAiThresholdMet(true);
+      }
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Failed to queue AI suggestions' });
+    },
+  });
+
+  // Assign directly during render so the ref is never stale inside the effect.
+  const queueNextRef = useRef(queueNextMutation.mutate);
+  queueNextRef.current = queueNextMutation.mutate;
+
+  const prevIsAiEnabledRef = useRef(isAiEnabled);
+
+  // Queue next verses when active verse changes
+  useEffect(() => {
+    // If AI is disabled, we only want to ping the backend ONCE per chapter to discover if the threshold is met
+    if (!isAiEnabled && hasCheckedThresholdRef.current) {
+      prevIsAiEnabledRef.current = isAiEnabled;
+      return;
     }
+
+    const justEnabled = isAiEnabled && !prevIsAiEnabledRef.current;
+
+    if (activeVerseNumber > lastQueuedVerseRef.current || justEnabled) {
+      if (!isAiEnabled) {
+        hasCheckedThresholdRef.current = true;
+      }
+      lastQueuedVerseRef.current = activeVerseNumber;
+
+      queueNextRef.current({
+        projectUnitId,
+        bibleId,
+        bookCode,
+        chapterNumber,
+        currentVerse: activeVerseNumber,
+      });
+    }
+
+    prevIsAiEnabledRef.current = isAiEnabled;
   }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber, isAiEnabled]);
 
-  return { suggestions, isAiThresholdMet };
+  return { suggestions, isAiThresholdMet, isSuggestionsFetched };
 }
 
+// Tracks whether the drafter used or dismissed an AI suggestion.
 export const useTrackAiUsage = () => {
   return useMutation({
     mutationFn: async ({

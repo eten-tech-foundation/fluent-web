@@ -17,6 +17,7 @@ interface DraftingTargetColumnProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isSuggestionsFetched: boolean;
 }
 
 export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
@@ -31,12 +32,20 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
   handleKeyDown,
   aiSuggestions,
   isAiThresholdMet,
+  isSuggestionsFetched,
 }) => {
   const isActive = !readOnly && activeVerseId === verseNumber;
   const currentTargetVerse = verses.find(v => v.verseNumber === verseNumber);
   const shouldShowTarget = readOnly || isActive || effectiveRevealedVerses.has(verseNumber);
   const currentProjectItem = useAppStore(state => state.currentProjectItem);
   const { t } = useTranslation();
+
+  const isAiActiveNoSuggestion =
+    isActive &&
+    currentProjectItem?.isAiEnabled &&
+    isAiThresholdMet &&
+    !aiSuggestions[verseNumber] &&
+    !currentTargetVerse?.content.trim();
 
   return (
     <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
@@ -60,10 +69,7 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             autoCorrect='on'
             className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
             placeholder={
-              isActive &&
-              currentProjectItem?.isAiEnabled &&
-              isAiThresholdMet &&
-              !aiSuggestions[verseNumber]
+              isAiActiveNoSuggestion && !isSuggestionsFetched
                 ? t('generatingAiSuggestion', 'Generating...')
                 : t('enterTranslation', 'Enter translation...')
             }
@@ -73,6 +79,11 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             onFocus={() => handleActiveVerseChange(verseNumber)}
             onKeyDown={handleKeyDown}
           />
+          {isAiActiveNoSuggestion && isSuggestionsFetched && (
+            <p className='text-destructive pb-1 text-sm font-medium'>
+              {t('aiTranslationNotAvailable', 'AI translation not available.')}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -95,6 +106,7 @@ interface DraftingGridVerseProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isSuggestionsFetched: boolean;
 }
 
 export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
@@ -113,6 +125,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   handleKeyDown,
   aiSuggestions,
   isAiThresholdMet,
+  isSuggestionsFetched,
 }) => {
   const { t } = useTranslation();
   return (
@@ -158,6 +171,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
               handleKeyDown={handleKeyDown}
               handleTextChange={handleTextChange}
               isAiThresholdMet={isAiThresholdMet}
+              isSuggestionsFetched={isSuggestionsFetched}
               readOnly={readOnly}
               textareaRefs={textareaRefs}
               verseNumber={verse.verseNumber}
