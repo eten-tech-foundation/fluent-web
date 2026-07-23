@@ -38,7 +38,7 @@ export const useAppStore = create<AppState>()(
         const currentId = get().currentProjectItem?.chapterAssignmentId;
         const newId = currentProjectItem?.chapterAssignmentId;
 
-        if (currentId !== newId) {
+        if (currentProjectItem === null || currentId !== newId) {
           // Clear threshold status when changing projects
           set({ currentProjectItem, isAiThresholdMet: null });
         } else {
