@@ -3,6 +3,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -25,7 +26,7 @@ interface DraftingGridPericopeProps {
   handleNextClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
-  isSuggestionsFetched: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
 interface TargetVersesGroupProps {
@@ -43,7 +44,7 @@ interface TargetVersesGroupProps {
   handleNextClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
-  isSuggestionsFetched: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
 export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
@@ -61,7 +62,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   handleNextClick,
   aiSuggestions,
   isAiThresholdMet,
-  isSuggestionsFetched,
+  suggestionStatus,
 }) => {
   const { t } = useTranslation();
   const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
@@ -132,7 +133,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                       isAiThresholdMet &&
                       !aiSuggestions[v.verseNumber] &&
                       !currentTargetVerse?.content.trim() &&
-                      !isSuggestionsFetched
+                      suggestionStatus === 'generating'
                         ? t('generatingAiSuggestion', 'Generating...')
                         : t('typeHere', 'Type here...')
                     }
@@ -167,11 +168,27 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                 isAiThresholdMet &&
                 !aiSuggestions[v.verseNumber] &&
                 !currentTargetVerse?.content.trim() &&
-                isSuggestionsFetched && (
-                  <p className='text-destructive mt-1 text-sm font-medium'>
-                    {t('aiTranslationNotAvailable', 'AI translation not available.')}
-                  </p>
-                )}
+                (() => {
+                  switch (suggestionStatus) {
+                    case 'error':
+                      return (
+                        <p className='text-destructive mt-1 text-sm font-medium'>
+                          {t('aiTranslationNotAvailable', 'AI translation not available.')}
+                        </p>
+                      );
+                    case 'unavailable':
+                      return (
+                        <p className='text-destructive mt-1 text-sm font-medium'>
+                          {t(
+                            'aiTranslationNotYetReady',
+                            'AI translation not yet ready. Please refresh the page to view the AI translation.'
+                          )}
+                        </p>
+                      );
+                    default:
+                      return null;
+                  }
+                })()}
             </div>
           </div>
         );
@@ -210,7 +227,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   handleNextClick,
   aiSuggestions,
   isAiThresholdMet,
-  isSuggestionsFetched,
+  suggestionStatus,
 }) => {
   const { t } = useTranslation();
   const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
@@ -324,10 +341,10 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   handleNextClick={handleNextClick}
                   handleTextChange={handleTextChange}
                   isAiThresholdMet={isAiThresholdMet}
-                  isSuggestionsFetched={isSuggestionsFetched}
                   isTranslationComplete={isTranslationComplete}
                   lastSourceVerseNumber={lastSourceVerseNumber}
                   readOnly={readOnly}
+                  suggestionStatus={suggestionStatus}
                   textareaRefs={textareaRefs}
                   verses={verses}
                 />

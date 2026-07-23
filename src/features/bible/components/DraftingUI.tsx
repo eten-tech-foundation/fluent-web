@@ -210,7 +210,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const {
     suggestions: aiSuggestions,
     isAiThresholdMet,
-    isSuggestionsFetched,
+    suggestionStatus,
   } = useAiSuggestions(
     projectItem.projectUnitId,
     projectItem.bibleId,
@@ -224,10 +224,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const fireToast = useAiSuggestionToast();
 
   useEffect(() => {
-    if (isAiThresholdMet && !projectItem.isAiEnabled) {
+    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
       fireToast(projectItem.targetLanguage);
     }
-  }, [isAiThresholdMet, fireToast, projectItem.targetLanguage, projectItem.isAiEnabled]);
+  }, [
+    isAiThresholdMet,
+    fireToast,
+    projectItem.targetLanguage,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
 
   const {
     pericopes,
@@ -537,7 +544,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Recalculate floating button position when AI suggestions load or fail (which changes row height)
   useEffect(() => {
     updateButtonPosition();
-  }, [isSuggestionsFetched, aiSuggestions, updateButtonPosition]);
+  }, [suggestionStatus, aiSuggestions, updateButtonPosition]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -643,11 +650,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
                         handleTextChange={handleTextChangeWithTracking}
-                        isAiThresholdMet={isAiThresholdMet}
-                        isSuggestionsFetched={isSuggestionsFetched}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         lastSourceVerseNumber={lastSourceVerseNumber}
                         readOnly={readOnly}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verses={verses}
                       />
@@ -689,9 +696,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   handleActiveVerseChange={handleActiveVerseChange}
                   handleKeyDown={handleKeyDown}
                   handleTextChange={handleTextChangeWithTracking}
-                  isAiThresholdMet={isAiThresholdMet}
-                  isSuggestionsFetched={isSuggestionsFetched}
+                  isAiThresholdMet={isAiThresholdMet ?? false}
                   readOnly={readOnly}
+                  suggestionStatus={suggestionStatus}
                   textareaRefs={textareaRefs}
                   verseNumber={verse.verseNumber}
                   verses={verses}
@@ -721,7 +728,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       aiSuggestions,
       effectiveRevealedVerses,
       isAiThresholdMet,
-      isSuggestionsFetched,
+      suggestionStatus,
       verseRefs,
     ]
   );
@@ -877,14 +884,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
                         handleTextChange={handleTextChangeWithTracking}
-                        isAiThresholdMet={isAiThresholdMet}
-                        isSuggestionsFetched={isSuggestionsFetched}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         pericopes={pericopes}
                         projectItem={projectItem}
                         readOnly={readOnly}
                         selectedPanel={selectedPanel}
                         sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verseRefs={verseRefs}
                         verses={verses}
@@ -899,11 +906,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleTextChange={handleTextChangeWithTracking}
-                        isAiThresholdMet={isAiThresholdMet}
-                        isSuggestionsFetched={isSuggestionsFetched}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         readOnly={readOnly}
                         selectedPanel={selectedPanel}
                         sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verseRefs={verseRefs}
                         verses={verses}

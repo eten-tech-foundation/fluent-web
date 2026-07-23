@@ -14,7 +14,7 @@ import { ChapterAssignmentStatus, UserRole } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export const AiTranslationSettings: React.FC = () => {
-  const { currentProjectItem, setCurrentProjectItem, userdetail } = useAppStore();
+  const { currentProjectItem, setCurrentProjectItem, userdetail, isAiThresholdMet } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
 
   const { mutate: toggleAi, isPending } = useToggleChapterAi(
@@ -43,16 +43,41 @@ export const AiTranslationSettings: React.FC = () => {
   const isTranslator = userdetail?.role === UserRole.TRANSLATOR;
   const isDraftingStage = currentProjectItem?.chapterStatus === ChapterAssignmentStatus.DRAFT;
 
-  if (!isTranslator || !isDraftingStage || !isTranslationView) {
-    return null;
-  }
+  const renderContent = () => {
+    switch (true) {
+      case !isTranslator || !isDraftingStage || !isTranslationView:
+        return null;
+
+      case isAiThresholdMet === null:
+        // Loading skeleton (matches the exact height/padding of the real one)
+        return (
+          <div className='border-primary bg-background flex w-full animate-pulse items-center justify-between rounded-[12px] border p-4 shadow-sm'>
+            <div className='h-5 w-48 rounded bg-gray-200' />
+            <div className='h-6 w-11 rounded-full bg-gray-200' />
+          </div>
+        );
+
+      case isAiThresholdMet === false:
+        return null;
+
+      default:
+        return (
+          <div className='border-primary bg-background flex w-full items-center justify-between rounded-[12px] border p-4 shadow-sm'>
+            <span className='text-foreground text-sm font-semibold'>
+              AI Translation Suggestions
+            </span>
+            <Switch checked={localAiState} disabled={isPending} onCheckedChange={handleToggleAi} />
+          </div>
+        );
+    }
+  };
+
+  const content = renderContent();
+  if (!content) return null;
 
   return (
     <>
-      <div className='border-primary bg-background flex w-full items-center justify-between rounded-[12px] border p-4 shadow-sm'>
-        <span className='text-foreground text-sm font-semibold'>AI Translation Suggestions</span>
-        <Switch checked={localAiState} disabled={isPending} onCheckedChange={handleToggleAi} />
-      </div>
+      {content}
       <Accordion
         collapsible
         className='border-y pt-2'

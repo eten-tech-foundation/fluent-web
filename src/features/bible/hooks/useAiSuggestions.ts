@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
+import { useAppStore } from '@/store/store';
 
 interface AiSuggestion {
   bibleTextId: number;
@@ -22,8 +23,11 @@ interface QueueNextPayload {
 // How long to wait before retrying a fetch when the active verse has no suggestion.
 const RETRY_DELAY_MS = 5000;
 
+export type SuggestionStatus = 'idle' | 'generating' | 'unavailable' | 'error';
+
 // Custom hook that orchestrates the "Stay Ahead" workflow on the frontend.
 // It queues upcoming verses in the background when the drafter moves,
+// and fetches suggestions on-demand when the active verse changes.
 // and fetches suggestions on-demand when the active verse changes.
 export function useAiSuggestions(
   projectUnitId: number,
@@ -34,9 +38,9 @@ export function useAiSuggestions(
   activeVerseNumber: number,
   isAiEnabled = false
 ) {
-  const [isAiThresholdMet, setIsAiThresholdMet] = useState(false);
-  const [settledVerse, setSettledVerse] = useState<number | null>(null);
-  const isSuggestionsFetched = settledVerse === activeVerseNumber;
+  const isAiThresholdMet = useAppStore(state => state.isAiThresholdMet);
+  const setIsAiThresholdMet = useAppStore(state => state.setIsAiThresholdMet);
+  const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>('idle');
   const lastQueuedVerseRef = useRef<number>(-1);
   const hasCheckedThresholdRef = useRef(false);
   const currentChapterRef = useRef<number>(chapterNumber);
@@ -46,7 +50,7 @@ export function useAiSuggestions(
   if (currentChapterRef.current !== chapterNumber) {
     lastQueuedVerseRef.current = -1;
     hasCheckedThresholdRef.current = false;
-    setSettledVerse(null);
+    setSuggestionStatus('idle');
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
@@ -79,6 +83,8 @@ export function useAiSuggestions(
 
   const suggestions = useMemo(() => {
     const map: Record<number, string> = {};
+    if (!isAiEnabled) return map; // Ensure no cached suggestions bleed through when turned off
+
     if (fetchedSuggestions) {
       fetchedSuggestions.forEach(item => {
         if (item.bibleTextId in verseMapping) {
@@ -87,7 +93,7 @@ export function useAiSuggestions(
       });
     }
     return map;
-  }, [fetchedSuggestions, verseMapping]);
+  }, [fetchedSuggestions, verseMapping, isAiEnabled]);
 
   // Refetch suggestions when the active verse changes. If the active verse has
   // no suggestion after the initial fetch, retry once after RETRY_DELAY_MS.
@@ -95,12 +101,23 @@ export function useAiSuggestions(
   useEffect(() => {
     if (!isAiEnabled) return;
 
+    let isStale = false;
+
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
 
+    setSuggestionStatus('generating');
+
     void refetch().then(result => {
+      if (isStale) return;
+
+      if (result.isError) {
+        setSuggestionStatus('error');
+        return;
+      }
+
       const data = result.data;
       const hasActiveSuggestion = data?.some(item => {
         const verseNum = verseMapping[item.bibleTextId];
@@ -108,21 +125,30 @@ export function useAiSuggestions(
       });
 
       if (hasActiveSuggestion) {
-        // Suggestion already available — nothing more to do
+        setSuggestionStatus('idle');
         return;
       }
 
       // No suggestion yet — schedule a single retry
       retryTimerRef.current = setTimeout(() => {
         retryTimerRef.current = null;
-        void refetch().then(() => {
-          // After retry, mark as settled regardless of result
-          setSettledVerse(activeVerseNumber);
+        void refetch().then(retryResult => {
+          if (isStale) return;
+
+          if (retryResult.isError) {
+            setSuggestionStatus('error');
+          } else {
+            const hasSuggestionNow = retryResult.data?.some(
+              item => verseMapping[item.bibleTextId] === activeVerseNumber
+            );
+            setSuggestionStatus(hasSuggestionNow ? 'idle' : 'unavailable');
+          }
         });
       }, RETRY_DELAY_MS);
     });
 
     return () => {
+      isStale = true;
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
@@ -145,12 +171,10 @@ export function useAiSuggestions(
       if (!res.ok) {
         throw new Error('Failed to queue AI suggestions');
       }
-      return (await res.json()) as { thresholdMet?: boolean };
+      return (await res.json()) as { thresholdMet?: boolean; versesQueued?: number[] };
     },
     onSuccess: data => {
-      if (data.thresholdMet) {
-        setIsAiThresholdMet(true);
-      }
+      setIsAiThresholdMet(!!data.thresholdMet);
     },
     onError: error => {
       Logger.logException(error, { context: 'Failed to queue AI suggestions' });
@@ -191,7 +215,7 @@ export function useAiSuggestions(
     prevIsAiEnabledRef.current = isAiEnabled;
   }, [activeVerseNumber, projectUnitId, bibleId, bookCode, chapterNumber, isAiEnabled]);
 
-  return { suggestions, isAiThresholdMet, isSuggestionsFetched };
+  return { suggestions, isAiThresholdMet, suggestionStatus };
 }
 
 // Tracks whether the drafter used or dismissed an AI suggestion.

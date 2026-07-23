@@ -106,6 +106,7 @@ export function showAiSuggestionToast({
       id: TOAST_ID,
       duration: Infinity,
       closeButton: false,
+      style: { width: '100%', maxWidth: '600px' },
     }
   );
 }
