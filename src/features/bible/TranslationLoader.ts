@@ -38,7 +38,7 @@ export const translationLoader = async ({
   if (!userdetail) {
     throw new Error('User details are missing.');
   }
-  const locationStateItem = (location.state as { projectItem?: ProjectItem }).projectItem;
+  const locationStateItem = location.state?.projectItem;
   let projectItem = currentProjectItem;
 
   // Only use the location state if it's a different assignment than what we have in the store

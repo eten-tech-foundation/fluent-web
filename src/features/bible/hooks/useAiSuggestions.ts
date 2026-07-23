@@ -78,6 +78,7 @@ export function useAiSuggestions(
       return data.data;
     },
     enabled: isAiEnabled && bibleTextIds.length > 0,
+    retry: false,
     // No refetchInterval — fetches are triggered on-demand by verse navigation.
   });
 

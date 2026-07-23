@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
-import { useAppStore } from '@/store/store';
 
 interface DraftingGridPericopeProps {
   pericopes: PericopeGroup[];
@@ -26,6 +25,7 @@ interface DraftingGridPericopeProps {
   handleNextClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
 }
 
@@ -44,6 +44,7 @@ interface TargetVersesGroupProps {
   handleNextClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
 }
 
@@ -62,6 +63,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   handleNextClick,
   aiSuggestions,
   isAiThresholdMet,
+  isAiActive,
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
@@ -70,7 +72,6 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
   const activeIndex = groupVerses.findIndex(gv => gv.verseNumber === activeVerseId);
   const isAnyActive = activeIndex !== -1;
-  const currentProjectItem = useAppStore(state => state.currentProjectItem);
 
   let buttonVerseNumber: number | null = null;
   let showOutOfBoxButton = false;
@@ -129,7 +130,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                     }`}
                     placeholder={
                       v.verseNumber === activeVerseId &&
-                      currentProjectItem?.isAiEnabled &&
+                      isAiActive &&
                       isAiThresholdMet &&
                       !aiSuggestions[v.verseNumber] &&
                       !currentTargetVerse?.content.trim() &&
@@ -164,7 +165,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
               {!readOnly &&
                 v.verseNumber === activeVerseId &&
-                currentProjectItem?.isAiEnabled &&
+                isAiActive &&
                 isAiThresholdMet &&
                 !aiSuggestions[v.verseNumber] &&
                 !currentTargetVerse?.content.trim() &&
@@ -227,6 +228,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   handleNextClick,
   aiSuggestions,
   isAiThresholdMet,
+  isAiActive,
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
@@ -340,6 +342,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   handleKeyDown={handleKeyDown}
                   handleNextClick={handleNextClick}
                   handleTextChange={handleTextChange}
+                  isAiActive={isAiActive}
                   isAiThresholdMet={isAiThresholdMet}
                   isTranslationComplete={isTranslationComplete}
                   lastSourceVerseNumber={lastSourceVerseNumber}

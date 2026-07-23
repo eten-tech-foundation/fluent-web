@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type Source, type TargetVerse } from '@/lib/types';
-import { useAppStore } from '@/store/store';
 
 interface DraftingTargetColumnProps {
   verseNumber: number;
@@ -18,6 +17,7 @@ interface DraftingTargetColumnProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
 }
 
@@ -33,17 +33,17 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
   handleKeyDown,
   aiSuggestions,
   isAiThresholdMet,
+  isAiActive,
   suggestionStatus,
 }) => {
   const isActive = !readOnly && activeVerseId === verseNumber;
   const currentTargetVerse = verses.find(v => v.verseNumber === verseNumber);
   const shouldShowTarget = readOnly || isActive || effectiveRevealedVerses.has(verseNumber);
-  const currentProjectItem = useAppStore(state => state.currentProjectItem);
   const { t } = useTranslation();
 
   const isAiActiveNoSuggestion =
     isActive &&
-    currentProjectItem?.isAiEnabled &&
+    isAiActive &&
     isAiThresholdMet &&
     !aiSuggestions[verseNumber] &&
     !currentTargetVerse?.content.trim();
@@ -124,6 +124,7 @@ interface DraftingGridVerseProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
+  isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
 }
 
@@ -143,6 +144,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   handleKeyDown,
   aiSuggestions,
   isAiThresholdMet,
+  isAiActive,
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
@@ -188,6 +190,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
               handleActiveVerseChange={handleActiveVerseChange}
               handleKeyDown={handleKeyDown}
               handleTextChange={handleTextChange}
+              isAiActive={isAiActive}
               isAiThresholdMet={isAiThresholdMet}
               readOnly={readOnly}
               suggestionStatus={suggestionStatus}

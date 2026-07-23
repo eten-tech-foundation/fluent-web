@@ -26,7 +26,7 @@ export const hydrationPromise = new Promise<void>(resolve => {
 
 export const useAppStore = create<AppState>()(
   persist(
-    set => ({
+    (set, get) => ({
       userdetail: null,
       currentProjectItem: null,
       presenceWarning: null,
@@ -35,8 +35,16 @@ export const useAppStore = create<AppState>()(
       isAiThresholdMet: null,
       setUserDetail: (userdetail: User) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
-        // Clear threshold status when changing projects
-        set({ currentProjectItem, isAiThresholdMet: null });
+        const currentId = get().currentProjectItem?.chapterAssignmentId;
+        const newId = currentProjectItem?.chapterAssignmentId;
+
+        if (currentId !== newId) {
+          // Clear threshold status when changing projects
+          set({ currentProjectItem, isAiThresholdMet: null });
+        } else {
+          // Keep threshold status when just updating the same project's fields
+          set({ currentProjectItem });
+        }
       },
       clearUserDetail: () => set({ userdetail: null }),
       clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),

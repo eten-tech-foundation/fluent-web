@@ -25,8 +25,15 @@ export const AiTranslationSettings: React.FC = () => {
   const handleToggleAi = (checked: boolean) => {
     setLocalAiState(checked);
     if (currentProjectItem) {
+      const previousState = currentProjectItem.isAiEnabled;
       setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: checked });
-      toggleAi(checked);
+      toggleAi(checked, {
+        onError: () => {
+          // Revert UI and store state on failure
+          setLocalAiState(previousState ?? false);
+          setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: previousState });
+        },
+      });
     }
   };
 
@@ -92,7 +99,8 @@ export const AiTranslationSettings: React.FC = () => {
           <AccordionContent className='text-base leading-7'>
             <p className='mb-4'>
               A minimum of 500 verses is needed to show translation suggestions. Once that threshold
-              is met, AI translation suggestions will automatically appear for each new verse.
+              is met and this setting is enabled, AI translation suggestions will automatically
+              appear for each new verse.
             </p>
             <p>
               Keep in mind that this feature is still in development. It is advised to double check

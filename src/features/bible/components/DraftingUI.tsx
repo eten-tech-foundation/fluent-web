@@ -218,7 +218,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     projectItem.chapterNumber,
     verseMapping,
     activeVerseId,
-    projectItem.isAiEnabled
+    projectItem.isAiEnabled && isDraft
   );
 
   const fireToast = useAiSuggestionToast();
@@ -526,7 +526,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   );
 
   useEffect(() => {
-    if (!projectItem.isAiEnabled || readOnly) return;
+    if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
     // Check if the current active verse is empty and we have a new AI suggestion for it
     const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
@@ -539,7 +539,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       userTouchedVersesRef.current.add(activeVerseId);
       handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
     }
-  }, [activeVerseId, aiSuggestions, verses, handleTextChange, projectItem.isAiEnabled, readOnly]);
+  }, [
+    activeVerseId,
+    aiSuggestions,
+    verses,
+    handleTextChange,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
 
   // Recalculate floating button position when AI suggestions load or fail (which changes row height)
   useEffect(() => {
@@ -650,6 +658,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
                         handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         lastSourceVerseNumber={lastSourceVerseNumber}
@@ -696,6 +705,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   handleActiveVerseChange={handleActiveVerseChange}
                   handleKeyDown={handleKeyDown}
                   handleTextChange={handleTextChangeWithTracking}
+                  isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                   isAiThresholdMet={isAiThresholdMet ?? false}
                   readOnly={readOnly}
                   suggestionStatus={suggestionStatus}
@@ -721,6 +731,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleNextClick,
       handleTextChangeWithTracking,
       isTranslationComplete,
+      isDraft,
       lastSourceVerseNumber,
       readOnly,
       textareaRefs,
@@ -884,6 +895,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
                         handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         pericopes={pericopes}
@@ -906,6 +918,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         readOnly={readOnly}
                         selectedPanel={selectedPanel}
