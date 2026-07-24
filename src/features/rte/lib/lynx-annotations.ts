@@ -96,6 +96,33 @@ function indexSliceTextNodes(sliceUsj: Usj): {
   return { chapter, pieces };
 }
 
+const CHARSET_SOURCE = 'allowed-character-set-checker';
+
+/**
+ * Drops allowed-character warnings for lines where they flood (more than
+ * `threshold` on one line): that pattern means the workspace's character set
+ * doesn't match the text's language (a Lynx configuration gap — see the Lynx
+ * PoC's per-language rule-set finding), so per-character marks are noise. It
+ * also matters mechanically: flooding the editor with adjacent marks is what
+ * triggers the platform-editor text-corruption bug at scale.
+ */
+export function dropCharsetFloods(
+  diagnostics: readonly Diagnostic[],
+  threshold: number
+): Diagnostic[] {
+  const perLine = new Map<number, number>();
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.source !== CHARSET_SOURCE) continue;
+    const line = diagnostic.range.start.line;
+    perLine.set(line, (perLine.get(line) ?? 0) + 1);
+  }
+  return diagnostics.filter(
+    diagnostic =>
+      diagnostic.source !== CHARSET_SOURCE ||
+      (perLine.get(diagnostic.range.start.line) ?? 0) <= threshold
+  );
+}
+
 function severityToType(severity: DiagnosticSeverity): string {
   if (severity === DiagnosticSeverity.Error) return 'error';
   if (severity === DiagnosticSeverity.Warning) return 'warning';
@@ -123,11 +150,30 @@ export function diagnosticsToAnnotations(
     const piece = slice.pieces.get(info.verse)?.[info.pieceIndex];
     if (!piece) return;
 
-    const startOffset = Math.max(0, diagnostic.range.start.character - info.textStartCol);
+    let startOffset = Math.max(0, diagnostic.range.start.character - info.textStartCol);
     const sameLine = diagnostic.range.end.line === diagnostic.range.start.line;
-    const endOffset = sameLine
+    let endOffset = sameLine
       ? Math.max(startOffset, diagnostic.range.end.character - info.textStartCol)
       : piece.length;
+    if (diagnostic.range.start.character < info.textStartCol) {
+      // Anchored on the marker itself (e.g. verse-order checks): verse-level
+      // diagnostic — highlight the whole verse text.
+      startOffset = 0;
+      endOffset = piece.length;
+    } else if (endOffset === startOffset) {
+      // Zero-width ranges render no mark; give them a one-character span.
+      endOffset = Math.min(startOffset + 1, piece.length);
+    }
+    // platform-editor 0.8.14: a mark ending exactly at a text piece's end pulls
+    // the adjacent presentation space node into the mark, which then serializes
+    // into the document text (one space appended per such mark, corrupting
+    // saves). Keep marks one character short of the end; shift end-of-text
+    // character marks one char left. Pieces of length 1 stay unhighlighted.
+    if (endOffset >= piece.length) {
+      endOffset = piece.length - 1;
+      if (startOffset > 0 && startOffset > endOffset - 1) startOffset = endOffset - 1;
+    }
+    if (endOffset <= startOffset) return;
 
     annotations.push({
       id: `lynx-${index}`,

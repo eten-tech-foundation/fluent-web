@@ -7,7 +7,7 @@ import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPerico
 import type { PericopeGroup } from '@/lib/types';
 
 import { fetchChapterSources, postTranslatedVerse } from '../lib/chapter-api';
-import { diagnosticsToAnnotations } from '../lib/lynx-annotations';
+import { diagnosticsToAnnotations, dropCharsetFloods } from '../lib/lynx-annotations';
 import { mergePericope, slicePericope } from '../lib/pericope-slice';
 import { usfmToUsj } from '../lib/usfm-to-usj';
 import { usjToVerses } from '../lib/usj-verses';
@@ -144,12 +144,22 @@ export function useRtePoc() {
   const annotations = useMemo(
     () =>
       diagnosticsToAnnotations(
-        lynx.diagnostics.filter(d => !d.dismissed).map(d => d.diagnostic),
+        dropCharsetFloods(
+          lynx.diagnostics.filter(d => !d.dismissed).map(d => d.diagnostic),
+          10
+        ),
         lynxUsfm,
         sliceUsj
       ),
     [lynx.diagnostics, lynxUsfm, sliceUsj]
   );
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__rteDebug = {
+      diagnostics: lynx.diagnostics,
+      lynxUsfm,
+      sliceUsj,
+    };
+  }
 
   const changedKeys = useMemo(() => {
     const changed = new Set<string>();
