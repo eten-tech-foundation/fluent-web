@@ -17,6 +17,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
+import { Route as AuthenticatedRtePocRouteImport } from './routes/_authenticated/rte-poc'
 import { Route as AuthenticatedLynxUsfmRouteImport } from './routes/_authenticated/lynx-usfm'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
@@ -63,6 +64,11 @@ const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => LegalRoute,
 } as any)
+const AuthenticatedRtePocRoute = AuthenticatedRtePocRouteImport.update({
+  id: '/rte-poc',
+  path: '/rte-poc',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedLynxUsfmRoute = AuthenticatedLynxUsfmRouteImport.update({
   id: '/lynx-usfm',
   path: '/lynx-usfm',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
+  '/rte-poc': typeof AuthenticatedRtePocRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
+  '/rte-poc': typeof AuthenticatedRtePocRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
+  '/_authenticated/rte-poc': typeof AuthenticatedRtePocRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/lynx-usfm'
+    | '/rte-poc'
     | '/legal/privacy'
     | '/legal/terms'
     | '/projects/'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/lynx-usfm'
+    | '/rte-poc'
     | '/legal/privacy'
     | '/legal/terms'
     | '/'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/_authenticated/lynx-usfm'
+    | '/_authenticated/rte-poc'
     | '/legal/privacy'
     | '/legal/terms'
     | '/_authenticated/'
@@ -260,6 +272,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof LegalRoute
     }
+    '/_authenticated/rte-poc': {
+      id: '/_authenticated/rte-poc'
+      path: '/rte-poc'
+      fullPath: '/rte-poc'
+      preLoaderRoute: typeof AuthenticatedRtePocRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/lynx-usfm': {
       id: '/_authenticated/lynx-usfm'
       path: '/lynx-usfm'
@@ -307,6 +326,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedLynxUsfmRoute: typeof AuthenticatedLynxUsfmRoute
+  AuthenticatedRtePocRoute: typeof AuthenticatedRtePocRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -317,6 +337,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLynxUsfmRoute: AuthenticatedLynxUsfmRoute,
+  AuthenticatedRtePocRoute: AuthenticatedRtePocRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,

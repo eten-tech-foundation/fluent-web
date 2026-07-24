@@ -1,4 +1,4 @@
-import type { MarkerContent, Usj } from '@eten-tech-foundation/scripture-utilities';
+import type { BookCode, MarkerContent, Usj } from '@eten-tech-foundation/scripture-utilities';
 
 /**
  * Minimal, deterministic USFM→USJ converter for the curated V1 subset the app
@@ -29,7 +29,8 @@ export function usfmToUsj(usfm: string): Usj {
       content.push({
         type: 'book',
         marker: 'id',
-        code: bookCode,
+        // The curated subset always carries a canonical 3-letter code.
+        code: bookCode as BookCode,
         content: idMatch[2] ? [idMatch[2]] : [],
       });
       continue;

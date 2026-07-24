@@ -1,0 +1,24 @@
+/* Lynx check highlights: TypedMarkNode renders <mark> with the annotation type
+ * as a CSS class (editor's classList.add(this.getType())). */
+.rte-editor mark.error {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline wavy var(--destructive, #dc2626);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.rte-editor mark.warning {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline wavy #d97706;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.rte-editor mark.info {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline dotted #2563eb;
+  text-underline-offset: 3px;
+}
