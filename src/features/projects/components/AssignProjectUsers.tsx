@@ -35,6 +35,7 @@ import {
 import { useCreateUser } from '@/hooks/useUsers';
 import {
   getDisplayRole,
+  getSystemRoleName,
   PROJECT_ROLE_OPTIONS,
   UserRole,
   type ChapterAssignmentProgress,
@@ -111,18 +112,32 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [updateRoleMutation]
   );
 
+  const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
+
+  // Filter users to only those who belong to the current active organization
+  const orgUsers = useMemo(() => {
+    if (!users) return [];
+    if (!activeOrgId) return users;
+    return users.filter((u: User) => {
+      const grants = u.orgGrants ?? u.grants ?? [];
+      const isInOrg = grants.some(g => g.orgId === activeOrgId);
+      return isInOrg || u.organization === activeOrgId || u.lastActiveOrgId === activeOrgId;
+    });
+  }, [users, activeOrgId]);
+
   const availableUsersToAdd = useMemo(() => {
-    if (!users || !projectUsers) return users ?? [];
+    if (!projectUsers) return orgUsers;
     const projectUserIds = new Set(projectUsers.map(pu => pu.userId));
-    return users.filter((u: User) => !projectUserIds.has(u.id));
-  }, [users, projectUsers]);
+    return orgUsers.filter((u: User) => !projectUserIds.has(u.id));
+  }, [orgUsers, projectUsers]);
 
   // --- Invite by Email helpers ---
+  // Only match existing users who are ALREADY members of this active organization
   const matchedExistingUser = useMemo(() => {
     const trimmed = inviteEmail.trim().toLowerCase();
-    if (!trimmed || !users) return null;
-    return users.find(u => u.email.toLowerCase() === trimmed) ?? null;
-  }, [inviteEmail, users]);
+    if (!trimmed) return null;
+    return orgUsers.find(u => u.email.toLowerCase() === trimmed) ?? null;
+  }, [inviteEmail, orgUsers]);
 
   const isInviteEmailValid = useCallback((email: string): boolean => {
     try {
@@ -192,19 +207,19 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     if (!isInviteFormValid || inviteRole === null) return;
     setInviteError(null);
 
-    const newUser: Omit<User, 'id'> = {
+    const invitePayload = {
       email: inviteEmail.trim().toLowerCase(),
-      displayName: inviteDisplayName.trim(),
       username: inviteDisplayName.trim(),
-      role: inviteRole,
-      organization: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
-      createdBy: userdetail?.id ?? 0,
-      isActive: true,
-      ...({ projectId } as { projectId: number }),
+      orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
+      projectId,
+      roleName: getSystemRoleName(inviteRole),
+      // Email personalisation — forwarded to the invitation email template
+      orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
+      inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
     };
 
     try {
-      await createUserMutation.mutateAsync({ userData: newUser });
+      await createUserMutation.mutateAsync({ userData: invitePayload });
       handleCloseDialog();
     } catch (err: unknown) {
       const message =

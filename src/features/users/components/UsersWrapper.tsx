@@ -4,7 +4,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 
 import { UserModal } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
-import { useCreateUser, useUpdateUser, useUsers } from '@/hooks/useUsers';
+import { useCreateUser, useUpdateUser, useUsers, type InviteUserPayload } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
 import { type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -80,14 +80,16 @@ export const UsersWrapper: React.FC = () => {
           });
         }
       } else {
-        const newUser: Omit<User, 'id'> = {
-          ...(userData as Omit<User, 'id'>),
-          organization: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
-          createdBy: userdetail?.id ?? 0,
-          isActive: true,
+        const userToInvite = userData as Omit<User, 'id'>;
+        const invitePayload: InviteUserPayload = {
+          email: userToInvite.email,
+          username: userToInvite.displayName ?? userToInvite.username,
+          orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
+          orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
+          inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
         };
         await createUserMutation.mutateAsync({
-          userData: newUser,
+          userData: invitePayload,
         });
       }
       handleClose();

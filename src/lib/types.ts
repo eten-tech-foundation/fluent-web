@@ -315,11 +315,20 @@ export const ROLES = {
   ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
-  PROJECT_TRANSLATOR: 'Translator',
-  PROJECT_OBSERVER: 'Observer',
+  PROJECT_TRANSLATOR: 'Project Translator',
+  PROJECT_OBSERVER: 'Project Observer',
 } as const;
 
 const roleDisplayMap: Partial<Record<UserRole, string>> = {
+  [UserRole.PROJECT_MANAGER]: 'Project Manager',
+  [UserRole.TRANSLATOR]: 'Translator',
+  [UserRole.SUPER_ADMIN]: 'SuperAdmin',
+  [UserRole.ORG_OWNER]: 'Org Owner',
+  [UserRole.ORG_MANAGER]: 'Org Manager',
+  [UserRole.PROJECT_OBSERVER]: 'Observer',
+};
+
+const systemRoleMap: Partial<Record<UserRole, string>> = {
   [UserRole.PROJECT_MANAGER]: ROLES.PROJECT_MANAGER,
   [UserRole.TRANSLATOR]: ROLES.PROJECT_TRANSLATOR,
   [UserRole.SUPER_ADMIN]: ROLES.SUPER_ADMIN,
@@ -330,6 +339,10 @@ const roleDisplayMap: Partial<Record<UserRole, string>> = {
 
 export function getDisplayRole(role: number): string {
   return roleDisplayMap[role as UserRole] ?? 'Unknown';
+}
+
+export function getSystemRoleName(role: number): string {
+  return systemRoleMap[role as UserRole] ?? getDisplayRole(role);
 }
 
 export interface RoleOption {

@@ -51,7 +51,18 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   return 'Generic API error';
 };
 
-const createUser = async (userData: Omit<User, 'id'>): Promise<User> => {
+/** Payload sent to POST /users/invite */
+export interface InviteUserPayload {
+  email: string;
+  username: string;
+  orgId: number;
+  projectId?: number | null;
+  roleName?: string;
+  orgName?: string;
+  inviterName?: string;
+}
+
+const createUser = async (userData: InviteUserPayload): Promise<User> => {
   try {
     return await apiRequest<User>(`${config.api.url}/users/invite`, {
       method: 'POST',
@@ -104,7 +115,7 @@ export const useCreateUser = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userData }: { userData: Omit<User, 'id'> }) => createUser(userData),
+    mutationFn: ({ userData }: { userData: InviteUserPayload }) => createUser(userData),
     onSuccess: () => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });
