@@ -85,6 +85,7 @@ export const UsersWrapper: React.FC = () => {
           email: userToInvite.email,
           username: userToInvite.displayName ?? userToInvite.username,
           orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
+          roleId: userToInvite.role,
           orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
           inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
         };

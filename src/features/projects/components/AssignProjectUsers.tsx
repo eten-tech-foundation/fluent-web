@@ -35,7 +35,6 @@ import {
 import { useCreateUser } from '@/hooks/useUsers';
 import {
   getDisplayRole,
-  getSystemRoleName,
   PROJECT_ROLE_OPTIONS,
   UserRole,
   type ChapterAssignmentProgress,
@@ -212,7 +211,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       username: inviteDisplayName.trim(),
       orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
       projectId,
-      roleName: getSystemRoleName(inviteRole),
+      roleId: inviteRole,
       // Email personalisation — forwarded to the invitation email template
       orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
       inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,

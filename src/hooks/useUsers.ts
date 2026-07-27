@@ -57,7 +57,7 @@ export interface InviteUserPayload {
   username: string;
   orgId: number;
   projectId?: number | null;
-  roleName?: string;
+  roleId: number;
   orgName?: string;
   inviterName?: string;
 }
@@ -116,9 +116,13 @@ export const useCreateUser = () => {
 
   return useMutation({
     mutationFn: ({ userData }: { userData: InviteUserPayload }) => createUser(userData),
-    onSuccess: () => {
+    onSuccess: (_data, { userData }) => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Invalidate project users list if invited within a project context
+      if (userData.projectId) {
+        void queryClient.invalidateQueries({ queryKey: ['projectUsers', userData.projectId] });
+      }
     },
     onError: error => {
       Logger.logException(error, { context: 'Error creating user' });
