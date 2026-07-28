@@ -15,9 +15,10 @@ import { useAppStore } from '@/store/store';
 import type * as ReactRouter from '@tanstack/react-router';
 
 // Mock TanStack Router
-const { mockNavigate, mockBack } = vi.hoisted(() => ({
+const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockBack: vi.fn(),
+  mockUseLocation: vi.fn().mockReturnValue({ pathname: '/test', search: {} }),
 }));
 
 vi.mock('@tanstack/react-router', async importOriginal => {
@@ -25,6 +26,8 @@ vi.mock('@tanstack/react-router', async importOriginal => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    useLocation: () => mockUseLocation(),
     useRouter: () => ({
       history: {
         back: mockBack,
@@ -58,6 +61,15 @@ vi.mock('@/features/bible/hooks/useResourceStatePersistence', () => ({
 
 vi.mock('@/features/bible/hooks/useDrafting', () => ({
   useDrafting: (props: unknown) => mockUseDrafting(props) as unknown,
+}));
+
+vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
+  useAiSuggestions: () => ({
+    suggestions: {},
+    isAiThresholdMet: false,
+    suggestionStatus: 'idle',
+  }),
+  useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock('@/features/bible/hooks/usePericope', () => ({

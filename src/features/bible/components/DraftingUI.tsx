@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
+import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
@@ -131,6 +133,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return () => setPresenceWarning(null);
   }, [editorName, setPresenceWarning]);
 
+  const trackAiUsageMutation = useTrackAiUsage();
+
   const saveVerse = useCallback(
     async (verse: number, text: string) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
@@ -149,12 +153,27 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         },
       });
 
+      if (projectItem.isAiEnabled) {
+        trackAiUsageMutation.mutate({
+          bibleTextId: sourceVerse.id,
+          projectUnitId: projectItem.projectUnitId,
+          wasUsed: true,
+        });
+      }
+
       // Bump on the successful auto-save event so the Repeated Word Check
       // re-fires (W3, card #172). `useAddTranslatedVerse` doesn't forward
       // mutate-time `onSuccess`, so we bump after the awaited resolve.
       setSaveCounter(c => c + 1);
     },
-    [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
+    [
+      addVerseMutation,
+      projectItem.projectUnitId,
+      sourceVerses,
+      userdetail,
+      projectItem.isAiEnabled,
+      trackAiUsageMutation,
+    ]
   );
 
   const {
@@ -180,6 +199,43 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     readOnly,
     onSave: saveVerse,
   });
+
+  const verseMapping = useMemo(() => {
+    const mapping: Record<number, number> = {};
+    sourceVerses.forEach((v: Source) => {
+      mapping[v.id] = v.verseNumber;
+    });
+    return mapping;
+  }, [sourceVerses]);
+
+  const {
+    suggestions: aiSuggestions,
+    isAiThresholdMet,
+    suggestionStatus,
+  } = useAiSuggestions(
+    projectItem.projectUnitId,
+    projectItem.bibleId,
+    projectItem.bookCode,
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    projectItem.isAiEnabled && isDraft
+  );
+
+  const fireToast = useAiSuggestionToast();
+
+  useEffect(() => {
+    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
+      fireToast(projectItem.targetLanguage);
+    }
+  }, [
+    isAiThresholdMet,
+    fireToast,
+    projectItem.targetLanguage,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
 
   const {
     pericopes,
@@ -458,6 +514,47 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router,
   ]);
 
+  // Keep track of verses that the user has manually typed in or that have been
+  // auto-populated, so we never auto-populate a verse the user is working on.
+  const userTouchedVersesRef = useRef<Set<number>>(new Set());
+
+  const handleTextChangeWithTracking = useCallback(
+    (verseNumber: number, text: string) => {
+      userTouchedVersesRef.current.add(verseNumber);
+      handleTextChange(verseNumber, text);
+    },
+    [handleTextChange]
+  );
+
+  useEffect(() => {
+    if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
+
+    // Check if the current active verse is empty and we have a new AI suggestion for it
+    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
+    if (
+      activeTargetVerse &&
+      !activeTargetVerse.content.trim() &&
+      aiSuggestions[activeVerseId] &&
+      !userTouchedVersesRef.current.has(activeVerseId)
+    ) {
+      userTouchedVersesRef.current.add(activeVerseId);
+      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
+    }
+  }, [
+    activeVerseId,
+    aiSuggestions,
+    verses,
+    handleTextChange,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
+
+  // Recalculate floating button position when AI suggestions load or fail (which changes row height)
+  useEffect(() => {
+    updateButtonPosition();
+  }, [suggestionStatus, aiSuggestions, updateButtonPosition]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -555,15 +652,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                     >
                       <TargetVersesGroup
                         activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
                         groupVerses={groupVerses}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
-                        handleTextChange={handleTextChange}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         lastSourceVerseNumber={lastSourceVerseNumber}
                         readOnly={readOnly}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verses={verses}
                       />
@@ -600,11 +701,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               >
                 <DraftingTargetColumn
                   activeVerseId={activeVerseId}
+                  aiSuggestions={aiSuggestions}
                   effectiveRevealedVerses={effectiveRevealedVerses}
                   handleActiveVerseChange={handleActiveVerseChange}
                   handleKeyDown={handleKeyDown}
-                  handleTextChange={handleTextChange}
+                  handleTextChange={handleTextChangeWithTracking}
+                  isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                  isAiThresholdMet={isAiThresholdMet ?? false}
                   readOnly={readOnly}
+                  suggestionStatus={suggestionStatus}
                   textareaRefs={textareaRefs}
                   verseNumber={verse.verseNumber}
                   verses={verses}
@@ -625,13 +730,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleActiveVerseChange,
       handleKeyDown,
       handleNextClick,
-      handleTextChange,
+      handleTextChangeWithTracking,
       isTranslationComplete,
+      isDraft,
       lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
+      aiSuggestions,
       effectiveRevealedVerses,
+      isAiThresholdMet,
+      suggestionStatus,
       verseRefs,
     ]
   );
@@ -780,18 +889,22 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                     ) : isPericopeMode && pericopes ? (
                       <DraftingGridPericope
                         activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
                         bibleVerseMap={bibleVerseMap}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
-                        handleTextChange={handleTextChange}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
                         pericopes={pericopes}
                         projectItem={projectItem}
                         readOnly={readOnly}
                         selectedPanel={selectedPanel}
                         sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verseRefs={verseRefs}
                         verses={verses}
@@ -799,15 +912,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                     ) : (
                       <DraftingGridVerse
                         activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
                         bibleVerseMap={bibleVerseMap}
                         effectiveRevealedVerses={effectiveRevealedVerses}
                         getPericopeStyle={getPericopeStyle}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
-                        handleTextChange={handleTextChange}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
                         readOnly={readOnly}
                         selectedPanel={selectedPanel}
                         sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verseRefs={verseRefs}
                         verses={verses}

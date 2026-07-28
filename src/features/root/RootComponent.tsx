@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Outlet } from '@tanstack/react-router';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Toaster } from '@/components/ui/sonner';
 import { Logger } from '@/lib/services/logger';
 
 export function RootComponent(): React.JSX.Element {
@@ -36,6 +37,7 @@ export function RootComponent(): React.JSX.Element {
   return (
     <ErrorBoundary>
       <Outlet />
+      <Toaster />
     </ErrorBoundary>
   );
 }
