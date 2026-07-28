@@ -11,10 +11,18 @@ import { Label } from '@/components/ui/label';
 import { useRtePoc } from '../hooks/useRtePoc';
 
 import { DerivedVersesPanel } from './DerivedVersesPanel';
+import { PmEditor } from './PmEditor';
 import { RteEditor } from './RteEditor';
+
+const EDITORS = [
+  ['shared', 'SharedEditor'],
+  ['prosemirror', 'ProseMirror'],
+] as const;
+type EditorKind = (typeof EDITORS)[number][0];
 
 export function RtePocPage() {
   const poc = useRtePoc();
+  const [editorKind, setEditorKind] = useState<EditorKind>('shared');
   const [chapterForm, setChapterForm] = useState({
     bibleId: '1',
     bookId: '1',
@@ -64,9 +72,11 @@ export function RtePocPage() {
     <div className='mx-auto h-full max-w-7xl space-y-4 overflow-y-auto pb-10'>
       <div className='flex flex-wrap items-end justify-between gap-3'>
         <div>
-          <h2 className='text-2xl font-bold'>RTE PoC · SharedEditor (Editorial)</h2>
+          <h2 className='text-2xl font-bold'>
+            RTE PoC · {editorKind === 'shared' ? 'SharedEditor (Editorial)' : 'ProseMirror'}
+          </h2>
           <p className='text-muted-foreground max-w-2xl text-sm'>
-            Pericope-scoped rich text editing on USJ with the{' '}
+            Pericope-scoped rich text editing on USJ —{' '}
             <a
               className='text-primary underline'
               href='https://github.com/eten-tech-foundation/scripture-editors'
@@ -75,8 +85,9 @@ export function RtePocPage() {
             >
               platform-editor
             </a>{' '}
-            Editorial component. Edits merge back into the chapter USJ, verse rows derive live (the
-            save path), and Lynx checks highlight inside the editor.
+            Editorial vs a ProseMirror counterpart behind the same interface. Edits merge back into
+            the chapter USJ, verse rows derive live (the save path), and Lynx checks highlight
+            inside whichever editor is active.
           </p>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
@@ -144,7 +155,21 @@ export function RtePocPage() {
       </Card>
 
       <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-muted-foreground text-sm'>Chapter</span>
+        <span className='text-muted-foreground text-sm'>Editor</span>
+        {EDITORS.map(([kind, label]) => (
+          <Button
+            key={kind}
+            size='sm'
+            variant={kind === editorKind ? 'default' : 'outline'}
+            onClick={() => {
+              setEditorKind(kind);
+              setAnnotationStats(undefined);
+            }}
+          >
+            {label}
+          </Button>
+        ))}
+        <span className='text-muted-foreground ml-3 text-sm'>Chapter</span>
         {poc.chapterNumbers.map(n => (
           <Button
             key={n}
@@ -174,14 +199,25 @@ export function RtePocPage() {
       </div>
 
       <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]'>
-        <RteEditor
-          annotations={poc.annotations}
-          usj={poc.sliceUsj}
-          usjKey={poc.editorKey}
-          onAnnotationsApplied={handleAnnotationsApplied}
-          onScrRefChange={setScrRef}
-          onUsjChange={poc.handleEditorChange}
-        />
+        {editorKind === 'shared' ? (
+          <RteEditor
+            annotations={poc.annotations}
+            usj={poc.sliceUsj}
+            usjKey={poc.editorKey}
+            onAnnotationsApplied={handleAnnotationsApplied}
+            onScrRefChange={setScrRef}
+            onUsjChange={poc.handleEditorChange}
+          />
+        ) : (
+          <PmEditor
+            annotations={poc.annotations}
+            usj={poc.sliceUsj}
+            usjKey={poc.editorKey}
+            onAnnotationsApplied={handleAnnotationsApplied}
+            onScrRefChange={setScrRef}
+            onUsjChange={poc.handleEditorChange}
+          />
+        )}
 
         <div className='space-y-4 self-start'>
           <Card>

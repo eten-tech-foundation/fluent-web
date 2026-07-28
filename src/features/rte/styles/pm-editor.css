@@ -1,0 +1,62 @@
+/* ProseMirror counterpart styling — mirrors the vendored usj-nodes look. */
+.pm-editor .ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.9;
+  font-size: 17px;
+  color: #111;
+}
+
+.pm-editor .ProseMirror p {
+  margin: 0 0 4px;
+}
+
+.pm-editor .pm-usj-q1 {
+  margin-left: 2rem;
+}
+
+.pm-editor .pm-usj-q2 {
+  margin-left: 3.5rem;
+}
+
+.pm-editor .pm-usj-m {
+  text-indent: 0;
+}
+
+.pm-editor .pm-book {
+  color: #9ca3af;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.pm-editor .pm-chapter {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 6px 0;
+}
+
+.pm-editor .pm-verse {
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 11px;
+  margin: 0 3px 0 6px;
+  user-select: none;
+}
+
+.pm-editor .pm-lynx-error {
+  text-decoration: underline wavy #dc2626;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.pm-editor .pm-lynx-warning {
+  text-decoration: underline wavy #d97706;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.pm-editor .pm-lynx-info {
+  text-decoration: underline dotted #2563eb;
+  text-underline-offset: 3px;
+}
