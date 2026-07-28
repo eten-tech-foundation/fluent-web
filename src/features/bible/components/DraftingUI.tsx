@@ -53,6 +53,7 @@ const RESOURCE_NAMES: ResourceName[] = [
   { id: 'Bibles', name: 'Bibles' },
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
+  { id: 'TyndaleStudyNotes', name: 'OSN' },
 ];
 
 export const DraftingUI: React.FC<DraftingUIProps> = ({
