@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { AiTranslationSettings } from '@/features/ai-translation/components/AiTranslationSettings';
 import { useAppStore } from '@/store/store';
 
 interface SettingsModalProps {
@@ -57,6 +58,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {/* Card 2: Light/Dark Mode (Sized to the same width as Scripture Display) */}
           <ThemeToggle />
+
+          <AiTranslationSettings />
         </div>
       </DialogContent>
     </Dialog>

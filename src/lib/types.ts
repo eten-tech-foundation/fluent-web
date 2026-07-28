@@ -142,6 +142,7 @@ export interface ProjectItem {
   submittedTime: string | null;
   bookCode: string;
   sourceLangCode: string;
+  isAiEnabled?: boolean;
 }
 
 export interface VerseData {

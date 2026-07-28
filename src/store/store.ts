@@ -9,6 +9,7 @@ interface AppState {
   presenceWarning: string | null;
   _hasHydrated: boolean;
   displayMode: 'verse' | 'pericope';
+  isAiThresholdMet: boolean | null;
   setUserDetail: (user: User) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
   clearUserDetail: () => void;
@@ -16,6 +17,7 @@ interface AppState {
   setHasHydrated: (state: boolean) => void;
   setPresenceWarning: (msg: string | null) => void;
   setDisplayMode: (mode: 'verse' | 'pericope') => void;
+  setIsAiThresholdMet: (status: boolean | null) => void;
 }
 let hydrationResolve: (() => void) | null = null;
 export const hydrationPromise = new Promise<void>(resolve => {
@@ -24,20 +26,32 @@ export const hydrationPromise = new Promise<void>(resolve => {
 
 export const useAppStore = create<AppState>()(
   persist(
-    set => ({
+    (set, get) => ({
       userdetail: null,
       currentProjectItem: null,
       presenceWarning: null,
       _hasHydrated: false,
       displayMode: 'verse',
+      isAiThresholdMet: null,
       setUserDetail: (userdetail: User) => set({ userdetail }),
-      setCurrentProjectItem: (currentProjectItem: ProjectItem | null) =>
-        set({ currentProjectItem }),
+      setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
+        const currentId = get().currentProjectItem?.chapterAssignmentId;
+        const newId = currentProjectItem?.chapterAssignmentId;
+
+        if (currentProjectItem === null || currentId !== newId) {
+          // Clear threshold status when changing projects
+          set({ currentProjectItem, isAiThresholdMet: null });
+        } else {
+          // Keep threshold status when just updating the same project's fields
+          set({ currentProjectItem });
+        }
+      },
       clearUserDetail: () => set({ userdetail: null }),
-      clearCurrentProjectItem: () => set({ currentProjectItem: null }),
+      clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
       setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
+      setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
     }),
     {
       name: 'app-store',
