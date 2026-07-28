@@ -8,6 +8,10 @@
 
 ## Revision history
 
+**Changes in response to the 2026-07-28 CodeRabbit round (CB7–CB9; CB9 accepted in part, CB7/CB8 answered on the PR):**
+
+- **CB9 — Gemini's 8,192-token input cap named.** §7.1's tripwire paragraph now lists the input-token cap alongside the ~655-second output cap as provider-enforced ceilings below `TTS_MAX_TEXT_LENGTH`; dense non-Latin text near the character tripwire can exceed it, and such inputs fail at synthesis through the normal provider-failure path rather than at validation — no pre-admission tokenizer is added, since legitimate inputs are verse-sized and a failed generation frees its admission slot at negligible cost (§7.1).
+
 **Changes in response to the 2026-07-28 third review round (N1–N6, all six addressed):**
 
 - **N1 — explicit cycle-break for prompt finalization.** The done-callback gains two stated load-bearing duties: after retrieving `task.exception()` it clears `entry.task` — breaking the entry→task→traceback→frame→entry reference cycle so buffer finalization stays refcount-prompt on the failure/cancel path — and it records failures on the entry as strings/error codes, never the exception object (whose `__traceback__` would recreate the cycle). The success path is naturally acyclic because CPython clears a coroutine's frame on return (§8.3, §9.2).
@@ -355,7 +359,7 @@ Validation/error outline:
 - `403` through existing permission middleware;
 - provider failures do **not** surface here — synthesis happens under `get-audio`, whose stream aborts on failure (§7.2.1); `503` with `Retry-After` appears there when the RAM budget is exhausted (§9.2).
 
-The proposed default `TTS_MAX_TEXT_LENGTH=20000` is intentionally far above a verse. It catches accidental chapter/book submission or abuse without acting as a normal product limit. It is worth noting that Gemini itself caps generated output near 655 seconds of audio, so the provider is an effective ceiling below the tripwire for extreme inputs. Rate limiting and user quotas are deferred until usage data justifies them.
+The proposed default `TTS_MAX_TEXT_LENGTH=20000` is intentionally far above a verse. It catches accidental chapter/book submission or abuse without acting as a normal product limit. It is worth noting that Gemini enforces its own ceilings below the tripwire for extreme inputs: an **8,192-token input cap** and a generated-output cap near 655 seconds of audio. Dense non-Latin text near the character tripwire can exceed the input-token cap; such an input fails at synthesis through the normal provider-failure path (§7.2.1) rather than at validation — acceptable because legitimate inputs are verse-sized, nowhere near either bound, and a failed generation frees its admission slot at negligible cost. Rate limiting and user quotas are deferred until usage data justifies them.
 
 ### 7.2 `get-audio` — the serving waterfall (T8, T15, T21–T23)
 
