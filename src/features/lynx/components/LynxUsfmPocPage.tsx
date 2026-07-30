@@ -41,7 +41,7 @@ export function LynxUsfmPocPage() {
   // Load the seeded sample as soon as the workspace is ready.
   useEffect(() => {
     if (status === 'ready' && usfm === '') {
-      void loadSource(SAMPLE_USFM);
+      void loadSource(SAMPLE_USFM, 'en');
     }
   }, [status, usfm, loadSource]);
 
@@ -69,7 +69,8 @@ export function LynxUsfmPocPage() {
         return;
       }
       // The exact assembly the server-side USFM export performs — derived
-      // client-side and checked before anything leaves the browser.
+      // client-side and checked before anything leaves the browser. Chapter
+      // language is unknown here, so charset checking is off for it (#385).
       await loadSource(buildUsfmFromVerses(verses));
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Failed to load chapter');
@@ -130,7 +131,7 @@ export function LynxUsfmPocPage() {
 
       <Card>
         <CardContent className='flex flex-wrap items-end gap-3 pt-6'>
-          <Button size='sm' variant='secondary' onClick={() => void loadSource(SAMPLE_USFM)}>
+          <Button size='sm' variant='secondary' onClick={() => void loadSource(SAMPLE_USFM, 'en')}>
             Load sample (seeded issues)
           </Button>
           <div className='bg-border h-8 w-px' />

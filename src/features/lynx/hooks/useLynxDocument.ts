@@ -32,7 +32,13 @@ export interface LynxDocumentState {
   triggerCharacters: string[];
   /** Milliseconds Lynx took to re-parse + re-check the last change, client-side. */
   lastCheckMs?: number;
-  loadSource: (usfm: string) => Promise<void>;
+  /**
+   * Load new source content. `contentLanguage` picks the rule set (#385):
+   * pass it when the content's language is known ('en' enables the English
+   * charset check); omit it for unknown languages, which disables charset
+   * checking. Changing it rebuilds the workspace transparently.
+   */
+  loadSource: (usfm: string, contentLanguage?: string) => Promise<void>;
   /** `typedChar`/`caretOffset` enable on-type formatting (smart quotes). */
   changeUsfm: (next: string, typedChar?: string, caretOffset?: number) => Promise<void>;
   applyFix: (fix: DiagnosticFix<TextEdit>) => Promise<void>;
@@ -54,6 +60,7 @@ function diagnosticKey(diagnostic: Diagnostic, occurrence: number): string {
  */
 export function useLynxDocument(): LynxDocumentState {
   const ctxRef = useRef<LynxContext>();
+  const contentLanguageRef = useRef<string>();
   const documentRef = useRef<UsfmDocument>();
   const generationRef = useRef(0);
 
@@ -145,7 +152,17 @@ export function useLynxDocument(): LynxDocumentState {
   }, []);
 
   const loadSource = useCallback(
-    async (next: string) => {
+    async (next: string, contentLanguage?: string) => {
+      // A different content language means a different rule set: rebuild the
+      // workspace before opening the document (#385).
+      if (ctxRef.current != null && contentLanguageRef.current !== contentLanguage) {
+        await ctxRef.current.closeDocument(POC_DOCUMENT_URI).catch(() => undefined);
+        const ctx = await createLynxWorkspace({ contentLanguage });
+        ctxRef.current = ctx;
+        contentLanguageRef.current = contentLanguage;
+        opened.current = false;
+        setTriggerCharacters(ctx.workspace.getOnTypeTriggerCharacters());
+      }
       setUsfm(next);
       setDismissedKeys(new Set());
       await refresh(next);

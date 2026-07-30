@@ -11,7 +11,8 @@ describe('createLynxWorkspace', () => {
   let ctx: LynxContext;
 
   beforeEach(async () => {
-    ctx = await createLynxWorkspace();
+    // The sample is English content, so the English rule set (incl. charset) applies.
+    ctx = await createLynxWorkspace({ contentLanguage: 'en' });
     await ctx.openDocument(SAMPLE_URI, SAMPLE_USFM);
   });
 
@@ -91,5 +92,31 @@ describe('createLynxWorkspace', () => {
     expect(edits).toBeDefined();
     expect(edits!.length).toBeGreaterThan(0);
     expect(edits![0].newText).toBe('“');
+  });
+});
+
+describe('content-language rule sets (#385)', () => {
+  it('drops the charset checker when the content language has no configured set', async () => {
+    // The English allowed-character set flags nearly every character of
+    // non-Latin text (~2,600 warnings on one Gujarati chapter), drowning real
+    // signal. Unknown language ⇒ no charset checking; script-agnostic checks
+    // (quotes, verse order) still run.
+    const ctx = await createLynxWorkspace({ contentLanguage: 'gu' });
+    await ctx.openDocument(SAMPLE_URI, SAMPLE_USFM);
+
+    const diagnostics = await ctx.workspace.getDiagnostics(SAMPLE_URI);
+    const sources = new Set(diagnostics.map(d => d.source));
+
+    expect(sources).not.toContain('allowed-character-set-checker');
+    expect(sources).toContain('quotation-mark-checker');
+    expect(sources).toContain('verse-order');
+  });
+
+  it('defaults to no charset checking when the content language is not given', async () => {
+    const ctx = await createLynxWorkspace();
+    await ctx.openDocument(SAMPLE_URI, SAMPLE_USFM);
+
+    const diagnostics = await ctx.workspace.getDiagnostics(SAMPLE_URI);
+    expect(diagnostics.some(d => d.source === 'allowed-character-set-checker')).toBe(false);
   });
 });
