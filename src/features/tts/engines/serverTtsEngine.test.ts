@@ -6,64 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { type ClipAudioElement } from '../lib/audioElement';
+import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
 import { type TtsRequest } from '../tts.types';
 
 import { ServerTtsEngine, superviseClipPlayback, type TtsRecoveryTiming } from './serverTtsEngine';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-interface FakeResponseInit {
-  status?: number;
-  url?: string;
-  body?: unknown;
-  headers?: Record<string, string>;
-  type?: ResponseType;
-}
-
-const fakeResponse = (init: FakeResponseInit = {}): Response => {
-  const status = init.status ?? 200;
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    url: init.url ?? '',
-    type: init.type ?? 'basic',
-    headers: new Headers(init.headers ?? {}),
-    json: () => Promise.resolve(init.body),
-  } as unknown as Response;
-};
-
-/** Fake media element with a manual event bus (jsdom has no media stack). */
-class FakeClipElement implements ClipAudioElement {
-  src = '';
-  preload = '';
-  currentTime = 0;
-  playbackRate = 1;
-  /** `src` value at each `load()` call — the reload assertions read this. */
-  loadCalls: string[] = [];
-  private listeners = new Map<string, Set<() => void>>();
-
-  load(): void {
-    this.loadCalls.push(this.src);
-  }
-  play(): Promise<void> {
-    return Promise.resolve();
-  }
-  pause(): void {}
-  addEventListener(type: string, listener: () => void): void {
-    const set = this.listeners.get(type) ?? new Set();
-    set.add(listener);
-    this.listeners.set(type, set);
-  }
-  removeEventListener(type: string, listener: () => void): void {
-    this.listeners.get(type)?.delete(listener);
-  }
-  emit(type: string): void {
-    for (const listener of this.listeners.get(type) ?? []) listener();
-  }
-}
 
 /** Small deterministic timing so fake-timer tests read clearly. */
 const TIMING: TtsRecoveryTiming = {
