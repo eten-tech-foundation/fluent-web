@@ -1,0 +1,13 @@
+{
+  "diagnosticMessagesByCode": {
+    "unmatched-opening-parenthesis": "Opening parenthesis with no closing parenthesis.",
+    "unmatched-closing-parenthesis": "Closing parenthesis with no opening parenthesis.",
+    "unmatched-opening-square-bracket": "Opening square bracket with no closing bracket.",
+    "unmatched-closing-square-bracket": "Closing square bracket with no opening bracket.",
+    "unmatched-opening-curly-bracket": "Opening curly bracket with no closing bracket.",
+    "unmatched-closing-curly-bracket": "Closing curly bracket with no opening bracket.",
+    "unmatched-opening-punctuation-mark": "Opening punctuation mark with no closing mark.",
+    "unmatched-closing-punctuation-mark": "Closing punctuation mark with no opening mark.",
+    "overlapping-punctuation-pairs": "This pair of punctuation marks {{firstPair}} overlaps with another pair {{secondPair}}."
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "diagnosticMessagesByCode": {
+    "disallowed-character": "The character '{{character}}' is not typically used in this language."
+  }
+}

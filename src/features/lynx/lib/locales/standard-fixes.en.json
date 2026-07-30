@@ -1,0 +1,7 @@
+{
+  "leadingSpaceInsertionFix": "Add a space before this",
+  "punctuationRemovalFix": "Delete punctuation mark",
+  "punctuationReplacementFix": "Replace this character with {{replacementCharacter}}",
+  "trailingSpaceInsertionFix": "Add a space after this",
+  "trailingStringInsertionFix": "Insert the missing characters: {{insertedString}}"
+}

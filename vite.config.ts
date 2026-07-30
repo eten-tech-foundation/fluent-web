@@ -1,11 +1,21 @@
+import { fileURLToPath } from 'node:url';
+
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
 
+// @sillsdev/machine (pulled in by the Lynx USFM PoC) imports Node built-ins at
+// module scope; its package `browser` field maps them to empty modules, which
+// leaves `fileURLToPath(import.meta.url)` undefined at load time in the
+// browser. Alias the four ids to inert shims for browser builds only — vitest
+// runs in Node, where the real modules must stay available.
+const nodeShims = fileURLToPath(new URL('./src/features/lynx/lib/node-shims.ts', import.meta.url));
+
 export default defineConfig(({ mode }) => {
   const isAnalyze = mode === 'analyze';
+  const isTest = mode === 'test' || process.env.VITEST != null;
 
   return {
     plugins: [
@@ -23,6 +33,14 @@ export default defineConfig(({ mode }) => {
 
     resolve: {
       tsconfigPaths: true, // ← native replacement for vite-tsconfig-paths plugin
+      alias: isTest
+        ? undefined
+        : [
+            { find: /^(?:node:)?fs\/promises$/, replacement: nodeShims },
+            { find: /^(?:node:)?fs$/, replacement: nodeShims },
+            { find: /^(?:node:)?path$/, replacement: nodeShims },
+            { find: /^(?:node:)?url$/, replacement: nodeShims },
+          ],
     },
 
     build: {

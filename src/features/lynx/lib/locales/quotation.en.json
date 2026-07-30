@@ -1,0 +1,10 @@
+{
+  "diagnosticMessagesByCode": {
+    "unmatched-opening-quotation-mark": "Opening quotation mark with no closing mark.",
+    "unmatched-closing-quotation-mark": "Closing quotation mark with no opening mark.",
+    "incorrectly-nested-quotation-mark": "Incorrectly nested quotation mark.",
+    "ambiguous-quotation-mark": "This quotation mark is ambiguous.",
+    "deeply-nested-quotation-mark": "Too many levels of quotation marks. Consider rephrasing to avoid this.",
+    "missing-quote-continuer": "Missing quotation mark when continuing a quote across multiple paragraphs."
+  }
+}
