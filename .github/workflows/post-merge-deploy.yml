@@ -55,7 +55,7 @@ jobs:
       - name: Validate CalVer tag format
         run: |
           TAG="${GITHUB_REF_NAME}"
-          if [[ ! "$TAG" =~ ^v[0-9]{2}\.[0-9]{2}\.[1-9][0-9]*$ ]]; then
+          if [[ ! "$TAG" =~ ^v[0-9]{2}\.(0[1-9]|1[0-2])\.[1-9][0-9]*$ ]]; then
             echo "::error::Tag '$TAG' does not match required CalVer format vYY.MM.SERIAL (e.g. v26.07.1)"
             exit 1
           fi

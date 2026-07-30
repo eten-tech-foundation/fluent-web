@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6.0.9
@@ -39,7 +41,7 @@ jobs:
       - name: Verify injected version in build artifacts
         run: |
           echo "Searching for 'v00.00.99' in built assets..."
-          if grep -q "v00.00.99" dist/assets/*.js; then
+          if grep -Fq "v00.00.99" dist/assets/*.js; then
             echo "::notice::Version successfully verified in build output!"
             exit 0
           else
