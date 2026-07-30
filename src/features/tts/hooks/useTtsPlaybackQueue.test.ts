@@ -1,0 +1,363 @@
+/**
+ * Queue/controls tests (§12.1 "Queue" rows). Deterministic by construction:
+ * fake engine (no Gemini/R2 credentials exist — operator ruling), fake clip
+ * elements (jsdom has no media stack), fake timers where recovery timers are
+ * in play. Advance is `ended`-driven ONLY (§6.2).
+ */
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { type FetchLike, type TtsRecoveryTiming } from '../engines/serverTtsEngine';
+import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
+import { type TtsClip, type TtsEngine, type TtsQueueItem, type TtsRequest } from '../tts.types';
+
+import { useTtsPlaybackQueue, type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
+
+// ---------------------------------------------------------------------------
+// Harness
+// ---------------------------------------------------------------------------
+
+/** Small deterministic timing so fake-timer tests read clearly. */
+const TIMING: TtsRecoveryTiming = {
+  maxRetriesPerClass: 2,
+  midStreamBackoffMs: 1000,
+  defaultRetryAfterMs: 2000,
+  stallWatchdogMs: 4000,
+  stallPollIntervalMs: 1000,
+  maxStallPolls: 5,
+};
+
+const verse = (n: number, text = `Verse ${n} text`): TtsQueueItem => ({
+  verseRef: `GEN 1:${n}`,
+  text,
+  langCode: 'eng',
+});
+
+const clipUrlFor = (text: string): string => `https://clips.test/${encodeURIComponent(text)}.wav`;
+
+interface Harness {
+  synthesize: Mock<(request: TtsRequest, signal?: AbortSignal) => Promise<TtsClip>>;
+  elements: FakeClipElement[];
+  onBoundaryReached: Mock<() => void>;
+  onError: Mock<(error: Error, item: TtsQueueItem) => void>;
+  onScrollRequest: Mock<(verseRef: string) => void>;
+  result: { current: ReturnType<typeof useTtsPlaybackQueue> };
+  unmount: () => void;
+}
+
+const createHarness = (overrides: Partial<UseTtsPlaybackQueueOptions> = {}): Harness => {
+  const synthesize = vi.fn<(request: TtsRequest, signal?: AbortSignal) => Promise<TtsClip>>(
+    request => Promise.resolve({ audioUrl: clipUrlFor(request.text) })
+  );
+  const engine: TtsEngine = { synthesize };
+  const elements: FakeClipElement[] = [];
+  const createElement = (src: string): FakeClipElement => {
+    const element = new FakeClipElement();
+    element.src = src;
+    element.preload = 'auto';
+    element.load();
+    elements.push(element);
+    return element;
+  };
+  const onBoundaryReached = vi.fn<() => void>();
+  const onError = vi.fn<(error: Error, item: TtsQueueItem) => void>();
+  const onScrollRequest = vi.fn<(verseRef: string) => void>();
+  const options: UseTtsPlaybackQueueOptions = {
+    engine,
+    onBoundaryReached,
+    onError,
+    onScrollRequest,
+    createElement,
+    timing: TIMING,
+    ...overrides,
+  };
+  const { result, unmount } = renderHook(() => useTtsPlaybackQueue(options));
+  return { synthesize, elements, onBoundaryReached, onError, onScrollRequest, result, unmount };
+};
+
+/** The clip element whose src is the given item's synthesized URL. */
+const elementFor = (harness: Harness, item: TtsQueueItem): FakeClipElement => {
+  const element = harness.elements.find(candidate => candidate.src === clipUrlFor(item.text));
+  if (!element) throw new Error(`no element created for ${item.verseRef}`);
+  return element;
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// ---------------------------------------------------------------------------
+// playOne / playFrom basics (T1, §5.3)
+// ---------------------------------------------------------------------------
+
+describe('useTtsPlaybackQueue — play actions', () => {
+  it('playOne synthesizes exactly the text it was given, with the langCode hint (T6, T18)', async () => {
+    const harness = createHarness();
+    const item = verse(1, 'In the beginning God created');
+
+    await act(async () => {
+      harness.result.current.playOne(item);
+    });
+
+    expect(harness.synthesize).toHaveBeenCalledTimes(1);
+    expect(harness.synthesize.mock.calls[0][0]).toEqual({
+      text: 'In the beginning God created',
+      langCode: 'eng',
+    });
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:1');
+  });
+
+  it('a row without playable text is a no-op stop: no synthesis, back to idle (§5.3 step 5)', async () => {
+    const harness = createHarness();
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1, '   '));
+    });
+
+    expect(harness.synthesize).not.toHaveBeenCalled();
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+  });
+
+  it('walks loading → playing → idle, and playOne ends WITHOUT a boundary signal (T1, §5.2)', async () => {
+    const harness = createHarness();
+    const item = verse(1);
+
+    await act(async () => {
+      harness.result.current.playOne(item);
+    });
+    expect(harness.result.current.status).toBe('loading');
+
+    await act(async () => {
+      elementFor(harness, item).emit('playing');
+    });
+    expect(harness.result.current.status).toBe('playing');
+    expect(harness.result.current.itemStates['GEN 1:1']).toBe('playing');
+
+    await act(async () => {
+      elementFor(harness, item).emit('ended');
+    });
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+    expect(harness.onBoundaryReached).not.toHaveBeenCalled();
+  });
+
+  it('playFrom advances on `ended` only: highlight moves, scroll is requested, buffered clip is reused (§5.3, §6.2)', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+
+    // While verse 1 plays, verse 2 was prefetched (one generate each — no more).
+    expect(harness.synthesize).toHaveBeenCalledTimes(2);
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:1');
+    expect(harness.result.current.itemStates['GEN 1:2']).toBe('buffered');
+    expect(harness.onScrollRequest.mock.calls.map(call => call[0])).toEqual(['GEN 1:1']);
+
+    await act(async () => {
+      elementFor(harness, items[0]).emit('ended');
+    });
+
+    // Advance consumed the buffered clip: NO new synthesis, NO new element.
+    expect(harness.synthesize).toHaveBeenCalledTimes(2);
+    expect(harness.elements).toHaveLength(2);
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:2');
+    expect(harness.onScrollRequest.mock.calls.map(call => call[0])).toEqual(['GEN 1:1', 'GEN 1:2']);
+  });
+
+  it('end of the supplied list emits boundaryReached and goes idle — the hook never navigates (T16)', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 1);
+    });
+    await act(async () => {
+      elementFor(harness, items[1]).emit('ended');
+    });
+
+    expect(harness.onBoundaryReached).toHaveBeenCalledTimes(1);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+    expect(harness.result.current.itemStates).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prefetch discipline (§5.3, CB1)
+// ---------------------------------------------------------------------------
+
+describe('useTtsPlaybackQueue — prefetch cap', () => {
+  it('prefetches only the configured depth ahead, even across rapid `ended` advances (CB1)', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2), verse(3), verse(4), verse(5)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+    // Playing verse 1 + default depth 1 ⇒ exactly verse 2 requested.
+    expect(harness.synthesize).toHaveBeenCalledTimes(2);
+
+    for (let played = 0; played < 3; played += 1) {
+      await act(async () => {
+        elementFor(harness, items[played]).emit('ended');
+      });
+      // Invariant after each advance: requests never exceed played+1 clip
+      // plus one prefetch ahead of the new play position.
+      expect(harness.synthesize.mock.calls.length).toBeLessThanOrEqual(played + 3);
+    }
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:4');
+  });
+
+  it('prefetchDepth is clamped to the hard maximum of two (CB1)', async () => {
+    const harness = createHarness({ prefetchDepth: 50 });
+    const items = [verse(1), verse(2), verse(3), verse(4), verse(5)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+
+    // Playing verse 1 + clamped depth 2 ⇒ verses 2 and 3 only, never fan-out.
+    expect(harness.synthesize).toHaveBeenCalledTimes(3);
+    expect(harness.result.current.itemStates['GEN 1:2']).toBe('buffered');
+    expect(harness.result.current.itemStates['GEN 1:3']).toBe('buffered');
+    expect(harness.result.current.itemStates['GEN 1:4']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stop() semantics (§5.1, CB1) — fake timers
+// ---------------------------------------------------------------------------
+
+describe('useTtsPlaybackQueue — stop', () => {
+  it('stop clears queue, highlight and prefetch intent, and cancels a PENDING recovery timer (CB1)', async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(fakeResponse({ status: 503, headers: { 'Retry-After': '3' } }));
+    const harness = createHarness({ fetchFn: fetchFn as unknown as FetchLike });
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const element = elementFor(harness, items[0]);
+    const loadsBefore = element.loadCalls.length;
+
+    // Element error → HEAD probe sees 503 + Retry-After ⇒ a retry timer is
+    // now pending inside the recovery ladder.
+    await act(async () => {
+      element.emit('error');
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      harness.result.current.stop();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    // T21/CB1: no reload, no further probe — the timer died with the signal.
+    expect(element.loadCalls.length).toBe(loadsBefore);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+    expect(harness.result.current.itemStates).toEqual({});
+  });
+
+  it('stop aborts the in-flight synthesis signal', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const harness = createHarness({
+      engine: {
+        synthesize: (_request: TtsRequest, signal?: AbortSignal) => {
+          capturedSignal = signal;
+          return new Promise<TtsClip>(() => {}); // never resolves
+        },
+      },
+    });
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+    expect(harness.result.current.status).toBe('loading');
+
+    act(() => {
+      harness.result.current.stop();
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Failure, rate passthrough, indeterminate duration (§5.2, §6.2)
+// ---------------------------------------------------------------------------
+
+describe('useTtsPlaybackQueue — failure and passthrough', () => {
+  it('a synthesis failure surfaces exactly once and leaves no stale highlight (§5.2)', async () => {
+    const harness = createHarness({
+      engine: { synthesize: () => Promise.reject(new Error('HTTP 502')) },
+    });
+    const item = verse(1);
+
+    await act(async () => {
+      harness.result.current.playOne(item);
+    });
+
+    expect(harness.onError).toHaveBeenCalledTimes(1);
+    expect(harness.onError.mock.calls[0][0].message).toBe('HTTP 502');
+    expect(harness.onError.mock.calls[0][1]).toEqual(item);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+    expect(harness.result.current.itemStates).toEqual({});
+  });
+
+  it('changing playbackRate is element passthrough only — never a new generate (T11, §6.2)', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+    const callsAfterStart = harness.synthesize.mock.calls.length;
+
+    act(() => {
+      harness.result.current.setPlaybackRate(1.5);
+    });
+
+    expect(elementFor(harness, items[0]).playbackRate).toBe(1.5);
+    expect(harness.synthesize.mock.calls.length).toBe(callsAfterStart);
+
+    // The NEXT clip inherits the rate too, still without extra synthesis.
+    await act(async () => {
+      elementFor(harness, items[0]).emit('ended');
+    });
+    expect(elementFor(harness, items[1]).playbackRate).toBe(1.5);
+    expect(harness.synthesize.mock.calls.length).toBe(callsAfterStart);
+  });
+
+  it('a clip reporting indeterminate duration still sequences via `ended` (§6.2)', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+    const element = elementFor(harness, items[0]);
+    // Streaming-era clips report NaN/Infinity duration; advance must not care.
+    (element as unknown as { duration: number }).duration = Number.NaN;
+
+    await act(async () => {
+      element.emit('ended');
+    });
+
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:2');
+  });
+});

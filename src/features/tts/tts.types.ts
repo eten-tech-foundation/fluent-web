@@ -49,7 +49,23 @@ export interface TtsClip {
 
 /** The frontend seam (§6.1). Buttons/queues never know the transport. */
 export interface TtsEngine {
-  synthesize(request: TtsRequest, signal?: AbortSignal): Promise<TtsClip>;
+  synthesize: (request: TtsRequest, signal?: AbortSignal) => Promise<TtsClip>;
+}
+
+/**
+ * One continuous-mode queue entry (§5.3). Feature-agnostic on purpose (T3):
+ * the host supplies text/langCode/refs, so the queue works on any future
+ * source-scripture surface — it never reads drafting state itself.
+ */
+export interface TtsQueueItem {
+  /** Host-meaningful row identity (highlight/scroll target); opaque here. */
+  verseRef: string;
+  /** Exact visible text to recite (T6). Empty ⇒ the row is not playable. */
+  text: string;
+  /** ISO 639-3 hint when the host knows it (T18). */
+  langCode?: string;
+  /** Which source the text came from (panel 1 project source / panel 2 Bible). */
+  audioSource?: string;
 }
 
 /**

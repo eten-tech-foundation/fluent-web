@@ -1,5 +1,5 @@
 /**
- * Source-Text TTS — public surface (phase: engine seam only, no UI yet).
+ * Source-Text TTS — public surface (engine seam + queue + controls).
  *
  * Consumers depend on `TtsEngine`, never on fetch or a vendor (§6.1, T3/T5).
  */
@@ -11,8 +11,27 @@ export {
   type TtsFormat,
   type TtsPacing,
   TtsPlaybackError,
+  type TtsQueueItem,
   type TtsRequest,
 } from './tts.types';
+
+export {
+  TTS_MAX_PREFETCH_DEPTH,
+  TTS_PREFETCH_DEPTH,
+  type TtsPlaybackQueueApi,
+  type TtsPlaybackStatus,
+  type TtsQueueItemState,
+  useTtsPlaybackQueue,
+  type UseTtsPlaybackQueueOptions,
+} from './hooks/useTtsPlaybackQueue';
+
+export {
+  TTS_KEYBOARD_SHORTCUTS,
+  useTtsKeyboardShortcuts,
+  type UseTtsKeyboardShortcutsOptions,
+} from './hooks/useTtsKeyboardShortcuts';
+
+export { TtsVerseControls, type TtsVerseControlsProps } from './components/TtsVerseControls';
 
 export {
   canBrowserPlayOpus,
