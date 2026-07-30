@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: {
-      __APP_VERSION__: JSON.stringify(pkg.version),
+      __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || pkg.version),
     },
     plugins: [
       tanstackRouter({ autoCodeSplitting: true }),
