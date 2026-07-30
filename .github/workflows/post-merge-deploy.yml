@@ -4,19 +4,13 @@ name: Post-merge Deploy
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deploy to'
-        required: true
-        default: 'production'
-        type: choice
-        options: [production, development]
+    tags: ['v*.*.*']
 
 jobs:
-  deploy:
+  deploy-dev:
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'development' }}
+    if: github.ref_type == 'branch'
+    environment: development
 
     steps:
       - uses: actions/checkout@v7.0.0
@@ -39,12 +33,52 @@ jobs:
           action: upload
           app_location: /
           output_location: dist
-          app_build_command: npm install -g pnpm@10.33.0 && pnpm install && pnpm build
+          app_build_command: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile && pnpm build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_APP_INSIGHTS_KEY: ${{ secrets.VITE_APP_INSIGHTS_KEY }}
           VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
-          VITE_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'development' }}
+          VITE_ENVIRONMENT: development
+          VITE_APP_VERSION: ${{ format('dev-{0}', github.sha) }}
+          VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
+          VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
+          VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
+          VITE_YOUVERSION_API_URL: ${{ secrets.VITE_YOUVERSION_API_URL }}
+          VITE_YOUVERSION_API_KEY: ${{ secrets.VITE_YOUVERSION_API_KEY }}
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          submodules: true
+
+      - uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.13.0'
+
+      - name: Deploy to Azure
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: /
+          output_location: dist
+          app_build_command: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile && pnpm build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_APP_INSIGHTS_KEY: ${{ secrets.VITE_APP_INSIGHTS_KEY }}
+          VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
+          VITE_ENVIRONMENT: production
+          VITE_APP_VERSION: ${{ github.ref_name }}
           VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
           VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
           VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
