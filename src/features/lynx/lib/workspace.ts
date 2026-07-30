@@ -1,5 +1,5 @@
 import { DocumentManager, Localizer, Workspace } from '@sillsdev/lynx';
-import { StandardRuleSets } from '@sillsdev/lynx-punctuation-checker';
+import { RuleType, StandardRuleSets } from '@sillsdev/lynx-punctuation-checker';
 import { UsfmDocumentFactory, UsfmEditFactory } from '@sillsdev/lynx-usfm';
 
 import allowedCharactersEn from './locales/allowed-characters.en.json';
@@ -34,6 +34,31 @@ function registerBundlerSafeLocales(localizer: Localizer): void {
   }
 }
 
+export interface LynxWorkspaceOptions {
+  /** UI locale for diagnostic messages. */
+  locale?: string;
+  /**
+   * Language of the CONTENT being checked — picks the rule set. Languages
+   * without a configured set (or an unknown language) run without the
+   * allowed-characters checker: the English charset flags nearly every
+   * character of non-Latin text (~2,600 warnings on one Gujarati chapter),
+   * which drowns real signal (#385). Script-agnostic checks still run.
+   */
+  contentLanguage?: string;
+}
+
+/** Rule sets per content language. Today only English ships upstream. */
+const CONTENT_RULE_SETS: Record<string, typeof StandardRuleSets.English> = {
+  en: StandardRuleSets.English,
+};
+
+/** Every rule except the charset check — safe for any script. */
+const SCRIPT_AGNOSTIC_RULES = [
+  RuleType.QuotationMarkPairing,
+  RuleType.PairedPunctuation,
+  RuleType.PunctuationContext,
+];
+
 export interface LynxContext {
   workspace: Workspace<TextEdit>;
   documentManager: DocumentManager<UsfmDocument>;
@@ -53,8 +78,11 @@ export interface LynxContext {
  * minus their editor bindings — the same workspace would sit behind a Checks
  * panel or a future rich scripture editor in Fluent.
  */
-export async function createLynxWorkspace(language = 'en'): Promise<LynxContext> {
-  const localizer = new Localizer(language);
+export async function createLynxWorkspace(
+  options: LynxWorkspaceOptions = {}
+): Promise<LynxContext> {
+  const { locale = 'en', contentLanguage } = options;
+  const localizer = new Localizer(locale);
   registerBundlerSafeLocales(localizer);
 
   const stylesheet = createBrowserUsfmStylesheet();
@@ -62,16 +90,27 @@ export async function createLynxWorkspace(language = 'en'): Promise<LynxContext>
   const editFactory = new UsfmEditFactory(stylesheet);
   const documentManager = new DocumentManager<UsfmDocument>(documentFactory);
 
-  const ruleSet = StandardRuleSets.English;
+  const knownRuleSet = contentLanguage == null ? undefined : CONTENT_RULE_SETS[contentLanguage];
+  // On-type formatting (smart quotes) is kept for every language; English
+  // quote conventions are the upstream default until per-language sets exist.
+  const baseRuleSet = knownRuleSet ?? StandardRuleSets.English;
+  const diagnosticProviders = knownRuleSet
+    ? knownRuleSet.createDiagnosticProviders(localizer, documentManager, editFactory)
+    : baseRuleSet.createSelectedDiagnosticProviders(
+        localizer,
+        documentManager,
+        editFactory,
+        SCRIPT_AGNOSTIC_RULES
+      );
 
   const workspace = new Workspace<TextEdit>({
     localizer,
     diagnosticProviders: [
-      ...ruleSet.createDiagnosticProviders(localizer, documentManager, editFactory),
+      ...diagnosticProviders,
       new VerseOrderDiagnosticProvider(localizer, documentManager, editFactory),
     ],
     onTypeFormattingProviders: [
-      ...ruleSet.createOnTypeFormattingProviders(documentManager, editFactory),
+      ...baseRuleSet.createOnTypeFormattingProviders(documentManager, editFactory),
     ],
   });
 
