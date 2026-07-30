@@ -10,6 +10,7 @@ import { type RouterContext } from '@/lib/router-context';
 export const Route = createRootRouteWithContext<RouterContext>()({
   validateSearch: z.object({
     modal: modalSchema.optional(),
+    openAiInfo: z.boolean().optional(),
   }),
   component: RootComponent,
   errorComponent: RootErrorComponent,

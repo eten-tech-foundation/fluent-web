@@ -19,6 +19,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   const targetScrollRef = useRef<HTMLDivElement>(null);
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const verseRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const initializedRef = useRef(false);
+  const pendingInitScrollRef = useRef<number | null>(null);
 
   const { debouncedSave, saveImmediately, getSaveStatus, setInitialContent } = useBibleTextDebounce(
     {
@@ -44,6 +46,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    if (textarea.offsetParent === null) return;
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(20, textarea.scrollHeight) + 'px';
   }, []);
@@ -60,7 +63,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     setButtonTop(top);
   }, [lastRevealedVerseNumber, readOnly]);
 
-  const scrollVerseToTop = useCallback((verseNumber: number) => {
+  const scrollVerseToTop = useCallback((verseNumber: number, force = false) => {
     const container = targetScrollRef.current;
     const row = verseRefs.current[verseNumber];
     if (!container || !row) return;
@@ -70,7 +73,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const rowBottomRelative = rowRect.bottom - containerRect.top;
 
     // If the row is already fully visible inside the scroll container, don't scroll
-    if (rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
+    if (!force && rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
       return;
     }
 
@@ -116,18 +119,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
       }
       setActiveVerseId(newVerseId);
-      const prevId = Math.max(1, newVerseId - 1);
-      requestAnimationFrame(() => scrollVerseToTop(prevId));
     },
-    [
-      readOnly,
-      verses,
-      activeVerseId,
-      getSaveStatus,
-      saveImmediately,
-      scrollVerseToTop,
-      setInitialContent,
-    ]
+    [readOnly, verses, activeVerseId, getSaveStatus, saveImmediately, setInitialContent]
   );
 
   const advanceToVerse = useCallback(
@@ -182,7 +175,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
 
   // Initialize verses and revealed state
   useEffect(() => {
-    if (targetVerses.length === 0) return;
+    if (targetVerses.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
     if (!readOnly) {
       targetVerses.forEach(verse => setInitialContent(verse.verseNumber, verse.content));
     }
@@ -199,8 +193,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const activeVerseNumber = allVersesCompleted ? 1 : lastVerseWithContent.verseNumber;
     setActiveVerseId(activeVerseNumber);
     if (!allVersesCompleted && activeVerseNumber > 1 && !readOnly) {
-      const verseDiv = verseRefs.current[activeVerseNumber];
-      if (verseDiv) verseDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      pendingInitScrollRef.current = Math.max(1, activeVerseNumber - 1);
     }
     const initiallyRevealed = new Set<number>();
     if (readOnly) {
@@ -245,6 +238,42 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     }
   }, [verses, readOnly, autoResizeTextarea]);
 
+  useEffect(() => {
+    if (readOnly) return;
+
+    const resizeAll = () => {
+      Object.values(textareaRefs.current).forEach(textarea => {
+        if (textarea) {
+          autoResizeTextarea(textarea);
+        }
+      });
+      updateButtonPosition();
+      if (pendingInitScrollRef.current !== null) {
+        scrollVerseToTop(pendingInitScrollRef.current, true);
+        pendingInitScrollRef.current = null;
+      }
+    };
+
+    const timer = setTimeout(resizeAll, 100);
+    window.addEventListener('resize', resizeAll);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && targetScrollRef.current) {
+      observer = new ResizeObserver(() => {
+        requestAnimationFrame(resizeAll);
+      });
+      observer.observe(targetScrollRef.current);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', resizeAll);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [readOnly, autoResizeTextarea, updateButtonPosition, scrollVerseToTop]);
+
   useLayoutEffect(() => {
     if (readOnly) return;
     const textarea = textareaRefs.current[activeVerseId];
@@ -267,6 +296,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     revealedVerses,
     buttonTop,
     lastRevealedVerseHasContent,
+    lastRevealedVerseNumber,
     targetScrollRef,
     textareaRefs,
     verseRefs,

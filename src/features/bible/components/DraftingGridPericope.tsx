@@ -3,6 +3,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 interface DraftingGridPericopeProps {
@@ -15,12 +16,17 @@ interface DraftingGridPericopeProps {
   bibleVerseMap: Map<number, string>;
   globalNextUntouchedVerse: Source | null;
   projectItem: ProjectItem;
+  isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
+  isAiActive: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
 interface TargetVersesGroupProps {
@@ -29,24 +35,36 @@ interface TargetVersesGroupProps {
   activeVerseId: number;
   readOnly: boolean;
   globalNextUntouchedVerse: Source | null;
+  lastSourceVerseNumber: number;
+  isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
+  isAiActive: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
-const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
+export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   groupVerses,
   verses,
   activeVerseId,
   readOnly,
   globalNextUntouchedVerse,
+  lastSourceVerseNumber,
+  isTranslationComplete,
   textareaRefs,
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
   handleNextClick,
+  aiSuggestions,
+  isAiThresholdMet,
+  isAiActive,
+  suggestionStatus,
 }) => {
   const { t } = useTranslation();
   const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
@@ -58,14 +76,18 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   let buttonVerseNumber: number | null = null;
   let showOutOfBoxButton = false;
 
-  if (isActiveVerseEmpty) {
-    if (isAnyActive) {
-      buttonVerseNumber = activeVerseId;
+  const isLastVerseOfChapter = activeVerseId === lastSourceVerseNumber;
+
+  if (!isTranslationComplete && (!isLastVerseOfChapter || globalNextUntouchedVerse)) {
+    if (isActiveVerseEmpty) {
+      if (isAnyActive) {
+        buttonVerseNumber = activeVerseId;
+      }
+    } else if (globalNextUntouchedVerse) {
+      buttonVerseNumber = globalNextUntouchedVerse.verseNumber;
+    } else if (isAnyActive) {
+      showOutOfBoxButton = true;
     }
-  } else if (globalNextUntouchedVerse) {
-    buttonVerseNumber = globalNextUntouchedVerse.verseNumber;
-  } else if (isAnyActive) {
-    showOutOfBoxButton = true;
   }
 
   return (
@@ -77,7 +99,7 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
         return (
           <div
             key={v.verseNumber}
-            className='relative flex w-full items-start'
+            className='flex w-full items-start'
             onClick={e => {
               e.stopPropagation();
               const textarea = textareaRefs.current[v.verseNumber];
@@ -86,50 +108,89 @@ const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
               }
             }}
           >
-            <span className='mt-0.5 mr-3 w-4 text-right text-base font-bold text-slate-900 select-none'>
+            <span className='mt-0.5 mr-3 w-4 text-right text-base font-bold text-slate-900 select-none dark:text-slate-100'>
               {v.verseNumber}
             </span>
-            <div className='flex min-h-[24px] flex-1 items-center'>
-              {readOnly ? (
-                <p className='w-full text-base leading-relaxed text-slate-800 select-text'>
-                  {currentTargetVerse?.content ?? ''}
-                </p>
-              ) : (
-                <textarea
-                  ref={el => {
-                    textareaRefs.current[v.verseNumber] = el;
-                  }}
-                  aria-label={`Translation for verse ${v.verseNumber}`}
-                  autoCapitalize='sentences'
-                  autoCorrect='on'
-                  className={`text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
-                    isButtonRow ? 'pr-16' : ''
-                  }`}
-                  placeholder={t('typeHere', 'Type here...')}
-                  rows={1}
-                  spellCheck={true}
-                  style={
-                    {
-                      fieldSizing: 'content',
-                    } as React.CSSProperties
-                  }
-                  value={currentTargetVerse?.content ?? ''}
-                  onChange={e => handleTextChange(v.verseNumber, e.target.value)}
-                  onFocus={() => handleActiveVerseChange(v.verseNumber)}
-                  onKeyDown={handleKeyDown}
-                />
-              )}
-            </div>
+            <div className='flex min-h-[24px] flex-1 flex-col items-start justify-center'>
+              <div className='relative w-full'>
+                {readOnly ? (
+                  <p className='w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                    {currentTargetVerse?.content ?? ''}
+                  </p>
+                ) : (
+                  <textarea
+                    ref={el => {
+                      textareaRefs.current[v.verseNumber] = el;
+                    }}
+                    aria-label={`Translation for verse ${v.verseNumber}`}
+                    autoCapitalize='sentences'
+                    autoCorrect='on'
+                    className={`text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
+                      isButtonRow ? 'pr-16' : ''
+                    }`}
+                    placeholder={
+                      v.verseNumber === activeVerseId &&
+                      isAiActive &&
+                      isAiThresholdMet &&
+                      !aiSuggestions[v.verseNumber] &&
+                      !currentTargetVerse?.content.trim() &&
+                      suggestionStatus === 'generating'
+                        ? t('generatingAiSuggestion', 'Generating...')
+                        : t('typeHere', 'Type here...')
+                    }
+                    rows={1}
+                    spellCheck={true}
+                    style={
+                      {
+                        fieldSizing: 'content',
+                      } as React.CSSProperties
+                    }
+                    value={currentTargetVerse?.content ?? ''}
+                    onChange={e => handleTextChange(v.verseNumber, e.target.value)}
+                    onFocus={() => handleActiveVerseChange(v.verseNumber)}
+                    onKeyDown={handleKeyDown}
+                  />
+                )}
 
-            {isButtonRow && (
-              <Button
-                className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all'
-                disabled={isActiveVerseEmpty}
-                onClick={handleNextClick}
-              >
-                {t('nextVerse', 'Next Verse')}
-              </Button>
-            )}
+                {isButtonRow && (
+                  <Button
+                    className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all'
+                    disabled={isActiveVerseEmpty}
+                    onClick={handleNextClick}
+                  >
+                    {t('nextVerse', 'Next Verse')}
+                  </Button>
+                )}
+              </div>
+
+              {!readOnly &&
+                v.verseNumber === activeVerseId &&
+                isAiActive &&
+                isAiThresholdMet &&
+                !aiSuggestions[v.verseNumber] &&
+                !currentTargetVerse?.content.trim() &&
+                (() => {
+                  switch (suggestionStatus) {
+                    case 'error':
+                      return (
+                        <p className='text-destructive mt-1 text-sm font-medium'>
+                          {t('aiTranslationNotAvailable', 'AI translation not available.')}
+                        </p>
+                      );
+                    case 'unavailable':
+                      return (
+                        <p className='text-destructive mt-1 text-sm font-medium'>
+                          {t(
+                            'aiTranslationNotYetReady',
+                            'AI translation not yet ready. Please refresh the page to view the AI translation.'
+                          )}
+                        </p>
+                      );
+                    default:
+                      return null;
+                  }
+                })()}
+            </div>
           </div>
         );
       })}
@@ -158,14 +219,20 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   bibleVerseMap,
   globalNextUntouchedVerse,
   projectItem,
+  isTranslationComplete,
   textareaRefs,
   verseRefs,
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
   handleNextClick,
+  aiSuggestions,
+  isAiThresholdMet,
+  isAiActive,
+  suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
 
   return (
     <>
@@ -196,12 +263,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             style={{ gridTemplateColumns: '1fr 1fr' }}
           >
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none'>
-                {projectItem.book} {heading}
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
               </h4>
               <div
-                className={`focus-visible:ring-primary w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupActive ? 'border-primary' : 'border-[#cfd8e3]'
+                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
                 }`}
                 role='button'
                 tabIndex={0}
@@ -225,16 +292,17 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   }
                 }}
               >
-                <p className='text-base leading-relaxed text-slate-800 select-text'>
+                <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                   {groupVerses.map(v => {
                     const textToRender =
                       selectedPanel === 1
                         ? v.text
-                        : (bibleVerseMap.get(v.verseNumber) ??
-                          t('noContentAvailable', 'No content available'));
+                        : (bibleVerseMap.get(v.verseNumber) ?? t('noContentAvailable'));
                     return (
                       <React.Fragment key={v.verseNumber}>
-                        <span className='mr-1.5 font-bold text-slate-900'>{v.verseNumber}</span>
+                        <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                          {v.verseNumber}
+                        </span>
                         <span
                           className={`mr-3 ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
                         >
@@ -247,12 +315,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               </div>
             </div>
             <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none'>
-                {projectItem.book} {heading}
+              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                {heading}
               </h4>
               <div
-                className={`w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                  isGroupActive ? 'border-primary' : 'border-[#cfd8e3]'
+                className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
                 }`}
                 onClick={e => {
                   if (e.target === e.currentTarget) {
@@ -267,13 +335,19 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               >
                 <TargetVersesGroup
                   activeVerseId={activeVerseId}
+                  aiSuggestions={aiSuggestions}
                   globalNextUntouchedVerse={globalNextUntouchedVerse}
                   groupVerses={groupVerses}
                   handleActiveVerseChange={handleActiveVerseChange}
                   handleKeyDown={handleKeyDown}
                   handleNextClick={handleNextClick}
                   handleTextChange={handleTextChange}
+                  isAiActive={isAiActive}
+                  isAiThresholdMet={isAiThresholdMet}
+                  isTranslationComplete={isTranslationComplete}
+                  lastSourceVerseNumber={lastSourceVerseNumber}
                   readOnly={readOnly}
+                  suggestionStatus={suggestionStatus}
                   textareaRefs={textareaRefs}
                   verses={verses}
                 />

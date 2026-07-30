@@ -15,9 +15,10 @@ import { useAppStore } from '@/store/store';
 import type * as ReactRouter from '@tanstack/react-router';
 
 // Mock TanStack Router
-const { mockNavigate, mockBack } = vi.hoisted(() => ({
+const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockBack: vi.fn(),
+  mockUseLocation: vi.fn().mockReturnValue({ pathname: '/test', search: {} }),
 }));
 
 vi.mock('@tanstack/react-router', async importOriginal => {
@@ -25,6 +26,8 @@ vi.mock('@tanstack/react-router', async importOriginal => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    useLocation: () => mockUseLocation(),
     useRouter: () => ({
       history: {
         back: mockBack,
@@ -60,8 +63,55 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
   useDrafting: (props: unknown) => mockUseDrafting(props) as unknown,
 }));
 
+vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
+  useAiSuggestions: () => ({
+    suggestions: {},
+    isAiThresholdMet: false,
+    suggestionStatus: 'idle',
+  }),
+  useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: (props: unknown) => mockUsePericope(props) as unknown,
+}));
+
+// Mock the Repeated Word Check hooks (Phase 4). These wrap TanStack Query /
+// fetch; this suite exercises drafting/pericope/resource behavior, not the
+// check itself (which is unit-tested in `useRepeatedWordsCheck.test.ts` and the
+// checks-feature component tests). Mocking them keeps DraftingUI renderable
+// without a QueryClientProvider and with no network I/O.
+vi.mock('@/features/checks/hooks/useSuppressions', () => ({
+  useSuppressions: () => ({
+    occurrenceRules: {},
+    globalRules: {},
+    globalIgnoresAvailable: false,
+    settingsProbeResolved: true,
+    ignoreHere: vi.fn(),
+    ignoreEverywhere: vi.fn(),
+    undoOccurrence: vi.fn(),
+    stopIgnoringEverywhere: vi.fn(),
+  }),
+}));
+
+vi.mock('@/features/checks/hooks/useRepeatedWordsCheck', () => ({
+  useRepeatedWordsCheck: () => ({ data: undefined, isError: false }),
+}));
+
+vi.mock('@/features/checks/hooks/useResolvedFindings', () => ({
+  useResolvedFindings: () => ({ active: [], inactive: [] }),
+}));
+
+// Mock the feature-flags selector. The Repeated Word Check tab/query are gated
+// on `useFeatureFlag('repeatedWordCheck')` (feature-flags proposal D5–D7); this
+// hook wraps TanStack Query / fetch, so mocking it keeps DraftingUI renderable
+// with no network I/O. Default: feature ON, so the existing tests exercise the
+// full Checks surface; individual tests flip `mockFeatureFlag` to false to
+// assert the hidden state.
+const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
+
+vi.mock('@/features/flags', () => ({
+  useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
 }));
 
 // Mock ResourcePanel
@@ -105,6 +155,7 @@ const mockProjectItem: ProjectItem = {
   bibleId: 1,
   bibleName: 'WEB',
   targetLanguage: 'Spanish',
+  targetLangCode: 'spa',
   bookId: 1,
   book: 'Genesis',
   chapterStatus: ChapterAssignmentStatus.DRAFT,
@@ -132,6 +183,7 @@ const defaultDraftingHookResult = (overrides = {}) => ({
   revealedVerses: new Set([1]),
   buttonTop: 150,
   lastRevealedVerseHasContent: true,
+  lastRevealedVerseNumber: 1,
   targetScrollRef: { current: null },
   textareaRefs: { current: {} },
   verseRefs: { current: {} },
@@ -175,6 +227,9 @@ const defaultPericopeHookResult = (overrides = {}) => ({
 describe('DraftingUI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Default: Repeated Word Check feature ON (see mock definition above).
+    mockFeatureFlag.mockReturnValue(true);
 
     mockUseAddTranslatedVerse.mockReturnValue({
       mutateAsync: vi.fn(),
@@ -278,7 +333,7 @@ describe('DraftingUI', () => {
     );
 
     // Should display the Pericope Header
-    expect(screen.getAllByText('Genesis 1:1-2')).toHaveLength(2);
+    expect(screen.getAllByText('1:1-2')).toHaveLength(2);
     expect(
       screen.getByText('In the beginning God created the heaven and the earth.')
     ).toBeInTheDocument();
@@ -324,6 +379,34 @@ describe('DraftingUI', () => {
       await user.click(closeSvg as HTMLElement);
     }
     expect(screen.queryByRole('button', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+  });
+
+  it('renders a vertical divider between the tabs on the Source side when the second tab is open', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+
+    // Open resource sidebar
+    const toggleButton = screen.getByRole('button', { pressed: false });
+    await user.click(toggleButton);
+
+    // Select alternative bible
+    const selectBibleBtn = screen.getByRole('button', { name: 'Select Alternative Bible' });
+    await user.click(selectBibleBtn);
+
+    // Verify the primary tab and alternative tab are both rendered
+    expect(screen.getByRole('button', { name: 'WEB' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alternative Bible' })).toBeInTheDocument();
+
+    // Verify the divider is rendered between them
+    expect(screen.getByText('|')).toBeInTheDocument();
   });
 
   it('triggers submit workflow when translation is complete and submit button is clicked', async () => {
@@ -391,5 +474,65 @@ describe('DraftingUI', () => {
     await user.click(nextBtn);
 
     expect(handleNextClickMock).toHaveBeenCalled();
+  });
+
+  // --- Repeated Word Check feature flag (feature-flags proposal D5–D7) -------
+  describe('Repeated Word Check feature flag', () => {
+    const openResourcePanel = async (user: ReturnType<typeof userEvent.setup>) => {
+      const toggleButton = screen.getByRole('button', { pressed: false });
+      await user.click(toggleButton);
+    };
+
+    it('shows the Checks tab when the feature is enabled', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockReturnValue(true);
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await openResourcePanel(user);
+
+      expect(screen.getByRole('tab', { name: 'Resources' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Checks' })).toBeInTheDocument();
+    });
+
+    it('hides the Checks tab (feature looks unimplemented) when the feature is disabled', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockReturnValue(false);
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await openResourcePanel(user);
+
+      // Resources tab remains; the Checks tab is gone entirely.
+      expect(screen.getByRole('tab', { name: 'Resources' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Checks' })).not.toBeInTheDocument();
+    });
+
+    it('only queries the flag for the repeatedWordCheck feature', () => {
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      expect(mockFeatureFlag).toHaveBeenCalledWith('repeatedWordCheck');
+    });
   });
 });

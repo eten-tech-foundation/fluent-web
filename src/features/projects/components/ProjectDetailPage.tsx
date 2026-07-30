@@ -5,7 +5,6 @@ import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -13,14 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
 import useProgressBar from '@/features/projects/hooks/useProgressBar';
@@ -28,7 +19,7 @@ import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBoo
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getConnectivityProfileDisplay, getStatusDisplay } from '@/lib/formatters';
+import { getConnectivityProfileDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -43,6 +34,8 @@ import { useAppStore } from '@/store/store';
 
 import { AssignProjectUsers } from './AssignProjectUsers';
 import { AssignUsersDialog } from './AssignUsersDialog';
+import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
+import { TruncatedCardText } from './TruncatedText';
 
 interface ProjectDetailPageProps {
   projectId?: number | null;
@@ -70,7 +63,7 @@ const CardProgressBar: React.FC<{
   return (
     <div className='space-y-2'>
       <TooltipProvider delayDuration={100}>
-        <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
+        <div className='flex h-[10px] w-full overflow-hidden rounded-full'>
           {segments.length === 0 ? (
             <div className='bg-primary/10 h-full w-full' />
           ) : (
@@ -89,7 +82,17 @@ const CardProgressBar: React.FC<{
                   className='bg-popover text-popover-foreground border-border rounded-md border px-2.5 py-1 text-xs font-semibold shadow-md'
                   side='top'
                 >
-                  {Math.round(segment.widthPercentage)}%
+                  {segment.subSegments ? (
+                    <div className='space-y-0.5'>
+                      {segment.subSegments.map(sub => (
+                        <div key={sub.label}>
+                          {sub.label}: {sub.percentage}%
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    `${segment.displayName}: ${Math.round(segment.widthPercentage)}%`
+                  )}
                 </TooltipContent>
               </Tooltip>
             ))
@@ -109,105 +112,6 @@ const CardProgressBar: React.FC<{
         ))}
       </div>
     </div>
-  );
-};
-
-const TruncatedCardText = ({ text }: { text: string }) => {
-  const textRef = useRef<HTMLDivElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const checkTruncation = () => {
-      if (textRef.current) {
-        setIsTruncated(textRef.current.scrollWidth > textRef.current.clientWidth);
-      }
-    };
-
-    checkTruncation();
-    let timeoutId: NodeJS.Timeout;
-    const debouncedCheck = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkTruncation, 150);
-    };
-    window.addEventListener('resize', debouncedCheck);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', debouncedCheck);
-    };
-  }, [text]);
-
-  const content = (
-    <div
-      ref={textRef}
-      className='max-w-full cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400'
-    >
-      {text}
-    </div>
-  );
-
-  if (!isTruncated) return content;
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent
-          align='center'
-          className='bg-popover text-popover-foreground border-border max-w-[350px] rounded-md border px-4 py-2.5 text-sm font-semibold break-all shadow-lg'
-          side='bottom'
-        >
-          {text}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
-const TruncatedTableText = ({ text }: { text: string }) => {
-  const textRef = useRef<HTMLDivElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const checkTruncation = () => {
-      if (textRef.current) {
-        setIsTruncated(textRef.current.scrollWidth > textRef.current.clientWidth);
-      }
-    };
-
-    checkTruncation();
-    let timeoutId: NodeJS.Timeout;
-    const debouncedCheck = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkTruncation, 150);
-    };
-    window.addEventListener('resize', debouncedCheck);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', debouncedCheck);
-    };
-  }, [text]);
-
-  const content = (
-    <div ref={textRef} className='max-w-full cursor-default truncate' title=''>
-      {text}
-    </div>
-  );
-
-  if (!isTruncated) return content;
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent
-          align='center'
-          className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
-          side='top'
-        >
-          {text}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 };
 
@@ -278,6 +182,35 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     [projectUsers]
   );
 
+  const detailsCardRef = useRef<HTMLDivElement>(null);
+  const [detailsHeight, setDetailsHeight] = useState<number>();
+
+  useLayoutEffect(() => {
+    const updateHeight = () => {
+      if (window.innerWidth >= 1024) {
+        setDetailsHeight(undefined);
+        return;
+      }
+
+      setDetailsHeight(detailsCardRef.current?.offsetHeight);
+    };
+
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+
+    if (detailsCardRef.current) {
+      observer.observe(detailsCardRef.current);
+    }
+
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
+
   const assignChapterMutation = useAssignChapters(
     projectId ? projectId.toString() : '0',
     getSelectedUserFullName(selectedDrafter),
@@ -295,10 +228,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       assignment => assignment.bookNameEng === selectedBookData.engDisplayName
     );
   }, [chapterAssignments, selectedBook, books]);
-
-  const formatProgress = useCallback((completedVerses: number, totalVerses: number) => {
-    return `${completedVerses} of ${totalVerses}`;
-  }, []);
 
   const handleChapterRowClick = useCallback(
     (assignment: ChapterAssignmentProgress) => {
@@ -328,6 +257,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         bibleId: assignment.bibleId,
         bibleName: projectSource,
         targetLanguage: projectTargetLanguageName,
+        // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
+        // the progress endpoint now surfaces this so the PM path no longer
+        // sends "<unknown>".
+        targetLangCode: assignment.targetLangCode,
         bookId: assignment.bookId,
         book: assignment.bookNameEng,
         chapterStatus: assignment.status,
@@ -439,7 +372,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const isDisabled = booksLoading || !books?.length || !chapterAssignments?.length;
 
   return (
-    <div className='flex h-full min-w-[750px] flex-col'>
+    <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
           <Button
@@ -456,11 +389,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         onBack={onBack}
       />
 
-      <div className='flex flex-1 overflow-hidden md:gap-4 lg:gap-6'>
-        {/* Left Pane - Project Details + Project Users */}
-        <div className='flex w-1/4 shrink-0 flex-col gap-4'>
+      <div className='flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row lg:gap-6'>
+        {/* Meta + Users Pane - side by side below 1024px, stacked column at 1024px+ */}
+        <div className='flex shrink-0 flex-row gap-4 lg:w-1/4 lg:flex-col lg:overflow-y-auto'>
           {/* Project Details Card */}
-          <Card className='h-fit'>
+          <Card ref={detailsCardRef} className='h-fit flex-1 lg:flex-none'>
             <CardContent className='space-y-4 py-4'>
               <div className='grid grid-cols-2 gap-2'>
                 <label className='text-base font-bold'>Title</label>
@@ -495,19 +428,22 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
           {/* Project Users Section - Managers only */}
           {isManager && (
-            <AssignProjectUsers
-              isAddUserOpen={isAddUserOpen}
-              projectId={projectId}
-              users={users}
-              usersLoading={usersLoading}
-              onAddUser={onAddUser}
-              onCloseAddUser={onCloseAddUser}
-            />
+            <div className='flex-1 lg:flex-none'>
+              <AssignProjectUsers
+                isAddUserOpen={isAddUserOpen}
+                projectId={projectId}
+                referenceHeight={detailsHeight}
+                users={users}
+                usersLoading={usersLoading}
+                onAddUser={onAddUser}
+                onCloseAddUser={onCloseAddUser}
+              />
+            </div>
           )}
         </div>
 
         {/* Table Section */}
-        <div className='flex w-3/4 grow flex-col overflow-hidden'>
+        <div className='flex min-h-0 w-full flex-1 flex-col lg:w-3/4 lg:grow'>
           <div className='shrink-0 pb-4 pl-[3px]'>
             <div className='flex items-center gap-3'>
               <Select value={selectedBook} onValueChange={setSelectedBook}>
@@ -545,119 +481,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </div>
           </div>
 
-          <div className='flex h-full flex-col overflow-hidden rounded-lg border'>
-            {assignmentsLoading ? (
-              <div className='flex items-center justify-center gap-2 py-8'>
-                <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
-                <span className='text-gray-500'>Loading assignments...</span>
-              </div>
-            ) : filteredAssignments.length === 0 ? (
-              <div className='flex items-center justify-center py-8'>
-                <span>
-                  {selectedBook && selectedBook !== 'all'
-                    ? 'No assignments found for selected book'
-                    : 'No assignments found'}
-                </span>
-              </div>
-            ) : (
-              <TooltipProvider delayDuration={300}>
-                <div className='relative flex h-full flex-col overflow-y-auto'>
-                  <Table className='w-full table-fixed'>
-                    <TableHeader className='sticky top-0 z-10'>
-                      <TableRow className='hover:bg-transparent'>
-                        <TableHead className='w-12 px-3 py-2 md:px-4 md:py-2.5 lg:px-6 lg:py-3'>
-                          <></>
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          Book
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          Chapter
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          Drafter
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          <TruncatedTableText text='Peer Checker' />
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          Status
-                        </TableHead>
-                        <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                          Progress
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className='divide-border divide-y'>
-                      {filteredAssignments.map(assignment => {
-                        return (
-                          <TableRow
-                            key={assignment.assignmentId}
-                            className='align-center cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
-                            onClick={() => handleChapterRowClick(assignment)}
-                          >
-                            <TableCell
-                              className={`w-12 px-3 py-3 md:px-4 md:py-3.5 lg:px-6 lg:py-4 ${isManager ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : ''}`}
-                              onClick={e => {
-                                e.stopPropagation();
-                                if (!isLoadingData && isManager) {
-                                  handleCheckboxChange(
-                                    assignment.assignmentId,
-                                    !selectedAssignments.includes(assignment.assignmentId)
-                                  );
-                                }
-                              }}
-                            >
-                              {isManager && (
-                                <Checkbox
-                                  checked={selectedAssignments.includes(assignment.assignmentId)}
-                                  disabled={isLoadingData}
-                                  onCheckedChange={checked =>
-                                    handleCheckboxChange(assignment.assignmentId, !!checked)
-                                  }
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              <TruncatedTableText text={assignment.bookNameEng} />
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              {assignment.chapterNumber}
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              <TruncatedTableText
-                                text={assignment.assignedUser?.displayName ?? ''}
-                              />
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              <TruncatedTableText
-                                text={assignment.peerChecker?.displayName ?? ''}
-                              />
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              <TruncatedTableText
-                                text={getStatusDisplay(
-                                  assignment.status as ChapterAssignmentStatusType
-                                )}
-                              />
-                            </TableCell>
-                            <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                              <TruncatedTableText
-                                text={formatProgress(
-                                  assignment.completedVerses,
-                                  assignment.totalVerses
-                                )}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TooltipProvider>
-            )}
-          </div>
+          <ChapterAssignmentsTable
+            assignments={filteredAssignments}
+            isLoading={assignmentsLoading}
+            isManager={isManager}
+            isRowActionsDisabled={isLoadingData}
+            selectedAssignments={selectedAssignments}
+            selectedBook={selectedBook}
+            onCheckboxChange={handleCheckboxChange}
+            onRowClick={handleChapterRowClick}
+          />
         </div>
       </div>
 

@@ -246,6 +246,11 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   useEffect(() => {
     if (localizeRefName.length > 0 && shouldFetchResources) {
+      if (selectedResource.id === 'UWTranslationQuestions') {
+        setOpenItem(prev => (prev.length === 0 ? prev : []));
+        return;
+      }
+
       const firstItemId = localizeRefName[0].id.toString();
       setOpenItem(prev => {
         if (prev.length === 1 && prev[0] === firstItemId) return prev;
@@ -256,7 +261,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
       setOpenItem(prev => (prev.length === 0 ? prev : []));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localizeRefName, shouldFetchResources]);
+  }, [localizeRefName, shouldFetchResources, selectedResource.id]);
 
   useEffect(() => {
     if (
@@ -410,10 +415,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   return (
     <aside className='bg-background flex h-full flex-col'>
+      {/* The "Resources" heading was removed: the shared LeftPanel tab row
+          ("Resources | Checks") now serves as this panel's header (W11, §6.6). */}
       <div className='bg-background top-0 py-4'>
-        <div className='flex items-center gap-2'>
-          <h3 className='text-foreground text-xl font-semibold'>Resources</h3>
-        </div>
         <ResourceChipRow
           resourceNames={resourceNames}
           selectedResource={selectedResource}

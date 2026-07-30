@@ -6,14 +6,23 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
+import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import {
+  type LeftTab,
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
+import { type OccurrenceRules } from '@/features/checks/checks.types';
+import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
+import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
+import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
+import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
+import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -25,10 +34,18 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope } from './DraftingGridPericope';
+import { DraftingGridPericope, TargetVersesGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+
+/**
+ * Stable empty snapshot for renders before the first check result settles —
+ * a module-level constant so the `ChecksPanel` prop reference doesn't change
+ * (and re-render) on every DraftingUI render. FindingRow falls back to
+ * `finding.surf` on a miss, so "empty" is always safe.
+ */
+const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
 
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
@@ -36,6 +53,7 @@ const RESOURCE_NAMES: ResourceName[] = [
   { id: 'Bibles', name: 'Bibles' },
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
+  { id: 'TyndaleStudyNotes', name: 'OSN' },
 ];
 
 export const DraftingUI: React.FC<DraftingUIProps> = ({
@@ -64,6 +82,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
   const [bibleContentLoading, setBibleContentLoading] = useState(false);
 
+  // Which left-panel tab is showing (Resources | Checks). Persisted in the
+  // editor-state blob as `activeLeftTab` (W11, §6.6).
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftTab>('resources');
+  // Occurrence-level suppression rules for the Repeated Word Check (cascade
+  // layer 2). Held here so they ride the existing debounced editor-state save
+  // — the single writer for the blob (§7.1).
+  const [occurrenceRules, setOccurrenceRules] = useState<OccurrenceRules>({});
+  // Increments on every successful verse auto-save; part of the check query key
+  // so the check re-fires exactly on the auto-save event (W3, card #172).
+  const [saveCounter, setSaveCounter] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const clearBibleRef = useRef<(() => void) | null>(null);
 
@@ -78,6 +107,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     activeResource: string;
     languageCode: string;
     tabStatus: boolean;
+    activeLeftTab: LeftTab;
+    checkOccurrenceRules: OccurrenceRules;
   } | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -102,6 +133,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return () => setPresenceWarning(null);
   }, [editorName, setPresenceWarning]);
 
+  const trackAiUsageMutation = useTrackAiUsage();
+
   const saveVerse = useCallback(
     async (verse: number, text: string) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
@@ -119,8 +152,28 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           assignedUserId: userdetail.id,
         },
       });
+
+      if (projectItem.isAiEnabled) {
+        trackAiUsageMutation.mutate({
+          bibleTextId: sourceVerse.id,
+          projectUnitId: projectItem.projectUnitId,
+          wasUsed: true,
+        });
+      }
+
+      // Bump on the successful auto-save event so the Repeated Word Check
+      // re-fires (W3, card #172). `useAddTranslatedVerse` doesn't forward
+      // mutate-time `onSuccess`, so we bump after the awaited resolve.
+      setSaveCounter(c => c + 1);
     },
-    [addVerseMutation, projectItem.projectUnitId, sourceVerses, userdetail]
+    [
+      addVerseMutation,
+      projectItem.projectUnitId,
+      sourceVerses,
+      userdetail,
+      projectItem.isAiEnabled,
+      trackAiUsageMutation,
+    ]
   );
 
   const {
@@ -129,6 +182,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealedVerses,
     buttonTop,
     lastRevealedVerseHasContent,
+    lastRevealedVerseNumber,
     targetScrollRef,
     textareaRefs,
     verseRefs,
@@ -145,6 +199,43 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     readOnly,
     onSave: saveVerse,
   });
+
+  const verseMapping = useMemo(() => {
+    const mapping: Record<number, number> = {};
+    sourceVerses.forEach((v: Source) => {
+      mapping[v.id] = v.verseNumber;
+    });
+    return mapping;
+  }, [sourceVerses]);
+
+  const {
+    suggestions: aiSuggestions,
+    isAiThresholdMet,
+    suggestionStatus,
+  } = useAiSuggestions(
+    projectItem.projectUnitId,
+    projectItem.bibleId,
+    projectItem.bookCode,
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    projectItem.isAiEnabled && isDraft
+  );
+
+  const fireToast = useAiSuggestionToast();
+
+  useEffect(() => {
+    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
+      fireToast(projectItem.targetLanguage);
+    }
+  }, [
+    isAiThresholdMet,
+    fireToast,
+    projectItem.targetLanguage,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
 
   const {
     pericopes,
@@ -170,6 +261,88 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealNextVerse,
   });
 
+  // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
+
+  // Feature flag: is the Repeated Word Check enabled in this environment? The
+  // whole Checks feature depends on fluent-ai, which isn't hosted everywhere,
+  // so the flag lets this code ship hidden until AI is wired (feature-flags
+  // proposal D6/D7). Fail-closed: `useFeatureFlag` returns false while loading
+  // or on endpoint error, so the tab and the AI query stay off by default. This
+  // is the single consumption point — the flag is threaded down as booleans so
+  // the leaf components stay flag-agnostic.
+  const checksEnabled = useFeatureFlag('repeatedWordCheck');
+
+  // The single writer for the occurrence-rule map: `useSuppressions` does the
+  // read-modify-write and hands the next full map back here; updating state
+  // makes it ride the existing debounced editor-state save (one writer, §7.1).
+  const saveOccurrenceRules = useCallback((next: OccurrenceRules) => {
+    setOccurrenceRules(next);
+  }, []);
+
+  const {
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+    globalIgnoresAvailable,
+    settingsProbeResolved,
+    ignoreHere,
+    ignoreEverywhere,
+    undoOccurrence,
+    stopIgnoringEverywhere,
+    // Gate the once-per-session `GET /self/settings` probe on the same feature
+    // flag as the check query: when the Repeated Word Check is off (or still
+    // loading / errored — fail-closed) the Checks UI is hidden, so there is no
+    // reason to fetch user settings for it (W2, feature-flags proposal D5/D7).
+  } = useSuppressions({ occurrenceRules, saveOccurrenceRules, enabled: checksEnabled });
+
+  // What the translator currently sees is what gets checked (§6.2) — feed the
+  // live drafting verses, not a refetch.
+  const checkVerses = verses.map(v => ({ verseNumber: v.verseNumber, content: v.content }));
+  const hasContent = checkVerses.some(v => v.content.trim() !== '');
+
+  const checkQuery = useRepeatedWordsCheck({
+    projectItem,
+    verses: checkVerses,
+    saveCounter,
+    // Wait for the settings probe so the first render is cascade-correct, and
+    // never run in read-only `/view` or when the chapter is empty (W10/§9.1).
+    // Also gate on the feature flag: when the Repeated Word Check is off (or
+    // still loading / errored — fail-closed) we suppress the query entirely so
+    // no known-failing POST to /ai/tools/... fires in environments where
+    // fluent-ai isn't wired (feature-flags proposal D5/D7).
+    enabled: checksEnabled && !readOnly && hasContent && settingsProbeResolved,
+  });
+
+  const resolved = useResolvedFindings({
+    findings: checkQuery.data?.result?.findings ?? [],
+    occurrenceRules: liveOccurrenceRules,
+    globalRules,
+  });
+
+  // As-checked verse-text snapshot, hydrated onto the settled check result by
+  // useRepeatedWordsCheck (NOT derived from live `verses` — the findings'
+  // offsets are relative to the text as it was checked, so the two must travel
+  // together and update only when a new result arrives). `checkQuery.data` is
+  // referentially stable per settled result, so this reference only changes
+  // when new findings do.
+  const verseTextBySntId = checkQuery.data?.verseTextBySntId ?? EMPTY_VERSE_TEXT_SNAPSHOT;
+
+  // Active-finding count drives both notification dots; computed once here and
+  // threaded to the tab and the closed-panel toggle button (S5, §6.4). When the
+  // Checks feature is disabled it is forced to 0 so neither dot can flash while
+  // the flag is resolving (the query is already suppressed above; this guards
+  // the count explicitly).
+  const activeFindingsCount = checksEnabled ? resolved.active.length : 0;
+
+  // When the Checks tab is hidden (feature off), a persisted `activeLeftTab ===
+  // 'checks'` must not strand the panel on an empty/absent tab — fall back to
+  // Resources for rendering. The persisted value itself is left untouched, so
+  // if the feature is later enabled the translator's last tab is restored.
+  const effectiveActiveLeftTab: LeftTab = checksEnabled ? activeLeftTab : 'resources';
+
+  const handleTabChange = useCallback((tab: LeftTab) => {
+    setActiveLeftTab(tab);
+  }, []);
+
   const handleBack = useCallback(() => {
     clearCurrentProjectItem();
 
@@ -186,11 +359,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     if (!isFetched || isInitializedRef.current) return;
 
     if (savedResourceState) {
-      const { languageCode, tabStatus } = savedResourceState;
+      const { languageCode, tabStatus, activeLeftTab: savedTab } = savedResourceState;
+      const savedOccurrenceRules = savedResourceState.checkOccurrenceRules ?? {};
 
       if (typeof tabStatus === 'boolean') {
         setShowResources(tabStatus);
       }
+
+      if (savedTab === 'resources' || savedTab === 'checks') {
+        setActiveLeftTab(savedTab);
+      }
+
+      setOccurrenceRules(savedOccurrenceRules);
 
       setCurrentLanguage(languageCode || projectItem.sourceLangCode);
 
@@ -201,6 +381,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         activeResource: RESOURCE_NAMES[0].id,
         languageCode: languageCode || projectItem.sourceLangCode,
         tabStatus: typeof tabStatus === 'boolean' ? tabStatus : false,
+        activeLeftTab: savedTab === 'checks' ? 'checks' : 'resources',
+        checkOccurrenceRules: savedOccurrenceRules,
       };
     } else {
       setCurrentLanguage(projectItem.sourceLangCode);
@@ -212,6 +394,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         activeResource: RESOURCE_NAMES[0].id,
         languageCode: projectItem.sourceLangCode,
         tabStatus: false,
+        activeLeftTab: 'resources',
+        checkOccurrenceRules: {},
       };
     }
 
@@ -236,6 +420,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       activeResource: currentResource.id,
       languageCode: currentLanguage || projectItem.sourceLangCode,
       tabStatus: showResources,
+      activeLeftTab,
+      checkOccurrenceRules: occurrenceRules,
     };
 
     if (lastSavedStateRef.current) {
@@ -245,7 +431,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         lastSavedStateRef.current.verseNumber !== currentState.verseNumber ||
         lastSavedStateRef.current.activeResource !== currentState.activeResource ||
         lastSavedStateRef.current.languageCode !== currentState.languageCode ||
-        lastSavedStateRef.current.tabStatus !== currentState.tabStatus;
+        lastSavedStateRef.current.tabStatus !== currentState.tabStatus ||
+        lastSavedStateRef.current.activeLeftTab !== currentState.activeLeftTab ||
+        // Occurrence rules are replaced by-reference on every write (the hook
+        // returns a fresh map), so an identity check is sufficient and cheap.
+        lastSavedStateRef.current.checkOccurrenceRules !== currentState.checkOccurrenceRules;
 
       if (!hasChanged) return;
     }
@@ -271,6 +461,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     currentResource.id,
     currentLanguage,
     showResources,
+    activeLeftTab,
+    occurrenceRules,
     activeVerseId,
     projectItem.chapterAssignmentId,
     projectItem.book,
@@ -278,6 +470,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     projectItem.sourceLangCode,
     saveResourceStateMutation,
   ]);
+
+  useEffect(() => {
+    const handle = requestAnimationFrame(() => {
+      updateButtonPosition();
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [selectedPanel, bibleContentLoading, bibleVerses.length, updateButtonPosition]);
 
   const totalSourceVerses = sourceVerses.length;
   const versesWithText = verses.filter(v => v.content.trim() !== '').length;
@@ -314,6 +513,47 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     clearCurrentProjectItem,
     router,
   ]);
+
+  // Keep track of verses that the user has manually typed in or that have been
+  // auto-populated, so we never auto-populate a verse the user is working on.
+  const userTouchedVersesRef = useRef<Set<number>>(new Set());
+
+  const handleTextChangeWithTracking = useCallback(
+    (verseNumber: number, text: string) => {
+      userTouchedVersesRef.current.add(verseNumber);
+      handleTextChange(verseNumber, text);
+    },
+    [handleTextChange]
+  );
+
+  useEffect(() => {
+    if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
+
+    // Check if the current active verse is empty and we have a new AI suggestion for it
+    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
+    if (
+      activeTargetVerse &&
+      !activeTargetVerse.content.trim() &&
+      aiSuggestions[activeVerseId] &&
+      !userTouchedVersesRef.current.has(activeVerseId)
+    ) {
+      userTouchedVersesRef.current.add(activeVerseId);
+      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
+    }
+  }, [
+    activeVerseId,
+    aiSuggestions,
+    verses,
+    handleTextChange,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
+
+  // Recalculate floating button position when AI suggestions load or fail (which changes row height)
+  useEffect(() => {
+    updateButtonPosition();
+  }, [suggestionStatus, aiSuggestions, updateButtonPosition]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -360,52 +600,155 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
+  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
+
   const renderPanelTwoPlaceholder = useCallback(
-    (middleContent: React.ReactNode, isCenter = true) => (
-      <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '2rem 1fr 1fr' }}>
-        <div className='w-8' />
-        <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
-          <div
-            className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
-          >
-            {middleContent}
+    (middleContent: React.ReactNode, isCenter = true) => {
+      if (isPericopeMode && pericopes) {
+        return (
+          <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+              <div
+                className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+              >
+                {middleContent}
+              </div>
+            </div>
+            <div className='flex flex-col space-y-4 px-6'>
+              {pericopes.map(group => {
+                const groupVerses = sourceVerses.filter(sv =>
+                  group.verses.some(gv => gv.verseNumber === sv.verseNumber)
+                );
+                if (groupVerses.length === 0) return null;
+                const verseNumbers = groupVerses.map(gv => gv.verseNumber);
+                const minVerse = Math.min(...verseNumbers);
+                const maxVerse = Math.max(...verseNumbers);
+                const heading =
+                  minVerse === maxVerse
+                    ? `${projectItem.chapterNumber}:${minVerse}`
+                    : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
+
+                const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+
+                return (
+                  <div key={group.pericopeNumber} className='flex w-full flex-col space-y-2'>
+                    <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                      {heading}
+                    </h4>
+                    <div
+                      className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                        isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                      }`}
+                      onClick={e => {
+                        if (e.target === e.currentTarget) {
+                          const isGroupAlreadyActive = groupVerses.some(
+                            gv => gv.verseNumber === activeVerseId
+                          );
+                          if (!isGroupAlreadyActive) {
+                            handleActiveVerseChange(groupVerses[0].verseNumber);
+                          }
+                        }
+                      }}
+                    >
+                      <TargetVersesGroup
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        groupVerses={groupVerses}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleNextClick={handleNextClick}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
+                        isTranslationComplete={isTranslationComplete}
+                        lastSourceVerseNumber={lastSourceVerseNumber}
+                        readOnly={readOnly}
+                        suggestionStatus={suggestionStatus}
+                        textareaRefs={textareaRefs}
+                        verses={verses}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          className='grid h-full items-start py-4'
+          style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
+        >
+          <div className='w-8' />
+          <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
+            <div
+              className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
+            >
+              {middleContent}
+            </div>
+          </div>
+          <div className='flex flex-col'>
+            {sourceVerses.map(verse => (
+              <div
+                key={verse.verseNumber}
+                ref={el => {
+                  verseRefs.current[verse.verseNumber] = el;
+                }}
+                className='py-4'
+              >
+                <DraftingTargetColumn
+                  activeVerseId={activeVerseId}
+                  aiSuggestions={aiSuggestions}
+                  effectiveRevealedVerses={effectiveRevealedVerses}
+                  handleActiveVerseChange={handleActiveVerseChange}
+                  handleKeyDown={handleKeyDown}
+                  handleTextChange={handleTextChangeWithTracking}
+                  isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                  isAiThresholdMet={isAiThresholdMet ?? false}
+                  readOnly={readOnly}
+                  suggestionStatus={suggestionStatus}
+                  textareaRefs={textareaRefs}
+                  verseNumber={verse.verseNumber}
+                  verses={verses}
+                />
+              </div>
+            ))}
           </div>
         </div>
-        <div className='flex flex-col px-6'>
-          {sourceVerses.map(verse => (
-            <div key={verse.verseNumber} className='py-4'>
-              <DraftingTargetColumn
-                activeVerseId={activeVerseId}
-                effectiveRevealedVerses={effectiveRevealedVerses}
-                handleActiveVerseChange={handleActiveVerseChange}
-                handleKeyDown={handleKeyDown}
-                handleTextChange={handleTextChange}
-                readOnly={readOnly}
-                textareaRefs={textareaRefs}
-                verseNumber={verse.verseNumber}
-                verses={verses}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
+      );
+    },
     [
+      isPericopeMode,
+      pericopes,
       sourceVerses,
+      projectItem,
       activeVerseId,
-      effectiveRevealedVerses,
+      globalNextUntouchedVerse,
       handleActiveVerseChange,
       handleKeyDown,
-      handleTextChange,
+      handleNextClick,
+      handleTextChangeWithTracking,
+      isTranslationComplete,
+      isDraft,
+      lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
+      aiSuggestions,
+      effectiveRevealedVerses,
+      isAiThresholdMet,
+      suggestionStatus,
+      verseRefs,
     ]
   );
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
       <DraftingHeader
+        activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}
         hasAnyError={hasAnyError}
         isAnythingSaving={isAnythingSaving}
@@ -424,6 +767,20 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       <div ref={containerRef} className='flex h-full overflow-hidden'>
         {showResources && isInitializedRef.current && (
           <DraftingResourceSidebar
+            activeFindingsCount={activeFindingsCount}
+            activeLeftTab={effectiveActiveLeftTab}
+            checksContent={
+              <ChecksPanel
+                globalIgnoresAvailable={globalIgnoresAvailable}
+                isError={checkQuery.isError}
+                resolved={resolved}
+                verseTextBySntId={verseTextBySntId}
+                onIgnoreEverywhere={ignoreEverywhere}
+                onIgnoreHere={ignoreHere}
+                onStopIgnoringEverywhere={stopIgnoringEverywhere}
+                onUndo={undoOccurrence}
+              />
+            }
             clearBibleRef={clearBibleRef}
             containerRef={containerRef}
             currentLanguage={currentLanguage}
@@ -438,12 +795,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             setCurrentResource={setCurrentResource}
             setOpenResourcePanel={setOpenResourcePanel}
             setSelectedPanel={setSelectedPanel}
+            showChecksTab={checksEnabled}
+            onTabChange={handleTabChange}
           />
         )}
 
-        <div className='w-full flex-1 overflow-hidden px-8'>
+        <div className='w-full flex-1 overflow-hidden'>
           <div
-            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full content-start`}
+            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full w-full content-start`}
             style={{
               gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
               gridTemplateRows: 'auto 1fr',
@@ -453,7 +812,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
             <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
               <button
-                className={`cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
+                className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
                   openResourcePanel
                     ? selectedPanel === 1
                       ? 'border-primary border-b-2 pb-1'
@@ -468,8 +827,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
               {openResourcePanel && (
                 <>
+                  <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
+                    |
+                  </span>
                   <button
-                    className={`ml-4 cursor-pointer text-2xl font-bold transition-colors ${
+                    className={`cursor-pointer text-2xl font-bold transition-colors ${
                       selectedPanel === 2
                         ? 'border-primary border-b-2 pb-1'
                         : 'text-muted-foreground'
@@ -487,10 +849,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             </div>
 
             <div className='bg-background sticky top-0 z-10 px-6 py-3'>
-              <h3 className='text-2xl font-bold text-slate-800'>{projectItem.targetLanguage}</h3>
+              <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
+                {projectItem.targetLanguage}
+              </h3>
             </div>
+
             <div
-              className={`col-span-3 flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
+              className={`col-span-full flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
             >
               <div
                 ref={targetScrollRef}
@@ -509,64 +874,69 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   !bibleContentLoading &&
                   bibleVerses.length === 0 &&
                   renderPanelTwoPlaceholder(
-                    <p className='text-muted-foreground text-sm'>
-                      {t('noContentAvailable', 'No content available')}
+                    <p className='text-muted-foreground px-6 text-center text-sm'>
+                      {t('noContentAvailable')}
                     </p>,
                     false
                   )}
 
-                <div
-                  className={
-                    selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)
-                      ? 'hidden'
-                      : undefined
-                  }
-                >
-                  {displayMode === 'pericope' && isPericopeLoading ? (
-                    <div className='flex h-full items-center justify-center py-12'>
-                      <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
-                    </div>
-                  ) : isPericopeMode && pericopes ? (
-                    <DraftingGridPericope
-                      activeVerseId={activeVerseId}
-                      bibleVerseMap={bibleVerseMap}
-                      globalNextUntouchedVerse={globalNextUntouchedVerse}
-                      handleActiveVerseChange={handleActiveVerseChange}
-                      handleKeyDown={handleKeyDown}
-                      handleNextClick={handleNextClick}
-                      handleTextChange={handleTextChange}
-                      pericopes={pericopes}
-                      projectItem={projectItem}
-                      readOnly={readOnly}
-                      selectedPanel={selectedPanel}
-                      sourceVerses={sourceVerses}
-                      textareaRefs={textareaRefs}
-                      verseRefs={verseRefs}
-                      verses={verses}
-                    />
-                  ) : (
-                    <DraftingGridVerse
-                      activeVerseId={activeVerseId}
-                      bibleVerseMap={bibleVerseMap}
-                      effectiveRevealedVerses={effectiveRevealedVerses}
-                      getPericopeStyle={getPericopeStyle}
-                      handleActiveVerseChange={handleActiveVerseChange}
-                      handleKeyDown={handleKeyDown}
-                      handleTextChange={handleTextChange}
-                      readOnly={readOnly}
-                      selectedPanel={selectedPanel}
-                      sourceVerses={sourceVerses}
-                      textareaRefs={textareaRefs}
-                      verseRefs={verseRefs}
-                      verses={verses}
-                    />
-                  )}
-                </div>
+                {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                  <>
+                    {displayMode === 'pericope' && isPericopeLoading ? (
+                      <div className='flex h-full items-center justify-center py-12'>
+                        <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                      </div>
+                    ) : isPericopeMode && pericopes ? (
+                      <DraftingGridPericope
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        bibleVerseMap={bibleVerseMap}
+                        globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleNextClick={handleNextClick}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
+                        isTranslationComplete={isTranslationComplete}
+                        pericopes={pericopes}
+                        projectItem={projectItem}
+                        readOnly={readOnly}
+                        selectedPanel={selectedPanel}
+                        sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
+                        textareaRefs={textareaRefs}
+                        verseRefs={verseRefs}
+                        verses={verses}
+                      />
+                    ) : (
+                      <DraftingGridVerse
+                        activeVerseId={activeVerseId}
+                        aiSuggestions={aiSuggestions}
+                        bibleVerseMap={bibleVerseMap}
+                        effectiveRevealedVerses={effectiveRevealedVerses}
+                        getPericopeStyle={getPericopeStyle}
+                        handleActiveVerseChange={handleActiveVerseChange}
+                        handleKeyDown={handleKeyDown}
+                        handleTextChange={handleTextChangeWithTracking}
+                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                        isAiThresholdMet={isAiThresholdMet ?? false}
+                        readOnly={readOnly}
+                        selectedPanel={selectedPanel}
+                        sourceVerses={sourceVerses}
+                        suggestionStatus={suggestionStatus}
+                        textareaRefs={textareaRefs}
+                        verseRefs={verseRefs}
+                        verses={verses}
+                      />
+                    )}
+                  </>
+                )}
 
                 {!readOnly &&
                   !isPericopeMode &&
                   !isPericopeLoading &&
-                  effectiveRevealedVerses.size < totalSourceVerses && (
+                  lastRevealedVerseNumber < totalSourceVerses && (
                     <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
                       <TooltipProvider delayDuration={300}>
                         <Tooltip>

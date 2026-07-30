@@ -86,6 +86,13 @@ export interface ChapterAssignmentProgress {
   bookId: number;
   bookCode: string;
   sourceLangCode: string;
+  /**
+   * ISO 639-3 target language CODE, e.g. "eng" (sent as the repeated-words
+   * check's `lang_code`). Required so the PM "open chapter" path can populate
+   * `ProjectItem.targetLangCode`; if it were optional the field could be
+   * silently dropped and the check would send "<unknown>" (BUG #3).
+   */
+  targetLangCode: string;
   bookNameEng: string;
   chapterNumber: number;
   assignedUser: AssignmentUser | null;
@@ -114,7 +121,18 @@ export interface ProjectItem {
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /**
+   * ISO 639-3 target language CODE, e.g. "eng". Sent as the check's `lang_code`
+   * — greek-room keys its legitimate-duplicate whitelist on this code, so the
+   * display name must NOT be used here. See phase-04 manual smoke (BUG #2).
+   * Required so the compiler forces every `ProjectItem` builder to supply it
+   * (the PM "open chapter" path silently omitted it — BUG #3). The check still
+   * degrades to "<unknown>" at runtime if the value is somehow empty, rather
+   * than crashing.
+   */
+  targetLangCode: string;
   bookId: number;
   book: string;
   chapterStatus: string;
@@ -124,6 +142,7 @@ export interface ProjectItem {
   submittedTime: string | null;
   bookCode: string;
   sourceLangCode: string;
+  isAiEnabled?: boolean;
 }
 
 export interface VerseData {
@@ -247,7 +266,10 @@ export interface UserChapterAssignment {
   bibleId: number;
   bibleName: string;
   chapterStatus: string;
+  /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
+  /** ISO 639-3 target language CODE, e.g. "eng" (sent as the check's lang_code). */
+  targetLangCode: string;
   sourceLangCode: string;
   bookCode: string;
   bookId: number;
@@ -291,6 +313,18 @@ export const ChapterAssignmentStatusNextAction: Partial<Record<ChapterAssignment
   [ChapterAssignmentStatus.LINGUIST_CHECK]: 'Send to Theological Check',
   [ChapterAssignmentStatus.THEOLOGICAL_CHECK]: 'Send to Consultant Check',
   [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Mark as Complete',
+};
+
+export const ADVANCED_CHECK_SUB_STATUSES: ChapterAssignmentStatus[] = [
+  ChapterAssignmentStatus.LINGUIST_CHECK,
+  ChapterAssignmentStatus.THEOLOGICAL_CHECK,
+  ChapterAssignmentStatus.CONSULTANT_CHECK,
+];
+
+export const ADVANCED_CHECK_SUB_LABELS: Partial<Record<ChapterAssignmentStatus, string>> = {
+  [ChapterAssignmentStatus.LINGUIST_CHECK]: 'Linguist Check',
+  [ChapterAssignmentStatus.THEOLOGICAL_CHECK]: 'Theologian Check',
+  [ChapterAssignmentStatus.CONSULTANT_CHECK]: 'Consultant Check',
 };
 
 export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [

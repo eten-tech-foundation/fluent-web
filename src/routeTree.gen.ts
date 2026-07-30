@@ -18,6 +18,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
 import { Route as AuthenticatedLynxUsfmRouteImport } from './routes/_authenticated/lynx-usfm'
+import { Route as AuthenticatedDebugRouteImport } from './routes/_authenticated/debug'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './routes/_authenticated/projects/$projectId/index'
@@ -68,6 +69,11 @@ const AuthenticatedLynxUsfmRoute = AuthenticatedLynxUsfmRouteImport.update({
   path: '/lynx-usfm',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedDebugRoute = AuthenticatedDebugRouteImport.update({
+  id: '/debug',
+  path: '/debug',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/debug': typeof AuthenticatedDebugRoute
   '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/debug': typeof AuthenticatedDebugRoute
   '/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/legal': typeof LegalRouteWithChildren
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/debug': typeof AuthenticatedDebugRoute
   '/_authenticated/lynx-usfm': typeof AuthenticatedLynxUsfmRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/debug'
     | '/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/debug'
     | '/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/legal'
     | '/login'
     | '/reset-password'
+    | '/_authenticated/debug'
     | '/_authenticated/lynx-usfm'
     | '/legal/privacy'
     | '/legal/terms'
@@ -267,6 +279,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLynxUsfmRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/debug': {
+      id: '/_authenticated/debug'
+      path: '/debug'
+      fullPath: '/debug'
+      preLoaderRoute: typeof AuthenticatedDebugRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
@@ -306,6 +325,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedDebugRoute: typeof AuthenticatedDebugRoute
   AuthenticatedLynxUsfmRoute: typeof AuthenticatedLynxUsfmRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
@@ -316,6 +336,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedDebugRoute: AuthenticatedDebugRoute,
   AuthenticatedLynxUsfmRoute: AuthenticatedLynxUsfmRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
