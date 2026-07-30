@@ -55,6 +55,8 @@ export function useRtePoc() {
   const lynx = useLynxDocument();
 
   const [book, setBook] = useState({ code: 'RUT', name: 'Ruth' });
+  /** Language of the loaded content; undefined = unknown → no charset checking (#385). */
+  const [contentLanguage, setContentLanguage] = useState<string | undefined>('en');
   const [chapterUsj, setChapterUsj] = useState<Usj>(() => usfmToUsj(SAMPLE_USFM));
   const [originalTexts, setOriginalTexts] = useState<ReadonlyMap<string, string>>(() =>
     verseTextMap(usfmToUsj(SAMPLE_USFM))
@@ -131,15 +133,20 @@ export function useRtePoc() {
   const { status: lynxStatus, usfm: lynxUsfm, loadSource, changeUsfm } = lynx;
   const assembledRef = useRef(assembledUsfm);
   assembledRef.current = assembledUsfm;
+  const lastLoadedGenerationRef = useRef(-1);
   useEffect(() => {
-    if (lynxStatus !== 'ready' || lynxUsfm === assembledUsfm) return;
-    if (lynxUsfm === '') {
-      void loadSource(assembledUsfm);
+    if (lynxStatus !== 'ready') return;
+    // A fresh load (sample or chapter) goes through loadSource so the rule set
+    // can follow the content language (#385); edits take the debounced path.
+    if (lastLoadedGenerationRef.current !== generation) {
+      lastLoadedGenerationRef.current = generation;
+      void loadSource(assembledUsfm, contentLanguage);
       return;
     }
+    if (lynxUsfm === assembledUsfm) return;
     const timer = setTimeout(() => void changeUsfm(assembledRef.current), 400);
     return () => clearTimeout(timer);
-  }, [lynxStatus, lynxUsfm, assembledUsfm, loadSource, changeUsfm]);
+  }, [lynxStatus, lynxUsfm, assembledUsfm, contentLanguage, generation, loadSource, changeUsfm]);
 
   const annotations = useMemo(
     () =>
@@ -176,11 +183,17 @@ export function useRtePoc() {
   );
 
   const resetTo = useCallback(
-    (usj: Usj, nextBook: { code: string; name: string }, ids: ReadonlyMap<string, number>) => {
+    (
+      usj: Usj,
+      nextBook: { code: string; name: string },
+      ids: ReadonlyMap<string, number>,
+      language: string | undefined
+    ) => {
       setBook(nextBook);
       setChapterUsj(usj);
       setOriginalTexts(verseTextMap(usj));
       setBibleTextIds(ids);
+      setContentLanguage(language);
       setChapterNumber(usjChapterNumbers(usj)[0] ?? 1);
       setPericopeIndex(0);
       setSaveState({ status: 'idle' });
@@ -190,7 +203,7 @@ export function useRtePoc() {
   );
 
   const loadSample = useCallback(() => {
-    resetTo(usfmToUsj(SAMPLE_USFM), { code: 'RUT', name: 'Ruth' }, new Map());
+    resetTo(usfmToUsj(SAMPLE_USFM), { code: 'RUT', name: 'Ruth' }, new Map(), 'en');
   }, [resetTo]);
 
   const loadChapter = useCallback(
@@ -209,7 +222,9 @@ export function useRtePoc() {
       const ids = new Map(
         sources.map(source => [verseKey(params.chapterNumber, source.verseNumber), source.id])
       );
-      resetTo(usfmToUsj(usfm), { code: params.bookCode, name: params.bookName }, ids);
+      // Language of API chapters is unknown here (no language on the texts
+      // endpoint), so charset checking stays off for them (#385).
+      resetTo(usfmToUsj(usfm), { code: params.bookCode, name: params.bookName }, ids, undefined);
     },
     [resetTo]
   );
