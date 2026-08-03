@@ -69,9 +69,9 @@ src/routes/_authenticated/lynx-usfm.tsx   # thin route file (TanStack file-based
 
 1. `UsfmEditor` onChange → hook state → `documentManager.fireChanged(uri, { contentChanges: [{ text }], version: n+1 })`.
 2. Providers emit on `workspace.diagnosticsChanged$` (push, RxJS) → hook merges per-source → React state.
-3. `verse-map.ts` re-walks `document.findNodes(...)` → structure snapshot (chapters, verses, ranges) → panels re-render; each diagnostic gets a verse ref by range containment.
-4. Quick fix click → `workspace.getDiagnosticFixes(uri, d)` → apply returned `TextEdit[]` to the string (via `document.offsetAt`) → back to step 1.
-5. Dismiss click → app-side suppression keyed by a locally computed fingerprint. (The *published* core 0.3.5 has no dismissal/fingerprint support yet — that is exactly the in-progress work Damien described in the February meeting, present on repo HEAD as `dismissDiagnostic` + `DiagnosticDismissalStore`. Emulating it client-side also mirrors how the Repeated-Word proposal filters findings.)
+3. `verse-map.ts` re-walks `document.findNodes(...)` → structure snapshot (chapters, verses, ranges) → panels re-render; `verseRefAtRange` resolves each diagnostic to the last verse starting at or before it. It returns `undefined` for anything outside a verse (`\id`/`\h`/`\mt` header lines): those findings still render, just without a verse chip. Findings are listed per provider, not bucketed by verse, so an unscoped diagnostic is never dropped.
+4. Quick fix click → `workspace.getDiagnosticFixes(uri, d)` → `DiagnosticFix[]`; the clicked fix's `fix.edits` are applied to the string (via `document.offsetAt`) → back to step 1. The PoC's fixes carry a single edit; applying a multi-edit fix safely (one snapshot, overlap check, descending offsets) is left to the production implementation.
+5. Dismiss click → app-side suppression keyed by `source|code|anchor|occurrence`, where `anchor` is the diagnostic's `verseRef` when one resolved and its `line:character` otherwise. The verse-anchored form survives re-parsing; **the positional fallback does not** — editing earlier text shifts the anchor and the dismissal is lost. Occurrence identity is the ordinal within `source|code|anchor` in document order. (The *published* core 0.3.5 has no dismissal/fingerprint support yet — that is exactly the in-progress work Damien described in the February meeting, present on repo HEAD as `dismissDiagnostic` + `DiagnosticDismissalStore`. Emulating it client-side also mirrors how the Repeated-Word proposal filters findings.)
 6. Typing a trigger char (from `getOnTypeTriggerCharacters()`) → `workspace.getOnTypeEdits(uri, pos, ch)` → apply (smart-quote autocorrect).
 
 **Published-API note.** npm 0.3.5 differs from repo HEAD (and HEAD's README): providers implement `getDiagnosticFixes` returning `DiagnosticFix { title, isPreferred?, edits }` — there are no command actions, no `fingerprint` field, no dismissal store. The vendored verse-order provider is adapted accordingly (its "exclude verse" command action was dropped).
@@ -90,7 +90,7 @@ Bundle: the whole feature (lynx core + usfm + punctuation-checker + machine corp
 
 ### Live findings beyond the hazards
 
-- **Performance:** parse + all five checkers on the sample ≈ 3 ms; Genesis 1 (31 verses, Gujarati IRV, fetched from the local fluent-api and assembled client-side) ≈ 28 ms. Interactive-keystroke budget is comfortable without any debouncing.
+- **Performance:** parse + all five checkers on the sample ≈ 3 ms; Genesis 1 (31 verses, Gujarati IRV, fetched from the local fluent-api and assembled client-side) ≈ 28 ms. Caveats before this number is used as a budget: single machine, single browser (Chromium), wall-clock of a handful of runs rather than p95/p99, and the pass runs **on the main thread**, so 28 ms overruns a 60 Hz frame (16.7 ms). The PoC needs no debouncing to feel immediate at chapter size, but a production integration editing longer documents should measure percentiles and plan for debouncing or a worker rather than assume headroom.
 - **Rule sets are language-specific:** running `StandardRuleSets.English` over Gujarati text produced ~2,600 allowed-character warnings. Not a bug — the character whitelist and quote conventions are `RuleSet` builder configuration, and a real integration must derive them from the project's target language. This is a first-class agenda item for the SIL collaboration (what does a Gujarati/Hindi rule set look like?).
 - **Quotation analysis is document-wide** (a quote-stack), so an unclosed quote early in a chapter shifts where later imbalances are reported. Fine for documents; worth thinking about for verse-scoped UX.
 
@@ -99,16 +99,26 @@ Bundle: the whole feature (lynx core + usfm + punctuation-checker + machine corp
 Two-column layout under the standard authenticated header, all shadcn components already in the repo (Card, Badge, Button, Select, Accordion, Tooltip, Separator):
 
 - **Left: USFM editor** — monospace textarea with an aligned overlay rendering wavy underlines/tints per diagnostic severity; issue count chips; on-type smart quotes live.
-- **Right, tab 1 "Checks"** — deliberately echoes the Repeated Word Check panel proposal: one accordion section per provider (Quotation, Allowed Characters, Paired Punctuation, Punctuation Context, Verse Order), findings **grouped by verse** with context snippets, severity badges, `[Fix: …]` buttons for actions with edits, `[Dismiss]` for fingerprinted diagnostics, zero state "No issues found".
+- **Right, tab 1 "Checks"** — deliberately echoes the Repeated Word Check panel proposal: one accordion section per provider (Quotation, Allowed Characters, Paired Punctuation, Punctuation Context, Verse Order), each finding **labelled with its verse** (chip omitted when the range sits outside any verse) plus context snippets, severity badges, `[Fix: …]` buttons for actions with edits, `[Dismiss]` for fingerprinted diagnostics, zero state "No issues found".
 - **Right, tab 2 "Structure"** — the typed node tree (type, range, preview) + a **formatted scripture preview** (chapter numbers, superscript verse numbers, paragraphs) rendered *purely from the parsed model* — the "front end understands verse structure natively" money shot.
 - Source switcher (Sample / From chapter with bible/book/chapter inputs) in the page header.
 
 ## 7. Verification
 
-- **Vitest (jsdom)**: stylesheet builds in a browser-like env with no `fs`; sample USFM parses to expected book/chapter/verse counts; seeded issues produce expected diagnostics per source; missing-verse quick fix round-trips (apply edit → diagnostic disappears); verses→USFM assembly matches the server's shape.
+- **Vitest (jsdom)**: stylesheet builds in a browser-like env with no `fs`; sample USFM parses to expected book/chapter/verse counts; seeded issues produce expected diagnostics per source; missing-verse quick fix round-trips (apply edit → diagnostic disappears); verses→USFM assembly produces the marker structure the server's exporter emits. That last test asserts **structure, not byte equality** with `generateUSFMText` — enough to show the client can assemble checkable USFM, not enough to claim the two are interchangeable. Establishing canonical equivalence (exact output or a normalized golden fixture, over chapters with missing verses, empty text and markers outside the curated subset) is a prerequisite for ever round-tripping client-assembled USFM back into storage.
 - **Live**: run the app against the local stack, drive the page (both source modes), screenshot; confirm no server round-trips during checking (network tab quiet after load).
 
-## 8. Follow-on roadmap this PoC informs (detail in `lynx-fluent-assessment.md`)
+## 8. What the PoC deliberately leaves open
+
+Scope boundaries, recorded so a production integration starts from the real state rather than from this page's happy path.
+
+- **Diagnostic lifecycle.** The hook renders whatever the last `diagnosticsChanged$` emission carried, per source. It does not correlate results with the document `version` that produced them, so a slow provider answering after a newer edit can briefly paint stale ranges; it does not clear findings while a re-check is in flight; and a provider that throws simply emits nothing, which the panel renders as the "No issues found" zero state. A real Checks panel needs version-tagged results, an explicit in-flight state, and an error state distinct from "clean" — otherwise a broken check looks like a passing one, which is the dangerous failure here.
+- **Unscoped diagnostics.** Findings outside any verse render without a verse chip (see §4). Nothing groups them under a structural heading, and quotation analysis is document-wide, so an early unclosed quote can report against a later verse than the one a user would blame.
+- **Multi-edit fixes.** Only single-edit fixes were exercised.
+- **Canonical USFM.** Assembly is verified structurally, not byte-for-byte (see §7).
+- **Rule sets are language-specific.** `StandardRuleSets.English` over Gujarati produced ~2,600 false warnings; a real integration must derive the rule set from the project's target language.
+
+## 9. Follow-on roadmap this PoC informs (detail in `lynx-fluent-assessment.md`)
 
 1. Checks panel engine: back the proposed Checks tab with a `Workspace` instead of per-check bespoke hooks; `fingerprint` ↔ occurrence identity, `DiagnosticDismissalStore` ↔ editor-state/user_settings suppression cascade.
 2. Greek Room / Wildebeest / spell check as `DiagnosticProvider`s calling the existing fluent-ai proxy.

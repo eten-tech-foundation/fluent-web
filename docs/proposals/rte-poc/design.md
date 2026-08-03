@@ -19,7 +19,7 @@ Roadmap step 3 for the Rich Text Editor: a working pericope-view editing PoC ins
 
 ## Architecture
 
-```
+```text
 src/features/rte/
   lib/
     usfm-to-usj.ts        # curated-subset USFM → USJ (deterministic)
@@ -45,6 +45,15 @@ TDD on the four lib modules (vitest, colocated): golden USFM→USJ conversion in
 ## Comparison harness (for the ProseMirror increment)
 
 The page keeps editor-specific code behind `RteEditor` so the ProseMirror counterpart swaps that component only; both share lib/hooks/panels, making the step-3 comparison apples-to-apples. Measurements (chapter load, typing latency, annotation apply) run CPU-throttled via DevTools on both, appended to the R&D doc scorecard.
+
+## Known limitations
+
+Behaviours a production version must close, recorded from the working PoC rather than inferred.
+
+- **The converter drops what it does not know.** `usfmToUsj` handles `\id \h \mt \c \p \v` plus plain continuation lines; any other marker is silently omitted, and malformed lines fall through as text. That is safe _only_ because its input is USFM this app assembled from verse rows moments earlier, never imported or user-authored USFM. Point it at real Paratext USFM and content disappears without a trace. Before it feeds anything that gets saved, it needs to fail closed on unknown markers (reject, or preserve them verbatim) and carry fixtures per supported marker plus one unsupported-marker case.
+- **The pericope fallback cannot distinguish "no pericopes" from "not loaded yet".** The whole-chapter fallback triggers whenever `useChapterPericopes` has no data — which is also true while the query is disabled (no project id), pending, or errored. A user whose pericope fetch fails silently gets a whole-chapter editor that looks deliberate. Production should branch on query state and treat only a settled empty result as "this chapter has none".
+- **The save contract is PoC-shaped.** The opt-in button posts changed verses one `POST /translated-verses` per row, sequentially, skipping rows whose `bibleTextId` is unknown and reporting saved/skipped counts. There is no batching, no retry, no optimistic state, and nothing prevents a second click from re-posting rows already in flight. A real dual-write needs the batch-vs-single decision made explicitly, plus duplicate-submit and partial-failure handling.
+- **The format bar is keyboard-first by requirement, which costs discoverability.** No permanent toolbar was allowed, so the bar is toggled by keyboard and auto-hides. As built that leaves pointer, touch and assistive-technology users without a route to it. Shipping this shape needs a focusable trigger with an accessible name, `aria-expanded`/`aria-controls`, the bar staying visible while it or its trigger holds focus, and Escape to dismiss.
 
 ## Out of scope
 

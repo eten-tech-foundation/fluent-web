@@ -18,10 +18,12 @@ Fluent's first check is now designed: the Repeated Word Check UI proposal builds
 | `useRepeatedWordsCheck` hook per check | `DiagnosticProvider` per check behind one `Workspace` |
 | Findings envelope from the fluent-ai proxy | `Diagnostic { source, range, severity, message, data }` |
 | `snt_id` + word + ordinal occurrence identity | `Diagnostic.fingerprint` (landing on Lynx HEAD) |
-| Ignore Here / Everywhere cascade in editor-state / `user_settings` | `DiagnosticDismissalStore` interface (Lynx HEAD) — Fluent implements it over those same stores |
-| "Show Ignored" + Undo | dismissal filtering built into `Workspace` |
+| Ignore Here / Everywhere cascade in editor-state / `user_settings` | `DiagnosticDismissalStore` interface (**Lynx HEAD only**) — Fluent implements it over those same stores |
+| "Show Ignored" + Undo | dismissal filtering built into `Workspace` (**Lynx HEAD only**) |
 | deferred "Drop duplicate" one-click fix | `DiagnosticFix` (edits) — the machinery already exists |
 | chapter re-check on every auto-save | `DocumentManager.fireChanged` + push-based `diagnosticsChanged$` |
+
+Rows marked **Lynx HEAD only** do not exist in the published 0.3.5 the PoC pins, so the PoC contracts dismissal and occurrence keying app-side instead (`source|code|anchor|occurrence` — see the design doc §4). Everything else in the table is available on 0.3.5 today.
 
 None of this forces a rewrite of the in-flight Repeated Word work. The realistic sequence is: land #277/#278 as designed, and when check **#2** arrives, put the panel on a `Workspace` so the third, fourth, fifth check are providers, not projects.
 
