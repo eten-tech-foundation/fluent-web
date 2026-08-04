@@ -3,11 +3,15 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
+import pkg from './package.json';
 
 export default defineConfig(({ mode }) => {
   const isAnalyze = mode === 'analyze';
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || pkg.version),
+    },
     plugins: [
       tanstackRouter({ autoCodeSplitting: true }),
       react(),
