@@ -1,14 +1,18 @@
+import { useMemo } from 'react';
+
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 
+import { applyFlagOverrides, type FlagOverrides } from './flagOverrides';
 import {
   type FeatureName,
   type Features,
   type FeaturesResponse,
   failClosedFeatures,
 } from './flags.types';
+import { useFlagOverrides } from './useFlagOverrides';
 
 /**
  * Query key for the published feature map. Exported so tests and the
@@ -56,12 +60,24 @@ export const fetchFeatureFlags = async (): Promise<Features> => {
 
 export interface UseFeatureFlagsResult {
   /**
-   * The effective feature map. **Never undefined** — while loading or on error
-   * this is the fail-closed map (every flag `false`), so callers can read
+   * The **effective** feature map — what the app should actually behave like.
+   * **Never undefined**: while loading or on error this starts from the
+   * fail-closed map (every flag `false`), so callers can read
    * `features.repeatedWordCheck` directly without null-checks and get the safe
    * (hidden) answer by default (D7).
+   *
+   * Note this may be a **local lie**: any flag the user has deliberately forced
+   * on this browser (see `flagOverrides.ts`) is reflected here. Use
+   * {@link UseFeatureFlagsResult.published} when you need what the API said.
    */
   features: Features;
+  /**
+   * What the API published (fail-closed defaults ∪ response body), **without**
+   * local overrides applied. For the diagnostics page's "Published" column.
+   */
+  published: Features;
+  /** The local overrides that were applied, if any (absent key = pass-through). */
+  overrides: FlagOverrides;
   /** True while the flags are being fetched for the first time. */
   isLoading: boolean;
   /** True if the fetch errored/was unreachable (flags are fail-closed). */
@@ -78,6 +94,20 @@ export interface UseFeatureFlagsResult {
  * hidden while the request is in flight or if it fails, which is the whole point
  * (don't surface features whose backend isn't there). The map is always the
  * full `Features` shape, so consumers never branch on undefined.
+ *
+ * **This is the one and only place local overrides are applied** (O3). Every
+ * consumer — `useFeatureFlag`, `<FeatureGate>`, and query-`enabled` gating such
+ * as `DraftingUI`'s checks query — reads through this hook, so merging here
+ * covers render *and* side effects with a single rule and they cannot drift.
+ *
+ * Fail-closed is **not weakened** by this: it still holds for everyone who has
+ * not deliberately opted in on that specific browser. An override is a local,
+ * explicit, self-inflicted act stored only in `localStorage`; nothing is sent to
+ * the API, and the backend remains the real authority (feature-flags D5 — it
+ * publishes flags, it does not enforce them), so forcing a flag on grants no
+ * access the user did not already have. It is intentionally live in production
+ * builds (O5) — testing a dark-shipped feature in its real hosting environment
+ * is the reason it exists, so do not gate the merge on `import.meta.env.DEV`.
  */
 export const useFeatureFlags = (): UseFeatureFlagsResult => {
   const query = useQuery<Features>({
@@ -101,10 +131,22 @@ export const useFeatureFlags = (): UseFeatureFlagsResult => {
     retry: false,
   });
 
+  const { overrides } = useFlagOverrides();
+
+  // Fail-closed: use live data only once it has actually arrived; otherwise
+  // (loading OR error) every flag reads false.
+  const published = useMemo(() => query.data ?? failClosedFeatures(), [query.data]);
+
+  // Overrides land LAST, on purpose: a force-on has to work even while the fetch
+  // is failing or unauthenticated (O4), which is exactly when you want to demo a
+  // dark-shipped feature. Memoized so `features` keeps a stable identity across
+  // renders for consumers that use it as an effect/query dependency.
+  const features = useMemo(() => applyFlagOverrides(published, overrides), [published, overrides]);
+
   return {
-    // Fail-closed: use live data only once it has actually arrived; otherwise
-    // (loading OR error) every flag reads false.
-    features: query.data ?? failClosedFeatures(),
+    features,
+    published,
+    overrides,
     isLoading: query.isLoading,
     isError: query.isError,
     query,
