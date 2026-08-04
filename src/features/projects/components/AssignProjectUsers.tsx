@@ -695,7 +695,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Input
                   className='bg-white'
                   id='invite-display-name'
-                  placeholder='Full Name'
+                  placeholder='Display Name'
                   value={inviteDisplayName}
                   onChange={e => setInviteDisplayName(e.target.value)}
                 />

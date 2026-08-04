@@ -71,7 +71,6 @@ export const UsersWrapper: React.FC = () => {
             email: res.email,
             username: res.username,
             role: activeGrant?.roleId ?? res.role,
-            organization: activeOrgId ?? res.organization,
             lastActiveOrgId: res.lastActiveOrgId ?? userdetail.lastActiveOrgId,
             grants: grants,
             firstName: res.firstName,

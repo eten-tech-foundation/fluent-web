@@ -56,7 +56,7 @@ export const ProjectsWrapper: React.FC = () => {
         sourceLanguage: projectData.sourceLanguage,
         bibleId: projectData.sourceBible,
         bookId: projectData.books,
-        organization: Number(activeOrgId ?? userdetail?.organization),
+        organization: Number(activeOrgId),
         createdBy: Number(userdetail?.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),
         pericopeSetId: projectData.pericopeSetId,

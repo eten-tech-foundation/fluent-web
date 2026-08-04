@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { getActiveGrants, canViewUsers } from '@/lib/grant-utils';
+import { canViewUsers, getActiveGrants, isOrgMemberOnly } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -33,6 +33,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   // Show users menu item for any role with USER_VIEW permission
   const showUsers = canViewUsers(activeGrants);
+  const orgMemberOnly = isOrgMemberOnly(activeGrants);
 
   if (!isAuthenticated || !user) {
     return null;
@@ -61,13 +62,15 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClick={onDashboardClick}
               onClosePopover={() => setOpen(false)}
             />
-            <MenuItem
-              icon={<Kanban size={18} />}
-              isActive={isProjectsActive}
-              text={t('projects')}
-              onClick={onProjectsClick}
-              onClosePopover={() => setOpen(false)}
-            />
+            {!orgMemberOnly && (
+              <MenuItem
+                icon={<Kanban size={18} />}
+                isActive={isProjectsActive}
+                text={t('projects')}
+                onClick={onProjectsClick}
+                onClosePopover={() => setOpen(false)}
+              />
+            )}
           </>
           {showUsers && (
             <>

@@ -34,6 +34,10 @@ export function isManager(activeGrants: UserGrant[]): boolean {
   return activeGrants.some(g => MANAGER_ROLES.includes(g.roleName));
 }
 
+export function isOrgMemberOnly(activeGrants: UserGrant[]): boolean {
+  return activeGrants.length > 0 && activeGrants.every(g => g.roleName === 'Org Member');
+}
+
 const ROLES_WITH_USER_VIEW = ['Org Manager', 'Org Owner', 'SuperAdmin'];
 /**
  * Alias: can the user view the /users table?

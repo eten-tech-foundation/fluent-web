@@ -16,7 +16,7 @@ export interface User {
   email: string;
   grants?: UserGrant[];
   orgGrants?: UserGrant[];
-  role?: number;
+  role: number;
   status?: string;
   organization?: number;
   lastActiveOrgId?: number | null;
@@ -308,6 +308,7 @@ export enum UserRole {
   ORG_OWNER = 4,
   ORG_MANAGER = 5,
   PROJECT_OBSERVER = 6,
+  ORG_MEMBER = 11,
 }
 
 export const ROLES = {
@@ -317,6 +318,7 @@ export const ROLES = {
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
   PROJECT_OBSERVER: 'Project Observer',
+  ORG_MEMBER: 'Org Member',
 } as const;
 
 const roleDisplayMap: Partial<Record<UserRole, string>> = {
@@ -326,6 +328,7 @@ const roleDisplayMap: Partial<Record<UserRole, string>> = {
   [UserRole.ORG_OWNER]: 'Org Owner',
   [UserRole.ORG_MANAGER]: 'Org Manager',
   [UserRole.PROJECT_OBSERVER]: 'Observer',
+  [UserRole.ORG_MEMBER]: 'Organization Member',
 };
 
 export function getDisplayRole(role: number): string {

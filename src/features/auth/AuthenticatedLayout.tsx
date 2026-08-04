@@ -9,7 +9,7 @@ import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
+import { UserRole, type User, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
@@ -18,7 +18,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
   const updateUserMutation = useUpdateUser();
-  const { setUserDetail } = useAppStore();
+  const { setUserDetail, userdetail } = useAppStore();
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
 
@@ -65,16 +65,30 @@ export function AuthenticatedLayout(): React.JSX.Element {
             });
           }
           const grants = userDetails.orgGrants ?? userDetails.grants ?? [];
-          const activeOrgId =
-            userDetails.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
-          const activeGrant = grants.find(g => g.orgId === activeOrgId);
+
+          // Validate that lastActiveOrgId is still valid (user still has grants for it)
+          let activeOrgId = userDetails.lastActiveOrgId;
+          const hasGrantsForActiveOrg =
+            activeOrgId != null && grants.some(g => g.orgId === activeOrgId);
+          if (!hasGrantsForActiveOrg) {
+            // Fall back to the first org the user still has access to
+            activeOrgId = grants.find(g => g.orgId !== null)?.orgId;
+          }
+          // Select active role with fallback priority:
+          // 1. Keep currently selected role if it still exists in this org
+          // 2. Otherwise switch to any remaining functional role in this org
+          // 3. Otherwise fall back to the Org Member anchor row
+          const orgGrants = activeOrgId != null ? grants.filter(g => g.orgId === activeOrgId) : [];
+          const activeGrant: UserGrant =
+            orgGrants.find(g => g.roleId === (userdetail?.role ?? userDetails.role)) ??
+            orgGrants.find(g => g.roleId !== UserRole.ORG_MEMBER) ??
+            orgGrants[0];
 
           setUserDetail({
             id: userDetails.id,
             email: userDetails.email,
             username: userDetails.username,
-            role: activeGrant?.roleId ?? userDetails.role,
-            organization: activeOrgId ?? userDetails.organization,
+            role: activeGrant.roleId,
             lastActiveOrgId: activeOrgId,
             grants: grants,
             firstName: userDetails.firstName,
@@ -105,6 +119,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
     setUserDetail,
     updateUserMutation,
     navigate,
+    userdetail?.role,
   ]);
 
   if (isLoading) return <LoadingScreen message='Loading...' />;
