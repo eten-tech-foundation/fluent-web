@@ -308,7 +308,7 @@ Add the camel-case wire flag `sourceTts`, backed by `EN_FEATURE_SOURCE_TTS`, to 
 The semantics mirror the repeated-word-check flag exactly:
 
 - **The backend never disables the service.** fluent-api’s proxy and fluent-ai’s endpoints stay live regardless of the flag; the flag only tells the frontend whether to render the controls.
-- **A hidden frontend override** (same mechanism the checks UI uses) can show the controls anyway, for demos before public enablement. If the deployment lacks a Gemini key, the override surfaces the resulting provider error — which is itself a valid error-path test rather than a misconfiguration to hide.
+- **A hidden frontend override** (a per-flag force-on/force-off saved in the browser from the unlinked `/debug` diagnostics page — local only, with no backend involvement) can show the controls anyway, for demos before public enablement. If the deployment lacks a Gemini key, the override surfaces the resulting provider error — which is itself a valid error-path test rather than a misconfiguration to hide.
 
 Proposed derived default: when `EN_FEATURE_SOURCE_TTS` is unset, publish `sourceTts: true` only when `FLUENT_AI_URL` and its API key are configured; otherwise publish false. An explicit flag value overrides the derived default. This is a **proposed default for review**.
 
