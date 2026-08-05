@@ -42,7 +42,8 @@ export const FeatureFlagsDiagnostics: React.FC = () => {
         </p>
         <p className='text-muted-foreground mt-1 text-xs'>
           Source: <span className='font-mono'>{config.api.url}/config/features</span> · Environment:{' '}
-          <span className='font-mono'>{config.environment.current}</span>
+          <span className='font-mono'>{config.environment.current}</span> · Version:{' '}
+          <span className='font-mono'>{__APP_VERSION__}</span>
         </p>
       </header>
 

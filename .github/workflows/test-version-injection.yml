@@ -1,0 +1,50 @@
+name: Test Version Injection
+
+on:
+  pull_request:
+    paths:
+      - 'vite.config.ts'
+      - 'src/vite-env.d.ts'
+      - 'src/features/flags/FeatureFlagsDiagnostics.tsx'
+      - '.github/workflows/**'
+
+jobs:
+  test-vite-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.13.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application with fixture version
+        run: pnpm build
+        env:
+          VITE_APP_VERSION: "v00.00.99"
+          VITE_ENVIRONMENT: "test"
+          VITE_API_URL: "http://localhost:3000"
+
+      - name: Verify injected version in build artifacts
+        run: |
+          echo "Searching for 'v00.00.99' in built assets..."
+          if grep -Fq "v00.00.99" dist/assets/*.js; then
+            echo "::notice::Version successfully verified in build output!"
+            exit 0
+          else
+            echo "::error::Version fixture 'v00.00.99' not found in dist/assets/*.js!"
+            exit 1
+          fi
