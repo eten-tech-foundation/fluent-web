@@ -31,7 +31,30 @@ export {
   type UseTtsKeyboardShortcutsOptions,
 } from './hooks/useTtsKeyboardShortcuts';
 
+export {
+  type SourceTtsPlaybackApi,
+  type TtsNextPage,
+  useSourceTtsPlayback,
+  type UseSourceTtsPlaybackOptions,
+} from './hooks/useSourceTtsPlayback';
+
 export { TtsVerseControls, type TtsVerseControlsProps } from './components/TtsVerseControls';
+
+export { TtsBoundaryPrompt, type TtsBoundaryPromptProps } from './components/TtsBoundaryPrompt';
+
+export {
+  buildTtsQueueItems,
+  findTtsQueueIndex,
+  isPlayableRow,
+  type TtsRowDraft,
+} from './lib/buildTtsQueueItems';
+
+export {
+  isRowFullyVisible,
+  type ScrollableRow,
+  scrollRowIntoViewIfNeeded,
+  type ScrollViewport,
+} from './lib/scrollRowIntoView';
 
 export {
   canBrowserPlayOpus,

@@ -17,7 +17,7 @@
  * `useFeatureFlag('...')` / `<FeatureGate feature="...">` is a compile error and
  * so the diagnostics page can enumerate the known flags.
  */
-export type FeatureName = 'repeatedWordCheck';
+export type FeatureName = 'repeatedWordCheck' | 'sourceTts';
 
 /** The published feature map: every known flag, always present as a boolean. */
 export type Features = Record<FeatureName, boolean>;
@@ -37,4 +37,8 @@ export interface FeaturesResponse {
  */
 export const failClosedFeatures = (): Features => ({
   repeatedWordCheck: false,
+  // Source-Text TTS (source-tts proposal T12/§6.3). Off by default like every
+  // flag here: the controls must not appear before the API confirms the
+  // feature, since the synthesis path depends on fluent-ai being wired.
+  sourceTts: false,
 });

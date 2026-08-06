@@ -1,0 +1,229 @@
+/**
+ * Host-composition tests for `useSourceTtsPlayback` (§12.1 "Queue" row).
+ *
+ * The queue itself is exhaustively covered by `useTtsPlaybackQueue.test.ts`,
+ * so it is mocked here and this file asserts only the four responsibilities
+ * this hook adds: document-order start index, conditional scroll, the T16
+ * boundary decision, and the failure toast.
+ */
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+
+import { type TtsEngine, type TtsQueueItem } from '../tts.types';
+
+import {
+  useSourceTtsPlayback,
+  type TtsNextPage,
+  type UseSourceTtsPlaybackOptions,
+} from './useSourceTtsPlayback';
+import { type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
+
+const toastError = vi.fn();
+vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => toastError(...args) } }));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (_key: string, defaultValue: string, options?: Record<string, unknown>) =>
+      defaultValue.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(options?.[name] ?? '')),
+  }),
+}));
+
+// Captured queue wiring, so tests can fire the queue's callbacks by hand.
+let queueOptions: UseTtsPlaybackQueueOptions;
+const playOne = vi.fn();
+const playFrom = vi.fn();
+const stop = vi.fn();
+let itemStates: Record<string, string> = {};
+let status = 'idle';
+
+vi.mock('./useTtsPlaybackQueue', () => ({
+  useTtsPlaybackQueue: (options: UseTtsPlaybackQueueOptions) => {
+    queueOptions = options;
+    return { status, activeVerseRef: null, itemStates, playOne, playFrom, stop };
+  },
+}));
+
+const engine: TtsEngine = { synthesize: vi.fn() };
+
+// The queue stubs are module-level (the mock factory is hoisted), so they must
+// be reset per test or one test's play call leaks into the next assertion.
+beforeEach(() => {
+  vi.clearAllMocks();
+  itemStates = {};
+  status = 'idle';
+});
+
+/** Row 2 is a reference-panel hole, so the queue is v1, v3, v4 (§5.1). */
+const rows = [
+  { verseRef: 'GEN 1:1', text: 'one', langCode: 'eng' },
+  { verseRef: 'GEN 1:2', text: null },
+  { verseRef: 'GEN 1:3', text: 'three', langCode: 'eng' },
+  { verseRef: 'GEN 1:4', text: 'four', langCode: 'eng' },
+];
+
+const rect = (top: number, bottom: number) => ({ getBoundingClientRect: () => ({ top, bottom }) });
+
+const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
+  const scrollIntoView = vi.fn();
+  const focus = vi.fn();
+  const options: UseSourceTtsPlaybackOptions = {
+    engine,
+    rows,
+    // Every row sits far below the viewport unless a test says otherwise.
+    getRowElement: () => ({ ...rect(900, 960), scrollIntoView, focus }),
+    getViewport: () => rect(0, 500),
+    ...overrides,
+  };
+  const { result, rerender } = renderHook(() => useSourceTtsPlayback(options));
+  return { result, rerender, scrollIntoView, focus };
+};
+
+const nextPage = (navigate: Mock = vi.fn()): TtsNextPage => ({ label: 'Genesis 2', navigate });
+
+describe('useSourceTtsPlayback — play actions', () => {
+  it('plays one verse without arming the queue (T1)', () => {
+    const { result } = setup();
+
+    act(() => result.current.playVerse('GEN 1:3'));
+
+    expect(playOne).toHaveBeenCalledWith(
+      expect.objectContaining({ verseRef: 'GEN 1:3', text: 'three' })
+    );
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('starts play-from-here at the index in the FILTERED list, not the row position', () => {
+    const { result } = setup();
+
+    act(() => result.current.playFromVerse('GEN 1:3'));
+
+    const [items, index] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number];
+    expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
+    // Row 3 on screen is queue index 1 — a rendered-row count would say 2.
+    expect(index).toBe(1);
+  });
+
+  it('ignores play requests for an unplayable row (§5.1)', () => {
+    const { result } = setup();
+
+    act(() => result.current.playVerse('GEN 1:2'));
+    act(() => result.current.playFromVerse('GEN 1:2'));
+
+    expect(playOne).not.toHaveBeenCalled();
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('reports playability and per-row loading from the queue', () => {
+    itemStates = { 'GEN 1:3': 'synthesizing' };
+    const { result } = setup();
+
+    expect(result.current.isRowPlayable('GEN 1:1')).toBe(true);
+    expect(result.current.isRowPlayable('GEN 1:2')).toBe(false);
+    expect(result.current.isRowLoading('GEN 1:3')).toBe(true);
+    expect(result.current.isRowLoading('GEN 1:1')).toBe(false);
+  });
+
+  it('delegates stop to the queue', () => {
+    const { result } = setup();
+
+    act(() => result.current.stop());
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useSourceTtsPlayback — auto-scroll (§5.3 step 2)', () => {
+  it('scrolls the active row when it is off-screen, without touching focus', () => {
+    const { scrollIntoView, focus } = setup();
+
+    act(() => queueOptions.onScrollRequest?.('GEN 1:3'));
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it('leaves the viewport alone when the row is already visible', () => {
+    const scrollIntoView = vi.fn();
+    setup({ getRowElement: () => ({ ...rect(100, 160), scrollIntoView }) });
+
+    act(() => queueOptions.onScrollRequest?.('GEN 1:3'));
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('useSourceTtsPlayback — boundary prompt (T16)', () => {
+  it('stays silent at the end of the page when nothing follows', () => {
+    const { result } = setup();
+
+    act(() => queueOptions.onBoundaryReached?.());
+
+    expect(result.current.boundaryPrompt.open).toBe(false);
+  });
+
+  it('asks when the host proved a next page exists', () => {
+    const { result } = setup({ nextPage: nextPage() });
+
+    act(() => queueOptions.onBoundaryReached?.());
+
+    expect(result.current.boundaryPrompt.open).toBe(true);
+    expect(result.current.boundaryPrompt.nextPageLabel).toBe('Genesis 2');
+  });
+
+  it('declining never navigates', () => {
+    const navigate = vi.fn();
+    const { result } = setup({ nextPage: nextPage(navigate) });
+
+    act(() => queueOptions.onBoundaryReached?.());
+    act(() => result.current.boundaryPrompt.onDismiss());
+
+    expect(result.current.boundaryPrompt.open).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('awaits the host navigation (which flushes saves) before closing', async () => {
+    let release = () => {};
+    const navigate = vi.fn(() => new Promise<void>(resolve => (release = resolve)));
+    const { result } = setup({ nextPage: nextPage(navigate) });
+
+    act(() => queueOptions.onBoundaryReached?.());
+    act(() => result.current.boundaryPrompt.onContinue());
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    // Still open and locked while the flush is in flight.
+    expect(result.current.boundaryPrompt.isContinuing).toBe(true);
+    expect(result.current.boundaryPrompt.open).toBe(true);
+
+    await act(async () => {
+      release();
+    });
+
+    expect(result.current.boundaryPrompt.isContinuing).toBe(false);
+    expect(result.current.boundaryPrompt.open).toBe(false);
+  });
+
+  it('stays put and unlocks when the navigation rejects', async () => {
+    const navigate = vi.fn(() => Promise.reject(new Error('nope')));
+    const { result } = setup({ nextPage: nextPage(navigate) });
+
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    expect(result.current.boundaryPrompt.isContinuing).toBe(false);
+    expect(result.current.boundaryPrompt.open).toBe(false);
+  });
+});
+
+describe('useSourceTtsPlayback — failure surfacing (§5.2)', () => {
+  it('turns a playback failure into a toast that names the verse', () => {
+    setup();
+
+    act(() => queueOptions.onError?.(new Error('boom'), { verseRef: 'GEN 1:3', text: 'three' }));
+
+    expect(toastError).toHaveBeenCalledWith(
+      'Could not play audio for verse GEN 1:3. Please try again.'
+    );
+  });
+});
