@@ -126,6 +126,15 @@ vi.mock('@/features/bible/hooks/usePericopeContext', () => ({
   usePericopeContext: () => mockUsePericopeContext() as unknown,
 }));
 
+// Mock the source-TTS next-page lookup (source-tts proposal T16). This suite's
+// flag mock reports every feature as ON, so the TTS wiring is live here; the
+// lookup wraps TanStack Query, and returning `null` ("nothing follows this
+// chapter") keeps DraftingUI renderable without a QueryClientProvider. The
+// boundary prompt itself is covered in `DraftingUI.tts.test.tsx`.
+vi.mock('@/features/bible/hooks/useNextAssignedChapter', () => ({
+  useNextAssignedChapter: () => null,
+}));
+
 // Mock the Repeated Word Check hooks (Phase 4). These wrap TanStack Query /
 // fetch; this suite exercises drafting/pericope/resource behavior, not the
 // check itself (which is unit-tested in `useRepeatedWordsCheck.test.ts` and the

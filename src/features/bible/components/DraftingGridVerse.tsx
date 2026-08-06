@@ -3,7 +3,29 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import { type SourceTtsPlaybackApi, TtsVerseControls } from '@/features/tts';
 import { type Source, type TargetVerse } from '@/lib/types';
+
+/**
+ * Source-TTS wiring for the grid (source-tts §5.1). The drafting page owns the
+ * playback state and the panel-aware text selection; this component only
+ * renders per-row controls and marks the row that is speaking.
+ *
+ * `verseRefFor` keeps the queue's row identity a host decision (T3) — the grid
+ * never invents the ref format.
+ */
+export interface DraftingGridVerseTts extends Pick<
+  SourceTtsPlaybackApi,
+  | 'activeVerseRef'
+  | 'isBusy'
+  | 'isRowPlayable'
+  | 'isRowLoading'
+  | 'playVerse'
+  | 'playFromVerse'
+  | 'stop'
+> {
+  verseRefFor: (verseNumber: number) => string;
+}
 
 interface DraftingTargetColumnProps {
   verseNumber: number;
@@ -126,6 +148,8 @@ interface DraftingGridVerseProps {
   isAiThresholdMet: boolean;
   isAiActive: boolean;
   suggestionStatus: SuggestionStatus;
+  /** Absent when the source-TTS feature is off — the grid renders as before. */
+  tts?: DraftingGridVerseTts;
 }
 
 export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
@@ -146,19 +170,31 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   isAiThresholdMet,
   isAiActive,
   suggestionStatus,
+  tts,
 }) => {
   const { t } = useTranslation();
   return (
     <>
       {sourceVerses.map(verse => {
         const isActive = !readOnly && activeVerseId === verse.verseNumber;
+        const ttsVerseRef = tts?.verseRefFor(verse.verseNumber);
+        const isSpeaking = tts !== undefined && ttsVerseRef === tts.activeVerseRef;
         return (
           <div
             key={verse.verseNumber}
             ref={el => {
               verseRefs.current[verse.verseNumber] = el;
             }}
-            className='grid items-start py-4'
+            // The playback marker is a LEFT RAIL plus a wash, chosen so it
+            // cannot be confused with the two highlights already on this page:
+            // the active editor's `border-primary` box (target column) and the
+            // repeated-word check's inline red text. The transparent rail on
+            // every other row keeps the grid from shifting as playback moves.
+            className={`grid items-start border-l-4 py-4 ${
+              isSpeaking ? 'border-l-primary bg-primary/5' : 'border-l-transparent'
+            }`}
+            data-testid={isSpeaking ? 'tts-active-row' : undefined}
+            data-verse-number={verse.verseNumber}
             style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
           >
             <div className='flex w-8 items-start px-4'>
@@ -180,6 +216,20 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                       {t('noContentAvailable')}
                     </p>
                   )}
+                </div>
+              )}
+              {tts !== undefined && ttsVerseRef !== undefined && (
+                <div className='mt-2 flex items-center gap-1'>
+                  <TtsVerseControls
+                    hasPlayableText={tts.isRowPlayable(ttsVerseRef)}
+                    isLoading={tts.isRowLoading(ttsVerseRef)}
+                    isPlaying={isSpeaking}
+                    showStop={tts.isBusy}
+                    verseRef={ttsVerseRef}
+                    onPlayFromHere={() => tts.playFromVerse(ttsVerseRef)}
+                    onPlayVerse={() => tts.playVerse(ttsVerseRef)}
+                    onStop={tts.stop}
+                  />
                 </div>
               )}
             </div>

@@ -168,9 +168,13 @@ describe('helpers', () => {
 
   it('applyFlagOverrides layers overrides on top of the published map', () => {
     const published = { ...failClosedFeatures(), repeatedWordCheck: true };
-    expect(applyFlagOverrides(published, {})).toEqual({ repeatedWordCheck: true });
+    expect(applyFlagOverrides(published, {})).toEqual({
+      repeatedWordCheck: true,
+      sourceTts: false,
+    });
     expect(applyFlagOverrides(published, { repeatedWordCheck: false })).toEqual({
       repeatedWordCheck: false,
+      sourceTts: false,
     });
     // Does not mutate its input.
     expect(published.repeatedWordCheck).toBe(true);
