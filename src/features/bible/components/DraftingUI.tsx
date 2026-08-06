@@ -12,6 +12,7 @@ import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
+import { useNextAssignedChapter } from '@/features/bible/hooks/useNextAssignedChapter';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
 import {
@@ -34,6 +35,12 @@ import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
+import {
+  ServerTtsEngine,
+  TtsBoundaryPrompt,
+  type TtsRowDraft,
+  useSourceTtsPlayback,
+} from '@/features/tts';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -375,6 +382,16 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // is the single consumption point — the flag is threaded down as booleans so
   // the leaf components stay flag-agnostic.
   const checksEnabled = useFeatureFlag('repeatedWordCheck');
+
+  // Feature flag: is Source-Text TTS enabled here? Same reasoning as the
+  // Checks flag above — synthesis depends on fluent-ai, which isn't hosted
+  // everywhere, so this ships hidden until the audio path is wired
+  // (source-tts §6.3, T12). Fail-closed by construction: `useFeatureFlag`
+  // returns false while loading and on endpoint error, so no controls render
+  // and no assignment lookup runs until the API positively says yes. Local
+  // overrides are NOT consulted here — they are applied once inside
+  // `useFeatureFlags`, so a forced-on flag reaches this boolean unchanged.
+  const ttsEnabled = useFeatureFlag('sourceTts');
 
   // The single writer for the occurrence-rule map: `useSuppressions` does the
   // read-modify-write and hands the next full map back here; updating state
@@ -853,6 +870,112 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
+  // ─── Source-Text TTS (source-tts §5.1/§5.3) ────────────────────────────────
+  //
+  // T17: BOTH source panels are listenable, and each is read in ITS OWN
+  // language. Panel 1 is the project's source text, so it carries
+  // `sourceLangCode`; panel 2 is whichever reference Bible the user opened, so
+  // it carries that Bible's language as reported by the resource panel. Using
+  // the project's source code for someone else's Bible would ask the engine to
+  // read, say, Hindi text as Greek. A panel-2 row with no verse simply has no
+  // text, which is what makes its controls disabled (§5.1) — the row is not
+  // silently skipped-over-and-clickable.
+  const ttsRows = useMemo<TtsRowDraft[]>(
+    () =>
+      sourceVerses.map(verse => ({
+        verseRef: String(verse.verseNumber),
+        text: selectedPanel === 1 ? verse.text : bibleVerseMap.get(verse.verseNumber),
+        // T18: sent when known. `currentLanguage` is the reference Bible's
+        // code and already falls back to the source code when unknown.
+        langCode: selectedPanel === 1 ? projectItem.sourceLangCode : currentLanguage,
+        // Provenance travels with the item rather than being re-derived from
+        // panel state later (T17).
+        audioSource: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
+      })),
+    [sourceVerses, selectedPanel, bibleVerseMap, projectItem.sourceLangCode, currentLanguage]
+  );
+
+  // A single engine for the page: a thin seam over the API route (§6.1), no
+  // per-verse state, so it must not be rebuilt on every render.
+  const ttsEngine = useMemo(() => new ServerTtsEngine(), []);
+
+  // Playback highlight geometry: the row elements the grid already registers,
+  // measured against the target column's scroll container.
+  const getTtsRowElement = useCallback(
+    (verseRef: string) => verseRefs.current[Number(verseRef)],
+    [verseRefs]
+  );
+  const getTtsViewport = useCallback(() => targetScrollRef.current, [targetScrollRef]);
+
+  // Drafting saves on a debounce and this route drops its cache when it
+  // navigates, so the verse under the caret is flushed BEFORE any
+  // TTS-initiated page change (there is no unmount flush to fall back on).
+  const flushActiveVerse = useCallback(async () => {
+    if (readOnly) return;
+    const active = verses.find(verse => verse.verseNumber === activeVerseId);
+    // `saveImmediately` takes a SavePayload since the RTE landed. Pass the verse's own
+    // markers, as every other flush site does (DraftingUI handleSubmit,
+    // useDrafting handleActiveVerseChange/advanceToVerse): undefined on a textarea-
+    // authored verse, so the trim still happens, and concrete on an RTE-authored one,
+    // so its paragraph offsets are not nulled on the way out (fluent-api#264).
+    if (active)
+      await saveImmediately(activeVerseId, {
+        content: active.content,
+        markers: active.markers,
+      });
+  }, [readOnly, verses, activeVerseId, saveImmediately]);
+
+  // T16: the prompt is only offered when a real next assignment exists. In
+  // read-only review there is nothing to continue INTO from here — that route
+  // is entered per chapter from the dashboard — so the offer stays off rather
+  // than pushing a reviewer into the drafting surface.
+  const ttsNextPage = useNextAssignedChapter({
+    enabled: ttsEnabled && !readOnly,
+    userId: userdetail.id,
+    currentItem: projectItem,
+    flushPendingWork: flushActiveVerse,
+  });
+
+  const tts = useSourceTtsPlayback({
+    engine: ttsEngine,
+    rows: ttsRows,
+    getRowElement: getTtsRowElement,
+    getViewport: getTtsViewport,
+    nextPage: ttsNextPage,
+  });
+
+  // Row identity for the queue is the verse number as a string; the grid asks
+  // for it rather than assuming a format (T3).
+  const ttsVerseRefFor = useCallback((verseNumber: number) => String(verseNumber), []);
+
+  // Undefined when the flag is off — the grid then renders exactly as before.
+  const ttsGridProps = useMemo(
+    () =>
+      ttsEnabled
+        ? {
+            activeVerseRef: tts.activeVerseRef,
+            isBusy: tts.isBusy,
+            isRowPlayable: tts.isRowPlayable,
+            isRowLoading: tts.isRowLoading,
+            playVerse: tts.playVerse,
+            playFromVerse: tts.playFromVerse,
+            stop: tts.stop,
+            verseRefFor: ttsVerseRefFor,
+          }
+        : undefined,
+    [
+      ttsEnabled,
+      tts.activeVerseRef,
+      tts.isBusy,
+      tts.isRowPlayable,
+      tts.isRowLoading,
+      tts.playVerse,
+      tts.playFromVerse,
+      tts.stop,
+      ttsVerseRefFor,
+    ]
+  );
+
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
       return (
@@ -1125,6 +1248,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}
                           textareaRefs={textareaRefs}
+                          tts={ttsGridProps}
                           verseRefs={verseRefs}
                           verses={verses}
                         />
@@ -1175,6 +1299,21 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           )}
         </div>
       </div>
+
+      {/*
+       * T16: end-of-page prompt. Rendered only when the flag is on AND a real
+       * next assignment exists, so playback simply stops at the end when there
+       * is nowhere legitimate to go. Confirming is the only path that moves.
+       */}
+      {ttsEnabled && ttsNextPage !== null && (
+        <TtsBoundaryPrompt
+          isContinuing={tts.boundaryPrompt.isContinuing}
+          nextPageLabel={tts.boundaryPrompt.nextPageLabel}
+          open={tts.boundaryPrompt.open}
+          onContinue={tts.boundaryPrompt.onContinue}
+          onDismiss={tts.boundaryPrompt.onDismiss}
+        />
+      )}
     </div>
   );
 };
