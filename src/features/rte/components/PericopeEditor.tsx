@@ -36,7 +36,8 @@ export interface PericopeEditorProps {
  *
  * The editor is **uncontrolled**: it owns the document once loaded, and this component mirrors
  * edits back out as verse rows. Feeding every keystroke back in as a new `usj` prop would fight
- * the editor for the cursor, so the reload path is deliberately narrow — only `contentKey`.
+ * the editor for the cursor, so it is written back into only in two cases: `contentKey` changed,
+ * or the parent filled a verse the editor holds empty (the AI suggestion path).
  *
  * Paragraph breaks the translator creates are real in the editor but are flattened away by
  * `usjToPericopeVerses`, because `translated_verses` has nowhere to store them (fluent-api#263).
@@ -52,26 +53,44 @@ export function PericopeEditor({
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const loadedKeyRef = useRef(contentKey);
-  /** The verses as last agreed with the parent, to diff each commit against. */
+  /** What the editor's own document holds, to diff each commit against. */
   const knownVersesRef = useRef<PericopeVerseText[]>(verses);
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
 
-  // Keep the diff baseline honest when the parent changes verses without a reload (e.g. an AI
-  // suggestion written into a verse), otherwise the next commit would report a stale diff.
+  const loadIntoEditor = useCallback(
+    (next: PericopeVerseText[]) => {
+      knownVersesRef.current = next;
+      const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
+      suppressedJsonRef.current = JSON.stringify(usj);
+      editorRef.current?.setUsj(usj);
+    },
+    [bookCode, chapterNumber]
+  );
+
+  // Text the parent wrote that the editor never held: the drafting surface fills an empty verse
+  // with its AI suggestion. It has to reach the document, or the translator never sees it and the
+  // next commit reports the verse as emptied and writes the suggestion away. Verses the editor
+  // already has text in are left alone, since that text is what the translator is looking at.
   useEffect(() => {
-    if (contentKey === loadedKeyRef.current) knownVersesRef.current = verses;
-  }, [contentKey, verses]);
+    if (contentKey !== loadedKeyRef.current) return;
+
+    const known = knownVersesRef.current;
+    const merged = known.map(verse => {
+      if (verse.text !== '') return verse;
+      const incoming = verses.find(candidate => candidate.verseNumber === verse.verseNumber);
+      return incoming && incoming.text !== '' ? { ...verse, text: incoming.text } : verse;
+    });
+
+    // Untouched entries come back by reference, so identity is the whole test.
+    if (merged.some((verse, index) => verse !== known[index])) loadIntoEditor(merged);
+  }, [contentKey, loadIntoEditor, verses]);
 
   useEffect(() => {
     if (contentKey === loadedKeyRef.current) return;
     loadedKeyRef.current = contentKey;
-    knownVersesRef.current = verses;
-
-    const usj = pericopeVersesToUsj(verses, chapterNumber, bookCode);
-    suppressedJsonRef.current = JSON.stringify(usj);
-    editorRef.current?.setUsj(usj);
-  }, [bookCode, chapterNumber, contentKey, verses]);
+    loadIntoEditor(verses);
+  }, [contentKey, loadIntoEditor, verses]);
 
   const handleUsjChange = useCallback(
     (usj: Usj) => {

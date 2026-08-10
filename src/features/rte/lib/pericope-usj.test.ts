@@ -114,6 +114,62 @@ describe('usjToPericopeVerses', () => {
       { verseNumber: 1, text: 'the LORD said' },
     ]);
   });
+
+  it('keeps every part of a character marker, split across items and nested', () => {
+    // \wj Holy \nd God\nd*, hear us\wj* — one marker, three content items, one of them a marker.
+    const nested: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'p',
+          content: [
+            { type: 'verse', marker: 'v', number: '1' },
+            {
+              type: 'char',
+              marker: 'wj',
+              content: ['Holy ', { type: 'char', marker: 'nd', content: ['God'] }, ', hear us'],
+            },
+            ' he said.',
+          ],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(nested)).toEqual([
+      { verseNumber: 1, text: 'Holy God, hear us he said.' },
+    ]);
+  });
+
+  it('leaves a footnote out of the verse row', () => {
+    // The note's text belongs to the note, not to the sentence it hangs off.
+    const withNote: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'p',
+          content: [
+            { type: 'verse', marker: 'v', number: '1' },
+            'In the beginning',
+            {
+              type: 'note',
+              marker: 'f',
+              caller: '+',
+              content: [{ type: 'char', marker: 'ft', content: ['Or "When God began"'] }],
+            },
+            ' God created.',
+          ],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(withNote)).toEqual([
+      { verseNumber: 1, text: 'In the beginning God created.' },
+    ]);
+  });
 });
 
 describe('changedVerses', () => {

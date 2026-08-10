@@ -46,6 +46,35 @@ export function pericopeVersesToUsj(
 }
 
 /**
+ * Markers that carry structure or apparatus rather than the verse's own words. A footnote's text
+ * belongs to the note, not to the sentence it hangs off, so it must not be folded into the row.
+ */
+const NON_TEXT_MARKER_TYPES = new Set([
+  'book',
+  'chapter',
+  'verse',
+  'note',
+  'figure',
+  'ms',
+  'sidebar',
+]);
+
+/**
+ * Every string a marker contributes, however deeply it is nested. A character marker holds a list,
+ * not a single string: `\wj Holy \nd God\nd*, hear us\wj*` is three items with one nested marker.
+ */
+function markerText(marker: MarkerObject): string {
+  if (!marker.content) return '';
+
+  let text = '';
+  for (const item of marker.content) {
+    if (typeof item === 'string') text += item;
+    else if (!NON_TEXT_MARKER_TYPES.has(item.type)) text += markerText(item);
+  }
+  return text;
+}
+
+/**
  * Save-path derivation: flattens the editor's USJ back to one plain string per verse, the shape
  * `translated_verses.content` stores.
  *
@@ -88,7 +117,7 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
         continue;
       }
       // Character-level markers (\nd, \add …) contribute their text to the verse.
-      if (typeof item.content?.[0] === 'string') buffer += item.content[0];
+      if (!NON_TEXT_MARKER_TYPES.has(item.type)) buffer += markerText(item);
     }
     push(currentVerse, buffer);
   }

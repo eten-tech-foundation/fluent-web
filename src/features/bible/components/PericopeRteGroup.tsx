@@ -11,6 +11,9 @@ import { type Source, type TargetVerse } from '@/lib/types';
 interface PericopeRteGroupProps {
   groupVerses: Source[];
   verses: TargetVerse[];
+  /** Identifies the chapter being drafted, so the editor reloads when the assignment changes. */
+  chapterAssignmentId: number;
+  bookCode: string;
   chapterNumber: number;
   activeVerseId: number;
   readOnly: boolean;
@@ -37,6 +40,8 @@ interface PericopeRteGroupProps {
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   groupVerses,
   verses,
+  chapterAssignmentId,
+  bookCode,
   chapterNumber,
   activeVerseId,
   readOnly,
@@ -63,10 +68,12 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   );
 
   // Reload only when the pericope's identity changes, not on every keystroke: the editor owns the
-  // document while it is focused.
+  // document while it is focused. The assignment is part of that identity — chapter 1 verses 1-2
+  // exist in every book, so without it a different book could reuse the loaded document.
   const contentKey = useMemo(
-    () => `${chapterNumber}:${groupVerses.map(v => v.verseNumber).join(',')}`,
-    [chapterNumber, groupVerses]
+    () =>
+      `${chapterAssignmentId}/${chapterNumber}:${groupVerses.map(v => v.verseNumber).join(',')}`,
+    [chapterAssignmentId, chapterNumber, groupVerses]
   );
 
   const handleVersesChange = useCallback(
@@ -100,6 +107,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   return (
     <div className='flex w-full flex-col gap-2'>
       <PericopeEditor
+        bookCode={bookCode}
         chapterNumber={chapterNumber}
         contentKey={contentKey}
         readOnly={readOnly}

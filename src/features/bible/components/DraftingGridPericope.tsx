@@ -347,6 +347,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                     <PericopeRteGroup
                       activeVerseId={activeVerseId}
                       aiSuggestions={aiSuggestions}
+                      bookCode={projectItem.bookCode}
+                      chapterAssignmentId={projectItem.chapterAssignmentId}
                       chapterNumber={projectItem.chapterNumber}
                       globalNextUntouchedVerse={globalNextUntouchedVerse}
                       groupVerses={groupVerses}
