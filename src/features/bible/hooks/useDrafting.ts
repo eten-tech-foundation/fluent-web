@@ -65,20 +65,37 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
 
   const scrollVerseToTop = useCallback((verseNumber: number, force = false) => {
     const container = targetScrollRef.current;
-    const row = verseRefs.current[verseNumber];
-    if (!container || !row) return;
-    const containerRect = container.getBoundingClientRect();
-    const rowRect = row.getBoundingClientRect();
-    const rowTopRelative = rowRect.top - containerRect.top;
-    const rowBottomRelative = rowRect.bottom - containerRect.top;
+    const activeRow = verseRefs.current[verseNumber];
+    if (!container || !activeRow) return;
 
-    // If the row is already fully visible inside the scroll container, don't scroll
-    if (!force && rowTopRelative >= 0 && rowBottomRelative <= containerRect.height) {
+    const containerRect = container.getBoundingClientRect();
+    const activeRowRect = activeRow.getBoundingClientRect();
+    const activeRowTopRelative = activeRowRect.top - containerRect.top;
+    const activeRowBottomRelative = activeRowRect.bottom - containerRect.top;
+
+    // If the active row is already fully visible inside the scroll container, don't scroll
+    if (!force && activeRowTopRelative >= 0 && activeRowBottomRelative <= containerRect.height) {
       return;
     }
 
-    const newScrollTop = container.scrollTop + rowTopRelative;
-    container.scrollTo({ top: newScrollTop, behavior: 'smooth' });
+    const prevId = Math.max(1, verseNumber - 1);
+    const prevRow = verseRefs.current[prevId];
+
+    if (prevRow) {
+      const prevRowRect = prevRow.getBoundingClientRect();
+      const prevRowTopRelative = prevRowRect.top - containerRect.top;
+
+      const activeRowBottomRelativeToPrevTop = activeRowRect.bottom - prevRowRect.top;
+      let newScrollTop = container.scrollTop + prevRowTopRelative;
+
+      if (activeRowBottomRelativeToPrevTop > containerRect.height) {
+        newScrollTop = container.scrollTop + activeRowTopRelative;
+      }
+      container.scrollTo({ top: newScrollTop, behavior: 'smooth' });
+    } else {
+      const newScrollTop = container.scrollTop + activeRowTopRelative;
+      container.scrollTo({ top: newScrollTop, behavior: 'smooth' });
+    }
   }, []);
 
   const handleTextChange = useCallback(
@@ -119,8 +136,17 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
       }
       setActiveVerseId(newVerseId);
+      requestAnimationFrame(() => scrollVerseToTop(newVerseId));
     },
-    [readOnly, verses, activeVerseId, getSaveStatus, saveImmediately, setInitialContent]
+    [
+      readOnly,
+      verses,
+      activeVerseId,
+      getSaveStatus,
+      saveImmediately,
+      setInitialContent,
+      scrollVerseToTop,
+    ]
   );
 
   const advanceToVerse = useCallback(
@@ -141,8 +167,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         }
       }
       setActiveVerseId(nextVerseId);
-      const prevId = Math.max(1, nextVerseId - 1);
-      requestAnimationFrame(() => scrollVerseToTop(prevId));
+      requestAnimationFrame(() => scrollVerseToTop(nextVerseId));
     },
     [
       verses,
@@ -192,8 +217,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     });
     const activeVerseNumber = allVersesCompleted ? 1 : lastVerseWithContent.verseNumber;
     setActiveVerseId(activeVerseNumber);
-    if (!allVersesCompleted && activeVerseNumber > 1 && !readOnly) {
-      pendingInitScrollRef.current = Math.max(1, activeVerseNumber - 1);
+    if (!allVersesCompleted && !readOnly) {
+      pendingInitScrollRef.current = activeVerseNumber;
     }
     const initiallyRevealed = new Set<number>();
     if (readOnly) {
