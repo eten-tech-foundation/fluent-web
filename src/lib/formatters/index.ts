@@ -27,5 +27,6 @@ export const getLastActivityDisplay = (value?: string | null): string => {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: 'UTC',
   });
 };
