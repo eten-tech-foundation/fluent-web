@@ -1,10 +1,19 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import { config } from '@/lib/config';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
+
+// Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
+// not pay for it (see eten-tech-foundation/scripture-editors#516).
+const PericopeRteGroup = lazy(() =>
+  import('@/features/bible/components/PericopeRteGroup').then(module => ({
+    default: module.PericopeRteGroup,
+  }))
+);
 
 interface DraftingGridPericopeProps {
   pericopes: PericopeGroup[];
@@ -333,24 +342,46 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   }
                 }}
               >
-                <TargetVersesGroup
-                  activeVerseId={activeVerseId}
-                  aiSuggestions={aiSuggestions}
-                  globalNextUntouchedVerse={globalNextUntouchedVerse}
-                  groupVerses={groupVerses}
-                  handleActiveVerseChange={handleActiveVerseChange}
-                  handleKeyDown={handleKeyDown}
-                  handleNextClick={handleNextClick}
-                  handleTextChange={handleTextChange}
-                  isAiActive={isAiActive}
-                  isAiThresholdMet={isAiThresholdMet}
-                  isTranslationComplete={isTranslationComplete}
-                  lastSourceVerseNumber={lastSourceVerseNumber}
-                  readOnly={readOnly}
-                  suggestionStatus={suggestionStatus}
-                  textareaRefs={textareaRefs}
-                  verses={verses}
-                />
+                {config.features.rtePericope ? (
+                  <Suspense fallback={null}>
+                    <PericopeRteGroup
+                      activeVerseId={activeVerseId}
+                      aiSuggestions={aiSuggestions}
+                      chapterNumber={projectItem.chapterNumber}
+                      globalNextUntouchedVerse={globalNextUntouchedVerse}
+                      groupVerses={groupVerses}
+                      handleActiveVerseChange={handleActiveVerseChange}
+                      handleNextClick={handleNextClick}
+                      handleTextChange={handleTextChange}
+                      isAiActive={isAiActive}
+                      isAiThresholdMet={isAiThresholdMet}
+                      isTranslationComplete={isTranslationComplete}
+                      lastSourceVerseNumber={lastSourceVerseNumber}
+                      readOnly={readOnly}
+                      suggestionStatus={suggestionStatus}
+                      verses={verses}
+                    />
+                  </Suspense>
+                ) : (
+                  <TargetVersesGroup
+                    activeVerseId={activeVerseId}
+                    aiSuggestions={aiSuggestions}
+                    globalNextUntouchedVerse={globalNextUntouchedVerse}
+                    groupVerses={groupVerses}
+                    handleActiveVerseChange={handleActiveVerseChange}
+                    handleKeyDown={handleKeyDown}
+                    handleNextClick={handleNextClick}
+                    handleTextChange={handleTextChange}
+                    isAiActive={isAiActive}
+                    isAiThresholdMet={isAiThresholdMet}
+                    isTranslationComplete={isTranslationComplete}
+                    lastSourceVerseNumber={lastSourceVerseNumber}
+                    readOnly={readOnly}
+                    suggestionStatus={suggestionStatus}
+                    textareaRefs={textareaRefs}
+                    verses={verses}
+                  />
+                )}
               </div>
             </div>
           </div>
