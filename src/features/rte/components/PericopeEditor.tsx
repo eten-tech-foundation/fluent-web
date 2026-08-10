@@ -11,6 +11,7 @@ import {
 
 import '../styles/usj-nodes.css';
 import '../styles/editor.css';
+import '../styles/pericope-editor.css';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
@@ -103,7 +104,14 @@ export function PericopeEditor({
       <Editorial
         ref={editorRef}
         defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}
-        options={{ isReadonly: readOnly, hasSpellCheck: false, textDirection: 'auto' }}
+        options={{
+          isReadonly: readOnly,
+          // The drafting page supplies its own controls; the built-in toolbar would repeat once
+          // per pericope box.
+          hasExternalUI: true,
+          hasSpellCheck: false,
+          textDirection: 'auto',
+        }}
         onScrRefChange={handleScrRefChange}
         onUsjChange={handleUsjChange}
       />
