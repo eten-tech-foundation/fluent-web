@@ -17,6 +17,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
+import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -24,6 +25,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -242,11 +244,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     isPericopeMode,
     isPericopeLoading,
     getPericopeStyle,
+    currentPericopeGroup,
     globalNextUntouchedVerse,
     resourceVerseId,
     effectiveRevealedVerses,
     isNextButtonEnabled,
     handleNextClick,
+    handleNextPericopeClick,
   } = usePericope({
     projectItem,
     sourceVerses,
@@ -529,19 +533,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   useEffect(() => {
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
-    // Check if the current active verse is empty and we have a new AI suggestion for it
-    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (
-      activeTargetVerse &&
-      !activeTargetVerse.content.trim() &&
-      aiSuggestions[activeVerseId] &&
-      !userTouchedVersesRef.current.has(activeVerseId)
-    ) {
-      userTouchedVersesRef.current.add(activeVerseId);
-      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
-    }
+    // Which verses a suggestion may land in. The textarea path shows one verse at a time, so it
+    // fills the verse in focus. The pericope editor shows the whole pericope at once, so the
+    // pericope populates progressively, verse by verse, as each suggestion arrives (#314).
+    const candidateVerseNumbers =
+      config.features.rtePericope && currentPericopeGroup
+        ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
+        : [activeVerseId];
+
+    pendingAiAutoFills({
+      candidateVerseNumbers,
+      verses,
+      suggestions: aiSuggestions,
+      touchedVerseNumbers: userTouchedVersesRef.current,
+    }).forEach(fill => {
+      userTouchedVersesRef.current.add(fill.verseNumber);
+      handleTextChange(fill.verseNumber, fill.text);
+    });
   }, [
     activeVerseId,
+    currentPericopeGroup,
     aiSuggestions,
     verses,
     handleTextChange,
@@ -895,6 +906,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
+                        handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}

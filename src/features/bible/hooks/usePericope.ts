@@ -180,6 +180,47 @@ export const usePericope = ({
     revealNextVerse,
   ]);
 
+  /**
+   * Advance to the first verse of the next pericope (#314).
+   *
+   * The rich text surface is one editor per pericope, so drafting moves pericope by pericope
+   * rather than verse by verse: there are no verse rows left to step through, and Enter is a
+   * paragraph break rather than a way to advance. Unlike `handleNextClick` this never stops at
+   * `globalNextUntouchedVerse` — an untouched verse inside the pericope the drafter is leaving is
+   * still inside the surface they can see and edit.
+   */
+  const handleNextPericopeClick = useCallback(async () => {
+    if (!isPericopeMode || !currentPericopeGroup) return;
+
+    const currentActiveVerse = verses.find(v => v.verseNumber === activeVerseId);
+    if (currentActiveVerse) {
+      const status = getSaveStatus(currentActiveVerse.verseNumber);
+      if (status.hasUnsavedChanges) {
+        await saveImmediately(currentActiveVerse.verseNumber, currentActiveVerse.content);
+      }
+    }
+
+    const currentIdx = pericopes.findIndex(
+      g => g.pericopeNumber === currentPericopeGroup.pericopeNumber
+    );
+    // The last pericope of the chapter has nowhere to advance to.
+    if (currentIdx === -1 || currentIdx >= pericopes.length - 1) return;
+
+    const nextGroup = pericopes[currentIdx + 1];
+    if (nextGroup.verses.length === 0) return;
+
+    handleActiveVerseChange(nextGroup.verses[0].verseNumber);
+  }, [
+    isPericopeMode,
+    pericopes,
+    currentPericopeGroup,
+    activeVerseId,
+    verses,
+    getSaveStatus,
+    saveImmediately,
+    handleActiveVerseChange,
+  ]);
+
   return {
     pericopes,
     pericopeMap,
@@ -192,5 +233,6 @@ export const usePericope = ({
     effectiveRevealedVerses,
     isNextButtonEnabled,
     handleNextClick,
+    handleNextPericopeClick,
   };
 };

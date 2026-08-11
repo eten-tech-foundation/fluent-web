@@ -17,12 +17,12 @@ interface PericopeRteGroupProps {
   chapterNumber: number;
   activeVerseId: number;
   readOnly: boolean;
-  globalNextUntouchedVerse: Source | null;
-  lastSourceVerseNumber: number;
+  /** Whether a pericope follows this one in the chapter, i.e. whether there is anywhere to go. */
+  hasNextPericope: boolean;
   isTranslationComplete: boolean;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
-  handleNextClick: () => Promise<void>;
+  handleNextPericopeClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
   isAiActive: boolean;
@@ -33,9 +33,10 @@ interface PericopeRteGroupProps {
  * One pericope as a single rich text editing surface (#314), replacing the column of per-verse
  * textareas in `TargetVersesGroup`.
  *
- * The per-verse affordances the drafting flow relies on — the AI suggestion notice and the "Next
- * Verse" button — move below the editor and follow the verse the cursor is in, since there are no
- * longer verse rows to hang them on.
+ * The per-verse affordances the drafting flow relies on move below the editor, since there are no
+ * longer verse rows to hang them on: the AI suggestion notice follows the verse the cursor is in,
+ * and the "Next Verse" button becomes a "Next Pericope" button at the bottom of the surface
+ * (chadw-eten on #400). Enter is left to the editor as a paragraph break and advances nothing.
  */
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   groupVerses,
@@ -45,12 +46,11 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   chapterNumber,
   activeVerseId,
   readOnly,
-  globalNextUntouchedVerse,
-  lastSourceVerseNumber,
+  hasNextPericope,
   isTranslationComplete,
   handleTextChange,
   handleActiveVerseChange,
-  handleNextClick,
+  handleNextPericopeClick,
   aiSuggestions,
   isAiThresholdMet,
   isAiActive,
@@ -86,13 +86,15 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
   const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-  const isLastVerseOfChapter = activeVerseId === lastSourceVerseNumber;
 
-  const showNextButton =
-    !readOnly &&
-    isGroupActive &&
-    !isTranslationComplete &&
-    (!isLastVerseOfChapter || globalNextUntouchedVerse !== null);
+  // The pericope-level reading of the verse button's "don't advance from an empty verse" rule:
+  // the whole pericope is on screen, so all of it has to be drafted before moving past it.
+  const isPericopeDrafted = groupVerses.every(gv =>
+    verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
+  );
+
+  const showNextPericopeButton =
+    !readOnly && isGroupActive && !isTranslationComplete && hasNextPericope;
 
   const aiNotice =
     !readOnly &&
@@ -130,14 +132,14 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         </p>
       )}
 
-      {showNextButton && (
+      {showNextPericopeButton && (
         <div className='flex justify-end'>
           <Button
             className='bg-primary hover:bg-primary-hover flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all'
-            disabled={isActiveVerseEmpty}
-            onClick={handleNextClick}
+            disabled={!isPericopeDrafted}
+            onClick={handleNextPericopeClick}
           >
-            {t('nextVerse', 'Next Verse')}
+            {t('nextPericope', 'Next Pericope')}
           </Button>
         </div>
       )}

@@ -32,6 +32,7 @@ interface DraftingGridPericopeProps {
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
+  handleNextPericopeClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
   isAiActive: boolean;
@@ -235,6 +236,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   handleActiveVerseChange,
   handleKeyDown,
   handleNextClick,
+  handleNextPericopeClick,
   aiSuggestions,
   isAiThresholdMet,
   isAiActive,
@@ -245,7 +247,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
 
   return (
     <>
-      {pericopes.map(group => {
+      {pericopes.map((group, groupIndex) => {
         const groupVerses = sourceVerses.filter(sv =>
           group.verses.some(gv => gv.verseNumber === sv.verseNumber)
         );
@@ -350,15 +352,14 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       bookCode={projectItem.bookCode}
                       chapterAssignmentId={projectItem.chapterAssignmentId}
                       chapterNumber={projectItem.chapterNumber}
-                      globalNextUntouchedVerse={globalNextUntouchedVerse}
                       groupVerses={groupVerses}
                       handleActiveVerseChange={handleActiveVerseChange}
-                      handleNextClick={handleNextClick}
+                      handleNextPericopeClick={handleNextPericopeClick}
                       handleTextChange={handleTextChange}
+                      hasNextPericope={groupIndex < pericopes.length - 1}
                       isAiActive={isAiActive}
                       isAiThresholdMet={isAiThresholdMet}
                       isTranslationComplete={isTranslationComplete}
-                      lastSourceVerseNumber={lastSourceVerseNumber}
                       readOnly={readOnly}
                       suggestionStatus={suggestionStatus}
                       verses={verses}

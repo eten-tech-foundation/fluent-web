@@ -121,6 +121,66 @@ describe('PericopeEditor', () => {
     expect(documentVerses()).toEqual(drafted);
   });
 
+  it('populates the pericope progressively as each verse suggestion arrives', () => {
+    const props = {
+      bookCode: BOOK,
+      chapterNumber: CHAPTER,
+      contentKey: 'a',
+      onVersesChange: vi.fn(),
+    };
+    const pericope: PericopeVerseText[] = [
+      { verseNumber: 1, text: '' },
+      { verseNumber: 2, text: '' },
+      { verseNumber: 3, text: '' },
+      { verseNumber: 4, text: '' },
+    ];
+
+    const { rerender } = render(<PericopeEditor {...props} verses={pericope} />);
+
+    // Generation runs three verses ahead, so the first three land together.
+    const firstThree = pericope.map((verse, index) =>
+      index < 3 ? { ...verse, text: `Suggestion ${verse.verseNumber}` } : verse
+    );
+    rerender(<PericopeEditor {...props} verses={firstThree} />);
+
+    expect(documentVerses()).toEqual(firstThree);
+
+    // Then verse 4 becomes available on its own and shows up in the same surface.
+    const andTheFourth = firstThree.map(verse =>
+      verse.verseNumber === 4 ? { ...verse, text: 'Suggestion 4' } : verse
+    );
+    rerender(<PericopeEditor {...props} verses={andTheFourth} />);
+
+    expect(documentVerses()).toEqual(andTheFourth);
+  });
+
+  it('keeps text the translator wrote when a later verse populates around it', () => {
+    const props = {
+      bookCode: BOOK,
+      chapterNumber: CHAPTER,
+      contentKey: 'a',
+      onVersesChange: vi.fn(),
+    };
+
+    const { rerender } = render(<PericopeEditor {...props} verses={EMPTY_PAIR} />);
+
+    typeInto(1, 'Drafted by hand.');
+    rerender(
+      <PericopeEditor
+        {...props}
+        verses={[
+          { verseNumber: 1, text: 'Drafted by hand.' },
+          { verseNumber: 2, text: 'Suggestion 2' },
+        ]}
+      />
+    );
+
+    expect(documentVerses()).toEqual([
+      { verseNumber: 1, text: 'Drafted by hand.' },
+      { verseNumber: 2, text: 'Suggestion 2' },
+    ]);
+  });
+
   it('reloads from the parent when the pericope identity changes', () => {
     const props = { bookCode: BOOK, chapterNumber: CHAPTER, onVersesChange: vi.fn() };
     const nextPericope = [{ verseNumber: 4, text: 'Fourth.' }];

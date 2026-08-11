@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
   type ProjectItem,
@@ -63,13 +64,21 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
   useDrafting: (props: unknown) => mockUseDrafting(props) as unknown,
 }));
 
+const mockUseAiSuggestions = vi.fn(() => ({
+  suggestions: {} as Record<number, string>,
+  isAiThresholdMet: false,
+  suggestionStatus: 'idle',
+}));
+
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
-  useAiSuggestions: () => ({
-    suggestions: {},
-    isAiThresholdMet: false,
-    suggestionStatus: 'idle',
-  }),
+  useAiSuggestions: () => mockUseAiSuggestions(),
   useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// The rich text surface is covered in `PericopeRteGroup.test.tsx`; standing it in here keeps the
+// ~180 KB editor out of this suite while still exercising the flag's branch.
+vi.mock('@/features/bible/components/PericopeRteGroup', () => ({
+  PericopeRteGroup: () => <div data-testid='pericope-rte-group' />,
 }));
 
 vi.mock('@/features/bible/hooks/usePericope', () => ({
@@ -221,6 +230,7 @@ const defaultPericopeHookResult = (overrides = {}) => ({
   effectiveRevealedVerses: new Set([1]),
   isNextButtonEnabled: true,
   handleNextClick: vi.fn(),
+  handleNextPericopeClick: vi.fn(),
   ...overrides,
 });
 
@@ -262,6 +272,11 @@ describe('DraftingUI', () => {
 
     mockUseDrafting.mockReturnValue(defaultDraftingHookResult());
     mockUsePericope.mockReturnValue(defaultPericopeHookResult());
+    mockUseAiSuggestions.mockReturnValue({
+      suggestions: {},
+      isAiThresholdMet: false,
+      suggestionStatus: 'idle',
+    });
   });
 
   it('renders correctly in Verse Mode', () => {
@@ -477,6 +492,73 @@ describe('DraftingUI', () => {
   });
 
   // --- Repeated Word Check feature flag (feature-flags proposal D5–D7) -------
+  describe('AI suggestion auto-population', () => {
+    const EMPTY_PERICOPE: TargetVerse[] = [
+      { verseNumber: 1, content: '' },
+      { verseNumber: 2, content: '' },
+    ];
+
+    const CURRENT_GROUP = {
+      pericopeNumber: '1',
+      pericopeTitle: 'Creation',
+      verses: [
+        { chapterNumber: 1, verseNumber: 1 },
+        { chapterNumber: 1, verseNumber: 2 },
+      ],
+    };
+
+    let handleTextChange: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      handleTextChange = vi.fn();
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: EMPTY_PERICOPE, handleTextChange })
+      );
+      mockUsePericope.mockReturnValue(
+        defaultPericopeHookResult({ isPericopeMode: true, currentPericopeGroup: CURRENT_GROUP })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Suggestion for 1', 2: 'Suggestion for 2' },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      useAppStore.setState({ displayMode: 'pericope' });
+    });
+
+    afterEach(() => {
+      config.features.rtePericope = false;
+    });
+
+    const renderWithAi = () =>
+      render(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={EMPTY_PERICOPE}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+    it('populates every verse of the pericope in the rich text surface', () => {
+      config.features.rtePericope = true;
+
+      renderWithAi();
+
+      // Verse 2 is not the active verse, but the whole pericope is on screen, so it fills too.
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1');
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2');
+    });
+
+    it('still fills only the verse in focus on the textarea path', () => {
+      config.features.rtePericope = false;
+
+      renderWithAi();
+
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1');
+      expect(handleTextChange).not.toHaveBeenCalledWith(2, 'Suggestion for 2');
+    });
+  });
+
   describe('Repeated Word Check feature flag', () => {
     const openResourcePanel = async (user: ReturnType<typeof userEvent.setup>) => {
       const toggleButton = screen.getByRole('button', { pressed: false });
