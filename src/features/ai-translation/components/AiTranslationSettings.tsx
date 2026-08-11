@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useLocation, useSearch } from '@tanstack/react-router';
 
@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { useToggleChapterAi } from '@/features/bible/hooks/useToggleChapterAi';
-import { ChapterAssignmentStatus, UserRole } from '@/lib/types';
+import { ChapterAssignmentStatus, ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export const AiTranslationSettings: React.FC = () => {
@@ -47,7 +47,7 @@ export const AiTranslationSettings: React.FC = () => {
   const isTranslationView = location.pathname.startsWith('/translation');
   const { openAiInfo } = useSearch({ from: '__root__' });
 
-  const isTranslator = userdetail?.role === UserRole.TRANSLATOR;
+  const isTranslator = userdetail?.role === ROLES.PROJECT_TRANSLATOR;
   const isDraftingStage = currentProjectItem?.chapterStatus === ChapterAssignmentStatus.DRAFT;
 
   const renderContent = () => {

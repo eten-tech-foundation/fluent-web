@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 function Tabs({
   className,
-  orientation = 'horizontal',
+  orientation = 'horizontal' as 'horizontal' | 'vertical',
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return (
@@ -39,7 +39,7 @@ const tabsListVariants = cva(
 
 function TabsList({
   className,
-  variant = 'default',
+  variant = 'default' as 'default' | 'line',
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>) {
   return (
