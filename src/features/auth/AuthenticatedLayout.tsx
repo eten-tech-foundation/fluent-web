@@ -9,7 +9,7 @@ import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { UserRole, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type User, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
@@ -81,7 +81,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
           const orgGrants = activeOrgId != null ? grants.filter(g => g.orgId === activeOrgId) : [];
           const activeGrant: UserGrant =
             orgGrants.find(g => g.roleId === (userdetail?.role ?? userDetails.role)) ??
-            orgGrants.find(g => g.roleId !== UserRole.ORG_MEMBER) ??
+            orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER) ??
             orgGrants[0];
 
           setUserDetail({

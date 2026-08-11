@@ -57,7 +57,7 @@ export interface InviteUserPayload {
   username: string;
   orgId: number;
   projectId?: number | null;
-  roleId: number;
+  roleName: string;
   orgName?: string;
   inviterName?: string;
 }

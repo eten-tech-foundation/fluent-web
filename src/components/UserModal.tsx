@@ -42,7 +42,7 @@ interface FormData {
   firstName: string;
   lastName: string;
   email: string;
-  role: number;
+  role: string;
   status: string;
   disabled?: boolean;
   required?: boolean;
@@ -65,19 +65,23 @@ export const UserModal: React.FC<UserModalProps> = ({
     firstName: '',
     lastName: '',
     email: '',
-    role: 0,
+    role: '',
     status: 'invited',
   });
 
   useEffect(() => {
     if (isOpen) {
       if (mode === 'edit' && user) {
+        const initialRoleName =
+          user.orgGrants?.[0]?.roleName ??
+          user.grants?.[0]?.roleName ??
+          (typeof user.role === 'string' ? user.role : '');
         setFormData({
           username: user.username,
           firstName: user.firstName ?? '',
           lastName: user.lastName ?? '',
           email: user.email,
-          role: user.role ?? 0,
+          role: initialRoleName,
           status: user.status ?? '',
         });
       } else {
@@ -86,7 +90,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           firstName: '',
           lastName: '',
           email: '',
-          role: 0,
+          role: '',
           status: 'invited',
         });
       }
@@ -107,7 +111,7 @@ export const UserModal: React.FC<UserModalProps> = ({
   const isFormValid = (): boolean => {
     const hasUsername = Boolean(formData.username.trim());
     const hasValidEmail = Boolean(formData.email.trim()) && isEmailValid(formData.email.trim());
-    const hasValidRole = Boolean(formData.role && formData.role !== 0);
+    const hasValidRole = Boolean(formData.role && formData.role.trim() !== '');
 
     return hasUsername && hasValidEmail && hasValidRole;
   };
@@ -115,9 +119,9 @@ export const UserModal: React.FC<UserModalProps> = ({
   const handleSubmit = async (): Promise<void> => {
     try {
       if (mode === 'edit' && user) {
-        await onSave({ ...user, ...formData });
+        await onSave({ ...user, ...formData } as unknown as User);
       } else {
-        await onSave(formData as Omit<User, 'id'>);
+        await onSave(formData as unknown as Omit<User, 'id'>);
       }
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -191,10 +195,7 @@ export const UserModal: React.FC<UserModalProps> = ({
             <Label className='gap-1' htmlFor='role'>
               <span style={{ color: 'red' }}>*</span> {t('role')}
             </Label>
-            <Select
-              value={formData.role === 0 ? '' : formData.role.toString()}
-              onValueChange={value => updateFormData('role', Number(value))}
-            >
+            <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
               <SelectTrigger className='w-full bg-white' disabled={disableRoleSelection}>
                 <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
               </SelectTrigger>

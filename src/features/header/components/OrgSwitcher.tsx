@@ -7,24 +7,24 @@ import { ChevronDown } from 'lucide-react';
 import { useUpdateActiveOrg } from '@/hooks/useUsers';
 import { isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { getDisplayRole, UserRole, type UserGrant } from '@/lib/types';
+import { ROLES, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 interface OrgRole {
   roleId: number;
   roleName: string;
 }
-const ROLE_DISPLAY_ORDER: number[] = [
-  UserRole.PROJECT_MANAGER,
-  UserRole.TRANSLATOR,
-  UserRole.PROJECT_OBSERVER,
-  UserRole.ORG_MEMBER,
+const ROLE_DISPLAY_ORDER: string[] = [
+  ROLES.PROJECT_MANAGER,
+  ROLES.PROJECT_TRANSLATOR,
+  ROLES.PROJECT_OBSERVER,
+  ROLES.ORG_MEMBER,
 ];
 
 const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
   [...roles].sort((a, b) => {
-    const aIndex = ROLE_DISPLAY_ORDER.indexOf(a.roleId);
-    const bIndex = ROLE_DISPLAY_ORDER.indexOf(b.roleId);
+    const aIndex = ROLE_DISPLAY_ORDER.indexOf(a.roleName);
+    const bIndex = ROLE_DISPLAY_ORDER.indexOf(b.roleName);
     const aRank = aIndex === -1 ? ROLE_DISPLAY_ORDER.length : aIndex;
     const bRank = bIndex === -1 ? ROLE_DISPLAY_ORDER.length : bIndex;
     return aRank - bRank;
@@ -56,18 +56,18 @@ export const OrgSwitcher: React.FC = () => {
     if (grant.orgId === null) return;
     const existing = rolesByOrg.get(grant.orgId) ?? [];
     if (!existing.some(r => r.roleId === grant.roleId)) {
-      existing.push({ roleId: grant.roleId, roleName: getDisplayRole(grant.roleId) });
+      existing.push({ roleId: grant.roleId, roleName: grant.roleName });
     }
     rolesByOrg.set(grant.orgId, existing);
   });
 
   // Rule: Only show "Organization Member" in the dropdown if no other roles exist for that org
   rolesByOrg.forEach((roles, orgId) => {
-    const hasFunctionalRole = roles.some(r => r.roleId !== UserRole.ORG_MEMBER);
+    const hasFunctionalRole = roles.some(r => r.roleName !== ROLES.ORG_MEMBER);
     if (hasFunctionalRole) {
       rolesByOrg.set(
         orgId,
-        roles.filter(r => r.roleId !== UserRole.ORG_MEMBER)
+        roles.filter(r => r.roleName !== ROLES.ORG_MEMBER)
       );
     }
   });
