@@ -7,9 +7,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
-import { type TtsRequest } from '../tts.types';
 
-import { ServerTtsEngine, superviseClipPlayback, type TtsRecoveryTiming } from './serverTtsEngine';
+import {
+  ServerTtsEngine,
+  superviseClipPlayback,
+  type TtsGenerateWireRequest,
+  type TtsRecoveryTiming,
+} from './serverTtsEngine';
 
 /** Small deterministic timing so fake-timer tests read clearly. */
 const TIMING: TtsRecoveryTiming = {
@@ -35,20 +39,22 @@ describe('ServerTtsEngine.synthesize', () => {
       supportsOpus: () => supportsOpus,
     });
 
-  const sentBody = (fetchFn: ReturnType<typeof vi.fn>): TtsRequest => {
+  /** The body as it actually goes over the wire — snake_case (§7.1, D8). */
+  const sentBody = (fetchFn: ReturnType<typeof vi.fn>): TtsGenerateWireRequest => {
     const init = fetchFn.mock.calls[0][1] as RequestInit;
-    return JSON.parse(init.body as string) as TtsRequest;
+    return JSON.parse(init.body as string) as TtsGenerateWireRequest;
   };
 
-  it('sends a known langCode and omits format/voice/pacing by default (T18, T11, §6.1)', async () => {
+  it('translates the camelCase seam request into the snake_case wire body (T18, T11, §6.1/§7.1)', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       fakeResponse({
         url: 'https://api.test/ai/tts/generate',
-        body: { audioUrl: 'audio/abc123.wav' },
+        body: { audio_url: 'audio/abc123.wav' },
       })
     );
     const engine = makeEngine(fetchFn, true);
 
+    // Seam input is camelCase...
     await engine.synthesize({ text: 'In the beginning', langCode: 'eng' });
 
     expect(fetchFn).toHaveBeenCalledWith(
@@ -56,7 +62,12 @@ describe('ServerTtsEngine.synthesize', () => {
       expect.objectContaining({ method: 'POST', credentials: 'include' })
     );
     const body = sentBody(fetchFn);
-    expect(body).toEqual({ text: 'In the beginning', langCode: 'eng' });
+    // ...and what leaves the browser is snake_case, mirroring fluent-ai's
+    // Python field names verbatim (D8). A regression here would silently drop
+    // the hint: `lang_code` is optional upstream, so a stray `langCode` would
+    // be rejected by the `.strict()` request schema in fluent-api.
+    expect(body).toEqual({ text: 'In the beginning', lang_code: 'eng' });
+    expect('langCode' in body).toBe(false);
     expect('format' in body).toBe(false);
     expect('voice' in body).toBe(false);
     expect('pacing' in body).toBe(false);
@@ -66,7 +77,7 @@ describe('ServerTtsEngine.synthesize', () => {
     const fetchFn = vi.fn().mockResolvedValue(
       fakeResponse({
         url: 'https://api.test/ai/tts/generate',
-        body: { audioUrl: 'audio/abc123.wav' },
+        body: { audio_url: 'audio/abc123.wav' },
       })
     );
     const engine = makeEngine(fetchFn, false);
@@ -76,18 +87,20 @@ describe('ServerTtsEngine.synthesize', () => {
     expect(sentBody(fetchFn).format).toBe('mp3');
   });
 
-  it('resolves the sibling-relative audioUrl against the RESPONSE url, nested path included (§7.1)', async () => {
+  it('resolves the wire audio_url into an absolute TtsClip.audioUrl against the RESPONSE url, nested path included (§7.1)', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       fakeResponse({
         // Deliberately nested prefix: resolution must land beside `generate`.
         url: 'https://api.test/some/prefix/ai/tts/generate',
-        body: { audioUrl: 'audio/9f2ac1d47b.wav' },
+        body: { audio_url: 'audio/9f2ac1d47b.wav' },
       })
     );
     const engine = makeEngine(fetchFn);
 
     const clip = await engine.synthesize({ text: 'hello' });
 
+    // The seam value is DERIVED, not relayed: the wire carried a relative
+    // reference, the clip carries the absolute URL.
     expect(clip.audioUrl).toBe('https://api.test/some/prefix/ai/tts/audio/9f2ac1d47b.wav');
   });
 

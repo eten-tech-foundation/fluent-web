@@ -15,12 +15,40 @@ import {
   type TtsClip,
   type TtsEngine,
   type TtsFailureClass,
+  type TtsFormat,
+  type TtsPacing,
   TtsPlaybackError,
   type TtsRequest,
 } from '../tts.types';
 
 /** Minimal fetch signature so tests can inject a deterministic fake. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * ── Wire payloads for fluent-api's `generate` proxy (§7.1) ───────────────────
+ *
+ * snake_case ON PURPOSE, and deliberately SEPARATE from the camelCase seam
+ * types in `tts.types.ts`. fluent-ai is a Python service whose field names
+ * travel through fluent-api verbatim (decision D8) — the same thing
+ * `features/checks/checks.types.ts` already does for greek-room.
+ *
+ * Keeping them separate is not pedantry: they hold different values. The
+ * server's `audio_url` is a SIBLING-RELATIVE reference; `TtsClip.audioUrl` is
+ * the ABSOLUTE URL derived from it below. This module is the only place the
+ * two vocabularies meet, which is exactly why a future browser-local engine
+ * (§13.3) can implement the same seam with no wire vocabulary at all.
+ */
+export interface TtsGenerateWireRequest {
+  text: string;
+  voice?: string;
+  format?: TtsFormat;
+  lang_code?: string;
+  pacing?: TtsPacing;
+}
+
+export interface TtsGenerateWireResponse {
+  audio_url: string;
+}
 
 /**
  * Proposed-default numbers (§6.1, flagged for review in the proposal). Named
@@ -70,7 +98,7 @@ export interface ServerTtsEngineOptions {
 
 /**
  * Server-backed engine: POSTs to fluent-api's `generate` proxy and resolves
- * the sibling-relative `audioUrl` against the response URL (§7.1).
+ * the sibling-relative `audio_url` against the response URL (§7.1).
  */
 export class ServerTtsEngine implements TtsEngine {
   private readonly apiBaseUrl: string;
@@ -84,10 +112,12 @@ export class ServerTtsEngine implements TtsEngine {
   }
 
   async synthesize(request: TtsRequest, signal?: AbortSignal): Promise<TtsClip> {
-    const body: TtsRequest = { text: request.text };
+    // Seam (camelCase) → wire (snake_case). The translation lives here and
+    // nowhere else; see the wire-payload note above.
+    const body: TtsGenerateWireRequest = { text: request.text };
     if (request.langCode !== undefined) {
       // T18: send the language hint whenever the caller knows it.
-      body.langCode = request.langCode;
+      body.lang_code = request.langCode;
     }
     // §6.1: omit `format` by default — the server's TTS_DEFAULT_FORMAT
     // governs. Send 'mp3' only when the browser cannot play Opus. An explicit
@@ -112,12 +142,13 @@ export class ServerTtsEngine implements TtsEngine {
       throw new Error(`Failed to generate TTS clip (HTTP ${res.status})`);
     }
 
-    const clip = (await res.json()) as TtsClip;
-    // §7.1: `audioUrl` is a sibling-relative reference. Resolving against the
+    const wire = (await res.json()) as TtsGenerateWireResponse;
+    // §7.1: `audio_url` is a sibling-relative reference. Resolving against the
     // RESPONSE URL (never string-concatenating a base) is what keeps the
     // serving choice server-side — the browser called fluent-api, so the
-    // audio fetch goes to fluent-api.
-    return { audioUrl: new URL(clip.audioUrl, res.url).toString() };
+    // audio fetch goes to fluent-api. The absolute result is what makes the
+    // returned `TtsClip` a different thing from the wire body.
+    return { audioUrl: new URL(wire.audio_url, res.url).toString() };
   }
 }
 
@@ -242,7 +273,7 @@ export const superviseClipPlayback = (options: ClipPlaybackSupervisionOptions): 
     notFound: 0,
     stall: 0,
   };
-  const unsubscribers: (() => void)[] = [];
+  const unsubscribers: Array<() => void> = [];
 
   const detach = (): void => {
     if (detached) return;
