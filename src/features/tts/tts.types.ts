@@ -20,13 +20,16 @@
  */
 export type TtsFormat = 'ogg-opus' | 'mp3';
 
-/** Reserved synthesis-time pacing slot (T11) — protocol only, no v1 UI. */
-export interface TtsPacing {
-  mode?: string;
-}
-
 /** What a caller asks an engine to speak. The server engine maps this onto the
- * `POST /ai/tts/generate` wire body (§7.1); a local engine would not. */
+ * `POST /ai/tts/generate` wire body (§7.1); a local engine would not.
+ *
+ * There is deliberately no `pacing` field. T11 originally reserved one for a
+ * future synthesis-time cadence option; it was removed on 2026-08-11, before
+ * any of this shipped, because it had no defined values, no UI, no provider
+ * parameter and no testable behavior — it could only be guessed at. Adding an
+ * optional field later is the cheap additive direction (the same reasoning that
+ * makes fluent-api's request schema `.strict()` safe), so reserving it early
+ * bought nothing. Playback speed stays `audio.playbackRate` (§6.2). */
 export interface TtsRequest {
   /** Exact visible text to recite (T6 — the backend knows nothing of verses). */
   text: string;
@@ -36,8 +39,6 @@ export interface TtsRequest {
   format?: TtsFormat;
   /** ISO 639-3 hint, sent whenever the caller knows it (T18). */
   langCode?: string;
-  /** Reserved; v1 never sends a non-null value (T11). */
-  pacing?: TtsPacing;
 }
 
 /**
