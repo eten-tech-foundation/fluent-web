@@ -7,6 +7,7 @@ export interface ProjectUser {
   userId: number;
   displayName: string;
   roleID: number;
+  roleName: string;
   addedAt: string | null;
 }
 
@@ -38,7 +39,7 @@ const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
 const addProjectUsers = async (
   projectId: number,
   userIds: number[],
-  roleId: number
+  roleName: string
 ): Promise<ProjectUser[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/`, {
     method: 'POST',
@@ -46,7 +47,7 @@ const addProjectUsers = async (
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ userIds, roleId }),
+    body: JSON.stringify({ userIds, roleName }),
   });
 
   if (!res.ok) await parseErrorMessage(res, 'Failed to add users to project');
@@ -83,8 +84,8 @@ export const useAddProjectUsers = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userIds, roleId }: { userIds: number[]; roleId: number }) =>
-      addProjectUsers(projectId, userIds, roleId),
+    mutationFn: ({ userIds, roleName }: { userIds: number[]; roleName: string }) =>
+      addProjectUsers(projectId, userIds, roleName),
     onSuccess: newUsers => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev => {
         const existing = prev ?? [];
@@ -115,7 +116,7 @@ export const useRemoveProjectUser = (projectId: number) => {
 const updateProjectUserRole = async (
   projectId: number,
   userId: number,
-  roleId: number
+  roleName: string
 ): Promise<ProjectUser> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/${userId}`, {
     method: 'PATCH',
@@ -123,7 +124,7 @@ const updateProjectUserRole = async (
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ roleId }),
+    body: JSON.stringify({ roleName }),
   });
 
   if (!res.ok) await parseErrorMessage(res, 'Failed to update user role');
@@ -134,11 +135,11 @@ export const useUpdateProjectUserRole = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userId, roleId }: { userId: number; roleId: number }) =>
-      updateProjectUserRole(projectId, userId, roleId),
-    onSuccess: (_updatedUser, { userId, roleId }) => {
+    mutationFn: ({ userId, roleName }: { userId: number; roleName: string }) =>
+      updateProjectUserRole(projectId, userId, roleName),
+    onSuccess: (_updatedUser, { userId, roleName }) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
-        prev ? prev.map(u => (u.userId === userId ? { ...u, roleID: roleId } : u)) : []
+        prev ? prev.map(u => (u.userId === userId ? { ...u, roleName } : u)) : []
       );
     },
     onError: () => {

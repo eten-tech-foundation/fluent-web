@@ -245,7 +245,7 @@ describe('DraftingUI', () => {
     // Default to Verse Mode
     useAppStore.setState({
       displayMode: 'verse',
-      userdetail: { id: 1, username: 'testuser', role: 2 } as unknown as User,
+      userdetail: { id: 1, username: 'testuser', role: 'Project Translator' } as unknown as User,
     });
 
     mockUseDrafting.mockReturnValue(defaultDraftingHookResult());

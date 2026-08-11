@@ -19,8 +19,11 @@ const fetchProjects = async (): Promise<Project[]> => {
   return data;
 };
 
-const fetchUserProjects = async (user: User): Promise<Project[]> => {
-  const res = await fetch(`${config.api.url}/users/${user.id}/projects`, {
+const fetchUserProjects = async (user: User, role?: string): Promise<Project[]> => {
+  const url = new URL(`${config.api.url}/users/${user.id}/projects`);
+  if (role) url.searchParams.set('role', role);
+
+  const res = await fetch(url.toString(), {
     method: 'GET',
     credentials: 'include',
     headers: {
@@ -55,12 +58,12 @@ export const useProjects = (enabled: boolean = true) => {
   });
 };
 
-export const useUserProjects = (user: User | null | undefined) => {
+export const useUserProjects = (user: User | null | undefined, role?: string) => {
   return useQuery<Project[]>({
-    queryKey: ['user-projects', user?.id],
+    queryKey: ['user-projects', user?.id, role],
     queryFn: () => {
       if (!user) throw new Error('User is required');
-      return fetchUserProjects(user);
+      return fetchUserProjects(user, role);
     },
     enabled: !!user?.id,
   });

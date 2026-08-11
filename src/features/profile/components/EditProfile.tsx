@@ -30,7 +30,7 @@ export function EditProfile({ isOpen, onClose }: EditProfileProps) {
         id: res.id,
         email: res.email,
         username: res.username,
-        role: activeGrant?.roleId ?? res.role,
+        role: activeGrant?.roleName ?? res.role,
         lastActiveOrgId: res.lastActiveOrgId ?? userdetail?.lastActiveOrgId,
         grants: grants,
         firstName: res.firstName,

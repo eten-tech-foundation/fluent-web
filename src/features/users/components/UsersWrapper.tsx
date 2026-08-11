@@ -70,7 +70,7 @@ export const UsersWrapper: React.FC = () => {
             id: res.id,
             email: res.email,
             username: res.username,
-            role: activeGrant?.roleId ?? res.role,
+            role: activeGrant?.roleName ?? res.role,
             lastActiveOrgId: res.lastActiveOrgId ?? userdetail.lastActiveOrgId,
             grants: grants,
             firstName: res.firstName,
@@ -78,13 +78,18 @@ export const UsersWrapper: React.FC = () => {
             status: res.status,
           });
         }
-      } else {
-        const userToInvite = userData as Omit<User, 'id'>;
+        const userToInvite = userData as Omit<User, 'id'> & {
+          roleName?: string;
+          role?: string | number;
+        };
+        const inviteRoleName =
+          userToInvite.roleName ??
+          (typeof userToInvite.role === 'string' ? userToInvite.role : String(userToInvite.role));
         const invitePayload: InviteUserPayload = {
           email: userToInvite.email,
           username: userToInvite.displayName ?? userToInvite.username,
           orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
-          roleId: userToInvite.role,
+          roleName: inviteRoleName,
           orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
           inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
         };

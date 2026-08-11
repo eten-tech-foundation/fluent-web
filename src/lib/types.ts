@@ -16,7 +16,7 @@ export interface User {
   email: string;
   grants?: UserGrant[];
   orgGrants?: UserGrant[];
-  role: number;
+  role: string;
   status?: string;
   organization?: number;
   lastActiveOrgId?: number | null;
@@ -301,19 +301,8 @@ export enum ChapterAssignmentStatus {
   CONSULTANT_CHECK = 'consultant_check',
   COMPLETE = 'complete',
 }
-export enum UserRole {
-  PROJECT_MANAGER = 1,
-  TRANSLATOR = 2,
-  SUPER_ADMIN = 3,
-  ORG_OWNER = 4,
-  ORG_MANAGER = 5,
-  PROJECT_OBSERVER = 6,
-  ORG_MEMBER = 11,
-}
-
 export const ROLES = {
   SUPER_ADMIN: 'SuperAdmin',
-  ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
@@ -321,34 +310,35 @@ export const ROLES = {
   ORG_MEMBER: 'Org Member',
 } as const;
 
-const roleDisplayMap: Partial<Record<UserRole, string>> = {
-  [UserRole.PROJECT_MANAGER]: 'Project Manager',
-  [UserRole.TRANSLATOR]: 'Translator',
-  [UserRole.SUPER_ADMIN]: 'SuperAdmin',
-  [UserRole.ORG_OWNER]: 'Org Owner',
-  [UserRole.ORG_MANAGER]: 'Org Manager',
-  [UserRole.PROJECT_OBSERVER]: 'Observer',
-  [UserRole.ORG_MEMBER]: 'Organization Member',
+export type RoleName = (typeof ROLES)[keyof typeof ROLES];
+
+// Display labels for role names shown in the UI
+const roleDisplayNames: Partial<Record<RoleName, string>> = {
+  [ROLES.PROJECT_MANAGER]: 'Project Manager',
+  [ROLES.PROJECT_TRANSLATOR]: 'Translator',
+  [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_MANAGER]: 'Org Manager',
+  [ROLES.PROJECT_OBSERVER]: 'Observer',
+  [ROLES.ORG_MEMBER]: 'Organization Member',
 };
 
-export function getDisplayRole(role: number): string {
-  return roleDisplayMap[role as UserRole] ?? 'Unknown';
+export function getDisplayRole(roleName: string): string {
+  return roleDisplayNames[roleName as RoleName] ?? roleName;
 }
 
 export interface RoleOption {
-  value: UserRole;
+  value: RoleName;
   label: string;
 }
 
 export const ROLE_OPTIONS: RoleOption[] = (
-  Object.entries(roleDisplayMap) as Array<[string, string]>
-).map(([value, label]) => ({
-  value: Number(value) as UserRole,
-  label,
-}));
+  Object.entries(roleDisplayNames) as Array<[RoleName, string]>
+).map(([value, label]) => ({ value, label }));
 
 export const PROJECT_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(r =>
-  [UserRole.PROJECT_MANAGER, UserRole.TRANSLATOR, UserRole.PROJECT_OBSERVER].includes(r.value)
+  (
+    [ROLES.PROJECT_MANAGER, ROLES.PROJECT_TRANSLATOR, ROLES.PROJECT_OBSERVER] as readonly string[]
+  ).includes(r.value)
 );
 
 export const ChapterAssignmentStatusDisplay: Record<ChapterAssignmentStatus, string> = {

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useUpdateActiveOrg } from '@/hooks/useUsers';
 import { isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { getDisplayRole, UserRole, type UserGrant } from '@/lib/types';
+import { getDisplayRole, ROLES, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 interface OrgRole {
@@ -21,17 +21,17 @@ interface OrgSwitcherProps {
   onAfterSelect?: () => void;
 }
 
-const ROLE_DISPLAY_ORDER: number[] = [
-  UserRole.PROJECT_MANAGER,
-  UserRole.TRANSLATOR,
-  UserRole.PROJECT_OBSERVER,
-  UserRole.ORG_MEMBER,
+const ROLE_DISPLAY_ORDER: string[] = [
+  ROLES.PROJECT_MANAGER,
+  ROLES.PROJECT_TRANSLATOR,
+  ROLES.PROJECT_OBSERVER,
+  ROLES.ORG_MEMBER,
 ];
 
 const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
   [...roles].sort((a, b) => {
-    const aIndex = ROLE_DISPLAY_ORDER.indexOf(a.roleId);
-    const bIndex = ROLE_DISPLAY_ORDER.indexOf(b.roleId);
+    const aIndex = ROLE_DISPLAY_ORDER.indexOf(a.roleName);
+    const bIndex = ROLE_DISPLAY_ORDER.indexOf(b.roleName);
     const aRank = aIndex === -1 ? ROLE_DISPLAY_ORDER.length : aIndex;
     const bRank = bIndex === -1 ? ROLE_DISPLAY_ORDER.length : bIndex;
     return aRank - bRank;
@@ -58,8 +58,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
 
   const activeOrgId = userdetail.lastActiveOrgId ?? Array.from(orgMap.keys())[0];
   const activeOrgName = orgMap.get(activeOrgId) ?? 'Unknown Organization';
-  const activeRoleId = userdetail.role;
-
+  const activeRoleName = userdetail.role;
   // Active org first, then the rest in original order
   const organizations = Array.from(orgMap.entries())
     .map(([id, name]) => ({ id, name }))
@@ -70,18 +69,18 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     if (grant.orgId === null) return;
     const existing = rolesByOrg.get(grant.orgId) ?? [];
     if (!existing.some(r => r.roleId === grant.roleId)) {
-      existing.push({ roleId: grant.roleId, roleName: getDisplayRole(grant.roleId) });
+      existing.push({ roleId: grant.roleId, roleName: grant.roleName });
     }
     rolesByOrg.set(grant.orgId, existing);
   });
 
   // Rule: Only show "Organization Member" in the list if no other roles exist for that org
   rolesByOrg.forEach((roles, orgId) => {
-    const hasFunctionalRole = roles.some(r => r.roleId !== UserRole.ORG_MEMBER);
+    const hasFunctionalRole = roles.some(r => r.roleName !== ROLES.ORG_MEMBER);
     if (hasFunctionalRole) {
       rolesByOrg.set(
         orgId,
-        roles.filter(r => r.roleId !== UserRole.ORG_MEMBER)
+        roles.filter(r => r.roleName !== ROLES.ORG_MEMBER)
       );
     }
   });
@@ -103,10 +102,10 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     );
   }
 
-  const navigateForRole = (orgId: number, roleId: number | undefined) => {
-    if (roleId === undefined) return;
+  const navigateForRole = (orgId: number, roleName: string | undefined) => {
+    if (roleName === undefined) return;
     const grants = userdetail.grants ?? [];
-    const grantsForRole = grants.filter(g => g.orgId === orgId && g.roleId === roleId);
+    const grantsForRole = grants.filter(g => g.orgId === orgId && g.roleName === roleName);
     if (isManager(grantsForRole)) {
       void navigate({ to: '/projects' });
     } else {
@@ -114,9 +113,9 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     }
   };
 
-  const handleSelectRole = async (orgId: number, roleId: number) => {
+  const handleSelectRole = async (orgId: number, roleName: string) => {
     setIsExpanded(false);
-    if (orgId === activeOrgId && roleId === activeRoleId) {
+    if (orgId === activeOrgId && roleName === activeRoleName) {
       onAfterSelect?.();
       return;
     }
@@ -127,7 +126,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
       setUserDetail({
         ...userdetail,
         lastActiveOrgId: orgId,
-        role: roleId,
+        role: roleName,
       });
 
       await Promise.all([
@@ -138,7 +137,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
         queryClient.invalidateQueries({ queryKey: ['userDetails'] }),
       ]);
 
-      navigateForRole(orgId, roleId);
+      navigateForRole(orgId, roleName);
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
@@ -202,7 +201,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
                 {roles.length > 0 && (
                   <div className='flex flex-wrap gap-1.5 px-0.5 pt-1.5'>
                     {roles.map(role => {
-                      const isActiveRole = isActiveOrg && role.roleId === activeRoleId;
+                      const isActiveRole = isActiveOrg && role.roleName === activeRoleName;
                       return (
                         <button
                           key={role.roleId}
@@ -211,9 +210,9 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
                               ? 'bg-primary text-primary-foreground'
                               : 'border-border bg-background text-foreground hover:bg-accent border'
                           }`}
-                          onClick={() => handleSelectRole(org.id, role.roleId)}
+                          onClick={() => handleSelectRole(org.id, role.roleName)}
                         >
-                          {role.roleName}
+                          {getDisplayRole(role.roleName)}
                         </button>
                       );
                     })}

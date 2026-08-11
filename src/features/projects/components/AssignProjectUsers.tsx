@@ -36,7 +36,7 @@ import { useCreateUser } from '@/hooks/useUsers';
 import {
   getDisplayRole,
   PROJECT_ROLE_OPTIONS,
-  UserRole,
+  ROLES,
   type ChapterAssignmentProgress,
   type User,
 } from '@/lib/types';
@@ -71,14 +71,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const { userdetail } = useAppStore();
 
   const [selectedUsersToAdd, setSelectedUsersToAdd] = useState<number[]>([]);
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<AddUserTab>('existing');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteDisplayName, setInviteDisplayName] = useState('');
-  const [inviteRole, setInviteRole] = useState<UserRole | null>(null);
+  const [inviteRole, setInviteRole] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   // --- Removal guardrail state ---
@@ -104,9 +104,9 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const assignableRoleOptions = PROJECT_ROLE_OPTIONS;
 
   const handleRoleChange = useCallback(
-    (userId: number, roleId: number) => {
+    (userId: number, roleName: string) => {
       setEditingUserId(null);
-      void updateRoleMutation.mutateAsync({ userId, roleId });
+      void updateRoleMutation.mutateAsync({ userId, roleName });
     },
     [updateRoleMutation]
   );
@@ -188,7 +188,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     try {
       await addProjectUsersMutation.mutateAsync({
         userIds: selectedUsersToAdd,
-        roleId: selectedRole,
+        roleName: selectedRole,
       });
       handleCloseDialog();
     } catch (err: unknown) {
@@ -211,7 +211,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       username: inviteDisplayName.trim(),
       orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
       projectId,
-      roleId: inviteRole,
+      roleName: inviteRole,
       // Email personalisation — forwarded to the invitation email template
       orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
       inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
@@ -267,7 +267,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
   // --- Removal guardrails ---
   const projectManagerCount = useMemo(
-    () => (projectUsers ?? []).filter(pu => pu.roleID === UserRole.PROJECT_MANAGER).length,
+    () => (projectUsers ?? []).filter(pu => pu.roleName === ROLES.PROJECT_MANAGER).length,
     [projectUsers]
   );
 
@@ -287,7 +287,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     (pu: ProjectUser) => {
       setError(null);
 
-      if (pu.roleID === UserRole.PROJECT_MANAGER && projectManagerCount <= 1) {
+      if (pu.roleName === ROLES.PROJECT_MANAGER && projectManagerCount <= 1) {
         setRemoveTarget(null);
         setRemoveBlockedReason(
           `${pu.displayName} is the only Project Manager on this project. Assign another Project Manager before removing them.`
@@ -360,7 +360,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
           <TableCell className='text-foreground py-2.5 pl-3 text-sm'>{pu.displayName}</TableCell>
           <TableCell className='text-foreground relative py-2.5 pr-3 text-sm'>
             {isOwnRow ? (
-              <span>{getDisplayRole(pu.roleID)}</span>
+              <span>{getDisplayRole(pu.roleName)}</span>
             ) : (
               <Popover
                 open={isEditingThisRow}
@@ -371,7 +371,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                     className='flex items-center gap-1 rounded-sm text-left hover:opacity-80'
                     type='button'
                   >
-                    {getDisplayRole(pu.roleID)}
+                    {getDisplayRole(pu.roleName)}
                     <ChevronDown
                       className={`transition-transform ${isEditingThisRow ? 'rotate-180' : ''}`}
                       size={14}
@@ -385,7 +385,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   sideOffset={4}
                 >
                   {assignableRoleOptions.map(role => {
-                    const isSelected = role.value === pu.roleID;
+                    const isSelected = role.value === pu.roleName;
                     return (
                       <button
                         key={role.value}
@@ -626,10 +626,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Label className='gap-1' htmlFor='role'>
                   Role
                 </Label>
-                <Select
-                  value={selectedRole !== null ? String(selectedRole) : ''}
-                  onValueChange={value => setSelectedRole(Number(value) as UserRole)}
-                >
+                <Select value={selectedRole ?? ''} onValueChange={value => setSelectedRole(value)}>
                   <SelectTrigger className='w-full bg-white'>
                     <SelectValue placeholder='Select a role'>{selectedRoleLabel}</SelectValue>
                   </SelectTrigger>
@@ -705,10 +702,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Label className='gap-1' htmlFor='invite-role'>
                   <span style={{ color: 'red' }}>*</span> Role
                 </Label>
-                <Select
-                  value={inviteRole !== null ? String(inviteRole) : ''}
-                  onValueChange={value => setInviteRole(Number(value) as UserRole)}
-                >
+                <Select value={inviteRole ?? ''} onValueChange={value => setInviteRole(value)}>
                   <SelectTrigger className='w-full bg-white'>
                     <SelectValue placeholder='Select a role'>{inviteRoleLabel}</SelectValue>
                   </SelectTrigger>

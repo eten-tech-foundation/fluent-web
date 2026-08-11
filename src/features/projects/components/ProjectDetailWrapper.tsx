@@ -29,7 +29,11 @@ export const ProjectDetailWrapper: React.FC = () => {
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
 
   const handleBack = () => {
-    void navigate({ to: '/projects' });
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      void navigate({ to: '/projects' });
+    }
   };
 
   const handleOpenExport = () => {

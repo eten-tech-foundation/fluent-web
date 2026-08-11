@@ -23,7 +23,7 @@ import { getConnectivityProfileDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
-  UserRole,
+  ROLES,
   type ChapterAssignmentProgress,
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
   type ChapterStatusCounts,
@@ -155,7 +155,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const activeProjectGrant = (userdetail?.grants ?? []).find(
     g => g.orgId === activeOrgId && g.projectId === projectId
   );
-  const isManager = activeProjectGrant?.roleId === UserRole.PROJECT_MANAGER;
+  const isManager = activeProjectGrant?.roleName === ROLES.PROJECT_MANAGER;
 
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
@@ -166,14 +166,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const projectTranslators = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
     );
   }, [projectUsers, selectedPeerChecker]);
 
   const availablePeerCheckers = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedDrafter
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedDrafter
     );
   }, [projectUsers, selectedDrafter]);
 
@@ -472,7 +472,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     selectedAssignments.length === 0 ||
                     booksLoading ||
                     isLoadingData ||
-                    (projectUsers?.filter(pu => pu.roleID === UserRole.TRANSLATOR).length ?? 0) < 2
+                    (projectUsers?.filter(pu => pu.roleName === ROLES.PROJECT_TRANSLATOR).length ??
+                      0) < 2
                   }
                   size='sm'
                   onClick={handleAddBook}
