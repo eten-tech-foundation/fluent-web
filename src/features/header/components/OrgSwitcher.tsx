@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ChevronDown } from 'lucide-react';
+import { Building2, Check, ChevronDown } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { useUpdateActiveOrg } from '@/hooks/useUsers';
 import { isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
@@ -14,6 +15,12 @@ interface OrgRole {
   roleId: number;
   roleName: string;
 }
+
+interface OrgSwitcherProps {
+  /** Called after a role/org switch succeeds, so the parent menu can close itself */
+  onAfterSelect?: () => void;
+}
+
 const ROLE_DISPLAY_ORDER: number[] = [
   UserRole.PROJECT_MANAGER,
   UserRole.TRANSLATOR,
@@ -30,13 +37,13 @@ const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
     return aRank - bRank;
   });
 
-export const OrgSwitcher: React.FC = () => {
+export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   const { userdetail, setUserDetail } = useAppStore();
   const updateActiveOrg = useUpdateActiveOrg();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return null;
@@ -49,7 +56,14 @@ export const OrgSwitcher: React.FC = () => {
     }
   });
 
-  const organizations = Array.from(orgMap.entries()).map(([id, name]) => ({ id, name }));
+  const activeOrgId = userdetail.lastActiveOrgId ?? Array.from(orgMap.keys())[0];
+  const activeOrgName = orgMap.get(activeOrgId) ?? 'Unknown Organization';
+  const activeRoleId = userdetail.role;
+
+  // Active org first, then the rest in original order
+  const organizations = Array.from(orgMap.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => (a.id === activeOrgId ? -1 : b.id === activeOrgId ? 1 : 0));
 
   const rolesByOrg = new Map<number, OrgRole[]>();
   userdetail.grants.forEach((grant: UserGrant) => {
@@ -61,7 +75,7 @@ export const OrgSwitcher: React.FC = () => {
     rolesByOrg.set(grant.orgId, existing);
   });
 
-  // Rule: Only show "Organization Member" in the dropdown if no other roles exist for that org
+  // Rule: Only show "Organization Member" in the list if no other roles exist for that org
   rolesByOrg.forEach((roles, orgId) => {
     const hasFunctionalRole = roles.some(r => r.roleId !== UserRole.ORG_MEMBER);
     if (hasFunctionalRole) {
@@ -72,18 +86,19 @@ export const OrgSwitcher: React.FC = () => {
     }
   });
 
-  const activeOrgId = userdetail.lastActiveOrgId ?? organizations[0]?.id;
-  const activeOrgName = orgMap.get(activeOrgId) ?? 'Unknown Organization';
-  const activeRoleId = userdetail.role;
-
   const singleOrgRoleCount =
     organizations.length === 1 ? (rolesByOrg.get(organizations[0].id)?.length ?? 0) : 0;
   const isSwitcherDisabled = organizations.length <= 1 && singleOrgRoleCount <= 1;
 
   if (isSwitcherDisabled) {
     return (
-      <div className='flex items-center rounded-md border border-white/25 bg-transparent px-4 py-1.5 text-sm font-semibold text-white'>
-        <span className='max-w-[200px] truncate'>{activeOrgName}</span>
+      <div className='flex h-10 w-full items-center px-4 py-2'>
+        <span className='text-text-primary mr-3'>
+          <Building2 size={18} />
+        </span>
+        <span className='text-text-primary truncate text-sm font-medium' title={activeOrgName}>
+          {activeOrgName}
+        </span>
       </div>
     );
   }
@@ -100,8 +115,11 @@ export const OrgSwitcher: React.FC = () => {
   };
 
   const handleSelectRole = async (orgId: number, roleId: number) => {
-    setIsOpen(false);
-    if (orgId === activeOrgId && roleId === activeRoleId) return;
+    setIsExpanded(false);
+    if (orgId === activeOrgId && roleId === activeRoleId) {
+      onAfterSelect?.();
+      return;
+    }
 
     try {
       await updateActiveOrg.mutateAsync({ orgId });
@@ -125,71 +143,86 @@ export const OrgSwitcher: React.FC = () => {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
       });
+    } finally {
+      onAfterSelect?.();
     }
   };
 
   return (
-    <div className='relative'>
-      <button
-        className='flex items-center gap-1.5 rounded-md border border-white/25 bg-transparent px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/10'
-        onClick={() => setIsOpen(!isOpen)}
+    <div className='w-full'>
+      <Button
+        aria-expanded={isExpanded}
+        className={`hover:bg-popover-hover text-text-primary h-10 w-full cursor-pointer justify-start px-4 py-2 transition-colors duration-150 ${
+          isExpanded ? 'bg-popover-hover' : ''
+        }`}
+        variant='ghost'
+        onClick={() => setIsExpanded(prev => !prev)}
       >
-        <span className='max-w-[160px] truncate'>{activeOrgName}</span>
-        <ChevronDown className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} size={16} />
-      </button>
-      {isOpen && (
-        <>
-          <div className='fixed inset-0 z-40' onClick={() => setIsOpen(false)} />
-          <div className='bg-popover absolute top-full right-0 z-50 mt-2 w-72 rounded-2xl p-4 shadow-lg'>
-            <div className='text-muted-foreground mb-3 px-1 text-xs font-semibold tracking-wider uppercase'>
-              Switch Organization
-            </div>
+        <span className='text-text-primary mr-3'>
+          <Building2 size={18} />
+        </span>
+        <span className='flex-1 truncate text-left text-sm font-medium' title={activeOrgName}>
+          {activeOrgName}
+        </span>
+        <ChevronDown
+          className={`text-text-primary ml-2 shrink-0 transition-transform ${
+            isExpanded ? 'rotate-180' : ''
+          }`}
+          size={16}
+        />
+      </Button>
 
-            <div className='space-y-4'>
-              {organizations.map(org => {
-                const roles = sortRolesByDisplayOrder(rolesByOrg.get(org.id) ?? []);
-                const isActiveOrg = org.id === activeOrgId;
+      {isExpanded && (
+        <div className='divide-border border-border bg-muted/60 mt-1.5 divide-y rounded-md border px-2.5'>
+          {organizations.map(org => {
+            const roles = sortRolesByDisplayOrder(rolesByOrg.get(org.id) ?? []);
+            const isActiveOrg = org.id === activeOrgId;
 
-                return (
-                  <div key={org.id}>
-                    <div className='flex items-center gap-2 px-1'>
-                      <span
-                        className={`text-base ${
-                          isActiveOrg
-                            ? 'text-foreground font-semibold'
-                            : 'text-foreground font-medium'
-                        }`}
-                      >
-                        {org.name}
-                      </span>
-                    </div>
+            return (
+              <div key={org.id} className='py-2.5 first:pt-2 last:pb-2'>
+                <div className='flex items-center gap-1.5 px-0.5'>
+                  <span
+                    className={`max-w-[160px] truncate text-xs ${
+                      isActiveOrg
+                        ? 'text-text-primary font-semibold'
+                        : 'text-muted-foreground font-medium'
+                    }`}
+                    title={org.name}
+                  >
+                    {org.name}
+                  </span>
+                  {isActiveOrg && (
+                    <span className='bg-primary/10 text-primary flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium'>
+                      <Check size={10} />
+                      Current
+                    </span>
+                  )}
+                </div>
 
-                    {roles.length > 0 && (
-                      <div className='flex flex-wrap gap-2 px-1 pt-2'>
-                        {roles.map(role => {
-                          const isActiveRole = isActiveOrg && role.roleId === activeRoleId;
-                          return (
-                            <button
-                              key={role.roleId}
-                              className={`rounded-full px-3.5 py-1 text-xs font-medium transition-colors ${
-                                isActiveRole
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'border-border bg-background text-foreground hover:bg-accent border'
-                              }`}
-                              onClick={() => handleSelectRole(org.id, role.roleId)}
-                            >
-                              {role.roleName}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                {roles.length > 0 && (
+                  <div className='flex flex-wrap gap-1.5 px-0.5 pt-1.5'>
+                    {roles.map(role => {
+                      const isActiveRole = isActiveOrg && role.roleId === activeRoleId;
+                      return (
+                        <button
+                          key={role.roleId}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            isActiveRole
+                              ? 'bg-primary text-primary-foreground'
+                              : 'border-border bg-background text-foreground hover:bg-accent border'
+                          }`}
+                          onClick={() => handleSelectRole(org.id, role.roleId)}
+                        >
+                          {role.roleName}
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
