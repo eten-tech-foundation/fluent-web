@@ -70,7 +70,6 @@ describe('ServerTtsEngine.synthesize', () => {
     expect('langCode' in body).toBe(false);
     expect('format' in body).toBe(false);
     expect('voice' in body).toBe(false);
-    expect('pacing' in body).toBe(false);
   });
 
   it('sends format mp3 only when Opus is unsupported (§6.1)', async () => {

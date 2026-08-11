@@ -9,7 +9,6 @@ export {
   type TtsEngine,
   type TtsFailureClass,
   type TtsFormat,
-  type TtsPacing,
   TtsPlaybackError,
   type TtsQueueItem,
   type TtsRequest,

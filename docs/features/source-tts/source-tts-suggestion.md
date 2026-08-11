@@ -29,7 +29,7 @@
 
 - **Client retries are bounded and cancellable.** The engine seam’s quiet retries get a stated cap (2 per failure class per clip, proposed default), `Retry-After`/fixed-backoff delays, and every retry timer is scheduled under the clip’s `AbortSignal`; exhaustion surfaces the toast + idle control. Alongside this, playback is pinned to **one uniform element-owned path** (prefetch = early element + `preload="auto"` + `load()`; element errors classified by a fetch HEAD re-probe), and continuous-mode prefetch depth is explicitly capped at 1–2 verses ahead (§5.2, §5.3, §6.1).
 - **`format` is optional, resolved before hashing.** The request-table contradiction with `TTS_DEFAULT_FORMAT` is resolved: fluent-ai resolves the default before hashing and sidecar creation, so “omitted” never exists past the API edge; the v1 frontend omits `format` unless `canPlayType` reports no Opus support (§6.1, §7.1, §8.4, §10.1).
-- **`audioUrl` is a sibling-relative URL reference.** fluent-ai returns `audio/{hash}.{ext}` relative to the request URL rather than minting a URL for a host it has no config for; resolution lands on whichever front door the caller used, and the mirrored-tail route convention becomes a stated contract requirement (§7.1, §12).
+- **`audio_url` is a sibling-relative URL reference.** fluent-ai returns `audio/{hash}.{ext}` relative to the request URL rather than minting a URL for a host it has no config for; resolution lands on whichever front door the caller used, and the mirrored-tail route convention becomes a stated contract requirement (§7.1, §12).
 - **Identity is described as recipe-addressed.** Nondeterministic providers may render one recipe differently; the conditional PUT is first-writer-wins with defined losing-stream behavior, and the PUT pair is recast as storage-level dedup (provider-call dedup is the in-process dict + T26 routing) (§9.1, §10.1, §11.2).
 - **Admission-semaphore sizing is stated.** Slots = ⌊`TTS_MAX_BUFFERED_BYTES` / per-clip ceiling⌋ (worst-case byte reservation) plus a per-append ceiling abort for misbehaving providers, with a cap-boundary test added (§9.2, §12.3).
 - **The summary no longer overclaims fetch authorization** — the compressed R2 URL is described as a bearer capability (creation is authorized; reads are capability-gated), matching §7.3/§11.1.
@@ -47,7 +47,7 @@
 
 - **TTS synthesis moved from fluent-api into fluent-ai.** fluent-api no longer calls Gemini or holds a Google key; it keeps only the authenticated proxy role it already provides for other AI tools.
 - **The Postgres cache is eliminated entirely.** Generated audio is a content-addressed artifact on Cloudflare R2; no database table anywhere.
-- **Artifact identity is an HMAC over a canonical versioned recipe**, with providers declaring non-byte-affecting fields — for Gemini, `langCode` is normalized out of the hash input, so hinted and unhinted requests share one artifact and one billing event.
+- **Artifact identity is an HMAC over a canonical versioned recipe**, with providers declaring non-byte-affecting fields — for Gemini, `lang_code` is normalized out of the hash input, so hinted and unhinted requests share one artifact and one billing event.
 - **Transcoding uses ffmpeg via a Python package bundling the binary** (suggested); the team's containerized ffmpeg (klappy/transcode-mcp) is documented as a workable alternative.
 - **Gemini facts refreshed (2026-07-16):** the Interactions API is now **GA**, and TTS streaming is verified available for models ≥ 3.1 including the proposed default.
 - **Feature-flag semantics aligned with the repeated-word-check precedent:** the flag only hides frontend UI; the backend never disables the service.
@@ -121,7 +121,7 @@ The governing principles are:
 | **T8 (revised 2026-07-21)**  | `generate` does not synthesize: it writes an immutable **request sidecar** to R2 and returns an `audio_url` reference resolved against the request URL (sibling-relative when fluent-ai references itself, §7.1). The first `get-audio` spawns the actual generation and streams it; once compressed, the URL answers a 302 to the immutable R2 object. The duration field is dropped from the response.                                                                                                                                                                           | Lazy generation from durable state: any replica can produce the audio, the browser still hears it immediately, and repeated `generate` calls are idempotent no-ops.                                                                               |
 | **T9 (revised 2026-07-21)**  | Synthesis buffers uncompressed WAV **in heap RAM**; the same task then pipes the buffer through ffmpeg (Opus-in-Ogg preferred; MP3 per request) and conditionally uploads to R2. Nothing touches local disk.                                                                                                                                                                                                                                                                                                                                                                       | The container filesystem is read-only (RC1); the user hears audio immediately; R2 stores only compressed bytes.                                                                                                                                   |
 | **T10 (revised 2026-07-21)** | Serving default is **option (b)**: fluent-api proxies `get-audio` behind the session cookie (auth present but not load-bearing); post-compression requests answer a **302 to the public R2 custom domain**, so heavy bytes bypass both services. Option (a) direct serving is a documented future path.                                                                                                                                                                                                                                                                            | fluent-ai keeps zero public ingress (RC2); the proxy burden is a generate call, a tiny 302, and first-listen WAV only.                                                                                                                            |
-| **T11**                      | Expose no v1 synthesis knobs. Use one configured voice and client-side `playbackRate`; carry `voice`, optional `lang_code`, and reserved pacing in the protocol.                                                                                                                                                                                                                                                                                                                                                                                                                   | One artifact serves all playback speeds while the protocol remains extensible.                                                                                                                                                                    |
+| **T11 (revised 2026-08-11)** | Expose no v1 synthesis knobs. Use one configured voice and client-side `playbackRate`; carry `voice` and optional `lang_code` in the protocol. The originally reserved `pacing` slot was **removed** during Phase 6 — a field with no defined values had no implementable behavior; see the amendment note in §7.1.                                                                                                                                                                                                                                                                | One artifact serves all playback speeds while the protocol remains extensible.                                                                                                                                                                    |
 | **T12 (revised 2026-07-16)** | Add the narrow `sourceTts` flag backed by `EN_FEATURE_SOURCE_TTS`. The flag only tells the frontend to hide the UI; the backend never disables the service. A hidden frontend override shows the UI for pre-release demos.                                                                                                                                                                                                                                                                                                                                                         | Mirrors the repeated-word-check flag semantics; a missing provider key plus the override is itself a valid error-path test.                                                                                                                       |
 | **T13**                      | Add `TTS_USE` as an alias of `project:view`, using the existing permission-alias pattern, enforced at the fluent-api proxy. This **deliberately diverges** from the sibling `AI_TOOLS_USE → content:update` level; §11.1 records why.                                                                                                                                                                                                                                                                                                                                              | Hearing follows seeing; edit-level gating would exclude reviewers and future read-only review flows.                                                                                                                                              |
 | **T14**                      | Enforce an env-configured maximum input length, proposed default 20,000 characters, returning a clear 400 error code. Defer rate limiting. Note: Gemini output caps near 655 seconds of audio, an effective provider ceiling below the tripwire.                                                                                                                                                                                                                                                                                                                                   | The cap is a generous misuse/integration tripwire, not an ordinary verse limit.                                                                                                                                                                   |
@@ -266,7 +266,6 @@ interface TtsRequest {
   voice?: string;
   format?: TtsFormat; // 'ogg-opus' | 'mp3'; omitted unless the browser cannot play Opus (§7.1)
   langCode?: string;
-  pacing?: { mode?: string }; // reserved; no v1 UI
 }
 
 interface TtsClip {
@@ -303,7 +302,7 @@ fluent-web **omits `format` by default**: the server’s `TTS_DEFAULT_FORMAT` (�
 
 ### 6.2 Playback speed and duration (T11, T22)
 
-Playback speed is applied through `audio.playbackRate`. It is deliberately absent from artifact identity and does not trigger new synthesis. The protocol reserves pacing for a future synthesis-time option where cadence itself must change.
+Playback speed is applied through `audio.playbackRate`. It is deliberately absent from artifact identity and does not trigger new synthesis. A future synthesis-time option, for cases where cadence itself must change, is a separate feature that would add its own request field at that time (§13) — the protocol does not reserve a slot for it in advance (see the §7.1 amendment note).
 
 Duration is treated as an emergent property of the media rather than a protocol field. During a first listen the clip streams behind a WAV header with unknown-length sizes (§7.2.1), so the browser reports an indeterminate duration and the frontend renders an indeterminate timeline — honest UX, since seeking into audio that does not exist yet is impossible anyway. Once the artifact is served from R2, the Ogg/MP3 container header provides the exact duration for free, and ordinary `Content-Length` and HTTP Range behavior make scrubbing work normally. Continuous-mode sequencing is unaffected: it advances on the `ended` event, never on a duration countdown. For verse-sized clips the degraded window lasts seconds and only on the first listen.
 
@@ -329,8 +328,7 @@ The money path stays authenticated end to end. fluent-web calls fluent-api with 
 ```json
 {
   "text": "In the beginning…",
-  "lang_code": "eng",
-  "pacing": null
+  "lang_code": "eng"
 }
 ```
 
@@ -342,7 +340,34 @@ Proposed request fields:
 | `voice`     | optional            | Requested logical/provider voice; v1 frontend omits it and the configured default is used.                                                                                                                                                                                                                                                                                  |
 | `format`    | optional            | Compressed format the compression tail should produce: `ogg-opus` or `mp3`. When omitted, fluent-ai resolves `TTS_DEFAULT_FORMAT` (§8.4) **before hashing and sidecar creation**, so “omitted” never exists past the API edge. The v1 frontend omits it unless `canPlayType()` reports no Opus support (§6.1); the resolved value participates in artifact identity (§9.1). |
 | `lang_code` | optional            | Language hint sent whenever fluent-web knows it (ISO 639-3 codes are available for all Fluent source languages, and should be for targets). Advisory for Gemini.                                                                                                                                                                                                            |
-| `pacing`    | optional/reserved   | Accepted protocol slot for future synthesis-time pacing; v1 should reject unsupported non-null values or define a no-op policy explicitly before implementation.                                                                                                                                                                                                            |
+
+> **Amended 2026-08-11 — the reserved `pacing` slot is removed (partial reversal of T11).**
+> Earlier revisions of this table carried a sixth field, `pacing`, as an "accepted
+> protocol slot for future synthesis-time pacing," with the note that v1 "should reject
+> unsupported non-null values or define a no-op policy explicitly before implementation."
+> Reaching that decision point during Phase 6 exposed the problem: the slot had **no
+> defined values** (`{ mode?: string }`, with no enumeration anywhere in this document),
+> no UI, no provider parameter, and therefore no testable behavior — so fluent-ai could
+> only have guessed at what a non-null value meant, and no test could have asserted the
+> guess was right. Both available policies were bad: rejecting means the proxy accepts a
+> shape the service refuses, and accepting-and-ignoring means a caller is billed for
+> audio that silently disregards what it asked for.
+>
+> It was justified by principle 3 ("the protocol is much harder to change than the
+> frontend presentation"), which holds for the things that really are expensive — the
+> hash recipe, the sibling-relative URL shape, field _removals_ — but not for an
+> optional request field. §7.1's own `.strict()` rationale says the additive direction
+> is the safe one: a new optional field is one coordinated change across three repos
+> that all deploy together, with fluent-web the only client. Reserving it early bought
+> nothing and cost a schema, a type, and an unanswerable question.
+>
+> Synthesis-time pacing remains a future direction (§13): whoever implements it adds the
+> field **with real defined values** at that time, and it joins the recipe under a bumped
+> version prefix if it affects output bytes. Playback speed is unaffected — it was never
+> this field, and remains client-side `playbackRate` (§6.2). The rest of T11 stands: v1
+> exposes no synthesis knobs, and `voice`/`lang_code` stay in the contract because both
+> are real (`voice` has a configured default and is byte-affecting; `lang_code` is
+> actually sent).
 
 `format` is honored, not negotiated: the compression tail always has ffmpeg (§10), so a request for `mp3` produces an mp3 artifact — a distinct hash that does not collide with an opus artifact for the same text. An **omitted** `format` is resolved from `TTS_DEFAULT_FORMAT` at the API edge, before hashing and sidecar creation — internally there is no “unspecified format” state, and an explicit request whose value equals the default hashes to the same artifact as an omitting one (correct dedup, not a collision). Keeping the field in the protocol means a client that cannot play Opus (an older browser, a future non-web consumer) is served without any backend change, even though the v1 frontend rarely sends it in practice (§6.1).
 
@@ -432,7 +457,6 @@ class TtsProviderRequest:
     voice: str
     model: str
     lang_code: str | None = None
-    pacing: dict | None = None
 
 class TtsProvider(Protocol):
     def synthesize_stream(
@@ -527,7 +551,7 @@ There is no database — and no staging filesystem. An artifact exists in a gene
 The identity is **recipe-addressed**: the HMAC names the synthesis _recipe_, and the stored bytes are one render of that recipe. A nondeterministic provider may render the same recipe differently on different attempts — every render is an equally valid reading of the same text, and §10.1’s first-writer-wins conditional PUT selects which render becomes the durable artifact. The artifact name is an HMAC (server secret `TTS_HASH_SECRET`, SHA-256) over a canonical recipe string with an explicit version prefix:
 
 ```text
-v1:{text}\x1f{voice}\x1f{model}\x1f{format}\x1f{lang_code-normalized}\x1f{pacing-normalized}
+v1:{text}\x1f{voice}\x1f{model}\x1f{format}\x1f{lang_code-normalized}
 ```
 
 - **Version prefix** (`v1:`): injected server-side by fluent-ai when it builds the recipe — it is not a request field and never appears in the API. Any future change to the recipe’s composition (or any server-side change that should invalidate existing artifacts wholesale) bumps the version, cleanly separating old and new artifact namespaces. Costs nothing now; saves a migration headache later.
@@ -699,7 +723,7 @@ A provider integration smoke test should synthesize a short non-sensitive fixtur
 2. **Alternating review mode:** queue source TTS verse 1 → recorded target verse 1 → source TTS verse 2 → recorded target verse 2. Queue items should therefore pair a verse reference with a generic audio source, not assume every item comes from `TtsEngine`.
 3. **Browser-local Web Speech option:** a future per-user `server | local` preference can trade voice consistency for zero provider cost and better behavior on weak connections. Voice availability/quality remains device-dependent.
 4. **Custom low-resource engine in fluent-ai:** another `TtsProvider` behind the same endpoints, selected by config or language; it declares its own byte-affecting fields (where `lang_code` likely _does_ join the hash).
-5. **Voice picker and synthesis-time pacing:** activate already-reserved request fields; both join the recipe when they affect generated bytes. Client `playbackRate` remains the cheap speed control.
+5. **Voice picker and synthesis-time pacing:** `voice` is already in the contract, so a picker only needs UI plus validation against the provider's voice list. Pacing needs a **new** optional request field, defined with real values at that point rather than reserved blind (see the §7.1 amendment note). Either joins the recipe when it affects generated bytes, under a bumped version prefix. Client `playbackRate` remains the cheap speed control.
 6. **CDN in front of R2 / signed URLs:** the custom public domain (§7.3) already puts Cloudflare in front of the compressed objects, so basic CDN caching is largely in place; signed URLs become relevant if the serving posture tightens (content-sensitivity trigger in §7.3, or eviction per §9.4) or recordings share infrastructure.
 7. **Read-only and source-Bible listening surfaces:** reuse `features/tts/`; those surfaces may choose continuous playback across page breaks because boundary policy is frontend-owned.
 8. **Artifact lifecycle policy:** only if R2 growth ever escapes the cents-per-month arithmetic; age-based expiry via R2 lifecycle rules would be the natural tool (there is no LRU state to consult, by design) — noting that any eviction reopens the regeneration window and forces the §7.3 access-posture revisit (§9.4).
