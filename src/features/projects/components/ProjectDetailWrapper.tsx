@@ -121,6 +121,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         projectChapterStatusCounts={project.chapterStatusCounts}
         projectConnectivityProfile={project.metadata.connectivityProfile}
         projectId={project.id}
+        projectLastActivityAt={project.lastActivityAt}
         projectSource={project.sourceName}
         projectSourceLanguageName={project.sourceLanguageName}
         projectTargetLanguageName={project.targetLanguageName}

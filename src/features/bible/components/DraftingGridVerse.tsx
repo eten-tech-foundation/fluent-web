@@ -2,6 +2,7 @@ import React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type Source, type TargetVerse } from '@/lib/types';
 
 interface DraftingTargetColumnProps {
@@ -14,6 +15,10 @@ interface DraftingTargetColumnProps {
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
+  isAiActive: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
 export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
@@ -26,10 +31,22 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
+  aiSuggestions,
+  isAiThresholdMet,
+  isAiActive,
+  suggestionStatus,
 }) => {
   const isActive = !readOnly && activeVerseId === verseNumber;
   const currentTargetVerse = verses.find(v => v.verseNumber === verseNumber);
   const shouldShowTarget = readOnly || isActive || effectiveRevealedVerses.has(verseNumber);
+  const { t } = useTranslation();
+
+  const isAiActiveNoSuggestion =
+    isActive &&
+    isAiActive &&
+    isAiThresholdMet &&
+    !aiSuggestions[verseNumber] &&
+    !currentTargetVerse?.content.trim();
 
   return (
     <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
@@ -51,14 +68,40 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             aria-label={`Translation for verse ${verseNumber}`}
             autoCapitalize='sentences'
             autoCorrect='on'
-            className='w-full resize-none overflow-hidden border-none bg-transparent text-base leading-snug outline-none'
-            placeholder='Enter translation...'
+            className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+            placeholder={
+              isAiActiveNoSuggestion && suggestionStatus === 'generating'
+                ? t('generatingAiSuggestion', 'Generating...')
+                : t('enterTranslation', 'Enter translation...')
+            }
             spellCheck={true}
             value={currentTargetVerse?.content ?? ''}
             onChange={e => handleTextChange(verseNumber, e.target.value)}
             onFocus={() => handleActiveVerseChange(verseNumber)}
             onKeyDown={handleKeyDown}
           />
+          {isAiActiveNoSuggestion &&
+            (() => {
+              switch (suggestionStatus) {
+                case 'error':
+                  return (
+                    <p className='text-destructive pb-1 text-sm font-medium'>
+                      {t('aiTranslationNotAvailable', 'AI translation not available.')}
+                    </p>
+                  );
+                case 'unavailable':
+                  return (
+                    <p className='text-destructive pb-1 text-sm font-medium'>
+                      {t(
+                        'aiTranslationNotYetReady',
+                        'AI translation not yet ready. Please refresh the page to view the AI translation.'
+                      )}
+                    </p>
+                  );
+                default:
+                  return null;
+              }
+            })()}
         </div>
       )}
     </div>
@@ -79,6 +122,10 @@ interface DraftingGridVerseProps {
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
+  isAiActive: boolean;
+  suggestionStatus: SuggestionStatus;
 }
 
 export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
@@ -95,6 +142,10 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   handleTextChange,
   handleActiveVerseChange,
   handleKeyDown,
+  aiSuggestions,
+  isAiThresholdMet,
+  isAiActive,
+  suggestionStatus,
 }) => {
   const { t } = useTranslation();
   return (
@@ -126,10 +177,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                     </p>
                   ) : (
                     <p className='text-muted-foreground min-h-12 leading-relaxed'>
-                      {t(
-                        'noContentAvailable',
-                        "This Bible version doesn't have content in this passage."
-                      )}
+                      {t('noContentAvailable')}
                     </p>
                   )}
                 </div>
@@ -137,11 +185,15 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             </div>
             <DraftingTargetColumn
               activeVerseId={activeVerseId}
+              aiSuggestions={aiSuggestions}
               effectiveRevealedVerses={effectiveRevealedVerses}
               handleActiveVerseChange={handleActiveVerseChange}
               handleKeyDown={handleKeyDown}
               handleTextChange={handleTextChange}
+              isAiActive={isAiActive}
+              isAiThresholdMet={isAiThresholdMet}
               readOnly={readOnly}
+              suggestionStatus={suggestionStatus}
               textareaRefs={textareaRefs}
               verseNumber={verse.verseNumber}
               verses={verses}

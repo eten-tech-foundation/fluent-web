@@ -13,7 +13,7 @@ import { DraftingUI } from './DraftingUI';
 type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 
 const DraftingPage: React.FC = () => {
-  const { userdetail } = useAppStore();
+  const { userdetail, currentProjectItem } = useAppStore();
 
   const translationMatch = useMatch({
     from: '/_authenticated/translation/$bookId/$chapterNumber',
@@ -49,9 +49,14 @@ const DraftingPage: React.FC = () => {
     );
   }
 
+  const projectItem =
+    currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
+      ? currentProjectItem
+      : loaderData.projectItem;
+
   return (
     <DraftingUI
-      projectItem={loaderData.projectItem}
+      projectItem={projectItem}
       readOnly={isReadOnly}
       sourceVerses={loaderData.sourceVerses}
       targetVerses={loaderData.targetVerses}
