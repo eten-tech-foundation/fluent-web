@@ -16,7 +16,6 @@ import {
   type TtsEngine,
   type TtsFailureClass,
   type TtsFormat,
-  type TtsPacing,
   TtsPlaybackError,
   type TtsRequest,
 } from '../tts.types';
@@ -43,7 +42,6 @@ export interface TtsGenerateWireRequest {
   voice?: string;
   format?: TtsFormat;
   lang_code?: string;
-  pacing?: TtsPacing;
 }
 
 export interface TtsGenerateWireResponse {
@@ -127,8 +125,9 @@ export class ServerTtsEngine implements TtsEngine {
     } else if (!this.supportsOpus()) {
       body.format = 'mp3';
     }
-    // T11: v1 omits `voice` and `pacing` — the wire slots exist, the frontend
-    // deliberately does not populate them.
+    // T11: v1 omits `voice` — the wire slot exists and the server's configured
+    // default applies. (A `pacing` slot was also reserved here; it was dropped
+    // on 2026-08-11 as an unimplementable placeholder — see `tts.types.ts`.)
 
     const res = await this.fetchFn(`${this.apiBaseUrl}/ai/tts/generate`, {
       method: 'POST',
