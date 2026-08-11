@@ -83,6 +83,41 @@ describe('usePericope handleNextPericopeClick', () => {
     expect(handleActiveVerseChange).toHaveBeenCalledWith(4);
   });
 
+  it('skips a pericope the grid renders nothing for', async () => {
+    // Verses 6-7 are outside this chapter's source, so `DraftingGridPericope` renders no box for
+    // that pericope. Advancing into it would strand the drafter: no box is active, so the Next
+    // Pericope button disappears too.
+    mockUseChapterPericopes.mockReturnValue({
+      data: [
+        { pericopeNumber: '1', pericopeTitle: 'First', verses: verseRefs(1, 2) },
+        { pericopeNumber: 'gap', pericopeTitle: 'Unbacked', verses: verseRefs(6, 7) },
+        { pericopeNumber: '3', pericopeTitle: 'Third', verses: verseRefs(3, 4, 5) },
+      ],
+      isLoading: false,
+    });
+    const { result } = renderPericope(1, drafted(...ALL_VERSES));
+
+    await result.current.handleNextPericopeClick();
+
+    expect(handleActiveVerseChange).toHaveBeenCalledTimes(1);
+    expect(handleActiveVerseChange).toHaveBeenCalledWith(3);
+  });
+
+  it('does nothing when every later pericope renders nothing', async () => {
+    mockUseChapterPericopes.mockReturnValue({
+      data: [
+        { pericopeNumber: '1', pericopeTitle: 'First', verses: verseRefs(1, 2, 3, 4, 5) },
+        { pericopeNumber: 'gap', pericopeTitle: 'Unbacked', verses: verseRefs(6, 7) },
+      ],
+      isLoading: false,
+    });
+    const { result } = renderPericope(1, drafted(...ALL_VERSES));
+
+    await result.current.handleNextPericopeClick();
+
+    expect(handleActiveVerseChange).not.toHaveBeenCalled();
+  });
+
   it('does nothing on the last pericope of the chapter', async () => {
     const { result } = renderPericope(4, drafted(...ALL_VERSES));
 

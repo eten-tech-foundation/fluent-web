@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
+import { nextRenderablePericopeVerse } from '@/features/bible/lib/pericope-navigation';
 import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPericopes';
 import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
@@ -203,19 +204,20 @@ export const usePericope = ({
     const currentIdx = pericopes.findIndex(
       g => g.pericopeNumber === currentPericopeGroup.pericopeNumber
     );
-    // The last pericope of the chapter has nowhere to advance to.
-    if (currentIdx === -1 || currentIdx >= pericopes.length - 1) return;
+    if (currentIdx === -1) return;
 
-    const nextGroup = pericopes[currentIdx + 1];
-    if (nextGroup.verses.length === 0) return;
+    // Skips pericopes the grid renders nothing for, and returns null on the last one that does.
+    const nextVerseNumber = nextRenderablePericopeVerse(pericopes, currentIdx, sourceVerses);
+    if (nextVerseNumber === null) return;
 
-    handleActiveVerseChange(nextGroup.verses[0].verseNumber);
+    handleActiveVerseChange(nextVerseNumber);
   }, [
     isPericopeMode,
     pericopes,
     currentPericopeGroup,
     activeVerseId,
     verses,
+    sourceVerses,
     getSaveStatus,
     saveImmediately,
     handleActiveVerseChange,

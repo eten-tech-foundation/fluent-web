@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import { config } from '@/lib/config';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
@@ -356,7 +357,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       handleActiveVerseChange={handleActiveVerseChange}
                       handleNextPericopeClick={handleNextPericopeClick}
                       handleTextChange={handleTextChange}
-                      hasNextPericope={groupIndex < pericopes.length - 1}
+                      hasNextPericope={pericopes
+                        .slice(groupIndex + 1)
+                        .some(later => hasSourceBackedVerse(later, sourceVerses))}
                       isAiActive={isAiActive}
                       isAiThresholdMet={isAiThresholdMet}
                       isTranslationComplete={isTranslationComplete}
