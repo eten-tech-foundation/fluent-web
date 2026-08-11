@@ -298,11 +298,13 @@ describe('DraftingUI — forced-on with no TTS backend (phase 2b hand-off)', () 
     expect(ttsControls()).toHaveLength(2);
 
     // 2. The attempt actually leaves the browser, carrying T18's language hint.
+    //    This is the real HTTP body, so the field is the wire's `lang_code` —
+    //    the camelCase `langCode` lives only in the in-app engine seam.
     await user.click(screen.getByRole('button', { name: 'Play verse 1' }));
     await waitFor(() => expect(generateCalls.count).toBe(1));
     expect(generateCalls.body).toMatchObject({
       text: 'In the beginning God created the heaven and the earth.',
-      langCode: 'eng',
+      lang_code: 'eng',
     });
 
     // 3. The failure is visible and names the verse — not a silent no-op (§5.2).

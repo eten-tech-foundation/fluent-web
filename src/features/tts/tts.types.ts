@@ -1,9 +1,16 @@
 /**
- * Source-Text TTS — wire types and the engine seam.
+ * Source-Text TTS — the engine seam and its supporting types.
  *
  * Shapes are exactly the proposal's §6.1 (T3/T5): the UI depends on
  * `TtsEngine`, never on fetch or a vendor. A future `WebSpeechTtsEngine`
  * (local, streaming) implements the same role without UI changes.
+ *
+ * These are SEAM types, not wire types, and they are camelCase like the rest
+ * of the frontend. The `generate` HTTP payloads are snake_case (`lang_code`,
+ * `audio_url` — §7.1, mirroring fluent-ai's Python names verbatim per decision
+ * D8) and are declared in `engines/serverTtsEngine.ts`, the single module that
+ * translates between the two. That split is what lets a wire-less local engine
+ * satisfy this same seam.
  */
 
 /**
@@ -18,7 +25,8 @@ export interface TtsPacing {
   mode?: string;
 }
 
-/** Request body for `POST /ai/tts/generate` (§7.1). */
+/** What a caller asks an engine to speak. The server engine maps this onto the
+ * `POST /ai/tts/generate` wire body (§7.1); a local engine would not. */
 export interface TtsRequest {
   /** Exact visible text to recite (T6 — the backend knows nothing of verses). */
   text: string;
@@ -36,8 +44,10 @@ export interface TtsRequest {
  * A playable clip reference.
  *
  * `audioUrl` is ABSOLUTE by the time it reaches a caller: the engine resolves
- * the server's sibling-relative reference against the response URL on receipt
- * (§7.1), so the serving choice stays server-side.
+ * the server's sibling-relative `audio_url` against the response URL on
+ * receipt (§7.1), so the serving choice stays server-side. It is therefore a
+ * DERIVED value, not the wire value — which is why this type is not the shape
+ * of the response body.
  *
  * `durationMs` is deliberately absent (T8/§6.2): a streaming first listen has
  * no knowable duration, and once compressed the container header carries the
