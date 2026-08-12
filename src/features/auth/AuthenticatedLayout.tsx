@@ -71,18 +71,22 @@ export function AuthenticatedLayout(): React.JSX.Element {
           const hasGrantsForActiveOrg =
             activeOrgId != null && grants.some(g => g.orgId === activeOrgId);
           if (!hasGrantsForActiveOrg) {
-            // Fall back to the first org the user still has access to
             activeOrgId = grants.find(g => g.orgId !== null)?.orgId;
           }
-          // Select active role with fallback priority:
-          // 1. Keep currently selected role if it still exists in this org
-          // 2. Otherwise switch to any remaining functional role in this org
-          // 3. Otherwise fall back to the Org Member anchor row
           const orgGrants = activeOrgId != null ? grants.filter(g => g.orgId === activeOrgId) : [];
-          const activeGrant: UserGrant =
-            orgGrants.find(g => g.roleName === (userdetail?.role ?? userDetails.role)) ??
-            orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER) ??
-            orgGrants[0];
+
+          const functionalGrant = orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
+          const savedRole = userdetail?.role;
+          const isSavedRoleFunctional =
+            savedRole &&
+            savedRole !== ROLES.ORG_MEMBER &&
+            orgGrants.some(g => g.roleName === savedRole);
+
+          const savedGrant = isSavedRoleFunctional
+            ? orgGrants.find(g => g.roleName === savedRole)
+            : undefined;
+
+          const activeGrant: UserGrant = savedGrant ?? functionalGrant ?? orgGrants[0];
 
           setUserDetail({
             id: userDetails.id,
