@@ -8,7 +8,7 @@ interface AppState {
   currentProjectItem: ProjectItem | null;
   presenceWarning: string | null;
   _hasHydrated: boolean;
-  displayMode: 'verse' | 'pericope';
+  displayMode: 'verse' | 'pericope' | 'chapter';
   isAiThresholdMet: boolean | null;
   isAiSyncPending: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
@@ -56,7 +56,7 @@ export const useAppStore = create<AppState>()(
       clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
-      setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
+      setDisplayMode: (displayMode: 'verse' | 'pericope' | 'chapter') => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
       setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
       setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
