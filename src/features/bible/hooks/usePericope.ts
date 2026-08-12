@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 import { nextRenderablePericopeVerse } from '@/features/bible/lib/pericope-navigation';
 import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPericopes';
-import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
+import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface UsePericopeProps {
   projectItem: ProjectItem;
@@ -13,7 +13,10 @@ interface UsePericopeProps {
   lastRevealedVerseHasContent: boolean;
   displayMode: string;
   getSaveStatus: (verseNumber: number) => { hasUnsavedChanges: boolean };
-  saveImmediately: (verseNumber: number, content: string) => Promise<void>;
+  saveImmediately: (
+    verseNumber: number,
+    payload: { content: string; markers?: VerseMarkers | null }
+  ) => Promise<void>;
   handleActiveVerseChange: (verseNumber: number) => void;
   revealNextVerse: () => void;
 }
@@ -142,7 +145,10 @@ export const usePericope = ({
     if (currentActiveVerse) {
       const status = getSaveStatus(currentActiveVerse.verseNumber);
       if (status.hasUnsavedChanges) {
-        await saveImmediately(currentActiveVerse.verseNumber, currentActiveVerse.content);
+        await saveImmediately(currentActiveVerse.verseNumber, {
+          content: currentActiveVerse.content,
+          markers: currentActiveVerse.markers,
+        });
       }
     }
 
@@ -197,7 +203,10 @@ export const usePericope = ({
     if (currentActiveVerse) {
       const status = getSaveStatus(currentActiveVerse.verseNumber);
       if (status.hasUnsavedChanges) {
-        await saveImmediately(currentActiveVerse.verseNumber, currentActiveVerse.content);
+        await saveImmediately(currentActiveVerse.verseNumber, {
+          content: currentActiveVerse.content,
+          markers: currentActiveVerse.markers,
+        });
       }
     }
 

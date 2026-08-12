@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
+import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
@@ -33,6 +34,7 @@ import {
   type DraftingUIProps,
   type ResourceName,
   type Source,
+  type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -138,13 +140,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const trackAiUsageMutation = useTrackAiUsage();
 
   const saveVerse = useCallback(
-    async (verse: number, text: string) => {
+    async (verse: number, payload: SavePayload) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
       if (!sourceVerse) {
         Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
         return;
       }
-      const trimmedText = text.trim();
+      const trimmedText = payload.content.trim();
 
       await addVerseMutation.mutateAsync({
         verseData: {
@@ -152,6 +154,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           content: trimmedText,
           bibleTextId: sourceVerse.id,
           assignedUserId: userdetail.id,
+          // Only when the caller derived markers (the RTE): the API overwrites stored markers
+          // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
+          ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
         },
       });
 
@@ -498,7 +503,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
     const savePromises = verses
       .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
-      .map(verse => saveImmediately(verse.verseNumber, verse.content));
+      .map(verse =>
+        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      );
 
     await Promise.all(savePromises);
 
@@ -523,9 +530,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
 
   const handleTextChangeWithTracking = useCallback(
-    (verseNumber: number, text: string) => {
+    (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
       userTouchedVersesRef.current.add(verseNumber);
-      handleTextChange(verseNumber, text);
+      handleTextChange(verseNumber, text, markers);
     },
     [handleTextChange]
   );

@@ -10,6 +10,7 @@ import {
   type Source,
   type TargetVerse,
   type User,
+  type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -326,7 +327,8 @@ describe('DraftingUI', () => {
     const textarea = screen.getByLabelText('Translation for verse 1');
     await user.type(textarea, ' New text');
 
-    expect(handleTextChangeMock).toHaveBeenCalledWith(1, expect.any(String));
+    // The tracking wrapper always forwards a markers slot; the textarea derives none.
+    expect(handleTextChangeMock).toHaveBeenCalledWith(1, expect.any(String), undefined);
   });
 
   it('renders in Pericope Mode when enabled', () => {
@@ -615,6 +617,51 @@ describe('DraftingUI', () => {
       );
 
       expect(mockFeatureFlag).toHaveBeenCalledWith('repeatedWordCheck');
+    });
+  });
+
+  describe('verse save payload', () => {
+    it('maps markers into the upsert, omitting the field when the caller derived none', async () => {
+      const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
+      mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync: mutateAsyncMock, isPending: false });
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (
+          verse: number,
+          payload: { content: string; markers?: VerseMarkers | null }
+        ) => Promise<void>;
+      };
+      const split: VerseMarkers = {
+        paragraphs: [
+          { marker: 'p', offset: 0 },
+          { marker: 'p', offset: 12 },
+        ],
+      };
+
+      // The RTE path: markers ride along, content is trimmed with offsets unaffected.
+      await onSave(1, { content: 'Starts here and continues.', markers: split });
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        verseData: expect.objectContaining({
+          content: 'Starts here and continues.',
+          markers: split,
+        }) as unknown,
+      });
+
+      // The textarea path: no opinion on markers, so the field stays out of the request body.
+      await onSave(1, { content: 'Plain textarea text.' });
+      const lastCall = mutateAsyncMock.mock.calls.at(-1)?.[0] as {
+        verseData: Record<string, unknown>;
+      };
+      expect('markers' in lastCall.verseData).toBe(false);
     });
   });
 });

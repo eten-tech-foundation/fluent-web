@@ -25,7 +25,7 @@ export interface PericopeEditorProps {
   readOnly?: boolean;
   /** Reloads the editor from `verses` when this changes, e.g. on chapter navigation. */
   contentKey: string;
-  /** Called with only the verses whose text changed. */
+  /** Called with only the verses whose text or paragraph markers changed. */
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
   onActiveVerseChange?: (verseNumber: number) => void;
@@ -39,8 +39,9 @@ export interface PericopeEditorProps {
  * the editor for the cursor, so it is written back into only in two cases: `contentKey` changed,
  * or the parent filled a verse the editor holds empty (the AI suggestion path).
  *
- * Paragraph breaks the translator creates are real in the editor but are flattened away by
- * `usjToPericopeVerses`, because `translated_verses` has nowhere to store them (fluent-api#263).
+ * Paragraph breaks the translator creates survive the trip out: `usjToPericopeVerses` derives a
+ * `{marker, offset}` entry per paragraph, stored beside the verse (fluent-api#264), and stored
+ * markers are rebuilt into the document on load.
  */
 export function PericopeEditor({
   verses,
@@ -53,15 +54,22 @@ export function PericopeEditor({
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const loadedKeyRef = useRef(contentKey);
-  /** What the editor's own document holds, to diff each commit against. */
-  const knownVersesRef = useRef<PericopeVerseText[]>(verses);
+  /**
+   * What the editor's own document holds, to diff each commit against — kept in *document space*
+   * (the rows re-derived from the document we built), never the raw props. The document makes a
+   * legacy verse's opening paragraph explicit, so diffing raw rows against a derived commit would
+   * report that upgrade as an edit on every mount.
+   */
+  const knownVersesRef = useRef<PericopeVerseText[]>(
+    usjToPericopeVerses(pericopeVersesToUsj(verses, chapterNumber, bookCode))
+  );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
-      knownVersesRef.current = next;
       const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
+      knownVersesRef.current = usjToPericopeVerses(usj);
       suppressedJsonRef.current = JSON.stringify(usj);
       editorRef.current?.setUsj(usj);
     },
@@ -104,7 +112,7 @@ export function PericopeEditor({
 
       knownVersesRef.current = knownVersesRef.current.map(verse => {
         const update = changed.find(c => c.verseNumber === verse.verseNumber);
-        return update ? { ...verse, text: update.text } : verse;
+        return update ? { ...verse, text: update.text, markers: update.markers } : verse;
       });
       onVersesChange(changed);
     },

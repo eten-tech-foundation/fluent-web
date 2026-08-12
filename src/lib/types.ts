@@ -145,11 +145,28 @@ export interface ProjectItem {
   isAiEnabled?: boolean;
 }
 
+/** One paragraph a verse opens or splits into, as `translated_verses.markers` stores it. */
+export interface VerseParagraph {
+  marker: string;
+  offset: number;
+}
+
+/** A verse's paragraph context (fluent-api#264). `null` mirrors a row with none stored. */
+export interface VerseMarkers {
+  paragraphs: VerseParagraph[];
+}
+
 export interface VerseData {
   projectUnitId: number;
   content: string;
   bibleTextId: number;
   assignedUserId: number;
+  /**
+   * Omitted (undefined) when the caller has no opinion — the textarea path — so the field stays
+   * out of the request. The RTE always sends a concrete value, because the API overwrites the
+   * stored markers with whatever the upsert says (omission nulls them).
+   */
+  markers?: VerseMarkers | null;
 }
 
 export interface AudioStep {
@@ -248,6 +265,8 @@ export interface TargetVerse {
   id?: number;
   content: string;
   verseNumber: number;
+  /** Loaded from the API for the RTE; undefined on rows the textarea path creates locally. */
+  markers?: VerseMarkers | null;
 }
 
 export interface DraftingUIProps {

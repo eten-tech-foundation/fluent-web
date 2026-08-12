@@ -132,7 +132,7 @@ describe('usePericope handleNextPericopeClick', () => {
 
     await result.current.handleNextPericopeClick();
 
-    expect(saveImmediately).toHaveBeenCalledWith(2, 'Draft 2');
+    expect(saveImmediately).toHaveBeenCalledWith(2, { content: 'Draft 2', markers: undefined });
     expect(handleActiveVerseChange).toHaveBeenCalledWith(4);
   });
 

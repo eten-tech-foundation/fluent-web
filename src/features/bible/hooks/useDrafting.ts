@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { useBibleTextDebounce } from '@/features/bible/hooks/useBibleTextDebounce';
-import { type Source, type TargetVerse } from '@/lib/types';
+import {
+  useBibleTextDebounce,
+  type SavePayload,
+} from '@/features/bible/hooks/useBibleTextDebounce';
+import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface UseDraftingProps {
   sourceVerses: Source[];
   targetVerses: TargetVerse[];
   readOnly: boolean;
-  onSave: (verse: number, text: string) => Promise<void>;
+  onSave: (verse: number, payload: SavePayload) => Promise<void>;
 }
 
 export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: UseDraftingProps) => {
@@ -99,18 +102,21 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   }, []);
 
   const handleTextChange = useCallback(
-    (verseId: number, text: string) => {
+    // `markers` undefined means the caller derived none — the textarea path. It replaces whatever
+    // the verse carried, deliberately: keeping stored markers against text edited elsewhere would
+    // leave offsets pointing past the new content. The RTE always passes a concrete value.
+    (verseId: number, text: string, markers?: VerseMarkers | null) => {
       if (readOnly) return;
       setVerses(currentVerses => {
         const exists = currentVerses.some(v => v.verseNumber === verseId);
         if (!exists) {
-          return [...currentVerses, { verseNumber: verseId, content: text }];
+          return [...currentVerses, { verseNumber: verseId, content: text, markers }];
         }
         return currentVerses.map(verse =>
-          verse.verseNumber === verseId ? { ...verse, content: text } : verse
+          verse.verseNumber === verseId ? { ...verse, content: text, markers } : verse
         );
       });
-      debouncedSave(verseId, text);
+      debouncedSave(verseId, { content: text, markers });
       const textarea = textareaRefs.current[verseId];
       if (textarea) autoResizeTextarea(textarea);
       updateButtonPosition();
@@ -126,13 +132,16 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         if (previousVerse) {
           const status = getSaveStatus(activeVerseId);
           if (status.hasUnsavedChanges) {
-            void saveImmediately(activeVerseId, previousVerse.content);
+            void saveImmediately(activeVerseId, {
+              content: previousVerse.content,
+              markers: previousVerse.markers,
+            });
           }
         }
       }
       const exists = verses.some(v => v.verseNumber === newVerseId);
       if (!exists) {
-        setInitialContent(newVerseId, '');
+        setInitialContent(newVerseId, { content: '' });
         setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
       }
       setActiveVerseId(newVerseId);
@@ -150,12 +159,15 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   );
 
   const advanceToVerse = useCallback(
-    (nextVerseId: number, verseToSave?: { verseNumber: number; content: string }) => {
+    (
+      nextVerseId: number,
+      verseToSave?: { verseNumber: number; content: string; markers?: VerseMarkers | null }
+    ) => {
       if (readOnly || nextVerseId > sourceVerses.length) return;
       const nextVerseExists = verses.find(v => v.verseNumber === nextVerseId);
       if (!nextVerseExists) {
         setVerses(prev => [...prev, { verseNumber: nextVerseId, content: '' }]);
-        setInitialContent(nextVerseId, '');
+        setInitialContent(nextVerseId, { content: '' });
       }
       if (verseToSave) {
         const status = getSaveStatus(verseToSave.verseNumber);
@@ -163,7 +175,10 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
           // Flush unsaved changes immediately without blocking navigation.
           // The cursor moves to the next verse right away; the save completes
           // in the background and retries automatically on failure.
-          void saveImmediately(verseToSave.verseNumber, verseToSave.content);
+          void saveImmediately(verseToSave.verseNumber, {
+            content: verseToSave.content,
+            markers: verseToSave.markers,
+          });
         }
       }
       setActiveVerseId(nextVerseId);
@@ -203,7 +218,9 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     if (targetVerses.length === 0 || initializedRef.current) return;
     initializedRef.current = true;
     if (!readOnly) {
-      targetVerses.forEach(verse => setInitialContent(verse.verseNumber, verse.content));
+      targetVerses.forEach(verse =>
+        setInitialContent(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      );
     }
     const lastVerseWithContent = (() => {
       for (let i = targetVerses.length - 1; i >= 0; i--) {

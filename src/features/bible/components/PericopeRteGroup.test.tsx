@@ -7,10 +7,16 @@ import type { Source, TargetVerse } from '@/lib/types';
 
 /**
  * The editor itself is exercised in `PericopeEditor.test.tsx` against a document-keeping stand-in;
- * what matters here is the drafting affordances around it, so it is replaced by a plain element.
+ * what matters here is the drafting affordances around it, so it is replaced by a plain element
+ * that records the props it was handed.
  */
+const editorProps = vi.hoisted(() => ({ current: undefined as unknown }));
+
 vi.mock('@/features/rte/components/PericopeEditor', () => ({
-  PericopeEditor: () => <div data-testid='pericope-editor' />,
+  PericopeEditor: (props: unknown) => {
+    editorProps.current = props;
+    return <div data-testid='pericope-editor' />;
+  },
 }));
 
 const GROUP_VERSES: Source[] = [
@@ -113,5 +119,43 @@ describe('PericopeRteGroup', () => {
 
     expect(handleNextPericopeClick).not.toHaveBeenCalled();
     expect(handleActiveVerseChange).not.toHaveBeenCalled();
+  });
+
+  it('passes stored markers into the editor verses', () => {
+    const split = {
+      paragraphs: [
+        { marker: 'p', offset: 0 },
+        { marker: 'p', offset: 12 },
+      ],
+    };
+    renderGroup({
+      verses: [
+        { verseNumber: 1, content: 'Drafted 1', markers: split },
+        { verseNumber: 2, content: 'Drafted 2' },
+      ] as TargetVerse[],
+    });
+
+    expect((editorProps.current as { verses: unknown }).verses).toEqual([
+      { verseNumber: 1, text: 'Drafted 1', markers: split },
+      { verseNumber: 2, text: 'Drafted 2', markers: null },
+    ]);
+  });
+
+  it('forwards editor markers to the save chain', () => {
+    const split = {
+      paragraphs: [
+        { marker: 'p', offset: 0 },
+        { marker: 'p', offset: 12 },
+      ],
+    };
+    renderGroup();
+
+    (
+      editorProps.current as {
+        onVersesChange: (changed: unknown[]) => void;
+      }
+    ).onVersesChange([{ verseNumber: 1, text: 'Split text.', markers: split }]);
+
+    expect(handleTextChange).toHaveBeenCalledWith(1, 'Split text.', split);
   });
 });

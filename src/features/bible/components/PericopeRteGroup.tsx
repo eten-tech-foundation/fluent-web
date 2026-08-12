@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
-import { type Source, type TargetVerse } from '@/lib/types';
+import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
   groupVerses: Source[];
@@ -20,7 +20,7 @@ interface PericopeRteGroupProps {
   /** Whether a pericope follows this one in the chapter, i.e. whether there is anywhere to go. */
   hasNextPericope: boolean;
   isTranslationComplete: boolean;
-  handleTextChange: (verseNumber: number, text: string) => void;
+  handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleNextPericopeClick: () => Promise<void>;
   aiSuggestions: Record<number, string>;
@@ -60,10 +60,14 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   const editorVerses = useMemo<PericopeVerseText[]>(
     () =>
-      groupVerses.map(source => ({
-        verseNumber: source.verseNumber,
-        text: verses.find(target => target.verseNumber === source.verseNumber)?.content ?? '',
-      })),
+      groupVerses.map(source => {
+        const target = verses.find(candidate => candidate.verseNumber === source.verseNumber);
+        return {
+          verseNumber: source.verseNumber,
+          text: target?.content ?? '',
+          markers: target?.markers ?? null,
+        };
+      }),
     [groupVerses, verses]
   );
 
@@ -78,7 +82,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   const handleVersesChange = useCallback(
     (changed: PericopeVerseText[]) => {
-      changed.forEach(verse => handleTextChange(verse.verseNumber, verse.text));
+      changed.forEach(verse => handleTextChange(verse.verseNumber, verse.text, verse.markers));
     },
     [handleTextChange]
   );

@@ -1,7 +1,25 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import type { VerseMarkers } from '@/lib/types';
+
+/**
+ * What one verse save carries. `markers` undefined means the caller has no opinion (the textarea
+ * path) and the field stays out of the request; the RTE always passes a concrete value, because
+ * the API overwrites stored markers with whatever the upsert says (fluent-api#264).
+ */
+export interface SavePayload {
+  content: string;
+  markers?: VerseMarkers | null;
+}
+
+/** Value equality for dedupe: a markers-only edit (Enter without typing) is a real change. */
+const payloadKey = (payload: SavePayload | undefined): string =>
+  payload === undefined
+    ? ''
+    : JSON.stringify([payload.content, payload.markers?.paragraphs ?? null]);
+
 interface UseBibleTextDebounceProps {
-  onSave: (verseId: number, text: string) => Promise<void>;
+  onSave: (verseId: number, payload: SavePayload) => Promise<void>;
   debounceMs?: number;
   retryDelayMs?: number;
 }
@@ -14,8 +32,8 @@ export const useBibleTextDebounce = ({
   const debounceTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const activeSaves = useRef<Map<number, Promise<void>>>(new Map());
   const retryTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
-  const lastSavedContent = useRef<Map<number, string>>(new Map());
-  const currentContent = useRef<Map<number, string>>(new Map());
+  const lastSavedContent = useRef<Map<number, SavePayload>>(new Map());
+  const currentContent = useRef<Map<number, SavePayload>>(new Map());
   const saveSequence = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
@@ -30,26 +48,25 @@ export const useBibleTextDebounce = ({
 
   // Core save function that handles race conditions and retries
   const executeSave = useCallback(
-    async (verseId: number, content: string, sequenceNumber: number): Promise<void> => {
+    async (verseId: number, payload: SavePayload, sequenceNumber: number): Promise<void> => {
       // Check if this is still the latest save attempt
       const currentSequence = saveSequence.current.get(verseId) ?? 0;
       if (sequenceNumber < currentSequence) {
         return;
       }
 
-      // Don't save if content hasn't changed from last saved version
-      const lastSaved = lastSavedContent.current.get(verseId) ?? '';
-      if (content === lastSaved) {
+      // Don't save if content and markers haven't changed from the last saved version
+      if (payloadKey(payload) === payloadKey(lastSavedContent.current.get(verseId))) {
         activeSaves.current.delete(verseId);
         return;
       }
 
       try {
-        await onSave(verseId, content);
+        await onSave(verseId, payload);
 
         // Only update if this is still the latest sequence
         if (sequenceNumber === (saveSequence.current.get(verseId) ?? 0)) {
-          lastSavedContent.current.set(verseId, content);
+          lastSavedContent.current.set(verseId, payload);
           activeSaves.current.delete(verseId);
 
           // Clear any pending retry for this verse
@@ -67,11 +84,14 @@ export const useBibleTextDebounce = ({
           // Schedule a single retry after 10 seconds
           const retryTimeout = setTimeout(() => {
             retryTimeouts.current.delete(verseId);
-            const retryContent = currentContent.current.get(verseId) ?? '';
-            if (retryContent !== lastSavedContent.current.get(verseId)) {
+            const retryPayload = currentContent.current.get(verseId);
+            if (
+              retryPayload !== undefined &&
+              payloadKey(retryPayload) !== payloadKey(lastSavedContent.current.get(verseId))
+            ) {
               const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
               saveSequence.current.set(verseId, newSequence);
-              activeSaves.current.set(verseId, executeSave(verseId, retryContent, newSequence));
+              activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
             }
           }, retryDelayMs);
 
@@ -88,8 +108,8 @@ export const useBibleTextDebounce = ({
   );
 
   const debouncedSave = useCallback(
-    (verseId: number, content: string) => {
-      currentContent.current.set(verseId, content);
+    (verseId: number, payload: SavePayload) => {
+      currentContent.current.set(verseId, payload);
 
       // Clear existing debounce timeout
       const existingTimeout = debounceTimeouts.current.get(verseId);
@@ -97,9 +117,8 @@ export const useBibleTextDebounce = ({
         clearTimeout(existingTimeout);
       }
 
-      // Don't schedule save if content hasn't changed from last saved
-      const lastSaved = lastSavedContent.current.get(verseId) ?? '';
-      if (content === lastSaved) {
+      // Don't schedule a save if content and markers haven't changed from the last saved
+      if (payloadKey(payload) === payloadKey(lastSavedContent.current.get(verseId))) {
         debounceTimeouts.current.delete(verseId);
         return;
       }
@@ -111,7 +130,7 @@ export const useBibleTextDebounce = ({
         const sequenceNumber = (saveSequence.current.get(verseId) ?? 0) + 1;
         saveSequence.current.set(verseId, sequenceNumber);
 
-        const savePromise = executeSave(verseId, content, sequenceNumber);
+        const savePromise = executeSave(verseId, payload, sequenceNumber);
         activeSaves.current.set(verseId, savePromise);
       }, debounceMs);
 
@@ -122,9 +141,9 @@ export const useBibleTextDebounce = ({
 
   // Immediate save - cancels debounce and saves immediately
   const saveImmediately = useCallback(
-    async (verseId: number, content: string): Promise<void> => {
+    async (verseId: number, payload: SavePayload): Promise<void> => {
       // Update current content
-      currentContent.current.set(verseId, content);
+      currentContent.current.set(verseId, payload);
 
       // Clear any pending debounce - this is crucial for preventing the race condition
       const existingTimeout = debounceTimeouts.current.get(verseId);
@@ -133,9 +152,8 @@ export const useBibleTextDebounce = ({
         debounceTimeouts.current.delete(verseId);
       }
 
-      // Don't save if content hasn't changed
-      const lastSaved = lastSavedContent.current.get(verseId) ?? '';
-      if (content === lastSaved) {
+      // Don't save if content and markers haven't changed
+      if (payloadKey(payload) === payloadKey(lastSavedContent.current.get(verseId))) {
         return;
       }
 
@@ -149,7 +167,7 @@ export const useBibleTextDebounce = ({
         await existingSave;
       }
 
-      const savePromise = executeSave(verseId, content, sequenceNumber);
+      const savePromise = executeSave(verseId, payload, sequenceNumber);
       activeSaves.current.set(verseId, savePromise);
 
       await savePromise;
@@ -162,7 +180,8 @@ export const useBibleTextDebounce = ({
     const isActivelySaving = activeSaves.current.has(verseId);
     const hasRetryScheduled = retryTimeouts.current.has(verseId);
     const hasUnsavedChanges =
-      (currentContent.current.get(verseId) ?? '') !== (lastSavedContent.current.get(verseId) ?? '');
+      payloadKey(currentContent.current.get(verseId)) !==
+      payloadKey(lastSavedContent.current.get(verseId));
 
     return {
       hasPendingDebounce,
@@ -173,9 +192,9 @@ export const useBibleTextDebounce = ({
     };
   }, []);
 
-  const setInitialContent = useCallback((verseId: number, content: string) => {
-    lastSavedContent.current.set(verseId, content);
-    currentContent.current.set(verseId, content);
+  const setInitialContent = useCallback((verseId: number, payload: SavePayload) => {
+    lastSavedContent.current.set(verseId, payload);
+    currentContent.current.set(verseId, payload);
   }, []);
 
   return {
