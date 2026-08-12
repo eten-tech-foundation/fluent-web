@@ -146,12 +146,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
         return;
       }
-      const trimmedText = payload.content.trim();
+      // Marker offsets are positions in the exact string the caller measured, so that string has
+      // to be what is stored: trimming underneath them shifts every nonzero offset and can leave
+      // one past the end of the content. The textarea path carries no offsets and keeps its trim.
+      const content = payload.markers === undefined ? payload.content.trim() : payload.content;
 
       await addVerseMutation.mutateAsync({
         verseData: {
           projectUnitId: projectItem.projectUnitId,
-          content: trimmedText,
+          content,
           bibleTextId: sourceVerse.id,
           assignedUserId: userdetail.id,
           // Only when the caller derived markers (the RTE): the API overwrites stored markers

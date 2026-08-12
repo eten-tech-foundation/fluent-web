@@ -647,7 +647,7 @@ describe('DraftingUI', () => {
         ],
       };
 
-      // The RTE path: markers ride along, content is trimmed with offsets unaffected.
+      // The RTE path: markers ride along, and the content goes through as given.
       await onSave(1, { content: 'Starts here and continues.', markers: split });
       expect(mutateAsyncMock).toHaveBeenCalledWith({
         verseData: expect.objectContaining({
@@ -662,6 +662,71 @@ describe('DraftingUI', () => {
         verseData: Record<string, unknown>;
       };
       expect('markers' in lastCall.verseData).toBe(false);
+    });
+
+    it('sends content the marker offsets were measured against, unmodified', async () => {
+      const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
+      mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync: mutateAsyncMock, isPending: false });
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (
+          verse: number,
+          payload: { content: string; markers?: VerseMarkers | null }
+        ) => Promise<void>;
+      };
+
+      // Offsets are positions in the string the caller measured. Trimming that string underneath
+      // them shifts every nonzero offset and can push one past the end of what is stored, so a
+      // reload would restore paragraph breaks in the wrong places.
+      const padded = '  Starts here and continues.  ';
+      const markers: VerseMarkers = {
+        paragraphs: [
+          { marker: 'p', offset: 0 },
+          { marker: 'p', offset: padded.length - 4 },
+        ],
+      };
+
+      await onSave(1, { content: padded, markers });
+
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        verseData: expect.objectContaining({ content: padded, markers }) as unknown,
+      });
+    });
+
+    it('still trims on the textarea path, which carries no offsets', async () => {
+      const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
+      mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync: mutateAsyncMock, isPending: false });
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (
+          verse: number,
+          payload: { content: string; markers?: VerseMarkers | null }
+        ) => Promise<void>;
+      };
+
+      await onSave(1, { content: '  Plain textarea text.  ' });
+
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        verseData: expect.objectContaining({ content: 'Plain textarea text.' }) as unknown,
+      });
     });
   });
 });
