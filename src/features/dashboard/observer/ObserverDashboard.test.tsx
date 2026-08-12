@@ -123,10 +123,10 @@ describe('ObserverDashboard', () => {
     render(<ObserverDashboard />);
 
     await user.click(screen.getByText('Test Project'));
-
     expect(mockNavigate).toHaveBeenCalledWith({
       to: '/projects/$projectId',
       params: { projectId: '99' },
+      state: { from: '/' },
     });
   });
 
