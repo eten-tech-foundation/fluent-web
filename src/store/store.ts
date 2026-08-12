@@ -3,12 +3,15 @@ import { persist } from 'zustand/middleware';
 
 import { type ProjectItem, type User } from '@/lib/types';
 
+/** The drafting views a chapter can be presented in (#396). */
+export type DisplayMode = 'verse' | 'pericope' | 'chapter';
+
 interface AppState {
   userdetail: User | null;
   currentProjectItem: ProjectItem | null;
   presenceWarning: string | null;
   _hasHydrated: boolean;
-  displayMode: 'verse' | 'pericope' | 'chapter';
+  displayMode: DisplayMode;
   isAiThresholdMet: boolean | null;
   isAiSyncPending: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
@@ -18,7 +21,7 @@ interface AppState {
   clearCurrentProjectItem: () => void;
   setHasHydrated: (state: boolean) => void;
   setPresenceWarning: (msg: string | null) => void;
-  setDisplayMode: (mode: 'verse' | 'pericope') => void;
+  setDisplayMode: (mode: DisplayMode) => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
   setIsAiSyncPending: (pending: boolean) => void;
   setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
@@ -56,7 +59,7 @@ export const useAppStore = create<AppState>()(
       clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
-      setDisplayMode: (displayMode: 'verse' | 'pericope' | 'chapter') => set({ displayMode }),
+      setDisplayMode: (displayMode: DisplayMode) => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
       setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
       setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
