@@ -45,6 +45,7 @@ export const ProjectsWrapper: React.FC = () => {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId: projectId.toString() },
+      state: { from: '/projects' },
     });
   };
 

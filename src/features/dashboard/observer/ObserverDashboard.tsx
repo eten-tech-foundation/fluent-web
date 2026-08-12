@@ -116,6 +116,7 @@ export const ObserverDashboard: React.FC = () => {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId: project.id.toString() },
+      state: { from: '/' },
     });
   };
 

@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 
-import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { getActiveGrants, isObserver } from '@/lib/grant-utils';
+import { useAppStore } from '@/store/store';
 
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { ProjectDetailPage } from './ProjectDetailPage';
@@ -28,14 +30,24 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
 
+  const location = useLocation();
+  const { userdetail } = useAppStore();
   const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
+    // 1. If origin route was passed in state, navigate directly back to it
+    const from = (location.state as { from?: string } | undefined)?.from;
+    if (from) {
+      void navigate({ to: from });
+      return;
+    }
+    // 2. Fallback based on active role if accessed directly or refreshed
+    const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+    const activeRoleGrant = activeGrants.filter(g => g.roleName === userdetail?.role);
+    if (isObserver(activeRoleGrant)) {
+      void navigate({ to: '/' });
     } else {
       void navigate({ to: '/projects' });
     }
   };
-
   const handleOpenExport = () => {
     void navigate({
       to: '/projects/$projectId',

@@ -27,5 +27,6 @@ declare module '@tanstack/react-router' {
   interface HistoryState {
     projectItem?: ProjectItem;
     user?: User;
+    from?: string;
   }
 }
