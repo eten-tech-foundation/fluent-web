@@ -2,12 +2,14 @@ import React from 'react';
 
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { Menu, SquareUserRound, TriangleAlert } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import MainMenu from '@/components/header/MainMenu';
 import UserMenu from '@/components/header/UserMenu';
 import { useAppStore } from '@/store/store';
 
 const Header: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const presenceWarning = useAppStore(state => state.presenceWarning);
@@ -54,7 +56,7 @@ const Header: React.FC = () => {
                 onUsersClick={onNavigateToUsers}
               >
                 <button
-                  aria-label='User menu'
+                  aria-label={t('mainMenu', 'Main menu')}
                   className='hover:bg-hover bg-background flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150'
                 >
                   <Menu className='text-foreground' size={35} strokeWidth={2.5} />
@@ -91,7 +93,7 @@ const Header: React.FC = () => {
           <div className='shrink-0 pr-[18px]'>
             <UserMenu onEditProfile={handleEditProfile} onToggleSettings={onNavigateToSettings}>
               <button
-                aria-label='User menu'
+                aria-label={t('userMenu', 'User menu')}
                 className='hover:bg-hover bg-background flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150'
               >
                 <SquareUserRound className='text-foreground' size={35} strokeWidth={2.5} />
