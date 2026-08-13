@@ -78,6 +78,7 @@ export const UsersWrapper: React.FC = () => {
             status: res.status,
           });
         }
+      } else {
         const userToInvite = userData as Omit<User, 'id'> & {
           roleName?: string;
           role?: string | number;

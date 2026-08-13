@@ -78,7 +78,7 @@ describe('ObserverDashboard', () => {
   });
 
   it('renders the "Observer Dashboard" heading', () => {
-    mockUseUserProjects.mockReturnValue({ data: [], isLoading: false });
+    mockUseUserProjects.mockReturnValue({ data: [], isLoading: false, isError: false });
 
     render(<ObserverDashboard />);
 
@@ -86,7 +86,7 @@ describe('ObserverDashboard', () => {
   });
 
   it('shows loading spinner while projects are being fetched', () => {
-    mockUseUserProjects.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseUserProjects.mockReturnValue({ data: undefined, isLoading: true, isError: false });
 
     render(<ObserverDashboard />);
 
@@ -94,7 +94,7 @@ describe('ObserverDashboard', () => {
   });
 
   it('shows empty state when no projects', () => {
-    mockUseUserProjects.mockReturnValue({ data: [], isLoading: false });
+    mockUseUserProjects.mockReturnValue({ data: [], isLoading: false, isError: false });
 
     render(<ObserverDashboard />);
 
@@ -103,7 +103,7 @@ describe('ObserverDashboard', () => {
 
   it('renders project rows with correct columns', () => {
     const project = makeProject();
-    mockUseUserProjects.mockReturnValue({ data: [project], isLoading: false });
+    mockUseUserProjects.mockReturnValue({ data: [project], isLoading: false, isError: false });
 
     render(<ObserverDashboard />);
 
@@ -117,12 +117,13 @@ describe('ObserverDashboard', () => {
 
   it('navigates to project detail on row click', async () => {
     const project = makeProject({ id: 99 });
-    mockUseUserProjects.mockReturnValue({ data: [project], isLoading: false });
+    mockUseUserProjects.mockReturnValue({ data: [project], isLoading: false, isError: false });
 
     const user = userEvent.setup();
     render(<ObserverDashboard />);
 
     await user.click(screen.getByText('Test Project'));
+
     expect(mockNavigate).toHaveBeenCalledWith({
       to: '/projects/$projectId',
       params: { projectId: '99' },
@@ -130,8 +131,62 @@ describe('ObserverDashboard', () => {
     });
   });
 
+  it('navigates to project detail on keyboard activation (Enter and Space)', async () => {
+    const project = makeProject({ id: 99 });
+    mockUseUserProjects.mockReturnValue({
+      data: [project],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(<ObserverDashboard />);
+
+    const projectRow = screen.getByRole('button', { name: `Open project ${project.name}` });
+    projectRow.focus();
+    expect(projectRow).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(mockNavigate).toHaveBeenLastCalledWith({
+      to: '/projects/$projectId',
+      params: { projectId: '99' },
+      state: { from: '/' },
+    });
+
+    await user.keyboard(' ');
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders error state when query fails and allows retry', async () => {
+    const mockRefetch = vi.fn();
+    mockUseUserProjects.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: mockRefetch,
+    });
+
+    const user = userEvent.setup();
+    render(<ObserverDashboard />);
+
+    expect(screen.getByText('Failed to load projects.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('You have not been added to any projects yet.')
+    ).not.toBeInTheDocument();
+
+    const retryButton = screen.getByRole('button', { name: 'Retry' });
+    await user.click(retryButton);
+
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
   it('does not render Create Project button or filter dropdowns', () => {
-    mockUseUserProjects.mockReturnValue({ data: [makeProject()], isLoading: false });
+    mockUseUserProjects.mockReturnValue({
+      data: [makeProject()],
+      isLoading: false,
+      isError: false,
+    });
 
     render(<ObserverDashboard />);
 

@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router';
+import { Navigate } from '@tanstack/react-router';
 
 import { NoAssignmentsPage } from '@/components/NoAssignmentsPage';
 import { ObserverDashboard } from '@/features/dashboard/observer';
@@ -9,7 +9,6 @@ import { useAppStore } from '@/store/store';
 
 export const RoleBasedHomePage = () => {
   const { userdetail } = useAppStore();
-  const navigate = useNavigate();
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return <UserDashboard />;
@@ -26,7 +25,7 @@ export const RoleBasedHomePage = () => {
   const activeRoleGrant = activeGrants.filter(g => g.roleName === effectiveRole);
 
   if (isManager(activeRoleGrant)) {
-    void navigate({ to: '/projects' });
+    return <Navigate to='/projects' />;
   }
   if (isObserver(activeRoleGrant)) {
     return <ObserverDashboard />;

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { toast } from 'sonner';
 
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
@@ -23,9 +24,10 @@ export const ProjectsWrapper: React.FC = () => {
   const createProjectMutation = useCreateProject();
 
   const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
   // All manager roles (including Project Manager) can create projects.
-  const canCreate = isManager(activeGrants);
+  const canCreate = isManager(activeRoleGrants);
 
   const handleOpenCreate = () => {
     void navigate({
@@ -50,6 +52,10 @@ export const ProjectsWrapper: React.FC = () => {
   };
 
   const handleSave = async (projectData: CreateProjectData) => {
+    if (!activeOrgId) {
+      toast.error('No active organization selected');
+      return;
+    }
     try {
       const newProjectData: Omit<CreateProject, 'id' | 'createdAt' | 'updatedAt'> = {
         name: projectData.title,
@@ -57,8 +63,8 @@ export const ProjectsWrapper: React.FC = () => {
         sourceLanguage: projectData.sourceLanguage,
         bibleId: projectData.sourceBible,
         bookId: projectData.books,
-        organization: Number(activeOrgId),
-        createdBy: Number(userdetail?.id),
+        organization: activeOrgId,
+        createdBy: Number(userdetail.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),
         pericopeSetId: projectData.pericopeSetId,
       };

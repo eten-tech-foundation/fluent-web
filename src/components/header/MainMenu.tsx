@@ -31,8 +31,8 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const location = useLocation();
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  // Show users menu item for any role with USER_VIEW permission
-  const showUsers = canViewUsers(activeGrants);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const showUsers = canViewUsers(activeRoleGrants);
   const orgMemberOnly = isOrgMemberOnly(activeGrants);
 
   if (!isAuthenticated || !user) {

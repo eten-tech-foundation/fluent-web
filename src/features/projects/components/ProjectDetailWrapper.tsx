@@ -36,7 +36,7 @@ export const ProjectDetailWrapper: React.FC = () => {
     // 1. If origin route was passed in state, navigate directly back to it
     const from = (location.state as { from?: string } | undefined)?.from;
     if (from) {
-      void navigate({ to: from });
+      void navigate({ to: from, replace: true });
       return;
     }
     // 2. Fallback based on active role if accessed directly or refreshed

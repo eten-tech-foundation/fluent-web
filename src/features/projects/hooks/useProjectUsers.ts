@@ -137,9 +137,9 @@ export const useUpdateProjectUserRole = (projectId: number) => {
   return useMutation({
     mutationFn: ({ userId, roleName }: { userId: number; roleName: string }) =>
       updateProjectUserRole(projectId, userId, roleName),
-    onSuccess: (_updatedUser, { userId, roleName }) => {
+    onSuccess: (updatedUser, { userId }) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
-        prev ? prev.map(u => (u.userId === userId ? { ...u, roleName } : u)) : []
+        prev ? prev.map(u => (u.userId === userId ? updatedUser : u)) : []
       );
     },
     onError: () => {

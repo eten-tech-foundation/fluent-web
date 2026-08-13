@@ -81,9 +81,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const [inviteRole, setInviteRole] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // --- Removal guardrail state ---
-  // removeTarget: awaiting confirm/cancel. removeBlockedReason: a blocked
-  // removal was attempted, shown until dismissed or another action clears it.
   const [removeTarget, setRemoveTarget] = useState<ProjectUser | null>(null);
   const [removeBlockedReason, setRemoveBlockedReason] = useState<string | null>(null);
 
@@ -102,25 +99,46 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const createUserMutation = useCreateUser();
 
   const assignableRoleOptions = PROJECT_ROLE_OPTIONS;
+  // --- Removal guardrails ---
+  const projectManagerCount = useMemo(
+    () => (projectUsers ?? []).filter(pu => pu.roleName === ROLES.PROJECT_MANAGER).length,
+    [projectUsers]
+  );
 
   const handleRoleChange = useCallback(
-    (userId: number, roleName: string) => {
+    async (userId: number, roleName: string) => {
       setEditingUserId(null);
-      void updateRoleMutation.mutateAsync({ userId, roleName });
+      setError(null);
+      const targetUser = projectUsers?.find(u => u.userId === userId);
+      if (
+        targetUser?.roleName === ROLES.PROJECT_MANAGER &&
+        roleName !== ROLES.PROJECT_MANAGER &&
+        projectManagerCount <= 1
+      ) {
+        setError(
+          `${targetUser.displayName} is the only Project Manager on this project. Assign another Project Manager before changing their role.`
+        );
+        return;
+      }
+      try {
+        await updateRoleMutation.mutateAsync({ userId, roleName });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to update user role';
+        setError(message);
+      }
     },
-    [updateRoleMutation]
+    [updateRoleMutation, projectUsers, projectManagerCount]
   );
 
   const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
 
-  // Filter users to only those who belong to the current active organization
+  // Filter users to only those who possess an actual grant in the active organization
   const orgUsers = useMemo(() => {
     if (!users) return [];
     if (!activeOrgId) return users;
     return users.filter((u: User) => {
       const grants = u.orgGrants ?? u.grants ?? [];
-      const isInOrg = grants.some(g => g.orgId === activeOrgId);
-      return isInOrg || u.organization === activeOrgId || u.lastActiveOrgId === activeOrgId;
+      return grants.some(g => g.orgId === activeOrgId);
     });
   }, [users, activeOrgId]);
 
@@ -131,7 +149,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   }, [orgUsers, projectUsers]);
 
   // --- Invite by Email helpers ---
-  // Only match existing users who are ALREADY members of this active organization
   const matchedExistingUser = useMemo(() => {
     const trimmed = inviteEmail.trim().toLowerCase();
     if (!trimmed) return null;
@@ -206,14 +223,20 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     if (!isInviteFormValid || inviteRole === null) return;
     setInviteError(null);
 
+    if (!activeOrgId) {
+      setInviteError('No active organization selected.');
+      return;
+    }
+
+    const activeOrgName =
+      userdetail?.grants?.find(g => g.orgId === activeOrgId)?.orgName ?? undefined;
     const invitePayload = {
       email: inviteEmail.trim().toLowerCase(),
       username: inviteDisplayName.trim(),
-      orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
+      orgId: activeOrgId,
       projectId,
       roleName: inviteRole,
-      // Email personalisation — forwarded to the invitation email template
-      orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
+      orgName: activeOrgName,
       inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
     };
 
@@ -231,11 +254,12 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     }
   }, [
     isInviteFormValid,
+    inviteRole,
+    activeOrgId,
+    userdetail,
     inviteEmail,
     inviteDisplayName,
-    inviteRole,
     projectId,
-    userdetail,
     createUserMutation,
     handleCloseDialog,
   ]);
@@ -265,12 +289,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [removeProjectUserMutation]
   );
 
-  // --- Removal guardrails ---
-  const projectManagerCount = useMemo(
-    () => (projectUsers ?? []).filter(pu => pu.roleName === ROLES.PROJECT_MANAGER).length,
-    [projectUsers]
-  );
-
   // "Active" work = not yet submitted, matching the definition UserHomePage
   // already uses for unsubmitted assignments.
   const getActiveAssignmentCount = useCallback(
@@ -295,6 +313,10 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         return;
       }
 
+      if (chapterAssignments === undefined) {
+        return;
+      }
+
       if (getActiveAssignmentCount(pu.userId) > 0) {
         setRemoveTarget(null);
         setRemoveBlockedReason(`${pu.displayName} still has assigned work.`);
@@ -304,7 +326,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       setRemoveBlockedReason(null);
       setRemoveTarget(pu);
     },
-    [projectManagerCount, getActiveAssignmentCount]
+    [projectManagerCount, chapterAssignments, getActiveAssignmentCount]
   );
 
   const handleConfirmRemove = useCallback(async () => {
@@ -484,7 +506,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
           </div>
         )}
 
-        {/* Remove-confirmation banner — takes priority while active */}
+        {/* Remove-confirmation banner */}
         {removeTarget && (
           <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30'>
             <span className='text-sm text-red-700 dark:text-red-400'>
@@ -732,7 +754,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   {createUserMutation.isPending && (
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                   )}
-                  Save Users
+                  Invite User
                 </Button>
               </div>
             </div>

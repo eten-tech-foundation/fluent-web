@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -110,7 +111,12 @@ export const ObserverDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { userdetail } = useAppStore();
 
-  const { data: projects = [], isLoading } = useUserProjects(userdetail, 'Project Observer');
+  const {
+    data: projects = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useUserProjects(userdetail, 'Project Observer');
 
   const handleRowClick = (project: Project) => {
     void navigate({
@@ -132,6 +138,19 @@ export const ObserverDashboard: React.FC = () => {
             <div className='flex items-center justify-center gap-2 py-8'>
               <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
               <span className='text-gray-500'>Loading projects…</span>
+            </div>
+          ) : isError ? (
+            <div className='flex flex-col items-center justify-center gap-3 py-8 text-center'>
+              <p className='text-destructive text-sm font-medium'>Failed to load projects.</p>
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => {
+                  void refetch();
+                }}
+              >
+                Retry
+              </Button>
             </div>
           ) : projects.length === 0 ? (
             <ObserverEmptyState />
@@ -156,8 +175,17 @@ export const ObserverDashboard: React.FC = () => {
                     {projects.map(project => (
                       <TableRow
                         key={project.id}
-                        className='cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
+                        aria-label={`Open project ${project.name}`}
+                        className='focus-visible:ring-ring cursor-pointer border-b transition-colors hover:bg-gray-50 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset dark:hover:bg-gray-800'
+                        role='button'
+                        tabIndex={0}
                         onClick={() => handleRowClick(project)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleRowClick(project);
+                          }
+                        }}
                       >
                         {/* Title */}
                         <TableCell

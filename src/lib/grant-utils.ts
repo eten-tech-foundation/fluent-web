@@ -43,7 +43,8 @@ export function isObserver(activeGrants: UserGrant[]): boolean {
   return activeGrants.some(g => g.roleName === 'Project Observer');
 }
 
-const ROLES_WITH_USER_VIEW = ['Org Manager', 'Org Owner', 'SuperAdmin'];
+const ROLES_WITH_USER_VIEW = MANAGER_ROLES;
+
 /**
  * Alias: can the user view the /users table?
  * Same as canViewUsers — all manager roles have USER_VIEW.

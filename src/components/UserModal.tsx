@@ -110,7 +110,9 @@ export const UserModal: React.FC<UserModalProps> = ({
   const isFormValid = (): boolean => {
     const hasUsername = Boolean(formData.username.trim());
     const hasValidEmail = Boolean(formData.email.trim()) && isEmailValid(formData.email.trim());
-    const hasValidRole = Boolean(formData.role && formData.role.trim() !== '');
+    const hasValidRole = Boolean(
+      formData.role && formData.role.trim() !== '' && formData.role !== 'No Role'
+    );
 
     return hasUsername && hasValidEmail && hasValidRole;
   };

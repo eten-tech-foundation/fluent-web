@@ -60,7 +60,7 @@ export const useProjects = (enabled: boolean = true) => {
 
 export const useUserProjects = (user: User | null | undefined, role?: string) => {
   return useQuery<Project[]>({
-    queryKey: ['user-projects', user?.id, role],
+    queryKey: ['user-projects', user?.id, user?.lastActiveOrgId, role],
     queryFn: () => {
       if (!user) throw new Error('User is required');
       return fetchUserProjects(user, role);
@@ -80,9 +80,8 @@ export const useUserProjects = (user: User | null | undefined, role?: string) =>
  */
 export const useProjectsByRole = (user: User | null | undefined) => {
   const activeGrants = getActiveGrants(user?.grants, user?.lastActiveOrgId);
-  // Project Managers also see all org projects (they are assigned to specific ones,
-  // but the backend /projects endpoint is scoped to the active org)
-  const isAnyManager = isManager(activeGrants);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === user?.role);
+  const isAnyManager = isManager(activeRoleGrants);
 
   const managerQuery = useProjects(isAnyManager);
   const translatorQuery = useUserProjects(!isAnyManager ? user : null);
