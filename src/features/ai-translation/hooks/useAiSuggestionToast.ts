@@ -3,24 +3,29 @@ import { useCallback } from 'react';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 
 import { showAiSuggestionToast } from '@/features/ai-translation/components/AiSuggestionToast';
+import { useAppStore } from '@/store/store';
 
-const AI_TOAST_DISMISSED_KEY = 'ai-suggestion-toast-dismissed';
+const getToastDismissedKey = (userId?: number) =>
+  `ai-suggestion-toast-dismissed-${userId ?? 'unknown'}`;
 
 export function useAiSuggestionToast() {
   const navigate = useNavigate();
   const location = useLocation();
+  const userdetail = useAppStore(state => state.userdetail);
 
   return useCallback(
     (targetLanguageName: string) => {
+      const toastKey = getToastDismissedKey(userdetail?.id);
+
       // Check if the user has already dismissed or interacted with this toast
-      const hasDismissed = localStorage.getItem(AI_TOAST_DISMISSED_KEY) === 'true';
+      const hasDismissed = localStorage.getItem(toastKey) === 'true';
       if (hasDismissed) return;
 
       showAiSuggestionToast({
         targetLanguageName,
 
         onTellMeMore: () => {
-          localStorage.setItem(AI_TOAST_DISMISSED_KEY, 'true');
+          localStorage.setItem(toastKey, 'true');
           void navigate({
             to: location.pathname,
             search: (prev: Record<string, unknown>) => ({
@@ -32,10 +37,10 @@ export function useAiSuggestionToast() {
           });
         },
         onDismiss: () => {
-          localStorage.setItem(AI_TOAST_DISMISSED_KEY, 'true');
+          localStorage.setItem(toastKey, 'true');
         },
       });
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, userdetail?.id]
   );
 }

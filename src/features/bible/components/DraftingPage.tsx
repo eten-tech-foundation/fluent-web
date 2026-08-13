@@ -3,6 +3,7 @@ import React from 'react';
 import { useMatch } from '@tanstack/react-router';
 import { Loader } from 'lucide-react';
 
+import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { useAppStore } from '@/store/store';
 
@@ -32,18 +33,26 @@ const DraftingPage: React.FC = () => {
   const loaderData = rawLoaderData as LoaderData | undefined;
   const isReadOnly = !!viewMatch;
 
-  if (!loaderData || !userdetail) {
+  const projectItem = loaderData
+    ? currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
+      ? currentProjectItem
+      : loaderData.projectItem
+    : undefined;
+
+  useSyncGlobalAiSetting(
+    projectItem?.chapterAssignmentId,
+    projectItem?.projectId,
+    projectItem?.isAiEnabled,
+    isReadOnly
+  );
+
+  if (!loaderData || !userdetail || !projectItem) {
     return (
       <div className='flex h-screen items-center justify-center'>
         <Loader className='h-8 w-8 animate-spin' />
       </div>
     );
   }
-
-  const projectItem =
-    currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
-      ? currentProjectItem
-      : loaderData.projectItem;
 
   return (
     <DraftingUI

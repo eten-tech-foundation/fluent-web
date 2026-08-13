@@ -14,7 +14,13 @@ import { ChapterAssignmentStatus, UserRole } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export const AiTranslationSettings: React.FC = () => {
-  const { currentProjectItem, setCurrentProjectItem, userdetail, isAiThresholdMet } = useAppStore();
+  const {
+    currentProjectItem,
+    setCurrentProjectItem,
+    userdetail,
+    isAiThresholdMet,
+    setAiAutoEnablePreference,
+  } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
 
   const { mutate: toggleAi, isPending } = useToggleChapterAi(
@@ -24,6 +30,9 @@ export const AiTranslationSettings: React.FC = () => {
 
   const handleToggleAi = (checked: boolean) => {
     setLocalAiState(checked);
+    if (userdetail) {
+      setAiAutoEnablePreference(userdetail.id, checked);
+    }
     if (currentProjectItem) {
       const previousState = currentProjectItem.isAiEnabled;
       setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: checked });
@@ -31,6 +40,9 @@ export const AiTranslationSettings: React.FC = () => {
         onError: () => {
           // Revert UI and store state on failure
           setLocalAiState(previousState ?? false);
+          if (userdetail) {
+            setAiAutoEnablePreference(userdetail.id, previousState ?? false);
+          }
           setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: previousState });
         },
       });

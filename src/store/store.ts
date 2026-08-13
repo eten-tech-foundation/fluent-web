@@ -10,6 +10,7 @@ interface AppState {
   _hasHydrated: boolean;
   displayMode: 'verse' | 'pericope';
   isAiThresholdMet: boolean | null;
+  aiAutoEnablePreferences: Record<number, boolean | undefined>;
   setUserDetail: (user: User) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
   clearUserDetail: () => void;
@@ -18,6 +19,7 @@ interface AppState {
   setPresenceWarning: (msg: string | null) => void;
   setDisplayMode: (mode: 'verse' | 'pericope') => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
+  setAiAutoEnablePreference: (userId: number, status: boolean) => void;
 }
 let hydrationResolve: (() => void) | null = null;
 export const hydrationPromise = new Promise<void>(resolve => {
@@ -33,6 +35,7 @@ export const useAppStore = create<AppState>()(
       _hasHydrated: false,
       displayMode: 'verse',
       isAiThresholdMet: null,
+      aiAutoEnablePreferences: {},
       setUserDetail: (userdetail: User) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
         const currentId = get().currentProjectItem?.chapterAssignmentId;
@@ -52,6 +55,10 @@ export const useAppStore = create<AppState>()(
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
       setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
+      setAiAutoEnablePreference: (userId: number, status: boolean) =>
+        set(state => ({
+          aiAutoEnablePreferences: { ...state.aiAutoEnablePreferences, [userId]: status },
+        })),
     }),
     {
       name: 'app-store',
@@ -59,6 +66,7 @@ export const useAppStore = create<AppState>()(
         userdetail: state.userdetail,
         currentProjectItem: state.currentProjectItem,
         displayMode: state.displayMode,
+        aiAutoEnablePreferences: state.aiAutoEnablePreferences,
       }),
       onRehydrateStorage: () => state => {
         state?.setHasHydrated(true);
