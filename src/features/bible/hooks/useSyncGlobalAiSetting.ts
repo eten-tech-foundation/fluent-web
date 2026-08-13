@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { type ProjectItem } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { useToggleChapterAi } from './useToggleChapterAi';
@@ -8,21 +9,34 @@ export function useSyncGlobalAiSetting(
   chapterAssignmentId: number | undefined,
   projectId: string | number | undefined,
   currentIsAiEnabled: boolean | undefined,
-  isReadOnly: boolean
+  isReadOnly: boolean,
+  projectItem: ProjectItem | undefined
 ) {
-  const { aiAutoEnablePreferences, userdetail, setCurrentProjectItem, currentProjectItem } =
-    useAppStore();
+  const { aiAutoEnablePreferences, userdetail, setCurrentProjectItem } = useAppStore();
 
-  const { mutate: toggleAi } = useToggleChapterAi(chapterAssignmentId ?? 0, projectId ?? 0);
+  const { mutateAsync: toggleAiAsync } = useToggleChapterAi(
+    chapterAssignmentId ?? 0,
+    projectId ?? 0
+  );
 
   const hasSyncedRef = useRef<number | null>(null);
-  const isSyncingRef = useRef<boolean>(false);
+  const syncingIdsRef = useRef<Set<number>>(new Set());
+  const failedIdsRef = useRef<Set<number>>(new Set());
+  const prevChapterRef = useRef<number | undefined>();
 
   useEffect(() => {
-    if (!chapterAssignmentId || !projectId || !userdetail || isReadOnly) return;
+    if (!chapterAssignmentId || !projectId || !userdetail || isReadOnly || !projectItem) return;
+
+    // When navigating to a different chapter, allow retry for previously failed chapters
+    if (prevChapterRef.current !== undefined && prevChapterRef.current !== chapterAssignmentId) {
+      failedIdsRef.current.delete(prevChapterRef.current);
+    }
+    prevChapterRef.current = chapterAssignmentId;
 
     // Only sync once per chapter assignment load
     if (hasSyncedRef.current === chapterAssignmentId) return;
+    // Don't retry a chapter that already failed in this mount (prevents infinite loop)
+    if (failedIdsRef.current.has(chapterAssignmentId)) return;
 
     const userGlobalPreference = aiAutoEnablePreferences[userdetail.id];
 
@@ -33,22 +47,39 @@ export function useSyncGlobalAiSetting(
 
     // Only auto-enable if the global preference is true and the current chapter is not enabled
     if (userGlobalPreference === true && !currentIsAiEnabled) {
-      if (isSyncingRef.current) return;
-      isSyncingRef.current = true;
+      if (syncingIdsRef.current.has(chapterAssignmentId)) return;
+      syncingIdsRef.current.add(chapterAssignmentId);
 
-      toggleAi(userGlobalPreference, {
-        onSuccess: () => {
+      // Do NOT update store optimistically here! If we do, the UI immediately thinks AI is enabled,
+      // and fires a GET/POST to the backend for AI suggestions BEFORE the PATCH completes.
+      // The backend sees AI is still disabled and ignores the request, causing suggestions to never load!
+
+      const enableAi = async () => {
+        try {
+          await toggleAiAsync(true);
           hasSyncedRef.current = chapterAssignmentId;
-          isSyncingRef.current = false;
-          if (currentProjectItem?.chapterAssignmentId === chapterAssignmentId) {
-            setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: userGlobalPreference });
-          }
-        },
-        onError: () => {
-          isSyncingRef.current = false;
-          // By not setting hasSyncedRef, we leave it retryable if the component re-renders
-        },
-      });
+          syncingIdsRef.current.delete(chapterAssignmentId);
+
+          // Wait until backend has confirmed the PATCH and any database replicas have caught up
+          // before updating the UI state. This ensures subsequent AI suggestion queues succeed.
+          setTimeout(() => {
+            // Read fresh state directly from the store to prevent stale closure bugs!
+            // If the user navigated rapidly, we DO NOT want to overwrite the store with old chapter data.
+            const latestStore = useAppStore.getState();
+            if (latestStore.currentProjectItem?.chapterAssignmentId === chapterAssignmentId) {
+              latestStore.setCurrentProjectItem({
+                ...latestStore.currentProjectItem,
+                isAiEnabled: true,
+              });
+            }
+          }, 300);
+        } catch {
+          syncingIdsRef.current.delete(chapterAssignmentId);
+          failedIdsRef.current.add(chapterAssignmentId);
+        }
+      };
+
+      void enableAi();
     } else {
       // Mark as synced if no action is needed (e.g. they match, or preference is false)
       hasSyncedRef.current = chapterAssignmentId;
@@ -59,9 +90,9 @@ export function useSyncGlobalAiSetting(
     currentIsAiEnabled,
     aiAutoEnablePreferences,
     userdetail,
-    toggleAi,
-    currentProjectItem,
-    setCurrentProjectItem,
+    toggleAiAsync,
     isReadOnly,
+    projectItem,
+    setCurrentProjectItem,
   ]);
 }

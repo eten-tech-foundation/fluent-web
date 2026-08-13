@@ -43,7 +43,8 @@ const DraftingPage: React.FC = () => {
     projectItem?.chapterAssignmentId,
     projectItem?.projectId,
     projectItem?.isAiEnabled,
-    isReadOnly
+    isReadOnly,
+    projectItem
   );
 
   if (!loaderData || !userdetail || !projectItem) {

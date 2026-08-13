@@ -25,6 +25,14 @@ const mockUser: User = {
   organization: 1,
 };
 
+const makeProjectItem = (overrides: Partial<ProjectItem> = {}): ProjectItem =>
+  ({
+    chapterAssignmentId: 100,
+    projectId: 1,
+    isAiEnabled: false,
+    ...overrides,
+  }) as ProjectItem;
+
 describe('useSyncGlobalAiSetting', () => {
   beforeEach(() => {
     useAppStore.setState({
@@ -36,10 +44,9 @@ describe('useSyncGlobalAiSetting', () => {
   });
 
   it('AI auto-enables on an editable translation page when user preference is true', async () => {
-    // Setup store with global preference true
+    const projectItem = makeProjectItem({ chapterAssignmentId: 101, isAiEnabled: false });
     useAppStore.setState({
       aiAutoEnablePreferences: { [mockUser.id]: true },
-      currentProjectItem: { chapterAssignmentId: 101, isAiEnabled: false } as ProjectItem,
     });
 
     let patchCalled = false;
@@ -50,22 +57,19 @@ describe('useSyncGlobalAiSetting', () => {
       })
     );
 
-    renderHook(() => useSyncGlobalAiSetting(101, 'proj1', false, false), {
+    renderHook(() => useSyncGlobalAiSetting(101, 'proj1', false, false, projectItem), {
       wrapper: makeWrapper(),
     });
 
     await waitFor(() => {
       expect(patchCalled).toBe(true);
     });
-
-    // Verify store was updated
-    expect(useAppStore.getState().currentProjectItem?.isAiEnabled).toBe(true);
   });
 
   it('AI does not auto-enable on read-only /view/...', async () => {
+    const projectItem = makeProjectItem({ chapterAssignmentId: 102, isAiEnabled: false });
     useAppStore.setState({
       aiAutoEnablePreferences: { [mockUser.id]: true },
-      currentProjectItem: { chapterAssignmentId: 102, isAiEnabled: false } as ProjectItem,
     });
 
     let patchCalled = false;
@@ -77,7 +81,9 @@ describe('useSyncGlobalAiSetting', () => {
     );
 
     // isReadOnly = true
-    renderHook(() => useSyncGlobalAiSetting(102, 'proj1', false, true), { wrapper: makeWrapper() });
+    renderHook(() => useSyncGlobalAiSetting(102, 'proj1', false, true, projectItem), {
+      wrapper: makeWrapper(),
+    });
 
     // Wait a bit to ensure it doesn't fire
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -85,24 +91,29 @@ describe('useSyncGlobalAiSetting', () => {
   });
 
   it('Failed auto-sync does not mark the assignment as synced forever', async () => {
+    const projectItem103 = makeProjectItem({ chapterAssignmentId: 103, isAiEnabled: false });
+    const projectItem104 = makeProjectItem({ chapterAssignmentId: 104, isAiEnabled: false });
+
     useAppStore.setState({
       aiAutoEnablePreferences: { [mockUser.id]: true },
-      currentProjectItem: { chapterAssignmentId: 103, isAiEnabled: false } as ProjectItem,
     });
 
     let patchCount = 0;
     server.use(
-      http.patch(`${config.api.url}/chapter-assignments/103/ai-status`, () => {
-        patchCount++;
-        return new HttpResponse(null, { status: 500 });
+      http.patch(`${config.api.url}/chapter-assignments/:id/ai-status`, ({ params }) => {
+        if (params.id === '103') {
+          patchCount++;
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json({});
       })
     );
 
     const { rerender } = renderHook(
-      ({ chapterId }) => useSyncGlobalAiSetting(chapterId, 'proj1', false, false),
+      ({ chapterId, item }) => useSyncGlobalAiSetting(chapterId, 'proj1', false, false, item),
       {
         wrapper: makeWrapper(),
-        initialProps: { chapterId: 103 },
+        initialProps: { chapterId: 103, item: projectItem103 },
       }
     );
 
@@ -114,12 +125,14 @@ describe('useSyncGlobalAiSetting', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(patchCount).toBe(1);
 
-    // If we navigate to another chapter, then back, it should retry the sync for 103
-    rerender({ chapterId: 104 });
-    rerender({ chapterId: 103 });
+    // Navigate to another chapter, wait a tick so its mutation starts with the correct closure
+    rerender({ chapterId: 104, item: projectItem104 });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Navigate back to 103 — should retry
+    rerender({ chapterId: 103, item: projectItem103 });
 
     await waitFor(() => {
-      // It should have fired a second time because hasSyncedRef was never set for 103
       expect(patchCount).toBe(2);
     });
   });

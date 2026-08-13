@@ -19,7 +19,7 @@ interface AppState {
   setPresenceWarning: (msg: string | null) => void;
   setDisplayMode: (mode: 'verse' | 'pericope') => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
-  setAiAutoEnablePreference: (userId: number, status: boolean) => void;
+  setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
 let hydrationResolve: (() => void) | null = null;
 export const hydrationPromise = new Promise<void>(resolve => {
@@ -55,10 +55,16 @@ export const useAppStore = create<AppState>()(
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
       setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
-      setAiAutoEnablePreference: (userId: number, status: boolean) =>
-        set(state => ({
-          aiAutoEnablePreferences: { ...state.aiAutoEnablePreferences, [userId]: status },
-        })),
+      setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
+        set(state => {
+          const next = { ...state.aiAutoEnablePreferences };
+          if (status === undefined) {
+            delete next[userId];
+          } else {
+            next[userId] = status;
+          }
+          return { aiAutoEnablePreferences: next };
+        }),
     }),
     {
       name: 'app-store',

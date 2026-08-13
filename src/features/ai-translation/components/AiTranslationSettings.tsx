@@ -30,6 +30,9 @@ export const AiTranslationSettings: React.FC = () => {
 
   const handleToggleAi = (checked: boolean) => {
     setLocalAiState(checked);
+    const priorUserPreference = userdetail
+      ? useAppStore.getState().aiAutoEnablePreferences[userdetail.id]
+      : undefined;
     if (userdetail) {
       setAiAutoEnablePreference(userdetail.id, checked);
     }
@@ -41,7 +44,7 @@ export const AiTranslationSettings: React.FC = () => {
           // Revert UI and store state on failure
           setLocalAiState(previousState ?? false);
           if (userdetail) {
-            setAiAutoEnablePreference(userdetail.id, previousState ?? false);
+            setAiAutoEnablePreference(userdetail.id, priorUserPreference);
           }
           setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: previousState });
         },
