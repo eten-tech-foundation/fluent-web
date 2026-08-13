@@ -63,7 +63,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     setButtonTop(top);
   }, [lastRevealedVerseNumber, readOnly]);
 
-  const scrollVerseToTop = useCallback((verseNumber: number, force = false) => {
+  const scrollVerseToTop = useCallback((verseNumber: number) => {
     const container = targetScrollRef.current;
     const activeRow = verseRefs.current[verseNumber];
     if (!container || !activeRow) return;
@@ -71,12 +71,8 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const containerRect = container.getBoundingClientRect();
     const activeRowRect = activeRow.getBoundingClientRect();
     const activeRowTopRelative = activeRowRect.top - containerRect.top;
-    const activeRowBottomRelative = activeRowRect.bottom - containerRect.top;
 
-    // If the active row is already fully visible inside the scroll container, don't scroll
-    if (!force && activeRowTopRelative >= 0 && activeRowBottomRelative <= containerRect.height) {
-      return;
-    }
+    // Always scroll to keep the active verse in a consistent focal point position
 
     const prevId = Math.max(1, verseNumber - 1);
     const prevRow = verseRefs.current[prevId];
@@ -274,7 +270,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       });
       updateButtonPosition();
       if (pendingInitScrollRef.current !== null) {
-        scrollVerseToTop(pendingInitScrollRef.current, true);
+        scrollVerseToTop(pendingInitScrollRef.current);
         pendingInitScrollRef.current = null;
       }
     };
