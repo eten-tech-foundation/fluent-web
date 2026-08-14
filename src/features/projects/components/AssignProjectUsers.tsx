@@ -175,7 +175,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     );
   }, [inviteEmail, inviteDisplayName, inviteRole, matchedExistingUser, isInviteEmailValid]);
 
-  const handleOpenAddDialog = useCallback(() => {
+  const resetAddUserForm = useCallback(() => {
     setError(null);
     setSelectedUsersToAdd([]);
     setSelectedRole(null);
@@ -184,20 +184,17 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     setInviteDisplayName('');
     setInviteRole(null);
     setInviteError(null);
+  }, []);
+
+  const handleOpenAddDialog = useCallback(() => {
+    resetAddUserForm();
     onAddUser?.();
-  }, [onAddUser]);
+  }, [resetAddUserForm, onAddUser]);
 
   const handleCloseDialog = useCallback(() => {
-    setError(null);
-    setSelectedUsersToAdd([]);
-    setSelectedRole(null);
-    setActiveTab('existing');
-    setInviteEmail('');
-    setInviteDisplayName('');
-    setInviteRole(null);
-    setInviteError(null);
+    resetAddUserForm();
     onCloseAddUser?.();
-  }, [onCloseAddUser]);
+  }, [resetAddUserForm, onCloseAddUser]);
 
   const handleAddProjectUser = useCallback(async () => {
     if (selectedUsersToAdd.length === 0 || selectedRole === null) return;

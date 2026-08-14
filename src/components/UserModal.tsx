@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { roleOptions } from '@/lib/constants/roles';
 import { Logger } from '@/lib/services/logger';
-import { getDisplayRole, type User } from '@/lib/types';
+import { type User } from '@/lib/types';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -72,9 +72,14 @@ export const UserModal: React.FC<UserModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (mode === 'edit' && user) {
-        const initialRoleName = getDisplayRole(
-          user.orgGrants?.[0]?.roleName ?? user.grants?.[0]?.roleName ?? 'No Role'
-        );
+        const activeGrant =
+          user.orgGrants?.find(g => g.orgId === user.lastActiveOrgId) ??
+          user.grants?.find(g => g.orgId === user.lastActiveOrgId) ??
+          user.orgGrants?.[0] ??
+          user.grants?.[0];
+
+        const initialRoleName = activeGrant?.roleName ?? user.role;
+
         setFormData({
           username: user.username,
           firstName: user.firstName ?? '',

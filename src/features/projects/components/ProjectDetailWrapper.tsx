@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { getActiveGrants, isObserver } from '@/lib/grant-utils';
+import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { ExportProjectDialog } from './ExportProjectDialog';
@@ -32,27 +32,27 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   const location = useLocation();
   const { userdetail } = useAppStore();
+
   const handleBack = () => {
-    // 1. If origin route was passed in state, navigate directly back to it
     const from = (location.state as { from?: string } | undefined)?.from;
     if (from) {
       void navigate({ to: from, replace: true });
       return;
     }
-    // 2. Fallback based on active role if accessed directly or refreshed
-    const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-    const activeRoleGrant = activeGrants.filter(g => g.roleName === userdetail?.role);
-    if (isObserver(activeRoleGrant)) {
+
+    if (userdetail?.role === ROLES.PROJECT_OBSERVER) {
       void navigate({ to: '/' });
     } else {
       void navigate({ to: '/projects' });
     }
   };
+
   const handleOpenExport = () => {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
       search: { modal: 'export' as const },
+      state: location.state,
     });
   };
 
@@ -61,6 +61,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: {},
+      state: location.state,
     });
   };
 
@@ -69,6 +70,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: { modal: 'add' as const },
+      state: location.state,
     });
   };
 
@@ -77,6 +79,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: {},
+      state: location.state,
     });
   };
 

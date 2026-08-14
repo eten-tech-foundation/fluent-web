@@ -9,7 +9,7 @@ import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { ROLES, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
@@ -86,19 +86,21 @@ export function AuthenticatedLayout(): React.JSX.Element {
             ? orgGrants.find(g => g.roleName === savedRole)
             : undefined;
 
-          const activeGrant: UserGrant = savedGrant ?? functionalGrant ?? orgGrants[0];
+          const activeGrant =
+            savedGrant ?? functionalGrant ?? (orgGrants.length > 0 ? orgGrants[0] : undefined);
 
           setUserDetail({
             id: userDetails.id,
             email: userDetails.email,
             username: userDetails.username,
-            role: activeGrant.roleName,
+            role: activeGrant ? activeGrant.roleName : userDetails.role,
             lastActiveOrgId: activeOrgId,
             grants: grants,
             firstName: userDetails.firstName,
             lastName: userDetails.lastName,
             status: userDetails.status,
           });
+
           setUserDetailsFetched(true);
         })();
       },

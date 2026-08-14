@@ -86,14 +86,17 @@ export const UsersWrapper: React.FC = () => {
         const inviteRoleName =
           userToInvite.roleName ??
           (typeof userToInvite.role === 'string' ? userToInvite.role : String(userToInvite.role));
+        const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
+        const activeGrant = userdetail?.grants?.find(g => g.orgId === activeOrgId);
         const invitePayload: InviteUserPayload = {
           email: userToInvite.email,
           username: userToInvite.displayName ?? userToInvite.username,
-          orgId: userdetail?.lastActiveOrgId ?? userdetail?.organization ?? 0,
+          orgId: activeOrgId ?? 0,
           roleName: inviteRoleName,
-          orgName: userdetail?.orgGrants?.[0]?.orgName ?? undefined,
+          orgName: activeGrant?.orgName ?? userdetail?.orgGrants?.[0]?.orgName ?? undefined,
           inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
         };
+
         await createUserMutation.mutateAsync({
           userData: invitePayload,
         });

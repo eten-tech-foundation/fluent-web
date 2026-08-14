@@ -34,6 +34,23 @@ export function isManager(activeGrants: UserGrant[]): boolean {
   return activeGrants.some(g => MANAGER_ROLES.includes(g.roleName));
 }
 
+/**
+ * True if the user has Manager privileges specifically for the given projectId:
+ * - Org-level managers (projectId == null/undefined) have manager privileges for all projects in the org.
+ * - Project-scoped managers only have manager privileges if their grant matches the projectId.
+ */
+export function isProjectManager(
+  activeGrants: UserGrant[],
+  projectId: number | null | undefined
+): boolean {
+  if (!projectId) return false;
+  return activeGrants.some(g => {
+    if (!MANAGER_ROLES.includes(g.roleName)) return false;
+    if (g.projectId === null || g.projectId === undefined) return true;
+    return g.projectId === projectId || g.projectId === Number(projectId);
+  });
+}
+
 export function isOrgMemberOnly(activeGrants: UserGrant[]): boolean {
   return activeGrants.length > 0 && activeGrants.every(g => g.roleName === 'Org Member');
 }
