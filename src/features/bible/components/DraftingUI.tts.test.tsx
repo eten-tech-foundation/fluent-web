@@ -103,10 +103,19 @@ const mockTargetVerses: TargetVerse[] = [
   { verseNumber: 3, content: '' },
 ];
 
+/**
+ * The verse the caret is in. Settable because it is NOT the playing verse
+ * (T2) — the keyboard shortcuts act on this one, and a fixed value would let a
+ * shortcut wired to a constant pass.
+ */
+let mockActiveVerseId = 1;
+
 vi.mock('@/features/bible/hooks/useDrafting', () => ({
   useDrafting: () => ({
     verses: mockTargetVerses,
-    activeVerseId: 1,
+    get activeVerseId() {
+      return mockActiveVerseId;
+    },
     revealedVerses: new Set([1, 2, 3]),
     buttonTop: 150,
     lastRevealedVerseHasContent: true,
@@ -287,6 +296,7 @@ beforeEach(() => {
   mockNextPage = null;
   nextChapterOptions = undefined;
   ttsRows = [];
+  mockActiveVerseId = 1;
   activeVerseRef = null;
   isBusy = false;
   boundaryOpen = false;
@@ -442,6 +452,65 @@ describe('DraftingUI — playback actions and highlight', () => {
     expect(stops).toHaveLength(3);
     await userEvent.click(stops[2]);
     expect(stopPlayback).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Keyboard shortcuts (§12.1 Keyboard row) ─────────────────────────────────
+
+/**
+ * These press real keys at the window, deliberately.
+ *
+ * `useTtsKeyboardShortcuts` had a full unit-test file of its own and passed it
+ * — because that file calls the hook directly. **No component had ever
+ * mounted it**, so every shortcut was inert in the running app while
+ * `TtsVerseControls` advertised all three in its tooltips. Found in a browser
+ * on 2026-08-16 (phase 09), invisible to 397 tests.
+ *
+ * The lesson these tests encode: a hook's own unit test cannot prove the hook
+ * is wired. Only the host can, and this file is the host's.
+ */
+describe('DraftingUI — keyboard shortcuts', () => {
+  it('Alt+P plays the verse the caret is in, not the one that is playing', async () => {
+    // The two are different on purpose (T2): a translator types in verse 4
+    // while verse 2 is read aloud, and Alt+P must play 4.
+    activeVerseRef = '2';
+    mockActiveVerseId = 3;
+
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+
+    expect(playVerse).toHaveBeenCalledWith('3');
+  });
+
+  it('Alt+Shift+P plays onward from the caret', async () => {
+    mockActiveVerseId = 2;
+
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+
+    expect(playFromVerse).toHaveBeenCalledWith('2');
+    expect(playVerse).not.toHaveBeenCalled();
+  });
+
+  it('Alt+S stops', async () => {
+    isBusy = true;
+    renderDrafting();
+
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+
+    expect(stopPlayback).toHaveBeenCalledTimes(1);
+  });
+
+  it('is silent while the feature is off (§6.3)', async () => {
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+
+    renderDrafting();
+
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+
+    expect(playVerse).not.toHaveBeenCalled();
+    expect(stopPlayback).not.toHaveBeenCalled();
   });
 });
 

@@ -40,6 +40,7 @@ import {
   TtsBoundaryPrompt,
   type TtsRowDraft,
   useSourceTtsPlayback,
+  useTtsKeyboardShortcuts,
 } from '@/features/tts';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
@@ -947,6 +948,22 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Row identity for the queue is the verse number as a string; the grid asks
   // for it rather than assuming a format (T3).
   const ttsVerseRefFor = useCallback((verseNumber: number) => String(verseNumber), []);
+
+  // Alt+P / Alt+Shift+P / Alt+S (§12.1 Keyboard). Mounted HERE, and only here,
+  // because the shortcuts act on the host's notion of the active verse (T2) —
+  // the row the caret is in — which is drafting's state, not the queue's. The
+  // playing row and the active row are deliberately different things: a
+  // translator keeps typing in verse 4 while verse 2 is being read aloud, and
+  // Alt+P then plays 4.
+  //
+  // `enabled` is the flag gate, not an activity gate: Stop must work whenever
+  // the feature is on, including while a clip is still loading.
+  useTtsKeyboardShortcuts({
+    enabled: ttsEnabled,
+    onPlayVerse: () => tts.playVerse(ttsVerseRefFor(activeVerseId)),
+    onPlayFromHere: () => tts.playFromVerse(ttsVerseRefFor(activeVerseId)),
+    onStop: tts.stop,
+  });
 
   // Undefined when the flag is off — the grid then renders exactly as before.
   const ttsGridProps = useMemo(
