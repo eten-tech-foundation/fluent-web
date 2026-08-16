@@ -12,7 +12,9 @@ export function useSyncGlobalAiSetting(
   isReadOnly: boolean,
   projectItem: ProjectItem | undefined
 ) {
-  const { aiAutoEnablePreferences, userdetail, setCurrentProjectItem } = useAppStore();
+  const aiAutoEnablePreferences = useAppStore(state => state.aiAutoEnablePreferences);
+  const userdetail = useAppStore(state => state.userdetail);
+  const setIsAiSyncPending = useAppStore(state => state.setIsAiSyncPending);
 
   const { mutateAsync: toggleAiAsync } = useToggleChapterAi(
     chapterAssignmentId ?? 0,
@@ -25,7 +27,14 @@ export function useSyncGlobalAiSetting(
   const prevChapterRef = useRef<number | undefined>();
 
   useEffect(() => {
-    if (!chapterAssignmentId || !projectId || !userdetail || isReadOnly || !projectItem) return;
+    if (
+      chapterAssignmentId == null ||
+      projectId == null ||
+      !userdetail ||
+      isReadOnly ||
+      !projectItem
+    )
+      return;
 
     // When navigating to a different chapter, allow retry for previously failed chapters
     if (prevChapterRef.current !== undefined && prevChapterRef.current !== chapterAssignmentId) {
@@ -56,26 +65,23 @@ export function useSyncGlobalAiSetting(
 
       const enableAi = async () => {
         try {
+          setIsAiSyncPending(true);
           await toggleAiAsync(true);
           hasSyncedRef.current = chapterAssignmentId;
           syncingIdsRef.current.delete(chapterAssignmentId);
 
-          // Wait until backend has confirmed the PATCH and any database replicas have caught up
-          // before updating the UI state. This ensures subsequent AI suggestion queues succeed.
-          setTimeout(() => {
-            // Read fresh state directly from the store to prevent stale closure bugs!
-            // If the user navigated rapidly, we DO NOT want to overwrite the store with old chapter data.
-            const latestStore = useAppStore.getState();
-            if (latestStore.currentProjectItem?.chapterAssignmentId === chapterAssignmentId) {
-              latestStore.setCurrentProjectItem({
-                ...latestStore.currentProjectItem,
-                isAiEnabled: true,
-              });
-            }
-          }, 300);
+          const latestStore = useAppStore.getState();
+          if (latestStore.currentProjectItem?.chapterAssignmentId === chapterAssignmentId) {
+            latestStore.setCurrentProjectItem({
+              ...latestStore.currentProjectItem,
+              isAiEnabled: true,
+            });
+          }
         } catch {
           syncingIdsRef.current.delete(chapterAssignmentId);
           failedIdsRef.current.add(chapterAssignmentId);
+        } finally {
+          setIsAiSyncPending(false);
         }
       };
 
@@ -93,6 +99,6 @@ export function useSyncGlobalAiSetting(
     toggleAiAsync,
     isReadOnly,
     projectItem,
-    setCurrentProjectItem,
+    setIsAiSyncPending,
   ]);
 }

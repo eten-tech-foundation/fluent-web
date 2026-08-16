@@ -19,6 +19,7 @@ export const AiTranslationSettings: React.FC = () => {
     setCurrentProjectItem,
     userdetail,
     isAiThresholdMet,
+    isAiSyncPending,
     setAiAutoEnablePreference,
   } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
@@ -88,7 +89,11 @@ export const AiTranslationSettings: React.FC = () => {
             <span className='text-foreground text-sm font-semibold'>
               AI Translation Suggestions
             </span>
-            <Switch checked={localAiState} disabled={isPending} onCheckedChange={handleToggleAi} />
+            <Switch
+              checked={localAiState}
+              disabled={isPending || isAiSyncPending}
+              onCheckedChange={handleToggleAi}
+            />
           </div>
         );
     }

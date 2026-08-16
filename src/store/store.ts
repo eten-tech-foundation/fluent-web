@@ -10,6 +10,7 @@ interface AppState {
   _hasHydrated: boolean;
   displayMode: 'verse' | 'pericope';
   isAiThresholdMet: boolean | null;
+  isAiSyncPending: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
   setUserDetail: (user: User) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
@@ -19,6 +20,7 @@ interface AppState {
   setPresenceWarning: (msg: string | null) => void;
   setDisplayMode: (mode: 'verse' | 'pericope') => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
+  setIsAiSyncPending: (pending: boolean) => void;
   setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
 let hydrationResolve: (() => void) | null = null;
@@ -35,6 +37,7 @@ export const useAppStore = create<AppState>()(
       _hasHydrated: false,
       displayMode: 'verse',
       isAiThresholdMet: null,
+      isAiSyncPending: false,
       aiAutoEnablePreferences: {},
       setUserDetail: (userdetail: User) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
@@ -55,6 +58,7 @@ export const useAppStore = create<AppState>()(
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
       setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
+      setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
       setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
         set(state => {
           const next = { ...state.aiAutoEnablePreferences };
