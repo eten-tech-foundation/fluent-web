@@ -14,7 +14,14 @@ import { ChapterAssignmentStatus, UserRole } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export const AiTranslationSettings: React.FC = () => {
-  const { currentProjectItem, setCurrentProjectItem, userdetail, isAiThresholdMet } = useAppStore();
+  const {
+    currentProjectItem,
+    setCurrentProjectItem,
+    userdetail,
+    isAiThresholdMet,
+    isAiSyncPending,
+    setAiAutoEnablePreference,
+  } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
 
   const { mutate: toggleAi, isPending } = useToggleChapterAi(
@@ -24,6 +31,12 @@ export const AiTranslationSettings: React.FC = () => {
 
   const handleToggleAi = (checked: boolean) => {
     setLocalAiState(checked);
+    const priorUserPreference = userdetail
+      ? useAppStore.getState().aiAutoEnablePreferences[userdetail.id]
+      : undefined;
+    if (userdetail) {
+      setAiAutoEnablePreference(userdetail.id, checked);
+    }
     if (currentProjectItem) {
       const previousState = currentProjectItem.isAiEnabled;
       setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: checked });
@@ -31,6 +44,9 @@ export const AiTranslationSettings: React.FC = () => {
         onError: () => {
           // Revert UI and store state on failure
           setLocalAiState(previousState ?? false);
+          if (userdetail) {
+            setAiAutoEnablePreference(userdetail.id, priorUserPreference);
+          }
           setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: previousState });
         },
       });
@@ -73,7 +89,11 @@ export const AiTranslationSettings: React.FC = () => {
             <span className='text-foreground text-sm font-semibold'>
               AI Translation Suggestions
             </span>
-            <Switch checked={localAiState} disabled={isPending} onCheckedChange={handleToggleAi} />
+            <Switch
+              checked={localAiState}
+              disabled={isPending || isAiSyncPending}
+              onCheckedChange={handleToggleAi}
+            />
           </div>
         );
     }
