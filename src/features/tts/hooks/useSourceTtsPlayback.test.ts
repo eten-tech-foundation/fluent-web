@@ -315,6 +315,88 @@ describe('useSourceTtsPlayback — continuing across the boundary (T16)', () => 
   });
 });
 
+describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () => {
+  /**
+   * The drafting route swaps chapters WITHOUT unmounting (no `remountDeps`),
+   * so these rerender one host with a new page key rather than mounting a
+   * second one — which is the shape the live bug had.
+   */
+  const pageProps = (
+    pageKey: string,
+    overrides: Partial<UseSourceTtsPlaybackOptions> = {}
+  ): UseSourceTtsPlaybackOptions => ({
+    engine,
+    rows,
+    getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
+    getViewport: () => rect(0, 500),
+    pageKey,
+    ...overrides,
+  });
+
+  const renderPage = (pageKey: string, overrides: Partial<UseSourceTtsPlaybackOptions> = {}) =>
+    renderHook((options: UseSourceTtsPlaybackOptions) => useSourceTtsPlayback(options), {
+      initialProps: pageProps(pageKey, overrides),
+    });
+
+  it('stops the queue when the page changes underneath it', () => {
+    const { rerender, result } = renderPage('chapter-2');
+    act(() => result.current.playFromVerse('GEN 1:1'));
+    expect(stop).not.toHaveBeenCalled();
+
+    // Back to the previous chapter: same component, new data.
+    act(() => rerender(pageProps('chapter-1')));
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps playing across a re-render of the same page', () => {
+    const { rerender } = renderPage('chapter-2');
+
+    act(() => rerender(pageProps('chapter-2')));
+
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it('keeps playing when only the rows change (panel switch)', () => {
+    const { rerender } = renderPage('chapter-2');
+
+    act(() =>
+      rerender(
+        pageProps('chapter-2', { rows: [{ verseRef: 'GEN 1:1', text: 'otra', langCode: 'spa' }] })
+      )
+    );
+
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it('closes a boundary prompt the listener has navigated away from', () => {
+    const { rerender, result } = renderPage('chapter-2', { nextPage: nextPage() });
+    act(() => queueOptions.onBoundaryReached?.());
+    expect(result.current.boundaryPrompt.open).toBe(true);
+
+    act(() => rerender(pageProps('chapter-1', { nextPage: nextPage() })));
+
+    expect(result.current.boundaryPrompt.open).toBe(false);
+  });
+
+  it('stops the old session before starting the continued one', async () => {
+    const calls: string[] = [];
+    stop.mockImplementation(() => calls.push('stop'));
+    playFrom.mockImplementation(() => calls.push('playFrom'));
+
+    const { rerender, result } = renderPage('chapter-1', { nextPage: nextPage() });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+    calls.length = 0; // playFromVerse was never called; ignore the arming render
+
+    act(() => rerender(pageProps('chapter-2')));
+
+    expect(calls).toEqual(['stop', 'playFrom']);
+  });
+});
+
 describe('useSourceTtsPlayback — failure surfacing (§5.2)', () => {
   it('turns a playback failure into a toast that names the verse', () => {
     setup();

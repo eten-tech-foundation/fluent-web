@@ -201,17 +201,41 @@ export const useSourceTtsPlayback = (
     })();
   }, []);
 
-  // T16, second half: arriving on the page a confirmed "Continue" promised.
-  // The prompt says "Continue on the next page?", so turning the page without
-  // resuming keeps only half of that bargain — the queue died with the route
-  // that owned it, and something on this side has to start the reading again.
+  // The page this host is showing, as of the last commit. Compared rather
+  // than depended on, because the queue must be told about a page change
+  // exactly once — on the render that changes it.
+  const shownPageKeyRef = useRef(pageKey);
+
+  // A page change under a live queue, and the arrival half of T16 — one
+  // effect, because they are one event seen from both sides.
   //
-  // Starts at the first playable row: continuing means from the top of what
-  // was just opened, and `items` is already document-ordered and filtered.
-  // The claim is what makes this safe — it succeeds only for the promised
-  // page, only once, and only within the arming window, so an ordinary visit
-  // never starts talking on its own.
+  // §5.2 (nothing outlives the page it belongs to): the drafting route swaps
+  // its chapter data WITHOUT unmounting — the router is configured with no
+  // `remountDeps`, so a Back/Forward or any chapter change re-renders this
+  // host in place. The queue's unmount cleanup therefore never runs, and a
+  // session started on the old chapter keeps reading its captured items while
+  // `activeVerseRef` highlights whatever row now carries that verse number.
+  // Stopping is the only honest outcome: the listener asked for that page.
+  //
+  // T16's second half: the prompt says "Continue on the next page?", so
+  // turning the page without resuming keeps half of the bargain. Playback
+  // restarts at the first playable row — continuing means from the top of
+  // what was just opened, and `items` is already document-ordered and
+  // filtered. The claim is what keeps this from firing on an ordinary visit:
+  // it succeeds only for the promised page, only once, and only inside the
+  // arming window. Stop-then-start is also the right order for the confirmed
+  // crossing, which is the one case where both halves fire on one render.
   useEffect(() => {
+    const shown = shownPageKeyRef.current;
+    shownPageKeyRef.current = pageKey;
+
+    if (shown !== pageKey) {
+      queueRef.current.stop();
+      // A prompt raised by the session just stopped has nothing left to
+      // continue from, and it names a page the listener has already left.
+      setIsBoundaryOpen(false);
+    }
+
     if (!pageKey || items.length === 0) return;
     if (!claimTtsContinuation(pageKey)) return;
     queueRef.current.playFrom(items, 0);
