@@ -15,6 +15,13 @@ export class FakeClipElement implements ClipAudioElement {
   /** `src` value at each `load()` call — the reload assertions read this. */
   loadCalls: string[] = [];
   /**
+   * `src` value at each `play()` call. Recovery has to RESTART playback, not
+   * merely re-point the element: `load()` leaves it paused, and `play()` is the
+   * only audible trigger. Without this counter that distinction is invisible to
+   * every test, which is how a ladder that never resumed anything stayed green.
+   */
+  playCalls: string[] = [];
+  /**
    * Rejection for the next `play()`, if any. A real element rejects this
    * promise for two very different reasons — autoplay refusal and a source
    * that failed to load — and until phase 09 this fake could only resolve, so
@@ -28,6 +35,7 @@ export class FakeClipElement implements ClipAudioElement {
     this.loadCalls.push(this.src);
   }
   play(): Promise<void> {
+    this.playCalls.push(this.src);
     return this.playRejection === undefined
       ? Promise.resolve()
       : Promise.reject(this.playRejection);

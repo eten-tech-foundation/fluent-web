@@ -180,6 +180,24 @@ describe('superviseClipPlayback — element error ladder', () => {
 
     expect(regenerate).toHaveBeenCalledTimes(1);
     expect(element.loadCalls).toEqual([freshUrl]);
+    // ...and RESUMES. `load()` leaves the element paused, so a ladder that
+    // only re-pointed the source repaired everything except the sound (found
+    // in a browser, phase 09 — the clip healed and then sat there silent).
+    expect(element.playCalls).toEqual([freshUrl]);
+  });
+
+  it('every recovery class restarts playback, not just the 404 rung', async () => {
+    // Mid-stream abort: probe says 200, so the clip is still streaming and the
+    // element is reset to the SAME url. That reset must play, for the same
+    // reason — this is the common path all classes route through.
+    const { element } = setup(vi.fn().mockResolvedValue(fakeResponse({ status: 200 })));
+
+    element.emit('error');
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000); // midStreamBackoffMs
+
+    expect(element.loadCalls).toEqual([CLIP_URL]);
+    expect(element.playCalls).toEqual([CLIP_URL]);
   });
 
   it('503 + Retry-After → quiet retry after the server delay, not before (§6.1)', async () => {
