@@ -11,6 +11,7 @@ import {
 
 import '../styles/usj-nodes.css';
 import '../styles/editor.css';
+import '../styles/editor-shared.css';
 import '../styles/pericope-editor.css';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
@@ -127,7 +128,7 @@ export function PericopeEditor({
   );
 
   return (
-    <div className='pericope-editor' data-testid='pericope-editor'>
+    <div className='pericope-editor rte-editor' data-testid='pericope-editor'>
       <Editorial
         ref={editorRef}
         defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}
