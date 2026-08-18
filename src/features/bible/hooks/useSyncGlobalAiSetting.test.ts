@@ -21,7 +21,7 @@ const mockUser: User = {
   id: 42,
   email: 'test@example.com',
   username: 'Test User',
-  role: 1,
+  role: 'Project Translator',
   organization: 1,
 };
 

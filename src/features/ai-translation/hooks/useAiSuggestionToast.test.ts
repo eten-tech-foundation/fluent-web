@@ -19,14 +19,14 @@ const mockUser1: User = {
   id: 1,
   email: 'u1@test.com',
   username: 'User 1',
-  role: 1,
+  role: 'Project Translator',
   organization: 1,
 };
 const mockUser2: User = {
   id: 2,
   email: 'u2@test.com',
   username: 'User 2',
-  role: 1,
+  role: 'Project Translator',
   organization: 1,
 };
 
