@@ -186,6 +186,33 @@ describe('useSourceTtsPlayback — playGroup (G3a)', () => {
     expect(playOne).not.toHaveBeenCalled();
   });
 
+  it("playFromGroup runs to the END of the page, starting at the group's first playable row", () => {
+    const { result } = setup();
+
+    // The group opens on the reference-panel hole, so "first row" and "first
+    // PLAYABLE row" are different answers.
+    act(() => result.current.playFromGroup(['GEN 1:2', 'GEN 1:3']));
+
+    const [items, index, emitBoundary] = playFrom.mock.calls.at(-1) as [
+      TtsQueueItem[],
+      number,
+      boolean | undefined,
+    ];
+    // The whole page, not the group — this action is the continuous one.
+    expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
+    expect(index).toBe(1);
+    // It really does end at the page end, so T16's prompt is honest here.
+    expect(emitBoundary ?? true).toBe(true);
+  });
+
+  it('playFromGroup ignores a group with nothing playable in it (§5.1)', () => {
+    const { result } = setup();
+
+    act(() => result.current.playFromGroup(['GEN 1:2']));
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
   it('isGroupSpeaking follows the playing row, so both layouts light up from one source', () => {
     activeVerseRef = 'GEN 1:3';
     const { result } = setup();
