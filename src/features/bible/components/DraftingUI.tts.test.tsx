@@ -685,6 +685,51 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     expect(speaking[0].className).toContain('bg-primary/5');
   });
 
+  it('marks the VERSE being read inside the group, not just the group', () => {
+    enterPericopeMode();
+    activeVerseRef = '2';
+
+    renderDrafting();
+
+    const spoken = screen.getAllByTestId('tts-active-verse');
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]).toHaveTextContent('And the earth was without form');
+    // Colour only: a weight or padding change here would re-flow the passage
+    // every time playback advanced a verse.
+    expect(spoken[0].className).not.toContain('font-');
+    expect(spoken[0].className).not.toContain('px-');
+  });
+
+  it('moves the verse marker as playback advances within one pericope', () => {
+    enterPericopeMode();
+    activeVerseRef = '1';
+
+    const { rerender } = renderDrafting();
+    expect(screen.getByTestId('tts-active-verse')).toHaveTextContent('In the beginning');
+
+    activeVerseRef = '2';
+    rerender(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+
+    const spoken = screen.getAllByTestId('tts-active-verse');
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]).toHaveTextContent('And the earth was without form');
+  });
+
+  it('marks no verse at all while idle', () => {
+    enterPericopeMode();
+
+    renderDrafting();
+
+    expect(screen.queryAllByTestId('tts-active-verse')).toHaveLength(0);
+  });
+
   it('leaves every silent group with a transparent rail, so the grid never shifts', () => {
     enterPericopeMode();
     activeVerseRef = '2';
