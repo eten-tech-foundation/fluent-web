@@ -982,6 +982,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             isRowLoading: tts.isRowLoading,
             isGroupSpeaking: tts.isGroupSpeaking,
             playGroup: tts.playGroup,
+            playFromGroup: tts.playFromGroup,
             stop: tts.stop,
             verseRefFor: ttsVerseRefFor,
           }
@@ -993,6 +994,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       tts.isRowLoading,
       tts.isGroupSpeaking,
       tts.playGroup,
+      tts.playFromGroup,
       tts.stop,
       ttsVerseRefFor,
     ]
