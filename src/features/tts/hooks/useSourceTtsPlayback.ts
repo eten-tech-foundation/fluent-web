@@ -90,6 +90,13 @@ export interface SourceTtsPlaybackApi {
    * from the page's own item list.
    */
   playGroup: (verseRefs: readonly string[]) => void;
+  /**
+   * G3a: continuous reading from this GROUP to the end of the page — the group
+   * analogue of `playFromVerse`. Starts at the group's first PLAYABLE row, not
+   * simply its first row, so a group opening on a reference-panel hole still
+   * starts where the audio actually does.
+   */
+  playFromGroup: (verseRefs: readonly string[]) => void;
   /** G3a: true while the playing row is one of these — the group-level highlight. */
   isGroupSpeaking: (verseRefs: readonly string[]) => boolean;
   stop: () => void;
@@ -198,6 +205,20 @@ export const useSourceTtsPlayback = (
     const reachesPageEnd = lastOfGroup.verseRef === lastOfPage.verseRef;
 
     queueRef.current.playFrom(groupItems, 0, reachesPageEnd);
+  }, []);
+
+  const playFromGroup = useCallback((verseRefs: readonly string[]) => {
+    const wanted = new Set(verseRefs);
+    const pageItems = itemsRef.current;
+    // The group's first playable row, located in the PAGE's list so the start
+    // index is the queue's index and not a rendered-row count.
+    const index = pageItems.findIndex(item => wanted.has(item.verseRef));
+    if (index < 0) return; // nothing playable in this group (§5.1)
+
+    // Unbounded, exactly like playFromVerse: this runs to the end of the page,
+    // so reaching that end really is the end of the page and T16's prompt is
+    // the honest thing to raise.
+    queueRef.current.playFrom(pageItems, index);
   }, []);
 
   const stop = useCallback(() => {
@@ -310,6 +331,7 @@ export const useSourceTtsPlayback = (
     playVerse,
     playFromVerse,
     playGroup,
+    playFromGroup,
     isGroupSpeaking,
     stop,
     boundaryPrompt: {

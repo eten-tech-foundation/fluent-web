@@ -1,16 +1,17 @@
 /**
  * `TtsGroupControls` — ▶ / Stop for a whole pericope group (G3a answer (b)).
  *
- * Pericope mode's unit of playback is the PERICOPE, not the verse: one press
- * reads the group and stops at its end. That is why this is a sibling of
- * `TtsVerseControls` rather than a mode of it — the verse control's second
- * button ("play from here", continuous to the end of the page) is the exact
- * behaviour a group control must NOT have, and there is no honest way to
- * render a two-button control with one button meaningless.
+ * Pericope mode's unit of playback is the PERICOPE, not the verse, so both
+ * play actions are scoped to the group: ▶ reads this pericope and stops at its
+ * end, ▶▶ reads from this pericope on to the end of the page. That mirrors the
+ * row control's pair exactly — one bounded, one continuous — at group scale.
  *
- * Keeping the two apart is also what makes G3a option (a) cheap later: a real
- * per-verse highlight inside a pericope replaces this component, and touches
- * nothing that verse mode uses.
+ * It is a sibling of `TtsVerseControls` rather than a mode of it because the
+ * accessible names, the bounded action's semantics and the shortcut hints all
+ * differ; sharing the component would mean three conditionals to say "this is
+ * a group". Keeping them apart is also what makes G3a option (a) cheap later:
+ * a real per-verse highlight inside a pericope replaces this component and
+ * touches nothing verse mode uses.
  *
  * Feature-agnostic like its sibling (T3): the host passes playability and
  * playback state in, and the buttons carry descriptive accessible names rather
@@ -19,7 +20,7 @@
 
 import React from 'react';
 
-import { Loader2, Play, Square } from 'lucide-react';
+import { FastForward, Loader2, Play, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,13 @@ export interface TtsGroupControlsProps {
    */
   showStop: boolean;
   onPlayGroup: () => void;
+  /**
+   * §5.1: continuous reading from this group to the end of the page — the same
+   * meaning the row control's second button carries, at group scale. Without
+   * it pericope mode has no DISCOVERABLE way to read on past one blob, since
+   * Alt+Shift+P is advertised on controls that do not render here.
+   */
+  onPlayFromGroup: () => void;
   onStop: () => void;
 }
 
@@ -54,11 +62,15 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
   isPlaying,
   showStop,
   onPlayGroup,
+  onPlayFromGroup,
   onStop,
 }) => {
   const { t } = useTranslation();
 
   const playLabel = t('ttsPlayPericope', 'Play pericope {{groupLabel}}', { groupLabel });
+  const playFromLabel = t('ttsPlayFromPericope', 'Play from pericope {{groupLabel}}', {
+    groupLabel,
+  });
   const stopLabel = t('ttsStopPlayback', 'Stop playback');
 
   return (
@@ -68,10 +80,9 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
         aria-label={playLabel}
         disabled={!hasPlayableText}
         size='icon'
-        // Alt+P acts on the caret's verse (T2), which in pericope mode reads
-        // that verse alone — deliberately NOT this button's group semantics —
-        // so the shortcut is not advertised here the way the row control
-        // advertises it.
+        // Alt+P acts on the caret's verse (T2), which reads that verse ALONE —
+        // deliberately not this button's whole-group semantics — so the
+        // shortcut is not advertised here.
         title={playLabel}
         type='button'
         variant='ghost'
@@ -82,6 +93,20 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
         ) : (
           <Play aria-hidden='true' />
         )}
+      </Button>
+      <Button
+        aria-label={playFromLabel}
+        disabled={!hasPlayableText}
+        size='icon'
+        // Unlike ▶, this one IS Alt+Shift+P: both read from here to the end of
+        // the page. (Alt+Shift+P starts at the caret's verse rather than this
+        // group's first, which is the same relationship the row control has.)
+        title={`${playFromLabel} (${TTS_KEYBOARD_SHORTCUTS.playFromHere})`}
+        type='button'
+        variant='ghost'
+        onClick={onPlayFromGroup}
+      >
+        <FastForward aria-hidden='true' />
       </Button>
       {showStop && (
         <Button

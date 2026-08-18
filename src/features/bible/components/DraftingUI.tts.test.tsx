@@ -187,6 +187,7 @@ let isBusy = false;
 const playVerse = vi.fn();
 const playFromVerse = vi.fn();
 const playGroup = vi.fn();
+const playFromGroup = vi.fn();
 const stopPlayback = vi.fn();
 const boundaryOnContinue = vi.fn();
 const boundaryOnDismiss = vi.fn();
@@ -217,6 +218,7 @@ vi.mock('@/features/tts', async importOriginal => {
         playVerse,
         playFromVerse,
         playGroup,
+        playFromGroup,
         // G3a: the real hook derives this from `activeVerseRef`, so the double
         // does too — a group is speaking iff it contains the playing row.
         isGroupSpeaking: (verseRefs: readonly string[]) =>
@@ -637,8 +639,32 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
 
     expect(playGroup).toHaveBeenCalledWith(['1', '2']);
     // Bounded playback is playGroup's job; the page-wide actions stay unused.
+    expect(playFromGroup).not.toHaveBeenCalled();
     expect(playFromVerse).not.toHaveBeenCalled();
     expect(playVerse).not.toHaveBeenCalled();
+  });
+
+  it('offers continuous reading too — the second button runs on past this blob', async () => {
+    // Without this button pericope mode has no DISCOVERABLE way to read on:
+    // Alt+Shift+P still works but is advertised only on controls that do not
+    // render here.
+    enterPericopeMode();
+
+    renderDrafting();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play from pericope 1:1-2' }));
+
+    expect(playFromGroup).toHaveBeenCalledWith(['1', '2']);
+    expect(playGroup).not.toHaveBeenCalled();
+  });
+
+  it('gives every pericope both play actions', () => {
+    enterPericopeMode();
+
+    renderDrafting();
+
+    expect(screen.getAllByRole('button', { name: /^Play pericope/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Play from pericope/ })).toHaveLength(2);
   });
 
   it('washes the group that contains the playing verse, and only that group', () => {
