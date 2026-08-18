@@ -680,6 +680,9 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     // the first cut carried this testid while rendering a 5% wash that dark
     // mode overrode entirely, so the group was "marked" and yet invisible.
     expect(speaking[0].className).toContain('border-l-primary');
+    // Verse mode washes the whole ROW, not just its source box; without this
+    // the pericope marker was a bare line with no field behind it.
+    expect(speaking[0].className).toContain('bg-primary/5');
   });
 
   it('leaves every silent group with a transparent rail, so the grid never shifts', () => {
