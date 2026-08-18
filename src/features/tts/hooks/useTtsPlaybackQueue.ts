@@ -89,6 +89,16 @@ interface PlaybackSession {
 const isAbortError = (error: unknown): boolean =>
   error instanceof DOMException && error.name === 'AbortError';
 
+/**
+ * Autoplay refusal — the browser will not start without a user gesture.
+ *
+ * The one `play()` rejection the recovery ladder genuinely cannot fix: nothing
+ * about the clip or its URL is wrong. Every other rejection means the source
+ * failed to load, which the ladder is built to classify and heal.
+ */
+const isAutoplayRefusal = (error: unknown): boolean =>
+  error instanceof DOMException && error.name === 'NotAllowedError';
+
 export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPlaybackQueueApi => {
   const [status, setStatus] = useState<TtsPlaybackStatus>('idle');
   const [activeVerseRef, setActiveVerseRef] = useState<string | null>(null);
@@ -286,8 +296,26 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       await element.play();
     } catch (error) {
       if (isAbortError(error) || !isCurrent(session)) return;
-      // Autoplay refusal or immediate element failure the ladder cannot see.
-      failSession(session, error instanceof Error ? error : new Error(String(error)), item);
+      // ⚠ A rejected `play()` is TWO different situations, and treating them
+      // alike silently disabled the ENTIRE recovery ladder (found in a browser,
+      // phase 09; every unit test passed).
+      //
+      // For a load failure the element does two things at once: it rejects
+      // this promise AND fires `error`, which `superviseClipPlayback` — already
+      // attached above — catches and begins healing (HEAD probe, then 404 ⇒
+      // regenerate, 503 ⇒ wait out Retry-After, …). Failing the session here
+      // called `goIdle`, which aborts `session.controller` — the very signal
+      // that probe runs under. An immediate rejection always beat a network
+      // round trip, so recovery was killed before it could finish and every
+      // clip-START failure surfaced as a toast. Only mid-stream failures, where
+      // `play()` had already resolved, could ever reach the ladder.
+      //
+      // So: fail only on autoplay refusal, and otherwise stay silent and let
+      // the ladder own it. Failures still surface — the supervisor calls
+      // `onFailure` (i.e. `failSession`) when its retry budget runs out.
+      if (isAutoplayRefusal(error)) {
+        failSession(session, error instanceof Error ? error : new Error(String(error)), item);
+      }
       return;
     }
 
