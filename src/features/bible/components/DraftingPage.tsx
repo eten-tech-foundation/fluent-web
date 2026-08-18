@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { useMatch } from '@tanstack/react-router';
 import { Loader } from 'lucide-react';
 
+import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { getActiveGrants } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
@@ -33,10 +34,12 @@ const DraftingPage: React.FC = () => {
 
   const loaderData = rawLoaderData as LoaderData | undefined;
 
-  const projectItem =
-    currentProjectItem?.chapterAssignmentId === loaderData?.projectItem.chapterAssignmentId
+  // Safer null-guard: returns undefined when loaderData is not yet available
+  const projectItem = loaderData
+    ? currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
       ? currentProjectItem
-      : loaderData?.projectItem;
+      : loaderData.projectItem
+    : undefined;
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const targetProjectId = projectItem?.projectId;
@@ -68,6 +71,16 @@ const DraftingPage: React.FC = () => {
 
   // Observer view or explicit /view route is ALWAYS read-only
   const isReadOnly = !!viewMatch || isObserverForProject;
+
+  // Sync the user's global AI auto-enable preference to this chapter.
+  // Must be called after isReadOnly is derived — the hook skips syncing for read-only views.
+  useSyncGlobalAiSetting(
+    projectItem?.chapterAssignmentId,
+    projectItem?.projectId,
+    projectItem?.isAiEnabled,
+    isReadOnly,
+    projectItem
+  );
 
   if (!loaderData || !userdetail || !projectItem) {
     return (
