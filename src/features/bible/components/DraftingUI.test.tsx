@@ -148,10 +148,19 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
         { verseNumber: 2, text: 'Alternative verse 2 text' },
       ]);
     };
+    // A Bible with nothing for this passage: panel 2 is selected but has no verses, which is what
+    // puts the drafting page on its panel-two placeholder.
+    const handleSelectEmptyBible = () => {
+      bibleResourceName('Empty Bible');
+      openResourceBiblePanel(true);
+      selectPanel(2);
+      onBibleVersesChange([]);
+    };
     return (
       <div data-testid='mock-resource-panel'>
         <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
         <button onClick={handleSelectBible}>Select Alternative Bible</button>
+        <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
       </div>
     );
   },
@@ -558,6 +567,54 @@ describe('DraftingUI', () => {
 
       expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1');
       expect(handleTextChange).not.toHaveBeenCalledWith(2, 'Suggestion for 2');
+    });
+  });
+
+  describe('panel two placeholder', () => {
+    afterEach(() => {
+      config.features.rtePericope = false;
+    });
+
+    const renderInPericopeMode = async (user: ReturnType<typeof userEvent.setup>) => {
+      mockUsePericope.mockReturnValue(defaultPericopeHookResult({ isPericopeMode: true }));
+      useAppStore.setState({ displayMode: 'pericope' });
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('button', { name: 'Select Empty Bible' }));
+
+      // The placeholder has taken the grid's place: its message replaces the source column.
+      expect(
+        screen.queryByText('In the beginning God created the heaven and the earth.')
+      ).not.toBeInTheDocument();
+    };
+
+    it('keeps the rich text editor when the resource panel has nothing to show', async () => {
+      const user = userEvent.setup();
+      config.features.rtePericope = true;
+
+      await renderInPericopeMode(user);
+
+      expect(screen.getByTestId('pericope-rte-group')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Translation for verse 1')).not.toBeInTheDocument();
+    });
+
+    it('keeps the textareas there without the flag', async () => {
+      const user = userEvent.setup();
+      config.features.rtePericope = false;
+
+      await renderInPericopeMode(user);
+
+      expect(screen.getByLabelText('Translation for verse 1')).toBeInTheDocument();
+      expect(screen.queryByTestId('pericope-rte-group')).not.toBeInTheDocument();
     });
   });
 

@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import { config } from '@/lib/config';
-import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
+import {
+  type PericopeGroup,
+  type ProjectItem,
+  type Source,
+  type TargetVerse,
+  type VerseMarkers,
+} from '@/lib/types';
 
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
@@ -29,7 +35,7 @@ interface DraftingGridPericopeProps {
   isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
-  handleTextChange: (verseNumber: number, text: string) => void;
+  handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
@@ -49,7 +55,7 @@ interface TargetVersesGroupProps {
   lastSourceVerseNumber: number;
   isTranslationComplete: boolean;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
-  handleTextChange: (verseNumber: number, text: string) => void;
+  handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
@@ -220,6 +226,108 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   );
 };
 
+interface PericopeTargetGroupProps {
+  pericopes: PericopeGroup[];
+  groupIndex: number;
+  sourceVerses: Source[];
+  groupVerses: Source[];
+  verses: TargetVerse[];
+  activeVerseId: number;
+  readOnly: boolean;
+  globalNextUntouchedVerse: Source | null;
+  isTranslationComplete: boolean;
+  projectItem: ProjectItem;
+  textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
+  handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
+  handleActiveVerseChange: (verseNumber: number) => void;
+  handleKeyDown: (e: React.KeyboardEvent) => void;
+  handleNextClick: () => Promise<void>;
+  handleNextPericopeClick: () => Promise<void>;
+  aiSuggestions: Record<number, string>;
+  isAiThresholdMet: boolean;
+  isAiActive: boolean;
+  suggestionStatus: SuggestionStatus;
+}
+
+/**
+ * The editing surface for one pericope: the rich text editor behind the flag, the per-verse
+ * textareas without it.
+ *
+ * Every place that renders a pericope's target column goes through here, so the two surfaces can
+ * never disagree about which one is on — the drafting grid and the panel-two placeholder that
+ * stands in for it while the resource panel loads render the same editor (#400 review).
+ */
+export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
+  pericopes,
+  groupIndex,
+  sourceVerses,
+  groupVerses,
+  verses,
+  activeVerseId,
+  readOnly,
+  globalNextUntouchedVerse,
+  isTranslationComplete,
+  projectItem,
+  textareaRefs,
+  handleTextChange,
+  handleActiveVerseChange,
+  handleKeyDown,
+  handleNextClick,
+  handleNextPericopeClick,
+  aiSuggestions,
+  isAiThresholdMet,
+  isAiActive,
+  suggestionStatus,
+}) => {
+  if (config.features.rtePericope) {
+    return (
+      <Suspense fallback={null}>
+        <PericopeRteGroup
+          activeVerseId={activeVerseId}
+          aiSuggestions={aiSuggestions}
+          bookCode={projectItem.bookCode}
+          chapterAssignmentId={projectItem.chapterAssignmentId}
+          chapterNumber={projectItem.chapterNumber}
+          groupVerses={groupVerses}
+          handleActiveVerseChange={handleActiveVerseChange}
+          handleNextPericopeClick={handleNextPericopeClick}
+          handleTextChange={handleTextChange}
+          hasNextPericope={pericopes
+            .slice(groupIndex + 1)
+            .some(later => hasSourceBackedVerse(later, sourceVerses))}
+          isAiActive={isAiActive}
+          isAiThresholdMet={isAiThresholdMet}
+          isTranslationComplete={isTranslationComplete}
+          readOnly={readOnly}
+          suggestionStatus={suggestionStatus}
+          verses={verses}
+        />
+      </Suspense>
+    );
+  }
+
+  return (
+    <TargetVersesGroup
+      activeVerseId={activeVerseId}
+      aiSuggestions={aiSuggestions}
+      globalNextUntouchedVerse={globalNextUntouchedVerse}
+      groupVerses={groupVerses}
+      handleActiveVerseChange={handleActiveVerseChange}
+      handleKeyDown={handleKeyDown}
+      handleNextClick={handleNextClick}
+      handleTextChange={handleTextChange}
+      isAiActive={isAiActive}
+      isAiThresholdMet={isAiThresholdMet}
+      isTranslationComplete={isTranslationComplete}
+      lastSourceVerseNumber={sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0}
+      readOnly={readOnly}
+      suggestionStatus={suggestionStatus}
+      textareaRefs={textareaRefs}
+      verses={verses}
+    />
+  );
+};
+
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   pericopes,
   sourceVerses,
@@ -244,7 +352,6 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
-  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
 
   return (
     <>
@@ -345,49 +452,28 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   }
                 }}
               >
-                {config.features.rtePericope ? (
-                  <Suspense fallback={null}>
-                    <PericopeRteGroup
-                      activeVerseId={activeVerseId}
-                      aiSuggestions={aiSuggestions}
-                      bookCode={projectItem.bookCode}
-                      chapterAssignmentId={projectItem.chapterAssignmentId}
-                      chapterNumber={projectItem.chapterNumber}
-                      groupVerses={groupVerses}
-                      handleActiveVerseChange={handleActiveVerseChange}
-                      handleNextPericopeClick={handleNextPericopeClick}
-                      handleTextChange={handleTextChange}
-                      hasNextPericope={pericopes
-                        .slice(groupIndex + 1)
-                        .some(later => hasSourceBackedVerse(later, sourceVerses))}
-                      isAiActive={isAiActive}
-                      isAiThresholdMet={isAiThresholdMet}
-                      isTranslationComplete={isTranslationComplete}
-                      readOnly={readOnly}
-                      suggestionStatus={suggestionStatus}
-                      verses={verses}
-                    />
-                  </Suspense>
-                ) : (
-                  <TargetVersesGroup
-                    activeVerseId={activeVerseId}
-                    aiSuggestions={aiSuggestions}
-                    globalNextUntouchedVerse={globalNextUntouchedVerse}
-                    groupVerses={groupVerses}
-                    handleActiveVerseChange={handleActiveVerseChange}
-                    handleKeyDown={handleKeyDown}
-                    handleNextClick={handleNextClick}
-                    handleTextChange={handleTextChange}
-                    isAiActive={isAiActive}
-                    isAiThresholdMet={isAiThresholdMet}
-                    isTranslationComplete={isTranslationComplete}
-                    lastSourceVerseNumber={lastSourceVerseNumber}
-                    readOnly={readOnly}
-                    suggestionStatus={suggestionStatus}
-                    textareaRefs={textareaRefs}
-                    verses={verses}
-                  />
-                )}
+                <PericopeTargetGroup
+                  activeVerseId={activeVerseId}
+                  aiSuggestions={aiSuggestions}
+                  globalNextUntouchedVerse={globalNextUntouchedVerse}
+                  groupIndex={groupIndex}
+                  groupVerses={groupVerses}
+                  handleActiveVerseChange={handleActiveVerseChange}
+                  handleKeyDown={handleKeyDown}
+                  handleNextClick={handleNextClick}
+                  handleNextPericopeClick={handleNextPericopeClick}
+                  handleTextChange={handleTextChange}
+                  isAiActive={isAiActive}
+                  isAiThresholdMet={isAiThresholdMet}
+                  isTranslationComplete={isTranslationComplete}
+                  pericopes={pericopes}
+                  projectItem={projectItem}
+                  readOnly={readOnly}
+                  sourceVerses={sourceVerses}
+                  suggestionStatus={suggestionStatus}
+                  textareaRefs={textareaRefs}
+                  verses={verses}
+                />
               </div>
             </div>
           </div>

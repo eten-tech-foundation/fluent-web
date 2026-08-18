@@ -38,7 +38,7 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope, TargetVersesGroup } from './DraftingGridPericope';
+import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
@@ -621,8 +621,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
-  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
-
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
       if (isPericopeMode && pericopes) {
@@ -636,7 +634,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               </div>
             </div>
             <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map(group => {
+              {pericopes.map((group, groupIndex) => {
                 const groupVerses = sourceVerses.filter(sv =>
                   group.verses.some(gv => gv.verseNumber === sv.verseNumber)
                 );
@@ -671,20 +669,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         }
                       }}
                     >
-                      <TargetVersesGroup
+                      <PericopeTargetGroup
                         activeVerseId={activeVerseId}
                         aiSuggestions={aiSuggestions}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        groupIndex={groupIndex}
                         groupVerses={groupVerses}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
+                        handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
-                        lastSourceVerseNumber={lastSourceVerseNumber}
+                        pericopes={pericopes}
+                        projectItem={projectItem}
                         readOnly={readOnly}
+                        sourceVerses={sourceVerses}
                         suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verses={verses}
@@ -751,10 +753,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleActiveVerseChange,
       handleKeyDown,
       handleNextClick,
+      handleNextPericopeClick,
       handleTextChangeWithTracking,
       isTranslationComplete,
       isDraft,
-      lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
