@@ -4,7 +4,12 @@
  * field among others, and has to follow the app's theme.
  */
 
+/* `.editor-container` has to be in this list, not only the elements below it: the vendored
+   stylesheet paints it `color: #000` for its white standalone page, and everything inside the
+   editor inherits from it. Left out, the whole surface stays black text whatever the theme is,
+   which is invisible in dark mode. */
 .pericope-editor,
+.pericope-editor .editor-container,
 .pericope-editor .editor-inner,
 .pericope-editor [contenteditable] {
   background: transparent;
