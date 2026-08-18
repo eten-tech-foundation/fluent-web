@@ -71,6 +71,12 @@ interface PrefetchEntry {
   audioUrl?: string;
   element?: ClipAudioElement;
   promise: Promise<void>;
+  /**
+   * Unsubscribe for the watch on the early element's `error` (§9.2). An
+   * unwatched prefetch element can fail its load — an admission `503` is the
+   * ordinary way — and leave the entry claiming `ready` while holding a corpse.
+   */
+  detachWatch?: () => void;
 }
 
 interface PlaybackSession {
@@ -137,6 +143,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   const goIdle = (session: PlaybackSession): void => {
     teardownActiveClip(session);
     session.controller.abort(); // kills prefetch fetches + retry/watchdog timers (CB1)
+    for (const entry of session.prefetches.values()) entry.detachWatch?.();
     session.prefetches.clear();
     if (sessionRef.current === session) sessionRef.current = null;
     setStatus('idle');
@@ -183,8 +190,24 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
           const clip = await synthesizeItem(session, item);
           if (!isCurrent(session)) return;
           entry.audioUrl = clip.audioUrl;
-          entry.element = createElement(clip.audioUrl);
+          const early = createElement(clip.audioUrl);
+          entry.element = early;
           entry.state = 'ready';
+          // §9.2: `generate` cannot refuse on admission — it writes a sidecar
+          // and spends nothing — so a refusal lands HERE, on the early
+          // element's own fetch of the audio. Without this watch the entry
+          // stays `ready` over a dead element, `advance` adopts it, `play()`
+          // rejects, and the recovery ladder attached at adoption never sees
+          // the `error` that already fired. Found in a browser against a
+          // one-slot service: verse 1 spoke, verse 2 was silent (phase 09).
+          entry.detachWatch = onClipEvent(early, 'error', () => {
+            entry.state = 'failed';
+            entry.element = undefined;
+            // The row is not buffered after all; a stale badge would lie.
+            if (session.prefetches.get(index) === entry) {
+              setItemState(item.verseRef, undefined);
+            }
+          });
           if (session.prefetches.get(index) === entry) {
             setItemState(item.verseRef, 'buffered');
           }
@@ -231,7 +254,13 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     // Consume (then prune) the prefetch window behind/at the play position.
     const prefetched = session.prefetches.get(index);
     for (const key of [...session.prefetches.keys()]) {
-      if (key <= index) session.prefetches.delete(key);
+      if (key <= index) {
+        // Entries dropped unheard take their element watch with them; the one
+        // about to be adopted keeps watching until the decision below, so a
+        // refusal arriving mid-await still disqualifies it.
+        if (key !== index) session.prefetches.get(key)?.detachWatch?.();
+        session.prefetches.delete(key);
+      }
     }
 
     let audioUrl: string;
@@ -240,6 +269,8 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       await prefetched.promise;
       if (!isCurrent(session)) return;
     }
+    // Supervision takes over from here, so the prefetch-era watch stands down.
+    prefetched?.detachWatch?.();
     if (prefetched?.state === 'ready' && prefetched.audioUrl !== undefined) {
       // §5.3 step 3: start the already-buffered clip.
       audioUrl = prefetched.audioUrl;
