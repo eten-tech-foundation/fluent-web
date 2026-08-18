@@ -47,5 +47,9 @@
   "blockOther": "Other",
   "headingLevel": "Level",
   "decreaseIndent": "Decrease indent",
-  "increaseIndent": "Increase indent"
+  "increaseIndent": "Increase indent",
+  "display": "Display",
+  "verse": "Verse",
+  "pericope": "Pericope",
+  "chapter": "Chapter"
 }
