@@ -90,6 +90,61 @@ afterEach(() => {
 // playOne / playFrom basics (T1, §5.3)
 // ---------------------------------------------------------------------------
 
+/**
+ * Found in a browser under a ONE-SLOT ai container (phase 09, 2026-08-18):
+ * continuous play spoke verse 1, moved the highlight to verse 2, and then sat
+ * in silence with no toast.
+ *
+ * The prefetch is what breaks. `generate` never refuses on admission — it
+ * writes a sidecar and costs nothing — so the prefetch PROMISE resolves and the
+ * entry is marked `ready`. The refusal lands on the ELEMENT, whose `load()`
+ * fetches the audio and gets `503`. Nothing was listening to that element, so
+ * the entry kept saying `ready` while holding a corpse, and `advance` adopted
+ * it: `play()` rejected, and — correctly, since `45d5029` — the queue stayed
+ * quiet and left it to the recovery ladder. But the ladder attaches its `error`
+ * listener at adoption time, and the element had already fired `error` while
+ * still a prefetch. Nobody was left to heal it.
+ */
+describe('useTtsPlaybackQueue — a prefetched clip that never loaded (§9.2 admission)', () => {
+  it('does not adopt a prefetched element whose own load failed', async () => {
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+    await act(async () => {
+      elementFor(harness, items[0]).emit('playing');
+    });
+
+    // The prefetched element for verse 2 exists, and its fetch was refused.
+    const prefetched = harness.elements[1];
+    expect(prefetched.src).toBe(clipUrlFor(items[1].text));
+    await act(async () => {
+      prefetched.emit('error');
+    });
+    // A real element rejects the pending play() for a source that never loaded.
+    prefetched.playRejection = new DOMException('no source', 'NotSupportedError');
+
+    await act(async () => {
+      elementFor(harness, items[0]).emit('ended');
+    });
+
+    // A fresh element must be built rather than the dead one adopted.
+    expect(harness.elements.length).toBe(3);
+    const replacement = harness.elements[2];
+    expect(replacement.src).toBe(clipUrlFor(items[1].text));
+    expect(replacement.playCalls).toEqual([clipUrlFor(items[1].text)]);
+
+    await act(async () => {
+      replacement.emit('playing');
+    });
+    expect(harness.result.current.status).toBe('playing');
+    expect(harness.result.current.activeVerseRef).toBe('GEN 1:2');
+    expect(harness.onError).not.toHaveBeenCalled();
+  });
+});
+
 describe('useTtsPlaybackQueue — play actions', () => {
   it('playOne synthesizes exactly the text it was given, with the langCode hint (T6, T18)', async () => {
     const harness = createHarness();
