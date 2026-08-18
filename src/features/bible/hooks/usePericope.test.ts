@@ -35,7 +35,7 @@ const drafted = (...verseNumbers: number[]): TargetVerse[] =>
 
 const handleActiveVerseChange = vi.fn();
 const saveImmediately = vi.fn(() => Promise.resolve());
-const getSaveStatus = vi.fn(() => ({ hasUnsavedChanges: false }));
+const getSaveStatus = vi.fn((_verseNumber: number) => ({ hasUnsavedChanges: false }));
 
 const renderPericope = (activeVerseId: number, verses: TargetVerse[]) =>
   renderHook(() =>
@@ -134,6 +134,27 @@ describe('usePericope handleNextPericopeClick', () => {
 
     expect(saveImmediately).toHaveBeenCalledWith(2, { content: 'Draft 2', markers: undefined });
     expect(handleActiveVerseChange).toHaveBeenCalledWith(4);
+  });
+
+  it('flushes a verse edited earlier in the pericope, not only the active one', async () => {
+    // Verse 1 typed, then the cursor moved to verse 3 without either save firing yet. Both sit in
+    // the same editor, so both have to reach the server before the surface is navigated away.
+    getSaveStatus.mockImplementation(verseNumber => ({ hasUnsavedChanges: verseNumber !== 3 }));
+    const { result } = renderPericope(3, drafted(1, 2, 3));
+
+    await result.current.handleNextPericopeClick();
+
+    expect(saveImmediately).toHaveBeenCalledWith(1, { content: 'Draft 1', markers: undefined });
+    expect(handleActiveVerseChange).toHaveBeenCalledWith(4);
+  });
+
+  it('flushes the same pending verses on the textarea path, which edits a group at once', async () => {
+    getSaveStatus.mockImplementation(verseNumber => ({ hasUnsavedChanges: verseNumber === 1 }));
+    const { result } = renderPericope(3, drafted(1, 2, 3));
+
+    await result.current.handleNextClick();
+
+    expect(saveImmediately).toHaveBeenCalledWith(1, { content: 'Draft 1', markers: undefined });
   });
 
   it('leaves the verse-by-verse handler alone for the textarea path', async () => {

@@ -134,6 +134,24 @@ export const usePericope = ({
     });
   }, [isPericopeMode, currentPericopeGroup, lastRevealedVerseHasContent, verses]);
 
+  /**
+   * Write out every verse still sitting on its debounce timer, before navigating away from it.
+   *
+   * A pericope is editable as a whole — one rich text editor, or a column of textareas — so the
+   * verse the drafter is in is not the only one that can hold an unsaved edit. Typing in verse 1,
+   * moving to verse 3 and pressing next leaves verse 1 on a timer that the unmount clears, and the
+   * edit never reaches the server.
+   */
+  const flushPendingVerses = useCallback(async () => {
+    const pending = verses.filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges);
+
+    await Promise.all(
+      pending.map(verse =>
+        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      )
+    );
+  }, [verses, getSaveStatus, saveImmediately]);
+
   const handleNextClick = useCallback(async () => {
     if (!isPericopeMode) {
       revealNextVerse();
@@ -141,16 +159,7 @@ export const usePericope = ({
     }
     if (!currentPericopeGroup) return;
 
-    const currentActiveVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (currentActiveVerse) {
-      const status = getSaveStatus(currentActiveVerse.verseNumber);
-      if (status.hasUnsavedChanges) {
-        await saveImmediately(currentActiveVerse.verseNumber, {
-          content: currentActiveVerse.content,
-          markers: currentActiveVerse.markers,
-        });
-      }
-    }
+    await flushPendingVerses();
 
     if (globalNextUntouchedVerse) {
       handleActiveVerseChange(globalNextUntouchedVerse.verseNumber);
@@ -179,10 +188,8 @@ export const usePericope = ({
     pericopes,
     currentPericopeGroup,
     activeVerseId,
-    verses,
     globalNextUntouchedVerse,
-    getSaveStatus,
-    saveImmediately,
+    flushPendingVerses,
     handleActiveVerseChange,
     revealNextVerse,
   ]);
@@ -199,16 +206,7 @@ export const usePericope = ({
   const handleNextPericopeClick = useCallback(async () => {
     if (!isPericopeMode || !currentPericopeGroup) return;
 
-    const currentActiveVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (currentActiveVerse) {
-      const status = getSaveStatus(currentActiveVerse.verseNumber);
-      if (status.hasUnsavedChanges) {
-        await saveImmediately(currentActiveVerse.verseNumber, {
-          content: currentActiveVerse.content,
-          markers: currentActiveVerse.markers,
-        });
-      }
-    }
+    await flushPendingVerses();
 
     const currentIdx = pericopes.findIndex(
       g => g.pericopeNumber === currentPericopeGroup.pericopeNumber
@@ -224,11 +222,8 @@ export const usePericope = ({
     isPericopeMode,
     pericopes,
     currentPericopeGroup,
-    activeVerseId,
-    verses,
     sourceVerses,
-    getSaveStatus,
-    saveImmediately,
+    flushPendingVerses,
     handleActiveVerseChange,
   ]);
 
