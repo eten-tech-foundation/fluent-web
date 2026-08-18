@@ -51,6 +51,7 @@ export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
   'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
 > {
+  activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];
   playFromGroup: SourceTtsPlaybackApi['playFromGroup'];
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
