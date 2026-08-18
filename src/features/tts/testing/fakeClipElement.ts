@@ -14,13 +14,23 @@ export class FakeClipElement implements ClipAudioElement {
   playbackRate = 1;
   /** `src` value at each `load()` call — the reload assertions read this. */
   loadCalls: string[] = [];
+  /**
+   * Rejection for the next `play()`, if any. A real element rejects this
+   * promise for two very different reasons — autoplay refusal and a source
+   * that failed to load — and until phase 09 this fake could only resolve, so
+   * the queue's handling of a rejected `play()` was never exercised at all.
+   * That is the hole a live 404 fell through.
+   */
+  playRejection?: unknown;
   private listeners = new Map<string, Set<() => void>>();
 
   load(): void {
     this.loadCalls.push(this.src);
   }
   play(): Promise<void> {
-    return Promise.resolve();
+    return this.playRejection === undefined
+      ? Promise.resolve()
+      : Promise.reject(this.playRejection);
   }
   pause(): void {}
   addEventListener(type: string, listener: () => void): void {

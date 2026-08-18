@@ -300,6 +300,101 @@ describe('useTtsPlaybackQueue — stop', () => {
 // Failure, rate passthrough, indeterminate duration (§5.2, §6.2)
 // ---------------------------------------------------------------------------
 
+/**
+ * A rejected `play()` — the seam that silently disabled the recovery ladder.
+ *
+ * Found in a real browser during phase 09 (2026-08-18) by pointing a clip at a
+ * URL that 404s. The element rejects `play()` AND fires `error` for the same
+ * load failure; the queue used to fail the session on the rejection, which
+ * aborts `session.controller` — the signal `superviseClipPlayback`'s HEAD probe
+ * runs under. An immediate rejection always beats a network round trip, so the
+ * ladder was killed mid-probe and EVERY clip-start failure became a toast:
+ * 404s never regenerated, and 503s never waited out their Retry-After.
+ *
+ * Nothing caught it because `FakeClipElement.play()` could only resolve, so
+ * this branch had no coverage at all, and the engine's own ladder tests
+ * exercise the supervisor in isolation with no queue to race it.
+ */
+describe('useTtsPlaybackQueue — a rejected play() must not outrun the ladder', () => {
+  const loadFailure = (): DOMException =>
+    new DOMException('Failed to load because no supported source was found.', 'NotSupportedError');
+  const autoplayRefusal = (): DOMException =>
+    new DOMException('play() failed because the user did not interact first.', 'NotAllowedError');
+
+  /** A harness whose every clip element rejects `play()` with `rejection`. */
+  const harnessRejectingPlay = (rejection: DOMException): Harness => {
+    const elements: FakeClipElement[] = [];
+    const harness = createHarness({
+      createElement: (src: string) => {
+        const element = new FakeClipElement();
+        element.src = src;
+        element.preload = 'auto';
+        element.playRejection = rejection;
+        element.load();
+        elements.push(element);
+        return element;
+      },
+    });
+    harness.elements.length = 0;
+    harness.elements.push(...elements);
+    return harness;
+  };
+
+  it('a source that fails to load does NOT fail the session — the ladder owns it', async () => {
+    const harness = harnessRejectingPlay(loadFailure());
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+
+    // No toast: `superviseClipPlayback` is still probing the URL to classify
+    // it. Before the fix this fired immediately and tore the session down.
+    expect(harness.onError).not.toHaveBeenCalled();
+  });
+
+  it('the session signal stays live, so the in-flight HEAD probe survives', async () => {
+    // The mechanism itself: goIdle() aborts this signal, and the probe runs
+    // under it. Killing it is what turned every 404 into a toast.
+    const signals: Array<AbortSignal | undefined> = [];
+    const harness = createHarness({
+      engine: {
+        synthesize: (request: TtsRequest, signal?: AbortSignal) => {
+          signals.push(signal);
+          return Promise.resolve({ audioUrl: clipUrlFor(request.text) });
+        },
+      },
+      createElement: (src: string) => {
+        const element = new FakeClipElement();
+        element.src = src;
+        element.playRejection = loadFailure();
+        element.load();
+        return element;
+      },
+    });
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
+  });
+
+  it('autoplay refusal still fails the session — no gesture is not a clip problem', async () => {
+    const harness = harnessRejectingPlay(autoplayRefusal());
+    const item = verse(1);
+
+    await act(async () => {
+      harness.result.current.playOne(item);
+    });
+
+    expect(harness.onError).toHaveBeenCalledTimes(1);
+    expect(harness.onError.mock.calls[0][1]).toEqual(item);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+  });
+});
+
 describe('useTtsPlaybackQueue — failure and passthrough', () => {
   it('a synthesis failure surfaces exactly once and leaves no stale highlight (§5.2)', async () => {
     const harness = createHarness({
