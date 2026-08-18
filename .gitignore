@@ -39,3 +39,5 @@ coverage
 # Generated files
 stats.html
 .tanstack
+# Local PR demo recordings (never committed)
+.playwright-mcp/
