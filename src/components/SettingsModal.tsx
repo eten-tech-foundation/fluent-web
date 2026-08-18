@@ -25,7 +25,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         <div className='space-y-4 py-4'>
           <DisplayModeToggle />
 
-          {/* Card 2: Light/Dark Mode (Sized to the same width as Scripture Display) */}
+          {/* Card 2: Light/Dark Mode (sized to the same width as the Display card above) */}
           <ThemeToggle />
 
           <AiTranslationSettings />
