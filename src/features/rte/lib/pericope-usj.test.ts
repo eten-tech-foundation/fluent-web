@@ -290,6 +290,74 @@ describe('paragraph markers', () => {
     });
   });
 
+  it('anchors the offset-zero marker to the paragraph the verse text is really in', () => {
+    // Enter pressed right after the verse marker and before typing: the paragraph the marker sits
+    // in ends up empty, and the words land in the one below it. Reading the marker off the empty
+    // paragraph would store `p` and render the verse unstyled on reload.
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '1' }] },
+        { type: 'para', marker: 'q1', content: ['Sung, not spoken.'] },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)[0]).toEqual({
+      verseNumber: 1,
+      text: 'Sung, not spoken.',
+      markers: { paragraphs: [{ marker: 'q1', offset: 0 }] },
+    });
+  });
+
+  it('keeps the paragraph of a verse whose marker ends the paragraph above', () => {
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'p',
+          content: [
+            { type: 'verse', marker: 'v', number: '1' },
+            'First verse.',
+            { type: 'verse', marker: 'v', number: '2' },
+          ],
+        },
+        { type: 'para', marker: 'q1', content: ['Second verse.'] },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)[1]).toEqual({
+      verseNumber: 2,
+      text: 'Second verse.',
+      markers: { paragraphs: [{ marker: 'q1', offset: 0 }] },
+    });
+  });
+
+  it('keeps the opening marker of a verse the drafter typed in front of', () => {
+    // The editor puts the verse number in a node the caret can sit before, so text can land ahead
+    // of the first verse marker. It has no earlier verse to belong to and joins the one that
+    // follows, which therefore still starts the paragraph.
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'q1',
+          content: ['Typed in front. ', { type: 'verse', marker: 'v', number: '1' }, 'The verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)[0]).toEqual({
+      verseNumber: 1,
+      text: 'Typed in front. The verse.',
+      markers: { paragraphs: [{ marker: 'q1', offset: 0 }] },
+    });
+  });
+
   it('anchors offsets to visible text, unmoved by a footnote', () => {
     const usj: Usj = {
       type: 'USJ',

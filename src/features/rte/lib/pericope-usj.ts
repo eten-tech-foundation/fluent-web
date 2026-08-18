@@ -150,7 +150,13 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
         continue;
       }
       if (item.type === 'verse') {
-        const opensPara = !paraHasPriorContent && buffer.trim() === '';
+        // Buffered text normally belongs to the verse before this one, which is what stops this
+        // verse from owning the paragraph. Before the document's first verse marker there is no
+        // such verse: the editor lets the caret sit in front of it, and that text joins the verse
+        // that follows (the flush below keeps the buffer, having no verse to file it under). The
+        // verse still starts the paragraph, so it keeps its offset-zero marker.
+        const opensPara =
+          !paraHasPriorContent && (currentVerse === undefined || buffer.trim() === '');
         flush();
         paraHasPriorContent = true;
         currentOpenedPara = opensPara;
@@ -172,8 +178,16 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
     const kept = records.filter(record => record.text !== '');
     const paragraphs: VerseParagraph[] = [];
 
-    if (records[0]?.openedByVerse) {
-      paragraphs.push({ marker: records[0].paraMarker, offset: 0 });
+    // Which paragraph offset 0 belongs to: the one the verse's visible text actually starts in,
+    // not the one its marker happens to sit in. Pressing Enter right after a verse marker leaves
+    // an empty paragraph holding nothing but the marker; that paragraph is not persisted (there is
+    // no character to anchor it to), so the paragraph the text landed in is the one the verse
+    // opens. A verse with no text at all keeps its own paragraph — its marker is still a position
+    // the editor can rebuild.
+    const firstTextIndex = records.findIndex(record => record.text !== '');
+    const opener = records[Math.max(firstTextIndex, 0)];
+    if (records.length > 0 && (firstTextIndex > 0 || opener.openedByVerse)) {
+      paragraphs.push({ marker: opener.paraMarker, offset: 0 });
     }
     let offset = 0;
     kept.forEach((record, index) => {
@@ -209,19 +223,16 @@ export function changedVerses(
   next: PericopeVerseText[]
 ): PericopeVerseText[] {
   const nextByNumber = new Map(next.map(verse => [verse.verseNumber, verse]));
+  const changed: PericopeVerseText[] = [];
 
-  return previous
-    .map(verse => {
-      const after = nextByNumber.get(verse.verseNumber);
-      return {
-        verseNumber: verse.verseNumber,
-        text: after?.text ?? '',
-        markers: after?.markers ?? null,
-      };
-    })
-    .filter(after => {
-      const before = previous.find(verse => verse.verseNumber === after.verseNumber);
-      if (!before) return true;
-      return before.text !== after.text || markersKey(before.markers) !== markersKey(after.markers);
-    });
+  for (const before of previous) {
+    const after = nextByNumber.get(before.verseNumber);
+    const text = after?.text ?? '';
+    const markers = after?.markers ?? null;
+    if (before.text !== text || markersKey(before.markers) !== markersKey(markers)) {
+      changed.push({ verseNumber: before.verseNumber, text, markers });
+    }
+  }
+
+  return changed;
 }
