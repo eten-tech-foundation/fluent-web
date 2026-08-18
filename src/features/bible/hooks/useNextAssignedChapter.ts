@@ -74,6 +74,10 @@ export const useNextAssignedChapter = ({
 
     return {
       label: `${next.book} ${next.chapterNumber}`,
+      // The assignment id, because that is what the destination page renders
+      // (`DraftingPage` resolves its `projectItem` by it) — a book/chapter
+      // pair would also match the same chapter in another project unit.
+      pageKey: String(next.chapterAssignmentId),
       navigate: async () => {
         // Flush BEFORE the route tears this page down; the drafting page has
         // no unmount flush of its own, so an in-flight debounced edit would

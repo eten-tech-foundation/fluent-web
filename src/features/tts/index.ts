@@ -49,6 +49,13 @@ export {
 } from './lib/buildTtsQueueItems';
 
 export {
+  armTtsContinuation,
+  claimTtsContinuation,
+  disarmTtsContinuation,
+  TTS_CONTINUATION_TTL_MS,
+} from './lib/playbackContinuation';
+
+export {
   isRowFullyVisible,
   type ScrollableRow,
   scrollRowIntoViewIfNeeded,

@@ -14,12 +14,17 @@
  * which keeps the fail-closed check next to the UI it hides (§6.3, T12).
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { buildTtsQueueItems, findTtsQueueIndex, type TtsRowDraft } from '../lib/buildTtsQueueItems';
+import {
+  armTtsContinuation,
+  claimTtsContinuation,
+  disarmTtsContinuation,
+} from '../lib/playbackContinuation';
 import {
   type ScrollableRow,
   scrollRowIntoViewIfNeeded,
@@ -38,6 +43,11 @@ export interface TtsNextPage {
   /** Human-readable, e.g. "Genesis 2". */
   label: string;
   /**
+   * Stable identity of the page `navigate` opens, matched against the next
+   * host's own `pageKey` so continued playback starts THERE and nowhere else.
+   */
+  pageKey: string;
+  /**
    * Perform the navigation. May be async so the host can flush pending work
    * (drafting debounces saves) BEFORE the page unmounts.
    */
@@ -54,6 +64,12 @@ export interface UseSourceTtsPlaybackOptions {
   getViewport: () => ScrollViewport | null | undefined;
   /** Omit (or pass null) when nothing follows this page. */
   nextPage?: TtsNextPage | null;
+  /**
+   * Stable identity of the page this host is showing. Supplying it is what
+   * lets a confirmed boundary crossing resume playback on arrival (T16);
+   * a host that omits it simply never auto-starts.
+   */
+  pageKey?: string;
 }
 
 export interface SourceTtsPlaybackApi {
@@ -82,7 +98,7 @@ export interface SourceTtsPlaybackApi {
 export const useSourceTtsPlayback = (
   options: UseSourceTtsPlaybackOptions
 ): SourceTtsPlaybackApi => {
-  const { engine, rows, getRowElement, getViewport, nextPage } = options;
+  const { engine, rows, getRowElement, getViewport, nextPage, pageKey } = options;
   const { t } = useTranslation();
 
   const [isBoundaryOpen, setIsBoundaryOpen] = useState(false);
@@ -164,6 +180,10 @@ export const useSourceTtsPlayback = (
       return;
     }
     setIsContinuing(true);
+    // Armed BEFORE navigating, because the destination can mount while
+    // `navigate` is still settling — arming afterwards would arrive too late
+    // for the page it is meant for.
+    armTtsContinuation(target.pageKey);
     void (async () => {
       try {
         // The host flushes pending saves inside `navigate` before it moves —
@@ -171,13 +191,31 @@ export const useSourceTtsPlayback = (
         await target.navigate();
       } catch {
         // Staying put on a failed navigation is the safe outcome; the host
-        // owns any messaging about why it could not move.
+        // owns any messaging about why it could not move. Nothing moved, so
+        // the promise of continued playback is withdrawn with it.
+        disarmTtsContinuation();
       } finally {
         setIsContinuing(false);
         setIsBoundaryOpen(false);
       }
     })();
   }, []);
+
+  // T16, second half: arriving on the page a confirmed "Continue" promised.
+  // The prompt says "Continue on the next page?", so turning the page without
+  // resuming keeps only half of that bargain — the queue died with the route
+  // that owned it, and something on this side has to start the reading again.
+  //
+  // Starts at the first playable row: continuing means from the top of what
+  // was just opened, and `items` is already document-ordered and filtered.
+  // The claim is what makes this safe — it succeeds only for the promised
+  // page, only once, and only within the arming window, so an ordinary visit
+  // never starts talking on its own.
+  useEffect(() => {
+    if (!pageKey || items.length === 0) return;
+    if (!claimTtsContinuation(pageKey)) return;
+    queueRef.current.playFrom(items, 0);
+  }, [pageKey, items]);
 
   const playableRefs = useMemo(() => new Set(items.map(item => item.verseRef)), [items]);
 

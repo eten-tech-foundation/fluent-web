@@ -323,7 +323,7 @@ const selectReferenceBible = async () => {
 describe('DraftingUI — source-TTS gate', () => {
   it('renders no controls and no prompt when the feature is off', () => {
     mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
-    mockNextPage = { label: 'Genesis 2', navigate: vi.fn() };
+    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
     boundaryOpen = true;
 
     renderDrafting();
@@ -526,7 +526,7 @@ describe('DraftingUI — end-of-chapter prompt', () => {
   });
 
   it('names the next chapter when one is assigned', () => {
-    mockNextPage = { label: 'Genesis 2', navigate: vi.fn() };
+    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
     boundaryOpen = true;
 
     renderDrafting();
