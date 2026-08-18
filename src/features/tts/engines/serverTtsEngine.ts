@@ -312,6 +312,24 @@ export const superviseClipPlayback = (options: ClipPlaybackSupervisionOptions): 
   const reload = (): void => {
     if (detached || signal.aborted) return;
     resetClipElement(element, currentUrl);
+    // `load()` leaves the element PAUSED — "play() is the only audible
+    // trigger" (audioElement.ts). So recovery has to restart playback itself.
+    // Without this the ladder repaired the source perfectly and left the
+    // listener in silence: it classified the failure, re-authorized the clip,
+    // pointed the element at the fresh URL — and never made a sound. That was
+    // true of EVERY recovery class, not just the 404 rung (phase 09, found in
+    // a browser once the clip-start teardown stopped masking it).
+    void element.play().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        // The browser refused to resume without a fresh gesture. Nothing about
+        // the clip is wrong, so no retry can help — surface it.
+        fail('midStream', 'TTS playback was refused by the browser after recovery');
+        return;
+      }
+      // Any other rejection means the new source failed too; the element fires
+      // `error` for that and re-enters this ladder under its own retry budget.
+    });
     armWatchdog();
   };
 
