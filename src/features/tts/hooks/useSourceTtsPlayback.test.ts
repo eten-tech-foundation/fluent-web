@@ -9,6 +9,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
+import { disarmTtsContinuation } from '../lib/playbackContinuation';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
 import {
@@ -51,6 +52,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   itemStates = {};
   status = 'idle';
+  // The continuation token is module state: an arm left behind by one test
+  // would make the next test's page start playing on mount.
+  disarmTtsContinuation();
 });
 
 /** Row 2 is a reference-panel hole, so the queue is v1, v3, v4 (§5.1). */
@@ -78,7 +82,11 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
   return { result, rerender, scrollIntoView, focus };
 };
 
-const nextPage = (navigate: Mock = vi.fn()): TtsNextPage => ({ label: 'Genesis 2', navigate });
+const nextPage = (navigate: Mock = vi.fn()): TtsNextPage => ({
+  label: 'Genesis 2',
+  pageKey: 'chapter-2',
+  navigate,
+});
 
 describe('useSourceTtsPlayback — play actions', () => {
   it('plays one verse without arming the queue (T1)', () => {
@@ -213,6 +221,97 @@ describe('useSourceTtsPlayback — boundary prompt (T16)', () => {
 
     expect(result.current.boundaryPrompt.isContinuing).toBe(false);
     expect(result.current.boundaryPrompt.open).toBe(false);
+  });
+});
+
+describe('useSourceTtsPlayback — continuing across the boundary (T16)', () => {
+  it('resumes on the promised page, from its first playable verse', async () => {
+    // Page 1 confirms the prompt...
+    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    // ...and the next page mounts as its own host, as the route change makes it.
+    setup({ pageKey: 'chapter-2' });
+
+    expect(playFrom).toHaveBeenCalledTimes(1);
+    expect(playFrom).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ verseRef: 'GEN 1:1' }),
+        expect.objectContaining({ verseRef: 'GEN 1:3' }),
+        expect.objectContaining({ verseRef: 'GEN 1:4' }),
+      ],
+      0
+    );
+  });
+
+  it('does not play on a page that was merely visited', () => {
+    setup({ pageKey: 'chapter-2' });
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('does not play on a page other than the one confirmed', async () => {
+    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    setup({ pageKey: 'chapter-9' });
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('does not re-play when the promised page re-renders', async () => {
+    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    const arrived = setup({ pageKey: 'chapter-2' });
+    act(() => arrived.rerender());
+
+    expect(playFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not arm anything when the prompt is declined', () => {
+    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    act(() => result.current.boundaryPrompt.onDismiss());
+
+    setup({ pageKey: 'chapter-2' });
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('withdraws the promise when the navigation rejects', async () => {
+    const navigate = vi.fn(() => Promise.reject(new Error('nope')));
+    const { result } = setup({ nextPage: nextPage(navigate), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    // Nothing moved, so the destination — reached later by hand — is silent.
+    setup({ pageKey: 'chapter-2' });
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('stays silent when the arriving page has no playable rows', async () => {
+    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
+    act(() => queueOptions.onBoundaryReached?.());
+    await act(async () => {
+      result.current.boundaryPrompt.onContinue();
+    });
+
+    setup({ pageKey: 'chapter-2', rows: [{ verseRef: 'GEN 2:1', text: null }] });
+
+    expect(playFrom).not.toHaveBeenCalled();
   });
 });
 

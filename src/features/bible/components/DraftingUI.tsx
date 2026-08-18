@@ -943,6 +943,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     getRowElement: getTtsRowElement,
     getViewport: getTtsViewport,
     nextPage: ttsNextPage,
+    // T16: names THIS page so a "Continue" confirmed on the previous chapter
+    // resumes here, and only here. Read-only `/view` gets a key too and is
+    // harmless — nothing ever arms one, since it offers no next page.
+    pageKey: String(projectItem.chapterAssignmentId),
   });
 
   // Row identity for the queue is the verse number as a string; the grid asks
