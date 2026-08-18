@@ -667,7 +667,7 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     expect(screen.getAllByRole('button', { name: /^Play from pericope/ })).toHaveLength(2);
   });
 
-  it('washes the group that contains the playing verse, and only that group', () => {
+  it('marks the group that contains the playing verse, and only that group', () => {
     enterPericopeMode();
     activeVerseRef = '2'; // verse 2 lives in the first group
 
@@ -676,6 +676,23 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     const speaking = screen.getAllByTestId('tts-active-group');
     expect(speaking).toHaveLength(1);
     expect(speaking[0]).toHaveTextContent('And the earth was without form');
+    // Assert the marker the LISTENER sees, not merely that a test hook exists:
+    // the first cut carried this testid while rendering a 5% wash that dark
+    // mode overrode entirely, so the group was "marked" and yet invisible.
+    expect(speaking[0].className).toContain('border-l-primary');
+  });
+
+  it('leaves every silent group with a transparent rail, so the grid never shifts', () => {
+    enterPericopeMode();
+    activeVerseRef = '2';
+
+    renderDrafting();
+
+    const silent = screen
+      .getAllByText(/And God said, Let there be light/)
+      .map(node => node.closest('[style*="grid-template-columns"]'))
+      .find(Boolean);
+    expect(silent?.className).toContain('border-l-transparent');
   });
 
   it('offers Stop on every group while the queue is busy (§5.1 is queue-wide)', () => {
