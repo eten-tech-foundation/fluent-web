@@ -238,6 +238,46 @@ describe('useTtsPlaybackQueue — play actions', () => {
     expect(harness.result.current.activeVerseRef).toBeNull();
     expect(harness.result.current.itemStates).toEqual({});
   });
+
+  it('playFrom with emitBoundary false still advances and still goes idle, but raises NO boundary (G3a)', async () => {
+    // Pericope mode reads a bounded slice of the page. Reaching the end of THAT
+    // slice must not raise "Continue on the next page?" — there is more of this
+    // page left — but everything else about the run is unchanged.
+    const harness = createHarness();
+    const items = [verse(1), verse(2)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0, false);
+    });
+    await act(async () => {
+      elementFor(harness, items[0]).emit('ended');
+    });
+
+    // It really is a multi-item run, not a playOne in disguise.
+    expect(harness.result.current.activeVerseRef).toBe(items[1].verseRef);
+
+    await act(async () => {
+      elementFor(harness, items[1]).emit('ended');
+    });
+
+    expect(harness.onBoundaryReached).not.toHaveBeenCalled();
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+  });
+
+  it('playFrom defaults to emitting the boundary, so verse mode is unchanged (G3a)', async () => {
+    const harness = createHarness();
+    const items = [verse(1)];
+
+    await act(async () => {
+      harness.result.current.playFrom(items, 0);
+    });
+    await act(async () => {
+      elementFor(harness, items[0]).emit('ended');
+    });
+
+    expect(harness.onBoundaryReached).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
