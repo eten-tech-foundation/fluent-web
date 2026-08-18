@@ -58,8 +58,16 @@ export interface TtsPlaybackQueueApi {
   playbackRate: number;
   /** T1: play one verse; stops at clip end, never advances. */
   playOne: (item: TtsQueueItem) => void;
-  /** T1: play from here; advances through the list on `ended` (§6.2). */
-  playFrom: (items: TtsQueueItem[], startIndex: number) => void;
+  /**
+   * T1: play from here; advances through the list on `ended` (§6.2).
+   *
+   * `emitBoundary` (default true) controls whether reaching the end of THIS
+   * list raises T16's end-of-page signal. A caller playing a bounded slice of
+   * the page — pericope mode reads one group and stops (G3a) — passes false
+   * unless the slice ends where the page ends, because "Continue on the next
+   * page?" is a lie when there is more of this page left.
+   */
+  playFrom: (items: TtsQueueItem[], startIndex: number, emitBoundary?: boolean) => void;
   /** §5.1: cancel queue, pause element, clear prefetch intent + highlight. */
   stop: () => void;
   /** §6.2 (T11): element passthrough only — NEVER triggers synthesis. */
@@ -374,8 +382,8 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     startSession([item], 0, false);
   };
 
-  const playFrom = (items: TtsQueueItem[], startIndex: number): void => {
-    startSession(items, startIndex, true);
+  const playFrom = (items: TtsQueueItem[], startIndex: number, emitBoundary = true): void => {
+    startSession(items, startIndex, emitBoundary);
   };
 
   const setPlaybackRate = (rate: number): void => {

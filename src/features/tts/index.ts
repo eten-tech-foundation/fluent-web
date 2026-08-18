@@ -39,6 +39,8 @@ export {
 
 export { TtsVerseControls, type TtsVerseControlsProps } from './components/TtsVerseControls';
 
+export { TtsGroupControls, type TtsGroupControlsProps } from './components/TtsGroupControls';
+
 export { TtsBoundaryPrompt, type TtsBoundaryPromptProps } from './components/TtsBoundaryPrompt';
 
 export {
