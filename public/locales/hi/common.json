@@ -46,5 +46,8 @@
   "blockPoetryLine": "काव्य पंक्ति",
   "headingLevel": "स्तर",
   "decreaseIndent": "इंडेंट घटाएँ",
-  "increaseIndent": "इंडेंट बढ़ाएँ"
+  "increaseIndent": "इंडेंट बढ़ाएँ",
+  "display": "प्रदर्शन",
+  "verse": "पद",
+  "chapter": "अध्याय"
 }
