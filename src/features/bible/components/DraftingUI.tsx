@@ -969,6 +969,35 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     onStop: tts.stop,
   });
 
+  // G3a: pericope mode's own props. A different shape from the verse grid's on
+  // purpose — that surface has no per-row control and no "play from here", so
+  // handing it the row API would advertise behaviour it does not offer.
+  // Undefined when the flag is off, exactly like the verse-mode props.
+  const ttsPericopeGridProps = useMemo(
+    () =>
+      ttsEnabled
+        ? {
+            isBusy: tts.isBusy,
+            isRowPlayable: tts.isRowPlayable,
+            isRowLoading: tts.isRowLoading,
+            isGroupSpeaking: tts.isGroupSpeaking,
+            playGroup: tts.playGroup,
+            stop: tts.stop,
+            verseRefFor: ttsVerseRefFor,
+          }
+        : undefined,
+    [
+      ttsEnabled,
+      tts.isBusy,
+      tts.isRowPlayable,
+      tts.isRowLoading,
+      tts.isGroupSpeaking,
+      tts.playGroup,
+      tts.stop,
+      ttsVerseRefFor,
+    ]
+  );
+
   // Undefined when the flag is off — the grid then renders exactly as before.
   const ttsGridProps = useMemo(
     () =>
@@ -1249,6 +1278,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}
                           textareaRefs={textareaRefs}
+                          tts={ttsPericopeGridProps}
                           verseRefs={verseRefs}
                           verses={verses}
                         />

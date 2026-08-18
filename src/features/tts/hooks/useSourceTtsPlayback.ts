@@ -83,6 +83,15 @@ export interface SourceTtsPlaybackApi {
   isRowLoading: (verseRef: string) => boolean;
   playVerse: (verseRef: string) => void;
   playFromVerse: (verseRef: string) => void;
+  /**
+   * G3a: play a bounded GROUP of rows and stop at its end — pericope mode's
+   * unit of playback is the pericope, not the verse. Refs may be given in any
+   * order and may include unplayable rows; document order and playability come
+   * from the page's own item list.
+   */
+  playGroup: (verseRefs: readonly string[]) => void;
+  /** G3a: true while the playing row is one of these — the group-level highlight. */
+  isGroupSpeaking: (verseRefs: readonly string[]) => boolean;
   stop: () => void;
   /** Boundary prompt state — feed straight into `TtsBoundaryPrompt`. */
   boundaryPrompt: {
@@ -162,6 +171,33 @@ export const useSourceTtsPlayback = (
     if (index < 0) return;
     // T1: continuous from here through the end of this page's list.
     queueRef.current.playFrom(itemsRef.current, index);
+  }, []);
+
+  /**
+   * G3a: pericope mode reads one group and stops there.
+   *
+   * No new playback mode was needed for this: `playFrom` stops at the end of
+   * whatever array it is handed, so a bounded blob is simply a SHORTER array
+   * built from the page's own document-ordered, playability-filtered items.
+   *
+   * The one thing that does need saying explicitly is the boundary. Reaching
+   * the end of a list normally raises T16's "Continue on the next page?", which
+   * is a lie for a group that ends mid-chapter — there is more of this page. So
+   * the signal is emitted only when this group's last row is also the PAGE's
+   * last row, which is exactly the case where the listener really has reached
+   * the end of the page.
+   */
+  const playGroup = useCallback((verseRefs: readonly string[]) => {
+    const wanted = new Set(verseRefs);
+    const pageItems = itemsRef.current;
+    const groupItems = pageItems.filter(item => wanted.has(item.verseRef));
+    if (groupItems.length === 0) return; // nothing playable in this group (§5.1)
+
+    const lastOfGroup = groupItems[groupItems.length - 1];
+    const lastOfPage = pageItems[pageItems.length - 1];
+    const reachesPageEnd = lastOfGroup.verseRef === lastOfPage.verseRef;
+
+    queueRef.current.playFrom(groupItems, 0, reachesPageEnd);
   }, []);
 
   const stop = useCallback(() => {
@@ -253,6 +289,18 @@ export const useSourceTtsPlayback = (
     [queue.itemStates]
   );
 
+  /**
+   * G3a: the group-level highlight, derived from the SAME `activeVerseRef` the
+   * row highlight uses — which is what makes a display-mode switch mid-playback
+   * safe to leave running: each layout can render the playing verse in its own
+   * idiom without the queue knowing which layout is on screen.
+   */
+  const isGroupSpeaking = useCallback(
+    (verseRefs: readonly string[]) =>
+      queue.activeVerseRef !== null && verseRefs.includes(queue.activeVerseRef),
+    [queue.activeVerseRef]
+  );
+
   return {
     status: queue.status,
     activeVerseRef: queue.activeVerseRef,
@@ -261,6 +309,8 @@ export const useSourceTtsPlayback = (
     isRowLoading,
     playVerse,
     playFromVerse,
+    playGroup,
+    isGroupSpeaking,
     stop,
     boundaryPrompt: {
       open: isBoundaryOpen,

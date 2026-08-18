@@ -36,11 +36,12 @@ const playFrom = vi.fn();
 const stop = vi.fn();
 let itemStates: Record<string, string> = {};
 let status = 'idle';
+let activeVerseRef: string | null = null;
 
 vi.mock('./useTtsPlaybackQueue', () => ({
   useTtsPlaybackQueue: (options: UseTtsPlaybackQueueOptions) => {
     queueOptions = options;
-    return { status, activeVerseRef: null, itemStates, playOne, playFrom, stop };
+    return { status, activeVerseRef, itemStates, playOne, playFrom, stop };
   },
 }));
 
@@ -52,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   itemStates = {};
   status = 'idle';
+  activeVerseRef = null;
   // The continuation token is module state: an arm left behind by one test
   // would make the next test's page start playing on mount.
   disarmTtsContinuation();
@@ -137,6 +139,65 @@ describe('useSourceTtsPlayback — play actions', () => {
     act(() => result.current.stop());
 
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G3a — pericope mode plays a bounded group and stops at its end
+// ---------------------------------------------------------------------------
+
+describe('useSourceTtsPlayback — playGroup (G3a)', () => {
+  it('plays ONLY the group, in document order, and raises no boundary mid-page', () => {
+    const { result } = setup();
+
+    // Given out of order and including the unplayable row, exactly as a
+    // pericope card would hand over its verses.
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:2', 'GEN 1:1']));
+
+    const [items, index, emitBoundary] = playFrom.mock.calls.at(-1) as [
+      TtsQueueItem[],
+      number,
+      boolean,
+    ];
+    // Order comes from the page's list, not the caller's array; the hole is gone.
+    expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3']);
+    expect(index).toBe(0);
+    // GEN 1:4 is still to come on this page, so "Continue on the next page?"
+    // would be a lie.
+    expect(emitBoundary).toBe(false);
+  });
+
+  it('DOES raise the boundary when the group ends where the page ends (T16)', () => {
+    const { result } = setup();
+
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
+
+    const [items, , emitBoundary] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number, boolean];
+    expect(items.map(item => item.verseRef)).toEqual(['GEN 1:3', 'GEN 1:4']);
+    expect(emitBoundary).toBe(true);
+  });
+
+  it('ignores a group with nothing playable in it (§5.1)', () => {
+    const { result } = setup();
+
+    act(() => result.current.playGroup(['GEN 1:2']));
+
+    expect(playFrom).not.toHaveBeenCalled();
+    expect(playOne).not.toHaveBeenCalled();
+  });
+
+  it('isGroupSpeaking follows the playing row, so both layouts light up from one source', () => {
+    activeVerseRef = 'GEN 1:3';
+    const { result } = setup();
+
+    expect(result.current.isGroupSpeaking(['GEN 1:1', 'GEN 1:3'])).toBe(true);
+    expect(result.current.isGroupSpeaking(['GEN 1:4'])).toBe(false);
+  });
+
+  it('isGroupSpeaking is false for every group while idle', () => {
+    const { result } = setup();
+
+    expect(result.current.isGroupSpeaking(['GEN 1:1', 'GEN 1:3'])).toBe(false);
   });
 });
 

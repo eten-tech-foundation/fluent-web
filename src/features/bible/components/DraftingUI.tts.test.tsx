@@ -137,10 +137,18 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
   }),
 }));
 
+// G3a: pericope mode is off by default; the pericope suite flips it on.
+let mockIsPericopeMode = false;
+let mockPericopes: Array<{
+  pericopeNumber: string;
+  pericopeTitle: null;
+  verses: Array<{ chapterNumber: number; verseNumber: number }>;
+}> = [];
+
 vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: () => ({
-    pericopes: [],
-    isPericopeMode: false,
+    pericopes: mockPericopes,
+    isPericopeMode: mockIsPericopeMode,
     isPericopeLoading: false,
     getPericopeStyle: () => 'border-border',
     currentPericopeGroup: null,
@@ -178,6 +186,7 @@ let activeVerseRef: string | null = null;
 let isBusy = false;
 const playVerse = vi.fn();
 const playFromVerse = vi.fn();
+const playGroup = vi.fn();
 const stopPlayback = vi.fn();
 const boundaryOnContinue = vi.fn();
 const boundaryOnDismiss = vi.fn();
@@ -207,6 +216,11 @@ vi.mock('@/features/tts', async importOriginal => {
         isRowLoading: () => false,
         playVerse,
         playFromVerse,
+        playGroup,
+        // G3a: the real hook derives this from `activeVerseRef`, so the double
+        // does too — a group is speaking iff it contains the playing row.
+        isGroupSpeaking: (verseRefs: readonly string[]) =>
+          activeVerseRef !== null && verseRefs.includes(activeVerseRef),
         stop: stopPlayback,
         boundaryPrompt: {
           open: boundaryOpen,
@@ -302,6 +316,8 @@ beforeEach(() => {
   boundaryOpen = false;
   mockVerseRefs.current = {};
   mockTargetScrollRef.current = null;
+  mockIsPericopeMode = false;
+  mockPericopes = [];
 });
 
 /**
@@ -569,5 +585,90 @@ describe('DraftingUI — Checks panel coexistence', () => {
     expect(screen.getByRole('tab', { name: 'Resources' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Checks' })).toBeInTheDocument();
     expect(screen.getAllByTestId('tts-verse-controls').length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G3a — pericope mode: group controls, group highlight, bounded playback
+// ---------------------------------------------------------------------------
+
+/** Two groups over the three source verses: 1-2, then 3 (the page's last row). */
+const twoPericopeGroups = [
+  {
+    pericopeNumber: '1',
+    pericopeTitle: null,
+    verses: [
+      { chapterNumber: 1, verseNumber: 1 },
+      { chapterNumber: 1, verseNumber: 2 },
+    ],
+  },
+  {
+    pericopeNumber: '2',
+    pericopeTitle: null,
+    verses: [{ chapterNumber: 1, verseNumber: 3 }],
+  },
+];
+
+const enterPericopeMode = () => {
+  mockIsPericopeMode = true;
+  mockPericopes = twoPericopeGroups;
+};
+
+describe('DraftingUI — pericope mode TTS (G3a)', () => {
+  it('renders one group control per pericope, and no per-verse controls', () => {
+    enterPericopeMode();
+
+    renderDrafting();
+
+    expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(2);
+    // The verse trio would offer "play from here", which is exactly the
+    // behaviour a group control must not have.
+    expect(screen.queryAllByTestId('tts-verse-controls')).toHaveLength(0);
+  });
+
+  it('plays the whole blob — the group control passes ITS verses, not just the first', async () => {
+    // This is the failure the operator named: a group control that plays only
+    // the group's first verse would be strange.
+    enterPericopeMode();
+
+    renderDrafting();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+
+    expect(playGroup).toHaveBeenCalledWith(['1', '2']);
+    // Bounded playback is playGroup's job; the page-wide actions stay unused.
+    expect(playFromVerse).not.toHaveBeenCalled();
+    expect(playVerse).not.toHaveBeenCalled();
+  });
+
+  it('washes the group that contains the playing verse, and only that group', () => {
+    enterPericopeMode();
+    activeVerseRef = '2'; // verse 2 lives in the first group
+
+    renderDrafting();
+
+    const speaking = screen.getAllByTestId('tts-active-group');
+    expect(speaking).toHaveLength(1);
+    expect(speaking[0]).toHaveTextContent('And the earth was without form');
+  });
+
+  it('offers Stop on every group while the queue is busy (§5.1 is queue-wide)', () => {
+    enterPericopeMode();
+    isBusy = true;
+    activeVerseRef = '1';
+
+    renderDrafting();
+
+    expect(screen.getAllByRole('button', { name: /Stop playback/ })).toHaveLength(2);
+  });
+
+  it('renders no TTS at all in pericope mode when the flag is off', () => {
+    enterPericopeMode();
+    mockFeatureFlag.mockImplementation((name: string) => name !== 'sourceTts');
+
+    renderDrafting();
+
+    expect(screen.queryAllByTestId('tts-group-controls')).toHaveLength(0);
+    expect(screen.queryAllByTestId('tts-active-group')).toHaveLength(0);
   });
 });
