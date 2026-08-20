@@ -3,7 +3,12 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
-import { type SourceTtsPlaybackApi, TtsVerseControls } from '@/features/tts';
+import {
+  type SourceTtsPlaybackApi,
+  type TtsServedFormat,
+  ttsServingWashClass,
+  TtsVerseControls,
+} from '@/features/tts';
 import { type Source, type TargetVerse } from '@/lib/types';
 
 /**
@@ -25,6 +30,12 @@ export interface DraftingGridVerseTts extends Pick<
   | 'stop'
 > {
   verseRefFor: (verseNumber: number) => string;
+  /**
+   * Present only while a deployment is being verified — DraftingUI gates this
+   * on a force-on override, so the wash is untouched for everyone else. See
+   * `ttsServingWashClass`.
+   */
+  servingFor?: (verseRef: string) => TtsServedFormat | undefined;
 }
 
 interface DraftingTargetColumnProps {
@@ -179,6 +190,9 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
         const isActive = !readOnly && activeVerseId === verse.verseNumber;
         const ttsVerseRef = tts?.verseRefFor(verse.verseNumber);
         const isSpeaking = tts !== undefined && ttsVerseRef === tts.activeVerseRef;
+        // Only the row being read has an answer worth showing.
+        const ttsServed =
+          isSpeaking && ttsVerseRef !== undefined ? tts?.servingFor?.(ttsVerseRef) : undefined;
         return (
           <div
             key={verse.verseNumber}
@@ -191,9 +205,12 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             // repeated-word check's inline red text. The transparent rail on
             // every other row keeps the grid from shifting as playback moves.
             className={`grid items-start border-l-4 py-4 ${
-              isSpeaking ? 'border-l-primary bg-primary/5' : 'border-l-transparent'
+              isSpeaking
+                ? (ttsServingWashClass(ttsServed) ?? 'border-l-primary bg-primary/5')
+                : 'border-l-transparent'
             }`}
             data-testid={isSpeaking ? 'tts-active-row' : undefined}
+            data-tts-served={isSpeaking ? ttsServed : undefined}
             data-verse-number={verse.verseNumber}
             style={{ gridTemplateColumns: '2rem 1fr 1fr' }}
           >

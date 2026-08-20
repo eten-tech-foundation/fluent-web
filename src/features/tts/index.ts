@@ -6,6 +6,7 @@
 
 export {
   type TtsClip,
+  type TtsServedFormat,
   type TtsEngine,
   type TtsFailureClass,
   type TtsFormat,
@@ -50,6 +51,7 @@ export {
   type TtsRowDraft,
 } from './lib/buildTtsQueueItems';
 
+export { ttsServingWashClass } from './lib/servingWash';
 export {
   armTtsContinuation,
   claimTtsContinuation,

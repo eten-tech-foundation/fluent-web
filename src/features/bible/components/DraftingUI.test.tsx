@@ -171,6 +171,14 @@ const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
 
 vi.mock('@/features/flags', () => ({
   useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
+  // DraftingUI reads the source-TTS flag through `useFeatureFlags` so that it
+  // can take the raw override from the same call — `flagOverrides.ts` permits
+  // exactly one override read site. No override here: the verification tint
+  // stays off and the playback wash is the ordinary one.
+  useFeatureFlags: () => ({
+    features: { sourceTts: mockFeatureFlag('sourceTts'), repeatedWordCheck: true },
+    overrides: {},
+  }),
 }));
 
 const resourcePanelMode = vi.hoisted(() => ({ real: false }));

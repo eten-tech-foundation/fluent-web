@@ -15,7 +15,12 @@ import {
   type TtsRecoveryTiming,
 } from '../engines/serverTtsEngine';
 import { type ClipAudioElement, createClipAudioElement, onClipEvent } from '../lib/audioElement';
-import { type TtsClip, type TtsEngine, type TtsQueueItem } from '../tts.types';
+import {
+  type TtsClip,
+  type TtsEngine,
+  type TtsQueueItem,
+  type TtsServedFormat,
+} from '../tts.types';
 
 /**
  * §5.3 (CB1): prefetch depth stays capped at the next verse, AT MOST two,
@@ -55,6 +60,8 @@ export interface TtsPlaybackQueueApi {
   activeVerseRef: string | null;
   /** Per-item states keyed by verseRef (§5.3). */
   itemStates: Readonly<Record<string, TtsQueueItemState>>;
+  /** Which container each clip was served as, for the verification tint (§9.2). */
+  itemServing: Readonly<Record<string, TtsServedFormat>>;
   playbackRate: number;
   /** T1: play one verse; stops at clip end, never advances. */
   playOne: (item: TtsQueueItem) => void;
@@ -117,6 +124,9 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   const [status, setStatus] = useState<TtsPlaybackStatus>('idle');
   const [activeVerseRef, setActiveVerseRef] = useState<string | null>(null);
   const [itemStates, setItemStates] = useState<Record<string, TtsQueueItemState>>({});
+  // Parallel to itemStates rather than folded into it: that record drives the
+  // per-row loading badge, and a diagnostic must not be able to change it.
+  const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
   const [playbackRate, setPlaybackRateState] = useState(1);
 
   const sessionRef = useRef<PlaybackSession | null>(null);
@@ -157,6 +167,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     setStatus('idle');
     setActiveVerseRef(null);
     setItemStates({});
+    setItemServing({});
   };
 
   const stop = (): void => {
@@ -171,11 +182,22 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     optionsRef.current.onError?.(error, item);
   };
 
-  const synthesizeItem = (session: PlaybackSession, item: TtsQueueItem): Promise<TtsClip> =>
-    optionsRef.current.engine.synthesize(
+  const synthesizeItem = async (session: PlaybackSession, item: TtsQueueItem): Promise<TtsClip> => {
+    const clip = await optionsRef.current.engine.synthesize(
       { text: item.text, langCode: item.langCode },
       session.controller.signal
     );
+    // Free: the engine read this off the URL it was already handed. Recorded
+    // here because this is the ONE place every clip comes from — prefetch,
+    // direct play and regenerate all route through it — and because running
+    // per synthesis is what keeps the answer current: a verse that streamed on
+    // its first listen is named as compressed once the tail has landed.
+    const servedAs = clip.servedAs;
+    if (servedAs !== undefined) {
+      setItemServing(previous => ({ ...previous, [item.verseRef]: servedAs }));
+    }
+    return clip;
+  };
 
   /**
    * §5.3 step 4: while verse N plays, request N+1 — `generate` plus an EARLY
@@ -413,6 +435,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     status,
     activeVerseRef,
     itemStates,
+    itemServing,
     playbackRate,
     playOne,
     playFrom,

@@ -551,3 +551,86 @@ describe('useTtsPlaybackQueue — failure and passthrough', () => {
     expect(harness.result.current.activeVerseRef).toBe('GEN 1:2');
   });
 });
+
+/**
+ * Which container each clip arrived as (§9.2) — free, and never stale.
+ *
+ * The engine reads it off the URL `generate` handed back, so this costs no
+ * request. Recorded at the one seam every clip passes through, and cleared
+ * when playback goes idle, so a note cannot outlive the listen it described.
+ */
+describe('useTtsPlaybackQueue — which container served each clip', () => {
+  const engineServing = (
+    served: Array<'wav' | 'ogg' | 'mp3'>
+  ): { engine: TtsEngine; calls: () => number } => {
+    let call = 0;
+    const engine: TtsEngine = {
+      synthesize: (request: TtsRequest) => {
+        const servedAs = served[Math.min(call, served.length - 1)];
+        call += 1;
+        return Promise.resolve({ audioUrl: clipUrlFor(request.text), servedAs });
+      },
+    };
+    return { engine, calls: () => call };
+  };
+
+  it('records the container the clip was served as', async () => {
+    const harness = createHarness({ engine: engineServing(['ogg']).engine });
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+
+    expect(harness.result.current.itemServing['GEN 1:1']).toBe('ogg');
+  });
+
+  /**
+   * The staleness case: a verse that STREAMED on its first listen is compressed
+   * moments later, and a note kept from the first listen would keep insisting
+   * the deployment regenerates every time — precisely the wrong answer to the
+   * only question this exists to answer.
+   */
+  it('reports the new container when the same verse is served from the bucket later', async () => {
+    const harness = createHarness({ engine: engineServing(['wav', 'ogg']).engine });
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+    expect(harness.result.current.itemServing['GEN 1:1']).toBe('wav');
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+
+    expect(harness.result.current.itemServing['GEN 1:1']).toBe('ogg');
+  });
+
+  it('keeps no note once playback goes idle', async () => {
+    // The mechanism the test above leans on, asserted on its own: nothing
+    // survives into a later session to be read as current.
+    const harness = createHarness({ engine: engineServing(['ogg']).engine });
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+    expect(harness.result.current.itemServing['GEN 1:1']).toBe('ogg');
+
+    act(() => {
+      harness.result.current.stop();
+    });
+
+    expect(harness.result.current.itemServing).toEqual({});
+  });
+
+  it('says nothing when the engine names no container', async () => {
+    // A future browser-local engine (§13.3) has no URL and no container to
+    // report; the wash then simply stays the ordinary one.
+    const harness = createHarness();
+
+    await act(async () => {
+      harness.result.current.playOne(verse(1));
+    });
+
+    expect(harness.result.current.itemServing).toEqual({});
+  });
+});

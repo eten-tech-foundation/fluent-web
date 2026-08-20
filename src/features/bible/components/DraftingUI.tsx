@@ -32,7 +32,7 @@ import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
 import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
-import { useFeatureFlag } from '@/features/flags';
+import { useFeatureFlag, useFeatureFlags } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
@@ -390,9 +390,29 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // (source-tts §6.3, T12). Fail-closed by construction: `useFeatureFlag`
   // returns false while loading and on endpoint error, so no controls render
   // and no assignment lookup runs until the API positively says yes. Local
-  // overrides are NOT consulted here — they are applied once inside
+  // overrides are NOT consulted here for GATING — they are applied once inside
   // `useFeatureFlags`, so a forced-on flag reaches this boolean unchanged.
-  const ttsEnabled = useFeatureFlag('sourceTts');
+  //
+  // `useFeatureFlags` rather than `useFeatureFlag` because the verification
+  // tint below needs the raw override too, and `flagOverrides.ts` permits
+  // exactly ONE site to consult overrides. Taking both from this one call
+  // keeps that invariant; a second `useFlagOverrides()` here would be the
+  // drift it warns about.
+  const { features: ttsFeatures, overrides: ttsOverrides } = useFeatureFlags();
+  const ttsEnabled = ttsFeatures.sourceTts;
+
+  // Verification affordance, NOT a product feature (§9.2): tint the playback
+  // wash when a clip came from the artifact store, so a deployer can see that
+  // R2 is really serving rather than every listen silently paying for a fresh
+  // synthesis — the two are indistinguishable by ear.
+  //
+  // Keyed to a FORCE-ON override rather than to the flag itself, so ordinary
+  // listeners never meet a colour they cannot interpret. Forcing on a flag
+  // that is already on is a no-op for everything else, which makes this an
+  // easy switch to reach for while verifying. Costs nothing to compute — the
+  // container is read off the clip URL the engine already has — so only the
+  // DISPLAY is gated, not the recording.
+  const ttsShowServing = ttsOverrides.sourceTts === true;
 
   // The single writer for the occurrence-rule map: `useSuppressions` does the
   // read-modify-write and hands the next full map back here; updating state
@@ -990,6 +1010,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             playFromGroup: tts.playFromGroup,
             stop: tts.stop,
             verseRefFor: ttsVerseRefFor,
+            servingFor: ttsShowServing ? tts.servingFor : undefined,
           }
         : undefined,
     [
@@ -999,6 +1020,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       tts.isRowLoading,
       tts.activeVerseRef,
       tts.isGroupSpeaking,
+      ttsShowServing,
+      tts.servingFor,
       tts.playGroup,
       tts.playFromGroup,
       tts.stop,
@@ -1019,6 +1042,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             playFromVerse: tts.playFromVerse,
             stop: tts.stop,
             verseRefFor: ttsVerseRefFor,
+            servingFor: ttsShowServing ? tts.servingFor : undefined,
           }
         : undefined,
     [
@@ -1031,6 +1055,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       tts.playFromVerse,
       tts.stop,
       ttsVerseRefFor,
+      ttsShowServing,
+      tts.servingFor,
     ]
   );
 

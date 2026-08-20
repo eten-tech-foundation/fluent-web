@@ -162,8 +162,15 @@ vi.mock('@/features/bible/hooks/usePericope', () => ({
 
 // ── Flags: every feature ON by default; tests flip sourceTts off ────────────
 const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
+let mockOverrides: Record<string, boolean> = {};
 vi.mock('@/features/flags', () => ({
   useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
+  // DraftingUI takes BOTH the merged flag and the raw override from this one
+  // hook, because `flagOverrides.ts` permits exactly one override read site.
+  useFeatureFlags: () => ({
+    features: { sourceTts: mockFeatureFlag('sourceTts'), repeatedWordCheck: true },
+    overrides: mockOverrides,
+  }),
 }));
 
 // ── The next-page lookup (T16): controllable, and its options captured ──────
@@ -182,6 +189,7 @@ vi.mock('@/features/bible/hooks/useNextAssignedChapter', () => ({
 
 // ── Playback: stubbed, so this file can drive state and read the rows ───────
 let ttsRows: readonly TtsFeature.TtsRowDraft[] = [];
+let ttsServed: Record<string, TtsFeature.TtsServedFormat> = {};
 let ttsPlaybackEnabled: boolean | undefined;
 let activeVerseRef: string | null = null;
 let isBusy = false;
@@ -218,6 +226,7 @@ vi.mock('@/features/tts', async importOriginal => {
         isBusy,
         isRowPlayable: (verseRef: string) => playable.has(verseRef),
         isRowLoading: () => false,
+        servingFor: (verseRef: string) => ttsServed[verseRef],
         playVerse,
         playFromVerse,
         playGroup,
@@ -315,6 +324,8 @@ beforeEach(() => {
   mockNextPage = null;
   nextChapterOptions = undefined;
   ttsRows = [];
+  ttsServed = {};
+  mockOverrides = {};
   ttsPlaybackEnabled = undefined;
   mockActiveVerseId = 1;
   activeVerseRef = null;
@@ -816,5 +827,84 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     // group ones, and it renders off `activeVerseRef` rather than off the grid
     // props — so it needs its own assertion or it could outlive the flag.
     expect(screen.queryAllByTestId('tts-active-verse')).toHaveLength(0);
+  });
+});
+
+/**
+ * The verification tint (§9.2) — an affordance for whoever is deploying, not a
+ * product feature.
+ *
+ * An artifact store that serves and one that silently regenerates every listen
+ * sound IDENTICAL; only the bill differs. Since `generate` names the compressed
+ * object directly when one exists (§7.1, amended 2026-08-20), the container is
+ * readable off the clip URL, so the wash can carry it for free.
+ *
+ * `wav` deliberately keeps the ORDINARY blue wash: the streaming case is the
+ * normal one and should look normal. Only a clip that came from the bucket
+ * departs from it, which makes verification one clear observation — play a
+ * verse twice, and the second time it should turn purple.
+ */
+describe('DraftingUI — the serving tint', () => {
+  it('keeps the ordinary wash for a clip generated on this listen', () => {
+    mockOverrides = { sourceTts: true };
+    activeVerseRef = '1';
+    ttsServed = { '1': 'wav' };
+
+    renderDrafting();
+
+    const row = screen.getByTestId('tts-active-row');
+    expect(row.className).toContain('bg-primary/5');
+    expect(row.className).not.toContain('purple');
+  });
+
+  it('turns the wash purple when the clip came from the bucket', () => {
+    mockOverrides = { sourceTts: true };
+    activeVerseRef = '1';
+    ttsServed = { '1': 'ogg' };
+
+    renderDrafting();
+
+    const row = screen.getByTestId('tts-active-row');
+    expect(row).toHaveAttribute('data-tts-served', 'ogg');
+    expect(row.className).toContain('bg-purple-500/20');
+    // The ordinary wash is REPLACED, not layered under the diagnostic.
+    expect(row.className).not.toContain('bg-primary/5');
+  });
+
+  it('uses a darker purple for an mp3 artifact, so the two are told apart', () => {
+    mockOverrides = { sourceTts: true };
+    activeVerseRef = '1';
+    ttsServed = { '1': 'mp3' };
+
+    renderDrafting();
+
+    const row = screen.getByTestId('tts-active-row');
+    expect(row).toHaveAttribute('data-tts-served', 'mp3');
+    expect(row.className).toContain('bg-purple-900/20');
+  });
+
+  it('shows nothing to a listener who has not forced the flag on', () => {
+    // The flag is ON here — merely on is not the same as "someone is verifying".
+    activeVerseRef = '1';
+    ttsServed = { '1': 'ogg' };
+
+    renderDrafting();
+
+    const row = screen.getByTestId('tts-active-row');
+    expect(row).not.toHaveAttribute('data-tts-served');
+    expect(row.className).toContain('bg-primary/5');
+  });
+
+  it('tints the pericope group by the verse being read inside it', () => {
+    enterPericopeMode();
+    mockOverrides = { sourceTts: true };
+    activeVerseRef = '1';
+    ttsServed = { '1': 'ogg' };
+
+    renderDrafting();
+
+    const group = screen.getByTestId('tts-active-group');
+    expect(group).toHaveAttribute('data-tts-served', 'ogg');
+    expect(group.className).toContain('bg-purple-500/20');
   });
 });
