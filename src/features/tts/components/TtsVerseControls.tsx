@@ -4,8 +4,12 @@
  * Feature-agnostic (T3): the host passes playability and playback state in;
  * this component renders real buttons with descriptive accessible names —
  * never icon-only semantics (§5.1) — and hit areas that meet the project's
- * touch sizing (Button `size='icon'`, 40×40) even though the icons stay
- * visually compact (T2).
+ * touch sizing (40×40) even though the icons stay visually compact (T2).
+ *
+ * That last clause is load-bearing rather than decorative: the strip repeats
+ * once per verse down a long page, so `size='icon'`'s 40px BOX (as opposed to
+ * its 40px target) would set the grid's vertical rhythm. `TTS_CONTROL_*`
+ * splits the two apart — see `../lib/controlLayout` for the numbers and why.
  */
 
 import React from 'react';
@@ -16,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
+import { TTS_CONTROL_BUTTON_CLASS, TTS_CONTROL_STRIP_CLASS } from '../lib/controlLayout';
 
 export interface TtsVerseControlsProps {
   /** Host-meaningful row identity, used in the accessible names. */
@@ -64,9 +69,10 @@ export const TtsVerseControls: React.FC<TtsVerseControlsProps> = ({
   const stopLabel = t('ttsStopPlayback', 'Stop playback');
 
   return (
-    <div className='flex items-center gap-1' data-testid='tts-verse-controls'>
+    <div className={TTS_CONTROL_STRIP_CLASS} data-testid='tts-verse-controls'>
       <Button
         aria-busy={isLoading}
+        className={TTS_CONTROL_BUTTON_CLASS}
         disabled={!hasPlayableText}
         size='icon'
         type='button'
@@ -85,6 +91,7 @@ export const TtsVerseControls: React.FC<TtsVerseControlsProps> = ({
       </Button>
       <Button
         aria-label={playFromLabel}
+        className={TTS_CONTROL_BUTTON_CLASS}
         disabled={!hasPlayableText}
         size='icon'
         title={`${playFromLabel} (${TTS_KEYBOARD_SHORTCUTS.playFromHere})`}
@@ -97,6 +104,7 @@ export const TtsVerseControls: React.FC<TtsVerseControlsProps> = ({
       {showStop && (
         <Button
           aria-label={stopLabel}
+          className={TTS_CONTROL_BUTTON_CLASS}
           data-active-row={isPlaying || undefined}
           size='icon'
           title={`${stopLabel} (${TTS_KEYBOARD_SHORTCUTS.stop})`}
