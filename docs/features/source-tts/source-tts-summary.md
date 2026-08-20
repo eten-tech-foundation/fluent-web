@@ -22,7 +22,7 @@
 
 - Client retries are now **bounded** (2 per failure class per clip, proposed) with all retry timers under the clip’s `AbortSignal`; playback/prefetch pinned to one uniform element-owned path; prefetch depth capped at 1–2 verses ahead (§5.2–§5.3, §6.1 of the full doc).
 - `format` is **optional**; fluent-ai resolves `TTS_DEFAULT_FORMAT` **before hashing and sidecar creation**, and the v1 frontend omits it unless the browser lacks Opus support (§7.1).
-- `audio_url` is a **sibling-relative URL reference** resolved against the request URL — fluent-ai never mints URLs for hosts it has no config for; the mirrored route-tail convention becomes a stated contract requirement (§7.1).
+- `audio_url` is a **sibling-relative URL reference** resolved against the request URL — fluent-ai never mints URLs for hosts it has no config for; the mirrored route-tail convention becomes a stated contract requirement (§7.1). **Amended 2026-08-20:** when the compressed object already exists, `generate` returns the absolute R2 URL instead, saving a fully cached verse one of its three round trips. Both shapes resolve under the same rule, so nothing downstream changes.
 - Artifact identity is described as **recipe-addressed** (bytes are one render of the recipe); the conditional PUT is first-writer-wins and a storage-dedup guard, not an anti-double-billing guard by itself (§9.1, §10.1, §11.2).
 - Admission-semaphore sizing stated: slots = ⌊budget / per-clip ceiling⌋ worst-case reservation, plus a per-append ceiling abort (§9.2).
 - The serving-posture review area below now names the R2 URL a **bearer capability** rather than implying every fetch is authorized.

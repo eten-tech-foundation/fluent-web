@@ -13,6 +13,7 @@ import { config } from '@/lib/config';
 import { type ClipAudioElement, onClipEvent, resetClipElement } from '../lib/audioElement';
 import {
   type TtsClip,
+  type TtsServedFormat,
   type TtsEngine,
   type TtsFailureClass,
   type TtsFormat,
@@ -147,13 +148,36 @@ export class ServerTtsEngine implements TtsEngine {
     // serving choice server-side — the browser called fluent-api, so the
     // audio fetch goes to fluent-api. The absolute result is what makes the
     // returned `TtsClip` a different thing from the wire body.
-    return { audioUrl: new URL(wire.audio_url, res.url).toString() };
+    const audioUrl = new URL(wire.audio_url, res.url).toString();
+    return { audioUrl, servedAs: servedFormatOf(audioUrl) };
   }
 }
 
 // ---------------------------------------------------------------------------
 // Clip playback supervision — the §6.1 failure ladder
 // ---------------------------------------------------------------------------
+
+/**
+ * Read the container off a clip URL (§7.1, amended 2026-08-20).
+ *
+ * `.wav` is the streaming sibling — this listen is paying for a synthesis.
+ * `.ogg`/`.mp3` mean `generate` found the compressed object and named it
+ * directly, so the bytes come from R2. That is the whole diagnostic, and it
+ * costs nothing: the URL is already in hand.
+ *
+ * Parsed from the PATHNAME rather than the raw string so a query or fragment
+ * cannot be mistaken for an extension.
+ */
+export const servedFormatOf = (audioUrl: string): TtsServedFormat | undefined => {
+  let pathname: string;
+  try {
+    pathname = new URL(audioUrl).pathname;
+  } catch {
+    pathname = audioUrl;
+  }
+  const match = /\.(wav|ogg|mp3)$/i.exec(pathname);
+  return match ? (match[1].toLowerCase() as TtsServedFormat) : undefined;
+};
 
 /** What a HEAD re-probe of the clip URL told us (§6.1). */
 type ProbeOutcome =

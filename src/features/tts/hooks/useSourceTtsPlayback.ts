@@ -31,7 +31,7 @@ import {
   scrollRowIntoViewIfNeeded,
   type ScrollViewport,
 } from '../lib/scrollRowIntoView';
-import { type TtsEngine, type TtsQueueItem } from '../tts.types';
+import { type TtsEngine, type TtsQueueItem, type TtsServedFormat } from '../tts.types';
 
 import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
 
@@ -93,6 +93,11 @@ export interface SourceTtsPlaybackApi {
   isRowPlayable: (verseRef: string) => boolean;
   /** This row is fetching its clip (§5.2). */
   isRowLoading: (verseRef: string) => boolean;
+  /**
+   * Which container this row's clip was served as (§9.2) — a verification
+   * signal, not playback. Undefined until the row has a clip.
+   */
+  servingFor: (verseRef: string) => TtsServedFormat | undefined;
   playVerse: (verseRef: string) => void;
   playFromVerse: (verseRef: string) => void;
   /**
@@ -330,6 +335,11 @@ export const useSourceTtsPlayback = (
     [queue.itemStates]
   );
 
+  const servingFor = useCallback(
+    (verseRef: string) => queue.itemServing[verseRef],
+    [queue.itemServing]
+  );
+
   /**
    * G3a: the group-level highlight, derived from the SAME `activeVerseRef` the
    * row highlight uses — which is what makes a display-mode switch mid-playback
@@ -348,6 +358,7 @@ export const useSourceTtsPlayback = (
     isBusy: queue.status !== 'idle',
     isRowPlayable,
     isRowLoading,
+    servingFor,
     playVerse,
     playFromVerse,
     playGroup,

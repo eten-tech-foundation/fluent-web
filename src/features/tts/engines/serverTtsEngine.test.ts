@@ -10,6 +10,7 @@ import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
 
 import {
   ServerTtsEngine,
+  servedFormatOf,
   superviseClipPlayback,
   type TtsGenerateWireRequest,
   type TtsRecoveryTiming,
@@ -384,5 +385,76 @@ describe('superviseClipPlayback — stall watchdog', () => {
       name: 'TtsPlaybackError',
       failureClass: 'stall',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// servedFormatOf — the verification signal (§9.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * `generate` names the compressed object directly when one exists (§7.1,
+ * amended 2026-08-20), so the container is readable off the URL. Nothing else
+ * in the browser exposes it — a media element that follows a 302 still reports
+ * the ORIGINAL URL as `currentSrc`, measured in Chrome 2026-08-20.
+ */
+describe('servedFormatOf', () => {
+  it('reads the streaming sibling as wav — this listen paid for a synthesis', () => {
+    expect(servedFormatOf('https://api.test/ai/tts/audio/abc123.wav')).toBe('wav');
+  });
+
+  it('reads a compressed artifact as its container — this came from the bucket', () => {
+    expect(servedFormatOf('https://tts.fluent.bible/tts/audio/abc123.ogg')).toBe('ogg');
+    expect(servedFormatOf('https://tts.fluent.bible/tts/audio/abc123.mp3')).toBe('mp3');
+  });
+
+  it('ignores a query or fragment rather than reading it as the extension', () => {
+    // A cache-buster is the realistic case, and `endsWith('.wav')` would miss it.
+    expect(servedFormatOf('https://api.test/ai/tts/audio/abc123.wav?t=1')).toBe('wav');
+    expect(servedFormatOf('https://tts.fluent.bible/tts/audio/abc.ogg#x')).toBe('ogg');
+  });
+
+  it('says nothing rather than guessing at an unrecognised container', () => {
+    expect(servedFormatOf('https://api.test/ai/tts/audio/abc123.flac')).toBeUndefined();
+    expect(servedFormatOf('not a url at all')).toBeUndefined();
+  });
+});
+
+describe('ServerTtsEngine.synthesize — the served container', () => {
+  const makeEngine = (fetchFn: ReturnType<typeof vi.fn>): ServerTtsEngine =>
+    new ServerTtsEngine({
+      apiBaseUrl: 'https://api.test',
+      fetchFn: fetchFn as unknown as (input: string, init?: RequestInit) => Promise<Response>,
+      supportsOpus: () => true,
+    });
+
+  it('reports wav for the sibling-relative streaming reference', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      fakeResponse({
+        body: { audio_url: 'audio/abc123.wav' },
+        url: 'https://api.test/ai/tts/generate',
+      })
+    );
+
+    const clip = await makeEngine(fetchFn).synthesize({ text: 'In the beginning' });
+
+    expect(clip.servedAs).toBe('wav');
+  });
+
+  it('reports the container when generate hands back the bucket URL directly', async () => {
+    // The amended §7.1 case: already compressed, so the caller is sent to R2
+    // and saves a hop. An absolute URL resolves to itself under the same
+    // `new URL(audio_url, response.url)` rule, so nothing else changes.
+    const fetchFn = vi.fn().mockResolvedValue(
+      fakeResponse({
+        body: { audio_url: 'https://tts.fluent.bible/tts/audio/abc123.ogg' },
+        url: 'https://api.test/ai/tts/generate',
+      })
+    );
+
+    const clip = await makeEngine(fetchFn).synthesize({ text: 'In the beginning' });
+
+    expect(clip.audioUrl).toBe('https://tts.fluent.bible/tts/audio/abc123.ogg');
+    expect(clip.servedAs).toBe('ogg');
   });
 });

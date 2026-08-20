@@ -54,8 +54,32 @@ export interface TtsRequest {
  * no knowable duration, and once compressed the container header carries the
  * exact value for free. Do not "fix" it back in.
  */
+/**
+ * The container the clip is actually being served as, read off `audioUrl`.
+ *
+ * Distinct from {@link TtsFormat}, which is what a caller REQUESTS: `wav` is
+ * never requestable — it is the streaming era's container, meaning this listen
+ * paid for a fresh synthesis — while `ogg`/`mp3` mean the compressed artifact
+ * already existed and the URL points at R2.
+ *
+ * Available only because `generate` names the compressed object directly when
+ * one exists (§7.1, amended 2026-08-20). Nothing else in the browser exposes
+ * it: a media element that follows a 302 still reports the ORIGINAL URL as
+ * `currentSrc`, and cross-origin resource timing hides the redirect entirely
+ * unless the bucket sends `Timing-Allow-Origin` — both measured in Chrome on
+ * 2026-08-20, see `self-notes .../tools/media_redirect_visibility_check.py`.
+ *
+ * One-directional inaccuracy, by design: an artifact compressed BETWEEN
+ * `generate` and the first GET still reads `wav`, so this can under-report a
+ * cache hit and never over-report one. Reality is better than reported, which
+ * is the safe direction for the thing it is used to check.
+ */
+export type TtsServedFormat = 'wav' | 'ogg' | 'mp3';
+
 export interface TtsClip {
   audioUrl: string;
+  /** Absent when the URL names no container this build recognises. */
+  servedAs?: TtsServedFormat;
 }
 
 /** The frontend seam (§6.1). Buttons/queues never know the transport. */
