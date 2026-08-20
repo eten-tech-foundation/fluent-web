@@ -1,5 +1,7 @@
 /* Vendored from eten-tech-foundation/scripture-editors packages/platform/src/editor/editor.css
- * (per the platform-editor README). Icon url() rules are inert here: hasExternalUI disables the built-in toolbar. MIT licensed. */
+ * at platform-editor 0.8.14 (per its README). The version is here so a future sync is a diff
+ * against that tag rather than a guess. Icon url() rules are inert: hasExternalUI disables the
+ * built-in toolbar. MIT licensed. */
 /* stylelint-disable selector-no-qualifying-type */
 
 /* Lexical */

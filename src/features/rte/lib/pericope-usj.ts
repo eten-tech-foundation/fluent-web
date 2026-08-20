@@ -217,6 +217,10 @@ function markersKey(markers: VerseMarkers | null): string {
  * markers because the API overwrites the stored value with whatever the request says
  * (fluent-api#264 nulls it when omitted). A verse missing from `next` is reported as emptied
  * rather than dropped: clearing all of a verse's text is a real edit.
+ *
+ * Only the verses in `previous` are looked at, so a verse `next` introduces is not reported. The
+ * caller is a pericope whose verse set is fixed by the document the editor was loaded with, and
+ * the editor cannot invent a verse marker; a caller where it can would need more than this.
  */
 export function changedVerses(
   previous: PericopeVerseText[],

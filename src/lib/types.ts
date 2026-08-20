@@ -145,7 +145,13 @@ export interface ProjectItem {
   isAiEnabled?: boolean;
 }
 
-/** One paragraph a verse opens or splits into, as `translated_verses.markers` stores it. */
+/**
+ * One paragraph a verse opens or splits into, as `translated_verses.markers` stores it.
+ *
+ * A field added here has to be added to `sameParagraphs` in `useBibleTextDebounce.ts` too, which
+ * compares these one field at a time rather than serializing them, to keep the drafting surface
+ * from allocating a string per verse on every render.
+ */
 export interface VerseParagraph {
   marker: string;
   offset: number;

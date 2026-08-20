@@ -1,5 +1,6 @@
 /* Vendored from eten-tech-foundation/scripture-editors packages/platform/src/usj-nodes.css
- * (per the platform-editor README: the npm package ships unstyled). MIT licensed. */
+ * at platform-editor 0.8.14 (per its README: the npm package ships unstyled). The version is here
+ * so a future sync is a diff against that tag rather than a guess. MIT licensed. */
 /* Sample styles for USJ Nodes */
 
 .leadingFloat {

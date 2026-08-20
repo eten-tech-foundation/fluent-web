@@ -29,8 +29,10 @@ const envSchema = z.object({
     message: 'YOUVERSION_API_KEY is required',
   }),
   // Rich text editing in the pericope view (#314). Off by default: paragraph breaks the editor
-  // lets translators author cannot be persisted yet (fluent-api#263). An empty value reads as
-  // unset, the way the other optional keys behave — an unset flag must never block startup.
+  // lets translators author cannot be persisted yet (fluent-api#263). The preprocess reads an
+  // empty value as unset, which this key needs and the other optional one does not: `z.enum`
+  // rejects `''` and would fail startup over a flag left blank, while an optional string simply
+  // takes it. An unset flag must never block the app from booting.
   RTE_PERICOPE: z.preprocess(
     value => (value === '' ? undefined : value),
     z.enum(['true', 'false']).optional()
