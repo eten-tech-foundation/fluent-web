@@ -51,6 +51,11 @@ export {
   type TtsRowDraft,
 } from './lib/buildTtsQueueItems';
 
+export {
+  TTS_CONTROL_BUTTON_CLASS,
+  TTS_CONTROL_ROW_CLASS,
+  TTS_CONTROL_STRIP_CLASS,
+} from './lib/controlLayout';
 export { ttsServingWashClass } from './lib/servingWash';
 export {
   armTtsContinuation,
