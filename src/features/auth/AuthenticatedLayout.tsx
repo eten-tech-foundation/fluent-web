@@ -7,18 +7,19 @@ import { SettingsModal } from '@/components/SettingsModal';
 import Header from '@/features/header/components/index';
 import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { ROLES, type User } from '@/lib/types';
-import { useAppStore } from '@/store/store';
+import { type User } from '@/lib/types';
 
 export function AuthenticatedLayout(): React.JSX.Element {
   const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
+  const { applyUser } = useRefreshUserDetail();
   const updateUserMutation = useUpdateUser();
-  const { setUserDetail, userdetail } = useAppStore();
+
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
 
@@ -55,52 +56,15 @@ export function AuthenticatedLayout(): React.JSX.Element {
 
     setFetchInitiated(true);
 
+    // Handle email-verification status upgrade before refreshing the store.
     fetchUserDetails(user.email, {
       onSuccess: userDetails => {
         void (async () => {
           if (userDetails.status !== 'verified' && user.emailVerified) {
             userDetails.status = 'verified';
-            await updateUserMutation.mutateAsync({
-              userData: userDetails as User,
-            });
+            await updateUserMutation.mutateAsync({ userData: userDetails as User });
           }
-          const grants = userDetails.orgGrants ?? userDetails.grants ?? [];
-
-          // Validate that lastActiveOrgId is still valid (user still has grants for it)
-          let activeOrgId = userDetails.lastActiveOrgId;
-          const hasGrantsForActiveOrg =
-            activeOrgId != null && grants.some(g => g.orgId === activeOrgId);
-          if (!hasGrantsForActiveOrg) {
-            activeOrgId = grants.find(g => g.orgId !== null)?.orgId;
-          }
-          const orgGrants = activeOrgId != null ? grants.filter(g => g.orgId === activeOrgId) : [];
-
-          const functionalGrant = orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
-          const savedRole = userdetail?.role;
-          const isSavedRoleFunctional =
-            savedRole &&
-            savedRole !== ROLES.ORG_MEMBER &&
-            orgGrants.some(g => g.roleName === savedRole);
-
-          const savedGrant = isSavedRoleFunctional
-            ? orgGrants.find(g => g.roleName === savedRole)
-            : undefined;
-
-          const activeGrant =
-            savedGrant ?? functionalGrant ?? (orgGrants.length > 0 ? orgGrants[0] : undefined);
-
-          setUserDetail({
-            id: userDetails.id,
-            email: userDetails.email,
-            username: userDetails.username,
-            role: activeGrant ? activeGrant.roleName : userDetails.role,
-            lastActiveOrgId: activeOrgId,
-            grants: grants,
-            firstName: userDetails.firstName,
-            lastName: userDetails.lastName,
-            status: userDetails.status,
-          });
-
+          applyUser(userDetails);
           setUserDetailsFetched(true);
         })();
       },
@@ -122,10 +86,9 @@ export function AuthenticatedLayout(): React.JSX.Element {
     user,
     fetchInitiated,
     fetchUserDetails,
-    setUserDetail,
+    applyUser,
     updateUserMutation,
     navigate,
-    userdetail?.role,
   ]);
 
   if (isLoading) return <LoadingScreen message='Loading...' />;

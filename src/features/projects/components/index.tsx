@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
 import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { type CreateProject } from '@/lib/types';
@@ -19,6 +20,7 @@ export const ProjectsWrapper: React.FC = () => {
   const navigate = useNavigate();
   const { modal } = routeApi.useSearch();
   const { userdetail } = useAppStore();
+  const { refresh: refreshUserDetail } = useRefreshUserDetail();
 
   const { data: projects = [], isLoading } = useProjectsByRole(userdetail);
   const createProjectMutation = useCreateProject();
@@ -72,6 +74,10 @@ export const ProjectsWrapper: React.FC = () => {
       await createProjectMutation.mutateAsync({
         projectData: newProjectData,
       });
+
+      // Refresh userdetail so the new PM grant (assigned by the backend on project
+      // creation) is in the store immediately — avoids a stale-grants view on first open.
+      refreshUserDetail();
 
       handleCloseCreate();
     } catch (error) {
