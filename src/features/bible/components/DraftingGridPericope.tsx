@@ -250,6 +250,25 @@ interface PericopeTargetGroupProps {
 }
 
 /**
+ * What a pericope box shows while the editor chunk is still on the wire.
+ *
+ * The chunk is fetched on demand and is ~180 KB, so on a slow connection the whole target column
+ * would sit blank with nothing to say a surface is coming (#400 review). One bar per verse, so the
+ * box is already the shape of what lands in it and the column does not jump when it does.
+ */
+const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }) => (
+  <div
+    aria-hidden='true'
+    className='animate-pulse space-y-2 py-1'
+    data-testid='pericope-editor-loading'
+  >
+    {Array.from({ length: verseCount }, (_, index) => (
+      <div key={index} className='bg-muted-foreground/20 h-4 rounded' />
+    ))}
+  </div>
+);
+
+/**
  * The editing surface for one pericope: the rich text editor behind the flag, the per-verse
  * textareas without it.
  *
@@ -281,7 +300,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 }) => {
   if (config.features.rtePericope) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<PericopeEditorSkeleton verseCount={groupVerses.length} />}>
         <PericopeRteGroup
           activeVerseId={activeVerseId}
           aiSuggestions={aiSuggestions}

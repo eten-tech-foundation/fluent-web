@@ -121,6 +121,42 @@ describe('PericopeRteGroup', () => {
     expect(handleActiveVerseChange).not.toHaveBeenCalled();
   });
 
+  describe('while a suggestion is on its way', () => {
+    const waiting = {
+      isAiActive: true,
+      isAiThresholdMet: true,
+      suggestionStatus: 'generating' as const,
+      verses: [
+        { verseNumber: 1, content: '' },
+        { verseNumber: 2, content: '' },
+      ] as TargetVerse[],
+    };
+
+    it('says so, the way the textarea placeholder does', () => {
+      renderGroup(waiting);
+
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
+    });
+
+    it('stops once the suggestion has landed', () => {
+      renderGroup({ ...waiting, aiSuggestions: { 1: 'Sugerencia.' } });
+
+      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+    });
+
+    it('says nothing about a verse that is already drafted', () => {
+      renderGroup({
+        ...waiting,
+        verses: [
+          { verseNumber: 1, content: 'Ya traducido.' },
+          { verseNumber: 2, content: '' },
+        ] as TargetVerse[],
+      });
+
+      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+    });
+  });
+
   it('passes stored markers into the editor verses', () => {
     const split = {
       paragraphs: [

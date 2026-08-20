@@ -122,6 +122,17 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         onVersesChange={handleVersesChange}
       />
 
+      {/*
+        The textarea path says this in the empty verse's placeholder. The editor holds a document
+        rather than an input, so there is no placeholder to borrow and the wait would otherwise
+        read as an empty verse nothing is coming for (#400 review).
+      */}
+      {aiNotice === 'generating' && (
+        <p className='text-muted-foreground text-sm'>
+          {t('generatingAiSuggestion', 'Generating...')}
+        </p>
+      )}
+
       {aiNotice === 'error' && (
         <p className='text-destructive text-sm font-medium'>
           {t('aiTranslationNotAvailable', 'AI translation not available.')}
