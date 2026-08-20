@@ -18,6 +18,7 @@ import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import { canSetPericopeTitle, getPericopeTitle } from '@/features/bible/lib/pericope-title';
 import {
   type SourceTtsPlaybackApi,
+  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
   TtsGroupControls,
   ttsServingWashClass,

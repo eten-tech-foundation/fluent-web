@@ -15,7 +15,9 @@
  *
  * Feature-agnostic like its sibling (T3): the host passes playability and
  * playback state in, and the buttons carry descriptive accessible names rather
- * than icon-only semantics (§5.1), at the project's 40x40 touch size.
+ * than icon-only semantics (§5.1), at the project's 40x40 touch size — which
+ * `../lib/controlLayout` supplies without spending 40px of layout height, the
+ * same way the row control does.
  */
 
 import React from 'react';
@@ -26,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
+import { TTS_CONTROL_BUTTON_CLASS, TTS_CONTROL_STRIP_CLASS } from '../lib/controlLayout';
 
 export interface TtsGroupControlsProps {
   /** Human-readable group identity for the accessible name, e.g. "1:1-5". */
@@ -74,10 +77,11 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
   const stopLabel = t('ttsStopPlayback', 'Stop playback');
 
   return (
-    <div className='flex items-center gap-1' data-testid='tts-group-controls'>
+    <div className={TTS_CONTROL_STRIP_CLASS} data-testid='tts-group-controls'>
       <Button
         aria-busy={isLoading}
         aria-label={playLabel}
+        className={TTS_CONTROL_BUTTON_CLASS}
         disabled={!hasPlayableText}
         size='icon'
         // Alt+P acts on the caret's verse (T2), which reads that verse ALONE —
@@ -96,6 +100,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
       </Button>
       <Button
         aria-label={playFromLabel}
+        className={TTS_CONTROL_BUTTON_CLASS}
         disabled={!hasPlayableText}
         size='icon'
         // Unlike ▶, this one IS Alt+Shift+P: both read from here to the end of
@@ -111,6 +116,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
       {showStop && (
         <Button
           aria-label={stopLabel}
+          className={TTS_CONTROL_BUTTON_CLASS}
           data-active-group={isPlaying || undefined}
           size='icon'
           title={`${stopLabel} (${TTS_KEYBOARD_SHORTCUTS.stop})`}

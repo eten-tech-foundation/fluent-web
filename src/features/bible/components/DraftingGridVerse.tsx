@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import {
   type SourceTtsPlaybackApi,
+  TTS_CONTROL_ROW_CLASS,
   type TtsServedFormat,
   ttsServingWashClass,
   TtsVerseControls,
@@ -236,7 +237,10 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                 </div>
               )}
               {tts !== undefined && ttsVerseRef !== undefined && (
-                <div className='mt-2 flex items-center gap-1'>
+                // Tucked under THIS verse's source box and overlapping the
+                // row's own bottom padding — see `TTS_CONTROL_ROW_CLASS` for
+                // why the strip costs ~18px here rather than 48px.
+                <div className={TTS_CONTROL_ROW_CLASS}>
                   <TtsVerseControls
                     hasPlayableText={tts.isRowPlayable(ttsVerseRef)}
                     isLoading={tts.isRowLoading(ttsVerseRef)}
