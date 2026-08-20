@@ -21,7 +21,7 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
 
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0 # need full tag history to compute the next serial
           token: ${{ steps.app-token.outputs.token }}
