@@ -947,6 +947,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     // resumes here, and only here. Read-only `/view` gets a key too and is
     // harmless — nothing ever arms one, since it offers no next page.
     pageKey: String(projectItem.chapterAssignmentId),
+    // The hook cannot be skipped when the flag is off (React forbids a
+    // conditional hook call), so the gate is passed in. This is the MERGED
+    // flag, so a local force-on keeps its continuation and its playback (O3/O4).
+    enabled: ttsEnabled,
   });
 
   // Row identity for the queue is the verse number as a string; the grid asks

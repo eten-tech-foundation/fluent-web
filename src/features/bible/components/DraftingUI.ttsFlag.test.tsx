@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/sonner';
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import { clearFlagOverrides, refreshFlagOverrides, setFlagOverride } from '@/features/flags';
+import { armTtsContinuation, disarmTtsContinuation } from '@/features/tts/lib/playbackContinuation';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -212,10 +213,14 @@ const ttsControls = () => screen.queryAllByTestId('tts-verse-controls');
 beforeEach(() => {
   localStorage.clear();
   refreshFlagOverrides();
+  // The continuation intent is MODULE memory (see `playbackContinuation.ts`),
+  // so it outlives a render and would leak into the next test.
+  disarmTtsContinuation();
 });
 
 afterEach(() => {
   clearFlagOverrides();
+  disarmTtsContinuation();
 });
 
 /**
@@ -313,5 +318,48 @@ describe('DraftingUI — forced-on with no TTS backend (phase 2b hand-off)', () 
         screen.getByText('Could not play audio for verse 1. Please try again.')
       ).toBeInTheDocument()
     );
+  });
+});
+
+/**
+ * The flag-off hole (2026-08-20).
+ *
+ * `useSourceTtsPlayback`'s header says gating is the surface's job — "the
+ * surface decides whether to render controls AND whether to call this at all".
+ * The second half is not a thing any caller can honour: React forbids a
+ * conditional hook call, so `DraftingUI` calls it unconditionally and the
+ * mount effect claims the continuation token no matter what the flag says.
+ *
+ * The token is armed on the PREVIOUS page, where the flag may well have been
+ * on. Landing on a page with it off must therefore be silent: no controls, no
+ * shortcuts, and above all no audio — the listener would have no way to stop
+ * it, since Alt+S is gated on the same flag it is not being given.
+ */
+describe('DraftingUI — a continuation armed elsewhere must not fire with the flag off', () => {
+  it('issues no /ai/tts/* request when the flag is off', async () => {
+    const flagCalls = publishFlags({ sourceTts: false });
+
+    const generateCalls = { count: 0 };
+    server.use(
+      http.post(TTS_GENERATE_URL, () => {
+        generateCalls.count += 1;
+        return HttpResponse.json({ audio_url: '/tts/audio/deadbeef.wav' });
+      })
+    );
+
+    // What the previous chapter left behind: the listener confirmed "Continue
+    // on the next page?" there, where the feature WAS on. The intent survives
+    // the page change on purpose (that is the whole point of T16's second
+    // half) — but it must not survive the flag going off.
+    armTtsContinuation(String(mockProjectItem.chapterAssignmentId));
+
+    renderDrafting();
+    await settle(flagCalls);
+    // The claim happens in a mount effect and the request that follows is
+    // async, so give it more than the flag settle before declaring silence.
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(ttsControls()).toHaveLength(0);
+    expect(generateCalls.count).toBe(0);
   });
 });

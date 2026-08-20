@@ -9,7 +9,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
-import { disarmTtsContinuation } from '../lib/playbackContinuation';
+import { armTtsContinuation, disarmTtsContinuation } from '../lib/playbackContinuation';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
 import {
@@ -494,5 +494,68 @@ describe('useSourceTtsPlayback — failure surfacing (§5.2)', () => {
     expect(toastError).toHaveBeenCalledWith(
       'Could not play audio for verse GEN 1:3. Please try again.'
     );
+  });
+});
+
+/**
+ * The flag gate (2026-08-20).
+ *
+ * The surface owns the feature flag, but it cannot act on it by skipping the
+ * call — React forbids a conditional hook — so the flag arrives as `enabled`
+ * and this hook has to honour it itself. Two things follow, and the second is
+ * the one a user would actually meet: turning the feature off while somebody
+ * is listening takes their controls and shortcuts away, so playback that kept
+ * running would have nothing left to stop it.
+ */
+describe('useSourceTtsPlayback — the enabled gate', () => {
+  const setupGated = (enabled: boolean, extra: Partial<UseSourceTtsPlaybackOptions> = {}) =>
+    renderHook(
+      ({ isEnabled }: { isEnabled: boolean }) =>
+        useSourceTtsPlayback({
+          engine,
+          rows,
+          getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
+          getViewport: () => rect(0, 500),
+          enabled: isEnabled,
+          ...extra,
+        }),
+      { initialProps: { isEnabled: enabled } }
+    );
+
+  it('stops playback when the feature is turned off mid-listen', () => {
+    const { result, rerender } = setupGated(true);
+    act(() => result.current.playFromVerse('GEN 1:1'));
+    expect(playFrom).toHaveBeenCalled();
+
+    // The operator pulls the flag. Controls and shortcuts vanish with it.
+    rerender({ isEnabled: false });
+
+    expect(stop).toHaveBeenCalled();
+  });
+
+  it('does not claim a continuation armed while the feature was on', () => {
+    // Armed on the previous page, where the flag was on; this page has it off.
+    armTtsContinuation('chapter-2');
+
+    setupGated(false, { pageKey: 'chapter-2' });
+
+    expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('defers a claim rather than dropping it when the flag has not arrived yet', () => {
+    // The flag fails closed, so `enabled` is false for the first moment of a
+    // COLD document. A token cannot exist there — `armed` is module state that
+    // dies with the document — so this ordering is unreachable in the app. It
+    // is pinned anyway, because the safe behaviour is what makes that argument
+    // unnecessary: a skipped claim does not CONSUME the token, so the intent
+    // survives until the flag resolves (inside the 30 s TTL).
+    armTtsContinuation('chapter-2');
+
+    const { rerender } = setupGated(false, { pageKey: 'chapter-2' });
+    expect(playFrom).not.toHaveBeenCalled();
+
+    rerender({ isEnabled: true });
+
+    expect(playFrom).toHaveBeenCalledTimes(1);
   });
 });

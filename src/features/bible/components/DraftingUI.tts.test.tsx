@@ -182,6 +182,7 @@ vi.mock('@/features/bible/hooks/useNextAssignedChapter', () => ({
 
 // ── Playback: stubbed, so this file can drive state and read the rows ───────
 let ttsRows: readonly TtsFeature.TtsRowDraft[] = [];
+let ttsPlaybackEnabled: boolean | undefined;
 let activeVerseRef: string | null = null;
 let isBusy = false;
 const playVerse = vi.fn();
@@ -202,8 +203,10 @@ vi.mock('@/features/tts', async importOriginal => {
     },
     useSourceTtsPlayback: (options: {
       rows: readonly TtsFeature.TtsRowDraft[];
+      enabled?: boolean;
     }): TtsFeature.SourceTtsPlaybackApi => {
       ttsRows = options.rows;
+      ttsPlaybackEnabled = options.enabled;
       const playable = new Set(
         options.rows
           .filter(row => typeof row.text === 'string' && row.text.trim() !== '')
@@ -312,6 +315,7 @@ beforeEach(() => {
   mockNextPage = null;
   nextChapterOptions = undefined;
   ttsRows = [];
+  ttsPlaybackEnabled = undefined;
   mockActiveVerseId = 1;
   activeVerseRef = null;
   isBusy = false;
@@ -574,6 +578,49 @@ describe('DraftingUI — end-of-chapter prompt', () => {
     // Flag-off must not add a request for the assignment list.
     expect(nextChapterOptions?.enabled).toBe(false);
   });
+
+  it('stays unmounted with the feature off even when a next chapter is known', () => {
+    // The lookup being disabled is not the only thing keeping this hidden —
+    // the render gate is tested here on its own, with every OTHER condition
+    // for showing the prompt deliberately satisfied.
+    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
+    boundaryOpen = true;
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+
+    renderDrafting();
+
+    expect(screen.queryByTestId('tts-boundary-prompt')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The flag reaches PLAYBACK, not just the controls.
+ *
+ * React forbids a conditional hook call, so `useSourceTtsPlayback` runs whether
+ * the feature is on or off and has to be told which. Before this was wired, a
+ * page with the feature off could still start audio (a continuation claimed on
+ * mount) and could keep audio running when the flag went off mid-listen — with
+ * no controls and no Alt+S to stop it. Verified in a browser 2026-08-20.
+ *
+ * The hook's own behaviour under `enabled` is proven in
+ * `useSourceTtsPlayback.test.ts`; what only the HOST can prove is that the
+ * boolean is actually handed over — the same wiring bug class as the shortcuts
+ * that were never mounted.
+ */
+describe('DraftingUI — the playback gate is wired, not just the controls', () => {
+  it('passes the feature flag down to playback', () => {
+    renderDrafting();
+
+    expect(ttsPlaybackEnabled).toBe(true);
+  });
+
+  it('tells playback the feature is off, so it claims nothing and stops', () => {
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+
+    renderDrafting();
+
+    expect(ttsPlaybackEnabled).toBe(false);
+  });
 });
 
 // ── Regression guard: the shipped Checks surface is untouched ───────────────
@@ -755,11 +802,19 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
 
   it('renders no TTS at all in pericope mode when the flag is off', () => {
     enterPericopeMode();
+    // A playing row, so every marker below WOULD render if the flag were on.
+    // Without this the assertions pass on an idle page and prove nothing —
+    // which is how the invisible pericope marker got shipped in the first place.
+    activeVerseRef = '1';
     mockFeatureFlag.mockImplementation((name: string) => name !== 'sourceTts');
 
     renderDrafting();
 
     expect(screen.queryAllByTestId('tts-group-controls')).toHaveLength(0);
     expect(screen.queryAllByTestId('tts-active-group')).toHaveLength(0);
+    // G3a option (a): the per-verse marker is a THIRD surface, added after the
+    // group ones, and it renders off `activeVerseRef` rather than off the grid
+    // props — so it needs its own assertion or it could outlive the flag.
+    expect(screen.queryAllByTestId('tts-active-verse')).toHaveLength(0);
   });
 });

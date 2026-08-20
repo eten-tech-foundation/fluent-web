@@ -9,9 +9,10 @@
  *      confirmation, and only when the host proved a next page exists.
  *   4. Surfacing a playback failure as a toast (§5.2).
  *
- * Deliberately NOT here: the feature flag. Gating is the surface's job (the
- * surface decides whether to render controls and whether to call this at all),
- * which keeps the fail-closed check next to the UI it hides (§6.3, T12).
+ * The feature flag is not resolved here — the surface owns it (§6.3, T12) and
+ * hands the answer down as `enabled`. The surface cannot express that gate by
+ * skipping the call, because React forbids a conditional hook, so honouring
+ * `enabled` is THIS hook's job.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -70,6 +71,17 @@ export interface UseSourceTtsPlaybackOptions {
    * a host that omits it simply never auto-starts.
    */
   pageKey?: string;
+  /**
+   * The surface's feature-flag answer, already merged with any local override
+   * (O3) — pass the same boolean that decides whether controls render.
+   *
+   * False makes this hook inert: no continuation is claimed, and anything
+   * already playing is stopped. That second half is the one a listener meets,
+   * because the controls and the Alt+S shortcut disappear WITH the flag, so a
+   * queue left running would have nothing left to stop it. Defaults to true so
+   * a surface with no flag of its own needs no argument.
+   */
+  enabled?: boolean;
 }
 
 export interface SourceTtsPlaybackApi {
@@ -114,7 +126,7 @@ export interface SourceTtsPlaybackApi {
 export const useSourceTtsPlayback = (
   options: UseSourceTtsPlaybackOptions
 ): SourceTtsPlaybackApi => {
-  const { engine, rows, getRowElement, getViewport, nextPage, pageKey } = options;
+  const { engine, rows, getRowElement, getViewport, nextPage, pageKey, enabled = true } = options;
   const { t } = useTranslation();
 
   const [isBoundaryOpen, setIsBoundaryOpen] = useState(false);
@@ -293,10 +305,18 @@ export const useSourceTtsPlayback = (
       setIsBoundaryOpen(false);
     }
 
-    if (!pageKey || items.length === 0) return;
+    if (!enabled || !pageKey || items.length === 0) return;
     if (!claimTtsContinuation(pageKey)) return;
     queueRef.current.playFrom(items, 0);
-  }, [pageKey, items]);
+  }, [pageKey, items, enabled]);
+
+  // Turning the feature off takes live playback with it. Stopping an idle
+  // queue is a no-op, which is the common case (every mount with the flag off).
+  useEffect(() => {
+    if (enabled) return;
+    queueRef.current.stop();
+    setIsBoundaryOpen(false);
+  }, [enabled]);
 
   const playableRefs = useMemo(() => new Set(items.map(item => item.verseRef)), [items]);
 
