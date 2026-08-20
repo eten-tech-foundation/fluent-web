@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
-import type { TargetVerse } from '@/lib/types';
+import type { TargetVerse, VerseMarkers } from '@/lib/types';
 
 const emptyPericope: TargetVerse[] = [
   { verseNumber: 1, content: '' },
@@ -73,6 +73,33 @@ describe('pendingAiAutoFills', () => {
     });
 
     expect(fills).toEqual([{ verseNumber: 3, text: 'Three.' }]);
+  });
+
+  it('carries the stored markers of the verse it fills', () => {
+    // The translator laid the pericope out first and left verse 2 empty, so verse 2 owns a
+    // paragraph with nothing in it yet. The fill must hand those markers back: the save path reads
+    // a missing `markers` as "store none", which would drop the paragraph on the server while the
+    // editor still shows it — silent loss the translator only sees after a reload.
+    const opensParagraph: VerseMarkers = { paragraphs: [{ marker: 'p', offset: 0 }] };
+
+    const fills = pendingAiAutoFills({
+      candidateVerseNumbers: PERICOPE,
+      verses: [
+        { verseNumber: 1, content: 'One.' },
+        { verseNumber: 2, content: '', markers: opensParagraph },
+        { verseNumber: 3, content: '' },
+        { verseNumber: 4, content: '' },
+      ],
+      suggestions: { 2: 'Two.', 3: 'Three.' },
+      touchedVerseNumbers: new Set([1]),
+    });
+
+    expect(fills).toEqual([
+      { verseNumber: 2, text: 'Two.', markers: opensParagraph },
+      // A verse with none stored stays without an opinion, which is what keeps the textarea
+      // path's trim on its own fills.
+      { verseNumber: 3, text: 'Three.', markers: undefined },
+    ]);
   });
 
   it('waits for a verse whose suggestion has not arrived', () => {

@@ -556,8 +556,9 @@ describe('DraftingUI', () => {
       renderWithAi();
 
       // Verse 2 is not the active verse, but the whole pericope is on screen, so it fills too.
-      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1');
-      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2');
+      // Neither verse has markers stored, so neither fill claims an opinion about them.
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1', undefined);
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
     });
 
     it('still fills only the verse in focus on the textarea path', () => {
@@ -565,8 +566,59 @@ describe('DraftingUI', () => {
 
       renderWithAi();
 
-      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1');
-      expect(handleTextChange).not.toHaveBeenCalledWith(2, 'Suggestion for 2');
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1', undefined);
+      expect(handleTextChange).not.toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
+    });
+
+    it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {
+      config.features.rtePericope = true;
+      const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
+      mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync: mutateAsyncMock, isPending: false });
+
+      // The translator laid the pericope out before drafting it and left verse 2 empty, so verse 2
+      // opens a paragraph that holds nothing yet.
+      const opensParagraph: VerseMarkers = { paragraphs: [{ marker: 'p', offset: 0 }] };
+      const laidOut: TargetVerse[] = [
+        { verseNumber: 1, content: 'Ya traducido.' },
+        { verseNumber: 2, content: '', markers: opensParagraph },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: laidOut, handleTextChange })
+      );
+
+      render(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={laidOut}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      // Whatever the auto-fill handed the drafting hook is what the hook debounces into a save, so
+      // the two halves compose into the trip the suggestion really makes.
+      const fills = handleTextChange.mock.calls as Array<
+        [number, string, VerseMarkers | undefined]
+      >;
+      const [, filledText, filledMarkers] = fills.find(([verseNumber]) => verseNumber === 2) ?? [];
+      expect(filledText).toBe('Suggestion for 2');
+
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (
+          verse: number,
+          payload: { content: string; markers?: VerseMarkers | null }
+        ) => Promise<void>;
+      };
+      await onSave(2, { content: filledText ?? '', markers: filledMarkers });
+
+      // Omitting the field would null the stored paragraph server side (fluent-api#264): the
+      // editor would keep showing it and the structure would be gone on the next reload.
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        verseData: expect.objectContaining({
+          content: 'Suggestion for 2',
+          markers: opensParagraph,
+        }) as unknown,
+      });
     });
   });
 

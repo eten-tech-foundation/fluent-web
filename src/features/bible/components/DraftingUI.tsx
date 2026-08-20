@@ -558,7 +558,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedVerseNumbers: userTouchedVersesRef.current,
     }).forEach(fill => {
       userTouchedVersesRef.current.add(fill.verseNumber);
-      handleTextChange(fill.verseNumber, fill.text);
+      // The verse's own markers ride along: a fill that dropped them would null the paragraph
+      // structure of a verse the translator laid out and left empty (#400 review).
+      handleTextChange(fill.verseNumber, fill.text, fill.markers);
     });
   }, [
     activeVerseId,
