@@ -4,8 +4,9 @@
  *
  * Deliberately a small subset: every marker here is one a translator can *choose*, so each has to
  * survive the round trip and be in the API's allowlist. Markers that arrive in imported content
- * but are not authorable (`\ms`, `\li`, tables) are preserved by the editor and simply report as
- * "other" in the bar, rather than being silently rewritten to something the translator picked.
+ * but are not authorable (`\ms`, `\li`, `\q3`, tables) are preserved by the editor and simply
+ * report as "other" in the bar, rather than being silently rewritten to something the translator
+ * picked.
  */
 
 export type BlockKind = 'paragraph' | 'heading' | 'poetry' | 'other';
@@ -23,7 +24,12 @@ export const POETRY_LEVELS = [1, 2] as const;
 export type PoetryLevel = (typeof POETRY_LEVELS)[number];
 
 const HEADING_PATTERN = /^s([1-4])?$/;
-const POETRY_PATTERN = /^q([1-4])?$/;
+/**
+ * Only the levels the bar can author. `markerFor` clamps poetry to `\q2`, so admitting `\q3` here
+ * would let the controls resolve an imported line to a level the translator never picked —
+ * outdenting `\q4` would land on `\q2`. Deeper levels read as "other" and are left as they came.
+ */
+const POETRY_PATTERN = /^q([1-2])?$/;
 
 /** Which of the bar's three kinds a marker belongs to. `undefined` (no cursor) reads as prose. */
 export function blockKindOf(marker: string | undefined): BlockKind {

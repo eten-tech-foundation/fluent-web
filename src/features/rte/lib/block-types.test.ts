@@ -24,6 +24,14 @@ describe('blockKindOf', () => {
     }
   });
 
+  it('counts poetry the bar cannot author as "other" too', () => {
+    // `markerFor` only ever writes \q1 and \q2, so calling a \q3 line poetry would hand the bar
+    // controls that can only resolve it to a level it did not have.
+    expect(blockKindOf('q3')).toBe('other');
+    expect(blockKindOf('q4')).toBe('other');
+    expect(levelOf('q3')).toBeUndefined();
+  });
+
   it('treats no cursor as prose', () => {
     expect(blockKindOf(undefined)).toBe('paragraph');
     expect(levelOf(undefined)).toBeUndefined();
@@ -58,6 +66,15 @@ describe('indent controls', () => {
 
   it('has no effect outside poetry, so the controls can stay hidden there', () => {
     for (const marker of ['p', 's1', 'ms', undefined]) {
+      expect(indentedMarker(marker)).toBeUndefined();
+      expect(outdentedMarker(marker)).toBeUndefined();
+    }
+  });
+
+  it('leaves an imported poetry level deeper than the bar authors alone', () => {
+    // Outdenting \q4 once has no answer in a two-level bar: it would have to resolve to \q2 and
+    // lose two levels of the imported indent that nobody asked to change.
+    for (const marker of ['q3', 'q4']) {
       expect(indentedMarker(marker)).toBeUndefined();
       expect(outdentedMarker(marker)).toBeUndefined();
     }
