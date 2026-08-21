@@ -330,6 +330,25 @@ describe('ChapterEditor', () => {
       expect(screen.queryByTestId('heading-levels')).not.toBeInTheDocument();
     });
 
+    it('says so when the cursor is in a block it cannot author', () => {
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+
+      // A major section head and an imported poetry level the bar does not write. Three unpressed
+      // buttons would read as "no formatting here", which is the one thing this block is not.
+      for (const marker of ['ms1', 'q3']) {
+        reportBlock(marker);
+        expect(screen.getByTestId('other-block')).toHaveTextContent('Other');
+        expect(screen.getByRole('button', { name: 'Paragraph' })).toHaveAttribute(
+          'aria-pressed',
+          'false'
+        );
+        expect(screen.queryByTestId('poetry-indent')).not.toBeInTheDocument();
+      }
+
+      reportBlock('p');
+      expect(screen.queryByTestId('other-block')).not.toBeInTheDocument();
+    });
+
     it('is not offered when the chapter is read only', () => {
       render(
         <ChapterEditor {...CHAPTER_PROPS} readOnly verses={A_PAIR} onVersesChange={vi.fn()} />

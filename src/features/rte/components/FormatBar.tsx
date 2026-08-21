@@ -31,6 +31,10 @@ const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string }> = [
  * The level control and the indent controls are contextual by design — heading levels only mean
  * something inside a heading, and indenting only means something inside poetry — so they appear
  * with their block rather than sitting there disabled.
+ *
+ * A block the bar cannot author — an imported `\ms`, or poetry indented deeper than it writes —
+ * says so, because three unpressed buttons on their own read as "this block has no formatting".
+ * The marker is left as it came until the translator picks one of the three.
  */
 export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
   const { t } = useTranslation();
@@ -61,6 +65,12 @@ export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
           </Button>
         ))}
       </div>
+
+      {kind === 'other' && (
+        <span className='text-muted-foreground pl-2 text-xs' data-testid='other-block'>
+          {t('blockOther', 'Other')}
+        </span>
+      )}
 
       {kind === 'heading' && (
         <div className='flex items-center gap-1 pl-2' data-testid='heading-levels'>
