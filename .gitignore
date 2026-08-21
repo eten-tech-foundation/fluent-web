@@ -39,5 +39,9 @@ coverage
 # Generated files
 stats.html
 .tanstack
-# Local PR demo recordings (never committed)
+# yalc local links to the shared editor (see scripture-editors README "Develop in App")
+.yalc/
+yalc.lock
+
+# Local demo recordings for PR descriptions (never committed)
 .playwright-mcp/

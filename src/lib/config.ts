@@ -28,6 +28,15 @@ const envSchema = z.object({
   YOUVERSION_API_KEY: z.string().min(1, {
     message: 'YOUVERSION_API_KEY is required',
   }),
+  // Rich text editing in the pericope view (#314). Off by default: paragraph breaks the editor
+  // lets translators author cannot be persisted yet (fluent-api#263). The preprocess reads an
+  // empty value as unset, which this key needs and the other optional one does not: `z.enum`
+  // rejects `''` and would fail startup over a flag left blank, while an optional string simply
+  // takes it. An unset flag must never block the app from booting.
+  RTE_PERICOPE: z.preprocess(
+    value => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).optional()
+  ),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -44,6 +53,7 @@ const processEnv = {
   YOUVERSION_API_URL: import.meta.env.VITE_YOUVERSION_API_URL as string,
   YOUVERSION_API_KEY: import.meta.env.VITE_YOUVERSION_API_KEY as string,
   BETTER_AUTH_URL: import.meta.env.VITE_BETTER_AUTH_URL as string,
+  RTE_PERICOPE: import.meta.env.VITE_RTE_PERICOPE as string | undefined,
 };
 
 /**
@@ -93,6 +103,11 @@ export const config = {
 
   monitoring: {
     appInsightsConnectionString: validatedEnv.APPINSIGHTS_CONNECTION_STRING,
+  },
+
+  features: {
+    /** Rich text editing in the pericope view instead of per-verse textareas (#314). */
+    rtePericope: validatedEnv.RTE_PERICOPE === 'true',
   },
 };
 

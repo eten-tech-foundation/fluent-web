@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { UserRole } from '@/lib/types';
+import { canViewUsers, getActiveGrants, isOrgMemberOnly } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -27,12 +27,18 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
   const { userdetail } = useAppStore();
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
   const [open, setOpen] = React.useState(false);
   const location = useLocation();
+
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const showUsers = canViewUsers(activeRoleGrants);
+  const orgMemberOnly = isOrgMemberOnly(activeGrants);
+
   if (!isAuthenticated || !user) {
     return null;
   }
+
   const isDashboardActive = location.pathname === '/';
   const isUsersActive = location.pathname === '/users';
   const isProjectsActive = location.pathname === '/projects';
@@ -56,15 +62,17 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClick={onDashboardClick}
               onClosePopover={() => setOpen(false)}
             />
-            <MenuItem
-              icon={<Kanban size={18} />}
-              isActive={isProjectsActive}
-              text={t('projects')}
-              onClick={onProjectsClick}
-              onClosePopover={() => setOpen(false)}
-            />
+            {!orgMemberOnly && (
+              <MenuItem
+                icon={<Kanban size={18} />}
+                isActive={isProjectsActive}
+                text={t('projects')}
+                onClick={onProjectsClick}
+                onClosePopover={() => setOpen(false)}
+              />
+            )}
           </>
-          {isManager && (
+          {showUsers && (
             <>
               <MenuItem
                 icon={<Users size={18} />}

@@ -1,6 +1,6 @@
 import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
 import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
-import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
+import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 import { hydrationPromise, useAppStore } from '@/store/store';
 
 interface SourceVerseData {
@@ -13,6 +13,7 @@ interface TargetVerseData {
   id: number;
   verseNumber: number;
   content: string;
+  markers?: VerseMarkers | null;
 }
 
 const toSourceVerse = (verse: SourceVerseData): Source => ({
@@ -25,6 +26,9 @@ const toTargetVerse = (verse: TargetVerseData): TargetVerse => ({
   id: verse.id,
   verseNumber: verse.verseNumber,
   content: verse.content,
+  // Absent on responses from an API without fluent-api#264 yet; null and absent both mean
+  // "no stored paragraph structure" and the editor treats them identically.
+  markers: verse.markers ?? null,
 });
 
 export const translationLoader = async ({

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
+import { OrgSwitcher } from '@/features/header/components/OrgSwitcher';
 import { useAuth } from '@/hooks/useAuth';
 import { Logger } from '@/lib/services/logger';
 import { useAppStore } from '@/store/store';
@@ -42,7 +43,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ children, onEditProfile, onToggleSe
       <PopoverContent
         hideWhenDetached
         align='end'
-        className='w-56 border p-2'
+        className='w-64 border p-2'
         side='bottom'
         sideOffset={5}
       >
@@ -63,6 +64,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ children, onEditProfile, onToggleSe
           <div className='px-2 py-1'>
             <p className='text-sm font-medium'>{userdetail?.username}</p>
           </div>
+          <OrgSwitcher onAfterSelect={() => setOpen(false)} /> <Separator className='bg my-2' />
           <MenuItem
             icon={<LogOut size={18} />}
             text={t('logout')}

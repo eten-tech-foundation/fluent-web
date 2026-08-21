@@ -8,6 +8,8 @@ import MainMenu from '@/components/header/MainMenu';
 import UserMenu from '@/components/header/UserMenu';
 import { useAppStore } from '@/store/store';
 
+// import { OrgSwitcher } from './OrgSwitcher';
+
 const Header: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -90,7 +92,7 @@ const Header: React.FC = () => {
             )}
           </div>
 
-          <div className='shrink-0 pr-[18px]'>
+          <div className='flex shrink-0 items-center gap-2 pr-[18px]'>
             <UserMenu onEditProfile={handleEditProfile} onToggleSettings={onNavigateToSettings}>
               <button
                 aria-label={t('userMenu', 'User menu')}
