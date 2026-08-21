@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
@@ -9,17 +9,19 @@ import {
   type PericopeVerseText,
 } from '../lib/pericope-usj';
 
+import { FormatBar } from './FormatBar';
+
 import '../styles/usj-nodes.css';
 import '../styles/editor.css';
 import '../styles/editor-shared.css';
-import '../styles/pericope-editor.css';
+import '../styles/chapter-editor.css';
 
-import type { EditorRef } from '@eten-tech-foundation/platform-editor';
+import type { EditorRef, StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 import type { SerializedVerseRef } from '@sillsdev/scripture';
 
-export interface PericopeEditorProps {
-  /** The pericope's target verses, in order. */
+export interface ChapterEditorProps {
+  /** Every verse of the chapter, in order. */
   verses: PericopeVerseText[];
   chapterNumber: number;
   bookCode?: string;
@@ -33,18 +35,19 @@ export interface PericopeEditorProps {
 }
 
 /**
- * Rich text editing for one pericope, replacing the per-verse textareas (#314).
+ * The whole chapter as one continuous editing surface (#397).
  *
- * The editor is **uncontrolled**: it owns the document once loaded, and this component mirrors
- * edits back out as verse rows. Feeding every keystroke back in as a new `usj` prop would fight
- * the editor for the cursor, so it is written back into only in two cases: `contentKey` changed,
- * or the parent filled a verse the editor holds empty (the AI suggestion path).
+ * Deliberately the same document pipeline as the pericope view: one editor, the chapter's verses
+ * instead of a pericope's. The requirement that all three views read and write the same data is
+ * met by construction rather than by keeping two conversions in step. The wrapper contract is the
+ * same one `PericopeEditor` keeps, down to the AI suggestion path, for the same reason.
  *
- * Paragraph breaks the translator creates survive the trip out: `usjToPericopeVerses` derives a
- * `{marker, offset}` entry per paragraph, stored beside the verse (fluent-api#264), and stored
- * markers are rebuilt into the document on load.
+ * What is new here is the format bar, and that the pane scrolls on its own — chapter view drops
+ * the paired-row layout the other views scroll inside, so the source and target scrollbars are
+ * independent (the drift that layout used to hide is answered by the two panes being separate
+ * documents, not by pretending they line up).
  */
-export function PericopeEditor({
+export function ChapterEditor({
   verses,
   chapterNumber,
   bookCode,
@@ -52,7 +55,7 @@ export function PericopeEditor({
   contentKey,
   onVersesChange,
   onActiveVerseChange,
-}: PericopeEditorProps) {
+}: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const loadedKeyRef = useRef(contentKey);
   /**
@@ -60,12 +63,25 @@ export function PericopeEditor({
    * (the rows re-derived from the document we built), never the raw props. The document makes a
    * legacy verse's opening paragraph explicit, so diffing raw rows against a derived commit would
    * report that upgrade as an edit on every mount.
+   *
+   * Built here rather than in an effect: the editor commits the document it was mounted with, and
+   * a child's effects run before its parent's, so an effect would leave the first commit to be
+   * diffed against nothing. The AI fill below reads this too, and it has the same problem.
    */
   const knownVersesRef = useRef<PericopeVerseText[]>(
     usjToPericopeVerses(pericopeVersesToUsj(verses, chapterNumber, bookCode))
   );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
+  const [blockMarker, setBlockMarker] = useState<string | undefined>();
+
+  const initialUsj = useMemo(
+    () => pericopeVersesToUsj(verses, chapterNumber, bookCode),
+    // Keyed on the chapter's identity, not `verses`: a new object every keystroke would be a new
+    // document for the editor to fight the cursor over.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contentKey]
+  );
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
@@ -127,22 +143,39 @@ export function PericopeEditor({
     [onActiveVerseChange]
   );
 
+  const handleStateChange = useCallback((snapshot: StateChangeSnapshot) => {
+    setBlockMarker(snapshot.blockMarker);
+  }, []);
+
+  const handleFormat = useCallback((marker: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.formatPara(marker);
+    // The editor reports the new block through onStateChange, but only once it has committed;
+    // reflecting it now keeps the bar from lagging a click behind. Only where there was a block
+    // to act on, though: with no cursor `formatPara` has nothing to format, and a bar that
+    // claimed otherwise would keep claiming it until the next selection change.
+    setBlockMarker(current => (current === undefined ? current : marker));
+  }, []);
+
   return (
-    <div className='pericope-editor rte-editor' data-testid='pericope-editor'>
-      <Editorial
-        ref={editorRef}
-        defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}
-        options={{
-          isReadonly: readOnly,
-          // The drafting page supplies its own controls; the built-in toolbar would repeat once
-          // per pericope box.
-          hasExternalUI: true,
-          hasSpellCheck: false,
-          textDirection: 'auto',
-        }}
-        onScrRefChange={handleScrRefChange}
-        onUsjChange={handleUsjChange}
-      />
+    <div className='chapter-editor flex h-full min-h-0 flex-col' data-testid='chapter-editor'>
+      {!readOnly && <FormatBar blockMarker={blockMarker} onFormat={handleFormat} />}
+      <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
+        <Editorial
+          ref={editorRef}
+          defaultUsj={initialUsj}
+          options={{
+            isReadonly: readOnly,
+            hasExternalUI: true,
+            hasSpellCheck: false,
+            textDirection: 'auto',
+          }}
+          onScrRefChange={handleScrRefChange}
+          onStateChange={handleStateChange}
+          onUsjChange={handleUsjChange}
+        />
+      </div>
     </div>
   );
 }

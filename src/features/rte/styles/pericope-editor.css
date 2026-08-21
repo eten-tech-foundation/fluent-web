@@ -1,20 +1,7 @@
 /*
- * Fits the editor into the drafting page. The vendored stylesheets are Platform.Bible's
- * standalone look: a white page with its own chrome. Inside a pericope box the editor is one
- * field among others, and has to follow the app's theme.
+ * Fits the editor into the drafting page's pericope boxes. The theme reset every surface needs
+ * lives in `editor-shared.css`; what is left here is what only a pericope box wants.
  */
-
-/* `.editor-container` has to be in this list, not only the elements below it: the vendored
-   stylesheet paints it `color: #000` for its white standalone page, and everything inside the
-   editor inherits from it. Left out, the whole surface stays black text whatever the theme is,
-   which is invisible in dark mode. */
-.pericope-editor,
-.pericope-editor .editor-container,
-.pericope-editor .editor-inner,
-.pericope-editor [contenteditable] {
-  background: transparent;
-  color: inherit;
-}
 
 /* Chapter number: correct to carry in the USJ (it keeps verse references resolvable), wrong to
    show, since the pericope heading above already says which chapter this is. */
@@ -25,14 +12,6 @@
 .pericope-editor .editor-input {
   padding: 0;
   min-height: 0;
-}
-
-/* Verse numbers stay visible but recede: they are landmarks, not content. */
-.pericope-editor .verse {
-  color: inherit;
-  opacity: 0.65;
-  font-weight: 700;
-  user-select: none;
 }
 
 .pericope-editor p {

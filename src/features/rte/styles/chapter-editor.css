@@ -1,0 +1,51 @@
+/*
+ * Chapter view (#397): the whole chapter as one document, so it reads like the printed page
+ * rather than like a form. Block treatments come from the USJ markers the editor renders.
+ *
+ * The theme reset every editor surface needs lives in `editor-shared.css`; this sheet is only
+ * what the chapter surface wants on top of it.
+ */
+
+/* Section headings: visually distinct from body text, per the ticket. */
+.chapter-editor-surface .usfm_s,
+.chapter-editor-surface .usfm_s1 {
+  font-weight: 700;
+  font-size: 1.05em;
+  margin: 1.4em 0 0.5em;
+}
+.chapter-editor-surface .usfm_s2 {
+  font-weight: 700;
+  font-size: 1em;
+  margin: 1.2em 0 0.45em;
+}
+.chapter-editor-surface .usfm_s3,
+.chapter-editor-surface .usfm_s4 {
+  font-weight: 600;
+  font-style: italic;
+  margin: 1em 0 0.4em;
+}
+
+/* Poetry: q1 at the first indent, q2 deeper, so the shape of the verse is visible while editing. */
+.chapter-editor-surface .usfm_q,
+.chapter-editor-surface .usfm_q1 {
+  margin-inline-start: 1.5em;
+  margin-block: 0.15em;
+}
+.chapter-editor-surface .usfm_q2 {
+  margin-inline-start: 3em;
+  margin-block: 0.15em;
+}
+
+.chapter-editor-surface p {
+  line-height: 1.75;
+  margin: 0 0 0.7em;
+}
+
+/* The chapter number belongs at the top of the document here, unlike the pericope boxes where the
+   heading above each box already says which chapter it is. */
+.chapter-editor-surface .chapter {
+  display: block;
+  font-size: 1.6em;
+  font-weight: 700;
+  margin: 0 0 0.5em;
+}

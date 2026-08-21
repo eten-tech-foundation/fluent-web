@@ -82,6 +82,24 @@ vi.mock('@/features/bible/components/PericopeRteGroup', () => ({
   PericopeRteGroup: () => <div data-testid='pericope-rte-group' />,
 }));
 
+/**
+ * The chapter view travels as its own chunk, and what the pane shows while it is in flight is the
+ * point of the suite at the bottom of this file. The mocked module resolves only when a test lets
+ * it, which is the slow connection the fallback exists for.
+ */
+const chapterChunk = vi.hoisted(() => {
+  let arrive = () => {};
+  const onTheWire = new Promise<void>(resolve => {
+    arrive = resolve;
+  });
+  return { onTheWire, deliver: () => arrive() };
+});
+
+vi.mock('@/features/bible/components/DraftingChapterView', async () => {
+  await chapterChunk.onTheWire;
+  return { DraftingChapterView: () => <div data-testid='chapter-view' /> };
+});
+
 vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: (props: unknown) => mockUsePericope(props) as unknown,
 }));
@@ -836,6 +854,35 @@ describe('DraftingUI', () => {
       expect(mutateAsyncMock).toHaveBeenCalledWith({
         verseData: expect.objectContaining({ content: 'Plain textarea text.' }) as unknown,
       });
+    });
+  });
+
+  describe('chapter mode', () => {
+    afterEach(() => {
+      config.features.rtePericope = false;
+    });
+
+    it('holds the pane open while the chapter chunk is still on the wire', async () => {
+      config.features.rtePericope = true;
+      useAppStore.setState({ displayMode: 'chapter' });
+
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      // An empty fallback leaves a blank pane, which reads as a chapter with nothing in it rather
+      // than as one still arriving.
+      expect(screen.getByTestId('chapter-view-loading')).toBeInTheDocument();
+
+      chapterChunk.deliver();
+
+      expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
+      expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
     });
   });
 });
