@@ -51,5 +51,7 @@
   "display": "Display",
   "verse": "Verse",
   "pericope": "Pericope",
-  "chapter": "Chapter"
+  "chapter": "Chapter",
+  "mainMenu": "Main menu",
+  "userMenu": "User menu"
 }
