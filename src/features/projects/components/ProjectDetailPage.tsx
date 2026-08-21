@@ -20,10 +20,11 @@ import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
 import { getConnectivityProfileDisplay, getLastActivityDisplay } from '@/lib/formatters';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
-  UserRole,
+  ROLES,
   type ChapterAssignmentProgress,
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
   type ChapterStatusCounts,
@@ -153,7 +154,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     projectId ? projectId.toString() : '0'
   );
 
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
+  const activeOrgId = userdetail?.lastActiveOrgId;
+  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+
+  const isManager = useMemo(
+    () => isProjectManager(activeGrants, projectId),
+    [activeGrants, projectId]
+  );
 
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
@@ -164,14 +171,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const projectTranslators = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
     );
   }, [projectUsers, selectedPeerChecker]);
 
   const availablePeerCheckers = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedDrafter
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedDrafter
     );
   }, [projectUsers, selectedDrafter]);
 
@@ -437,6 +444,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
+                chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
                 projectId={projectId}
                 referenceHeight={detailsHeight}
@@ -474,7 +482,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     selectedAssignments.length === 0 ||
                     booksLoading ||
                     isLoadingData ||
-                    (projectUsers?.filter(pu => pu.roleID === UserRole.TRANSLATOR).length ?? 0) < 2
+                    (projectUsers?.filter(pu => pu.roleName === ROLES.PROJECT_TRANSLATOR).length ??
+                      0) < 2
                   }
                   size='sm'
                   onClick={handleAddBook}

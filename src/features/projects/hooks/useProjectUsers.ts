@@ -7,6 +7,7 @@ export interface ProjectUser {
   userId: number;
   displayName: string;
   roleID: number;
+  roleName: string;
   addedAt: string | null;
 }
 
@@ -35,14 +36,18 @@ const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
 
   return (await res.json()) as ProjectUser[];
 };
-const addProjectUsers = async (projectId: number, userIds: number[]): Promise<ProjectUser[]> => {
+const addProjectUsers = async (
+  projectId: number,
+  userIds: number[],
+  roleName: string
+): Promise<ProjectUser[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/users/`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ userIds }),
+    body: JSON.stringify({ userIds, roleName }),
   });
 
   if (!res.ok) await parseErrorMessage(res, 'Failed to add users to project');
@@ -79,7 +84,8 @@ export const useAddProjectUsers = (projectId: number) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userIds }: { userIds: number[] }) => addProjectUsers(projectId, userIds),
+    mutationFn: ({ userIds, roleName }: { userIds: number[]; roleName: string }) =>
+      addProjectUsers(projectId, userIds, roleName),
     onSuccess: newUsers => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev => {
         const existing = prev ?? [];
@@ -103,6 +109,41 @@ export const useRemoveProjectUser = (projectId: number) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.filter(u => u.userId !== userId) : []
       );
+    },
+  });
+};
+
+const updateProjectUserRole = async (
+  projectId: number,
+  userId: number,
+  roleName: string
+): Promise<ProjectUser> => {
+  const res = await fetch(`${config.api.url}/projects/${projectId}/users/${userId}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ roleName }),
+  });
+
+  if (!res.ok) await parseErrorMessage(res, 'Failed to update user role');
+  return (await res.json()) as ProjectUser;
+};
+
+export const useUpdateProjectUserRole = (projectId: number) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, roleName }: { userId: number; roleName: string }) =>
+      updateProjectUserRole(projectId, userId, roleName),
+    onSuccess: (updatedUser, { userId }) => {
+      queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
+        prev ? prev.map(u => (u.userId === userId ? updatedUser : u)) : []
+      );
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId] });
     },
   });
 };

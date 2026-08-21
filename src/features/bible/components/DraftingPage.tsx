@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import { useMatch } from '@tanstack/react-router';
 import { Loader } from 'lucide-react';
 
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
+import { getActiveGrants } from '@/lib/grant-utils';
+import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { DraftingUI } from './DraftingUI';
@@ -31,14 +33,47 @@ const DraftingPage: React.FC = () => {
       : undefined;
 
   const loaderData = rawLoaderData as LoaderData | undefined;
-  const isReadOnly = !!viewMatch;
 
+  // Safer null-guard: returns undefined when loaderData is not yet available
   const projectItem = loaderData
     ? currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
       ? currentProjectItem
       : loaderData.projectItem
     : undefined;
 
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const targetProjectId = projectItem?.projectId;
+
+  const isObserverForProject = useMemo(() => {
+    if (!targetProjectId) {
+      return userdetail?.role === ROLES.PROJECT_OBSERVER;
+    }
+
+    // 1. Org-level managers are never restricted to observer read-only
+    const isOrgManager = activeGrants.some(
+      g =>
+        (g.projectId === null || g.projectId === undefined) &&
+        ['Org Manager', 'Org Owner', 'SuperAdmin'].includes(g.roleName)
+    );
+    if (isOrgManager) return false;
+
+    // 2. Resolve grant specifically matching targetProjectId
+    const projectGrant = activeGrants.find(
+      g => g.projectId === targetProjectId || g.projectId === Number(targetProjectId)
+    );
+    if (projectGrant) {
+      return projectGrant.roleName === ROLES.PROJECT_OBSERVER;
+    }
+
+    // 3. Fallback to active role
+    return userdetail?.role === ROLES.PROJECT_OBSERVER;
+  }, [activeGrants, targetProjectId, userdetail?.role]);
+
+  // Observer view or explicit /view route is ALWAYS read-only
+  const isReadOnly = !!viewMatch || isObserverForProject;
+
+  // Sync the user's global AI auto-enable preference to this chapter.
+  // Must be called after isReadOnly is derived — the hook skips syncing for read-only views.
   useSyncGlobalAiSetting(
     projectItem?.chapterAssignmentId,
     projectItem?.projectId,

@@ -1,13 +1,12 @@
-export const ROLES = {
-  1: 'Manager',
-  2: 'Translator',
-} as const;
+import { getDisplayRole, ROLES, type RoleOption } from '@/lib/types';
 
-export const roleOptions = [
-  { value: '1', label: 'Manager' },
-  { value: '2', label: 'Translator' },
+/** Dropdown options for UserModal with canonical role values */
+export const roleOptions: RoleOption[] = [
+  { value: ROLES.PROJECT_MANAGER, label: 'Project Manager' },
+  { value: ROLES.PROJECT_TRANSLATOR, label: 'Translator' },
 ];
 
-export const getRoleLabel = (roleNumber: number): string => {
-  return ROLES[roleNumber as keyof typeof ROLES];
+export const getRoleLabel = (roleName: string): string => {
+  const option = roleOptions.find(r => r.value === roleName);
+  return option?.label ?? getDisplayRole(roleName);
 };
