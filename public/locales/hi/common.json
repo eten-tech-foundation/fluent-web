@@ -48,6 +48,9 @@
   "headingLevel": "स्तर",
   "decreaseIndent": "इंडेंट घटाएँ",
   "increaseIndent": "इंडेंट बढ़ाएँ",
+  "display": "प्रदर्शन",
+  "verse": "पद",
+  "chapter": "अध्याय",
   "mainMenu": "मुख्य मेनू",
   "userMenu": "उपयोगकर्ता मेनू"
 }

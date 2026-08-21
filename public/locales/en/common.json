@@ -48,6 +48,10 @@
   "headingLevel": "Level",
   "decreaseIndent": "Decrease indent",
   "increaseIndent": "Increase indent",
+  "display": "Display",
+  "verse": "Verse",
+  "pericope": "Pericope",
+  "chapter": "Chapter",
   "mainMenu": "Main menu",
   "userMenu": "User menu"
 }
