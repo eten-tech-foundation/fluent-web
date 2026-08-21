@@ -834,7 +834,16 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
         <div className='w-full flex-1 overflow-hidden'>
           {isChapterMode ? (
-            <Suspense fallback={null}>
+            <Suspense
+              fallback={
+                <div
+                  className='flex h-full items-center justify-center'
+                  data-testid='chapter-view-loading'
+                >
+                  <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                </div>
+              }
+            >
               <DraftingChapterView
                 bibleVerseMap={bibleVerseMap}
                 handleActiveVerseChange={handleActiveVerseChange}
