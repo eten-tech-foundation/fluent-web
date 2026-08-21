@@ -14,7 +14,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getRoleLabel } from '@/lib/constants/roles';
 import { type User } from '@/lib/types';
 
 interface UsersPageProps {
@@ -85,7 +84,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
 
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 flex-shrink-0'>
+      <div className='mb-6 shrink-0'>
         <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('users')}</h1>
         <Button className='bg-primary hover:bg-primary/90 text-white' onClick={onAddUser}>
           {t(`addUser`)}
@@ -133,7 +132,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
                         <TruncatedTextCell text={user.username} />
                       </TableCell>
                       <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
-                        {getRoleLabel(user.role)}
+                        {user.orgGrants?.[0]?.roleName ?? user.grants?.[0]?.roleName ?? 'No Role'}
                       </TableCell>
                       <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
                         <TruncatedTextCell align='center' text={user.email} />

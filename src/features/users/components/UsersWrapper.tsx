@@ -4,7 +4,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 
 import { UserModal } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
-import { useCreateUser, useUpdateUser, useUsers } from '@/hooks/useUsers';
+import { useCreateUser, useUpdateUser, useUsers, type InviteUserPayload } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
 import { type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -61,26 +61,44 @@ export const UsersWrapper: React.FC = () => {
           userData: userData as User,
         });
         if (selectedUser.email === userdetail?.email) {
+          const grants = res.orgGrants ?? res.grants ?? [];
+          const activeOrgId =
+            userdetail.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
+          const activeGrant = grants.find(g => g.orgId === activeOrgId);
+
           setUserDetail({
             id: res.id,
             email: res.email,
             username: res.username,
-            role: res.role,
-            organization: res.organization,
+            role: activeGrant?.roleName ?? res.role,
+            lastActiveOrgId: res.lastActiveOrgId ?? userdetail.lastActiveOrgId,
+            grants: grants,
             firstName: res.firstName,
             lastName: res.lastName,
             status: res.status,
           });
         }
       } else {
-        const newUser: Omit<User, 'id'> = {
-          ...(userData as Omit<User, 'id'>),
-          organization: userdetail?.organization ?? 0,
-          createdBy: userdetail?.id ?? 0,
-          isActive: true,
+        const userToInvite = userData as Omit<User, 'id'> & {
+          roleName?: string;
+          role?: string | number;
         };
+        const inviteRoleName =
+          userToInvite.roleName ??
+          (typeof userToInvite.role === 'string' ? userToInvite.role : String(userToInvite.role));
+        const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
+        const activeGrant = userdetail?.grants?.find(g => g.orgId === activeOrgId);
+        const invitePayload: InviteUserPayload = {
+          email: userToInvite.email,
+          username: userToInvite.displayName ?? userToInvite.username,
+          orgId: activeOrgId ?? 0,
+          roleName: inviteRoleName,
+          orgName: activeGrant?.orgName ?? userdetail?.orgGrants?.[0]?.orgName ?? undefined,
+          inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
+        };
+
         await createUserMutation.mutateAsync({
-          userData: newUser,
+          userData: invitePayload,
         });
       }
       handleClose();
