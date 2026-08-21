@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
+import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
@@ -17,6 +18,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
+import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -24,6 +26,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -31,10 +34,11 @@ import {
   type DraftingUIProps,
   type ResourceName,
   type Source,
+  type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope, TargetVersesGroup } from './DraftingGridPericope';
+import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
@@ -136,20 +140,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const trackAiUsageMutation = useTrackAiUsage();
 
   const saveVerse = useCallback(
-    async (verse: number, text: string) => {
+    async (verse: number, payload: SavePayload) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
       if (!sourceVerse) {
         Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
         return;
       }
-      const trimmedText = text.trim();
+      // Marker offsets are positions in the exact string the caller measured, so that string has
+      // to be what is stored: trimming underneath them shifts every nonzero offset and can leave
+      // one past the end of the content. The textarea path carries no offsets and keeps its trim.
+      const content = payload.markers === undefined ? payload.content.trim() : payload.content;
 
       await addVerseMutation.mutateAsync({
         verseData: {
           projectUnitId: projectItem.projectUnitId,
-          content: trimmedText,
+          content,
           bibleTextId: sourceVerse.id,
           assignedUserId: userdetail.id,
+          // Only when the caller derived markers (the RTE): the API overwrites stored markers
+          // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
+          ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
         },
       });
 
@@ -242,11 +252,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     isPericopeMode,
     isPericopeLoading,
     getPericopeStyle,
+    currentPericopeGroup,
     globalNextUntouchedVerse,
     resourceVerseId,
     effectiveRevealedVerses,
     isNextButtonEnabled,
     handleNextClick,
+    handleNextPericopeClick,
   } = usePericope({
     projectItem,
     sourceVerses,
@@ -494,7 +506,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
     const savePromises = verses
       .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
-      .map(verse => saveImmediately(verse.verseNumber, verse.content));
+      .map(verse =>
+        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      );
 
     await Promise.all(savePromises);
 
@@ -519,9 +533,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
 
   const handleTextChangeWithTracking = useCallback(
-    (verseNumber: number, text: string) => {
+    (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
       userTouchedVersesRef.current.add(verseNumber);
-      handleTextChange(verseNumber, text);
+      handleTextChange(verseNumber, text, markers);
     },
     [handleTextChange]
   );
@@ -529,19 +543,28 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   useEffect(() => {
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
-    // Check if the current active verse is empty and we have a new AI suggestion for it
-    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (
-      activeTargetVerse &&
-      !activeTargetVerse.content.trim() &&
-      aiSuggestions[activeVerseId] &&
-      !userTouchedVersesRef.current.has(activeVerseId)
-    ) {
-      userTouchedVersesRef.current.add(activeVerseId);
-      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
-    }
+    // Which verses a suggestion may land in. The textarea path shows one verse at a time, so it
+    // fills the verse in focus. The pericope editor shows the whole pericope at once, so the
+    // pericope populates progressively, verse by verse, as each suggestion arrives (#314).
+    const candidateVerseNumbers =
+      config.features.rtePericope && currentPericopeGroup
+        ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
+        : [activeVerseId];
+
+    pendingAiAutoFills({
+      candidateVerseNumbers,
+      verses,
+      suggestions: aiSuggestions,
+      touchedVerseNumbers: userTouchedVersesRef.current,
+    }).forEach(fill => {
+      userTouchedVersesRef.current.add(fill.verseNumber);
+      // The verse's own markers ride along: a fill that dropped them would null the paragraph
+      // structure of a verse the translator laid out and left empty (#400 review).
+      handleTextChange(fill.verseNumber, fill.text, fill.markers);
+    });
   }, [
     activeVerseId,
+    currentPericopeGroup,
     aiSuggestions,
     verses,
     handleTextChange,
@@ -600,8 +623,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
-  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
-
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
       if (isPericopeMode && pericopes) {
@@ -615,7 +636,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               </div>
             </div>
             <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map(group => {
+              {pericopes.map((group, groupIndex) => {
                 const groupVerses = sourceVerses.filter(sv =>
                   group.verses.some(gv => gv.verseNumber === sv.verseNumber)
                 );
@@ -650,20 +671,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         }
                       }}
                     >
-                      <TargetVersesGroup
+                      <PericopeTargetGroup
                         activeVerseId={activeVerseId}
                         aiSuggestions={aiSuggestions}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        groupIndex={groupIndex}
                         groupVerses={groupVerses}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
+                        handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
-                        lastSourceVerseNumber={lastSourceVerseNumber}
+                        pericopes={pericopes}
+                        projectItem={projectItem}
                         readOnly={readOnly}
+                        sourceVerses={sourceVerses}
                         suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verses={verses}
@@ -730,10 +755,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleActiveVerseChange,
       handleKeyDown,
       handleNextClick,
+      handleNextPericopeClick,
       handleTextChangeWithTracking,
       isTranslationComplete,
       isDraft,
-      lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
@@ -895,6 +920,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
+                        handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}

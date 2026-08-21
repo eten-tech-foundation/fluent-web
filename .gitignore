@@ -39,3 +39,6 @@ coverage
 # Generated files
 stats.html
 .tanstack
+# yalc local links to the shared editor (see scripture-editors README "Develop in App")
+.yalc/
+yalc.lock
