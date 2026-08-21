@@ -47,5 +47,7 @@
   "blockOther": "Other",
   "headingLevel": "Level",
   "decreaseIndent": "Decrease indent",
-  "increaseIndent": "Increase indent"
+  "increaseIndent": "Increase indent",
+  "mainMenu": "Main menu",
+  "userMenu": "User menu"
 }

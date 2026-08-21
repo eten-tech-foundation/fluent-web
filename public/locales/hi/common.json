@@ -47,5 +47,7 @@
   "blockOther": "अन्य",
   "headingLevel": "स्तर",
   "decreaseIndent": "इंडेंट घटाएँ",
-  "increaseIndent": "इंडेंट बढ़ाएँ"
+  "increaseIndent": "इंडेंट बढ़ाएँ",
+  "mainMenu": "मुख्य मेनू",
+  "userMenu": "उपयोगकर्ता मेनू"
 }
