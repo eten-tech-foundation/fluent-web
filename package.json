@@ -28,7 +28,7 @@
     "set-env": "node scripts/set-env.ts"
   },
   "dependencies": {
-    "@eten-tech-foundation/platform-editor": "^0.8.14",
+    "@eten-tech-foundation/platform-editor": "file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz",
     "@eten-tech-foundation/scripture-utilities": "^0.1.6",
     "@microsoft/applicationinsights-web": "^3.3.8",
     "@radix-ui/react-accordion": "^1.2.12",
