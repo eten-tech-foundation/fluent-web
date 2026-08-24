@@ -9,6 +9,12 @@ i18n
   .use(initReactI18next)
   .init({
     fallbackLng: 'en',
+    // Only what actually ships under public/locales: one namespace per language, and no region
+    // directories — so 'en-US' resolves to 'en' instead of requesting files that don't exist
+    // (fluent-web#427). Without an explicit `ns`, i18next also loads its default 'translation'
+    // namespace on every page.
+    ns: ['common'],
+    load: 'languageOnly',
     debug: true,
     interpolation: {
       escapeValue: false,
