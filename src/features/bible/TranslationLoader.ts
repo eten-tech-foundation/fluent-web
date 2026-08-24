@@ -1,3 +1,5 @@
+import { redirect } from '@tanstack/react-router';
+
 import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
 import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
@@ -39,8 +41,12 @@ export const translationLoader = async ({
   await hydrationPromise;
   const { userdetail, currentProjectItem, setCurrentProjectItem } = useAppStore.getState();
 
+  // A fresh session (deep link, new tab, shared URL) has no store state to translate the URL
+  // into an assignment. That is a navigation problem, not an application error: send the user to
+  // the dashboard, where opening the assignment populates everything this loader needs
+  // (fluent-web#427).
   if (!userdetail) {
-    throw new Error('User details are missing.');
+    throw redirect({ to: '/' });
   }
   const locationStateItem = location.state?.projectItem;
   let projectItem = currentProjectItem;
@@ -56,7 +62,7 @@ export const translationLoader = async ({
   }
 
   if (!projectItem) {
-    throw new Error('Project item is missing. Please navigate from the project list.');
+    throw redirect({ to: '/' });
   }
   setCurrentProjectItem(projectItem);
 
