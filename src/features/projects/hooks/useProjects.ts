@@ -1,14 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
+import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import {
-  UserRole,
-  type CreateProject,
-  type Project,
-  type ProjectItem,
-  type User,
-} from '@/lib/types';
+import { type CreateProject, type Project, type ProjectItem, type User } from '@/lib/types';
 
 const fetchProjects = async (): Promise<Project[]> => {
   const res = await fetch(`${config.api.url}/projects`, {
@@ -24,8 +19,11 @@ const fetchProjects = async (): Promise<Project[]> => {
   return data;
 };
 
-const fetchUserProjects = async (user: User): Promise<Project[]> => {
-  const res = await fetch(`${config.api.url}/users/${user.id}/projects`, {
+const fetchUserProjects = async (user: User, role?: string): Promise<Project[]> => {
+  const url = new URL(`${config.api.url}/users/${user.id}/projects`);
+  if (role) url.searchParams.set('role', role);
+
+  const res = await fetch(url.toString(), {
     method: 'GET',
     credentials: 'include',
     headers: {
@@ -60,22 +58,34 @@ export const useProjects = (enabled: boolean = true) => {
   });
 };
 
-export const useUserProjects = (user: User | null | undefined) => {
+export const useUserProjects = (user: User | null | undefined, role?: string) => {
   return useQuery<Project[]>({
-    queryKey: ['user-projects', user?.id],
+    queryKey: ['user-projects', user?.id, user?.lastActiveOrgId, role],
     queryFn: () => {
       if (!user) throw new Error('User is required');
-      return fetchUserProjects(user);
+      return fetchUserProjects(user, role);
     },
     enabled: !!user?.id,
   });
 };
 
+/**
+ * Determines the correct project-fetching endpoint based on the user's active
+ * org grants.
+ *
+ * - Org Owner / Org Manager / SuperAdmin / Project Manager → GET /projects
+ *   (backend scopes to activeOrgId)
+ * - Translator / Observer → GET /users/{id}/projects
+ *   (only their assigned projects)
+ */
 export const useProjectsByRole = (user: User | null | undefined) => {
-  const isManager = user?.role === UserRole.PROJECT_MANAGER;
-  const managerQuery = useProjects(isManager);
-  const translatorQuery = useUserProjects(!isManager ? user : null);
-  return isManager ? managerQuery : translatorQuery;
+  const activeGrants = getActiveGrants(user?.grants, user?.lastActiveOrgId);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === user?.role);
+  const isAnyManager = isManager(activeRoleGrants);
+
+  const managerQuery = useProjects(isAnyManager);
+  const translatorQuery = useUserProjects(!isAnyManager ? user : null);
+  return isAnyManager ? managerQuery : translatorQuery;
 };
 
 export const useCreateProject = () => {

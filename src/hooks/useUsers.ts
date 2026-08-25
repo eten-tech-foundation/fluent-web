@@ -51,7 +51,18 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   return 'Generic API error';
 };
 
-const createUser = async (userData: Omit<User, 'id'>): Promise<User> => {
+/** Payload sent to POST /users/invite */
+export interface InviteUserPayload {
+  email: string;
+  username: string;
+  orgId: number;
+  projectId?: number | null;
+  roleName: string;
+  orgName?: string;
+  inviterName?: string;
+}
+
+const createUser = async (userData: InviteUserPayload): Promise<User> => {
   try {
     return await apiRequest<User>(`${config.api.url}/users/invite`, {
       method: 'POST',
@@ -104,10 +115,14 @@ export const useCreateUser = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userData }: { userData: Omit<User, 'id'> }) => createUser(userData),
-    onSuccess: () => {
+    mutationFn: ({ userData }: { userData: InviteUserPayload }) => createUser(userData),
+    onSuccess: (_data, { userData }) => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Invalidate project users list if invited within a project context
+      if (userData.projectId) {
+        void queryClient.invalidateQueries({ queryKey: ['projectUsers', userData.projectId] });
+      }
     },
     onError: error => {
       Logger.logException(error, { context: 'Error creating user' });
@@ -142,6 +157,34 @@ export const useGetUserDetailsMutation = () => {
     },
     onError: error => {
       Logger.logException(error, { context: 'Error fetching user details' });
+    },
+  });
+};
+
+const updateActiveOrg = async (orgId: number): Promise<void> => {
+  const response = await fetch(`${config.api.url}/users/me/active-org`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orgId }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || 'Failed to update active org');
+  }
+};
+
+export const useUpdateActiveOrg = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orgId }: { orgId: number }) => updateActiveOrg(orgId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['userDetails'] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error updating active org' });
     },
   });
 };

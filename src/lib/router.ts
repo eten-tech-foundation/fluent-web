@@ -14,7 +14,8 @@ export const router = createRouter({
     auth: {
       isAuthenticated: false,
       isLoading: true,
-      role: null,
+      isManager: false,
+      canViewUsers: false,
     } satisfies RouterContext['auth'],
   },
 });
@@ -26,5 +27,6 @@ declare module '@tanstack/react-router' {
   interface HistoryState {
     projectItem?: ProjectItem;
     user?: User;
+    from?: string;
   }
 }
