@@ -66,8 +66,9 @@ export const translationLoader = async ({
   }
   setCurrentProjectItem(projectItem);
 
-  const search = location.search as { t?: string };
-  const cacheParam = search.t ?? Date.now().toString();
+  // Both routes declare `validateSearch`, so the router always supplies `search` — but the type
+  // says it's optional, so read it as one instead of asserting it away.
+  const cacheParam = location.search?.t ?? Date.now().toString();
 
   const [sourceVerseData, targetVerseData] = await Promise.all([
     fetchBibleText(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber),
