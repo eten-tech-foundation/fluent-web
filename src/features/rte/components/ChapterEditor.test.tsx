@@ -30,6 +30,8 @@ const editor = vi.hoisted(() => ({
   commit: undefined as ((usj: Usj) => void) | undefined,
   reportState: undefined as ((snapshot: StateChangeSnapshot) => void) | undefined,
   reportScrRef: undefined as ((scrRef: SerializedVerseRef) => void) | undefined,
+  /** Every verse the editor has been asked to put the cursor in, in order. */
+  askedForVerses: [] as number[],
 }));
 
 vi.mock('@eten-tech-foundation/platform-editor', async () => {
@@ -37,6 +39,7 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
 
   interface StubProps {
     defaultUsj?: Usj;
+    scrRef?: SerializedVerseRef;
     onScrRefChange?: (scrRef: SerializedVerseRef) => void;
     onStateChange?: (snapshot: StateChangeSnapshot) => void;
     onUsjChange?: (usj: Usj) => void;
@@ -44,11 +47,17 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
 
   return {
     Editorial: react.forwardRef<unknown, StubProps>(
-      ({ defaultUsj, onScrRefChange, onStateChange, onUsjChange }, ref) => {
+      ({ defaultUsj, scrRef, onScrRefChange, onStateChange, onUsjChange }, ref) => {
         editor.usj ??= defaultUsj;
         editor.commit = onUsjChange;
         editor.reportState = onStateChange;
         editor.reportScrRef = onScrRefChange;
+
+        // The real plugin places the cursor when the verse it is handed changes, and only then.
+        const askedForVerse = scrRef?.verseNum;
+        react.useEffect(() => {
+          if (askedForVerse !== undefined) editor.askedForVerses.push(askedForVerse);
+        }, [askedForVerse]);
         react.useImperativeHandle(
           ref,
           () => ({
@@ -125,6 +134,7 @@ describe('ChapterEditor', () => {
     editor.commit = undefined;
     editor.reportState = undefined;
     editor.echoOnMount = true;
+    editor.askedForVerses = [];
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
   });
@@ -398,6 +408,7 @@ describe('scoped block formatting (#427)', () => {
     editor.reportState = undefined;
     editor.reportScrRef = undefined;
     editor.echoOnMount = true;
+    editor.askedForVerses = [];
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
   });
@@ -431,6 +442,26 @@ describe('scoped block formatting (#427)', () => {
       { verseNumber: 2, text: 'Second.', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
       { verseNumber: 3, text: 'Third.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
     ]);
+  });
+
+  it('asks for the active verse back after the reload, so the next click still lands', async () => {
+    render(<ChapterEditor {...CHAPTER_PROPS} verses={wholeChapter} onVersesChange={vi.fn()} />);
+    act(() => {
+      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
+      editor.reportState?.({
+        canRedo: false,
+        canUndo: false,
+        blockMarker: 'p',
+        contextMarker: undefined,
+      });
+    });
+    editor.askedForVerses = [];
+
+    await userEvent.click(screen.getByText('Poetry Line'));
+
+    // Reloading the document leaves no selection, and the plugin only acts on a verse it has not
+    // just been given — so the verse has to be let go of before it can be asked for again.
+    expect(editor.askedForVerses).toEqual([0, 2]);
   });
 
   it('keeps the editor-native path when the active verse already is its own block', async () => {

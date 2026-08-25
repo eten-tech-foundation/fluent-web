@@ -21,6 +21,9 @@ import type { EditorRef, StateChangeSnapshot } from '@eten-tech-foundation/platf
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 import type { SerializedVerseRef } from '@sillsdev/scripture';
 
+/** A reference the plugin has no verse to place the cursor in, which is how a verse is re-announced. */
+const NO_VERSE = 0;
+
 export interface ChapterEditorProps {
   /** Every verse of the chapter, in order. */
   verses: PericopeVerseText[];
@@ -155,6 +158,23 @@ export function ChapterEditor({
     setScrRef({ book: bookCode ?? '', chapterNum: chapterNumber, verseNum: 1 });
   }, [bookCode, chapterNumber, contentKey]);
 
+  /**
+   * The verse to put the cursor back in once the reference has been let go of. Reloading the
+   * document leaves the editor with no selection at all, and the plugin only places the cursor
+   * when the verse it is given *changes* — so re-announcing the verse the translator is in takes
+   * letting go of it first. Without this the next click on the bar lands on `formatPara`, which
+   * has no selection to act on and silently does nothing.
+   */
+  const restoreCursorRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const verseNum = restoreCursorRef.current;
+    if (verseNum === undefined) return;
+    restoreCursorRef.current = undefined;
+    // Anything else that moved the cursor in the meantime already left a usable selection.
+    if (scrRef.verseNum === NO_VERSE) setScrRef(current => ({ ...current, verseNum }));
+  }, [scrRef]);
+
   const handleScrRefChange = useCallback(
     (nextRef: SerializedVerseRef) => {
       setScrRef(nextRef);
@@ -184,9 +204,20 @@ export function ChapterEditor({
         activeVerse === undefined
           ? null
           : scopeBlockFormatToVerse(knownVersesRef.current, activeVerse, marker);
-      if (scoped) {
+      if (scoped && activeVerse !== undefined) {
         loadIntoEditor(scoped.updated);
-        onVersesChange(scoped.changed);
+        // Report what the document ended up holding, not the rows we handed it: the load
+        // re-derives them, and the parent's copy has to be the one the next commit is diffed
+        // against or an edit somewhere else would come back as a change to this verse.
+        const loaded = knownVersesRef.current;
+        onVersesChange(
+          scoped.changed.map(
+            row => loaded.find(verse => verse.verseNumber === row.verseNumber) ?? row
+          )
+        );
+        // The load left the editor with no selection; ask for the active verse back.
+        restoreCursorRef.current = activeVerse;
+        setScrRef(current => ({ ...current, verseNum: NO_VERSE }));
       } else {
         editor.formatPara(marker);
       }

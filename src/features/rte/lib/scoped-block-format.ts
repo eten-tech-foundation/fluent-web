@@ -8,11 +8,20 @@ const opensBlock = (row: PericopeVerseText): boolean =>
 const midVerseSplits = (row: PericopeVerseText) =>
   row.markers?.paragraphs.filter(paragraph => paragraph.offset > 0) ?? [];
 
-/** The marker of the block a row sits in: its own opener, the nearest one above, or the default. */
-function surroundingBlockMarker(rows: PericopeVerseText[], index: number): string {
+/**
+ * The marker of the block that is open at the *end* of a row — which is what the row after it
+ * continues. That is the row's own furthest paragraph if it has any (a verse can open a block at
+ * offset 0 and then split into another one mid-text), otherwise the nearest one above, otherwise
+ * the classic default. Looking only at offset-0 openers would miss a block a verse opened inside
+ * itself and end it by mistake.
+ */
+function openBlockMarkerAfter(rows: PericopeVerseText[], index: number): string {
   for (let i = index; i >= 0; i--) {
-    const opening = rows[i].markers?.paragraphs.find(paragraph => paragraph.offset === 0);
-    if (opening) return opening.marker;
+    const paragraphs = rows[i].markers?.paragraphs ?? [];
+    if (paragraphs.length === 0) continue;
+    return paragraphs.reduce((furthest, paragraph) =>
+      paragraph.offset > furthest.offset ? paragraph : furthest
+    ).marker;
   }
   return DEFAULT_BLOCK_MARKER;
 }
@@ -41,25 +50,20 @@ export function scopeBlockFormatToVerse(
   const next = index + 1 < rows.length ? rows[index + 1] : undefined;
   if (opensBlock(active) && (!next || opensBlock(next))) return null;
 
-  // Resolved before any rewrite: the follower reopens the block the active verse was sitting in.
-  const reopenMarker = surroundingBlockMarker(rows, index);
+  // Resolved before any rewrite: the follower reopens the block that was open where it starts.
+  // The active verse keeps its own mid-text splits, so that block is the same before and after.
+  const reopenMarker = openBlockMarkerAfter(rows, index);
 
   const updatedActive: PericopeVerseText = {
     ...active,
-    markers: {
-      ...(active.markers ?? {}),
-      paragraphs: [{ marker, offset: 0 }, ...midVerseSplits(active)],
-    },
+    markers: { paragraphs: [{ marker, offset: 0 }, ...midVerseSplits(active)] },
   };
 
   const updatedNext: PericopeVerseText | undefined =
     next && !opensBlock(next)
       ? {
           ...next,
-          markers: {
-            ...(next.markers ?? {}),
-            paragraphs: [{ marker: reopenMarker, offset: 0 }, ...midVerseSplits(next)],
-          },
+          markers: { paragraphs: [{ marker: reopenMarker, offset: 0 }, ...midVerseSplits(next)] },
         }
       : undefined;
 

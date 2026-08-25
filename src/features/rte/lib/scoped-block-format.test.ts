@@ -72,6 +72,27 @@ describe('scopeBlockFormatToVerse', () => {
     ]);
   });
 
+  it('reopens the block the active verse opened inside itself', () => {
+    // Verse 2 splits into q2 halfway through, so verse 3 was sitting in q2, not in the p above.
+    const rows = [
+      verse(1, 'First.'),
+      verse(2, 'Second half here.', [{ marker: 'q2', offset: 7 }]),
+      verse(3, 'Third.'),
+    ];
+    const { updated } = scopeBlockFormatToVerse(rows, 2, 'q1')!;
+    expect(updated[2].markers?.paragraphs).toEqual([{ marker: 'q2', offset: 0 }]);
+  });
+
+  it('reopens a block opened mid-verse on an earlier row', () => {
+    const rows = [
+      verse(1, 'First half here.', [{ marker: 'q2', offset: 6 }]),
+      verse(2, 'Second.'),
+      verse(3, 'Third.'),
+    ];
+    const { updated } = scopeBlockFormatToVerse(rows, 2, 'q1')!;
+    expect(updated[2].markers?.paragraphs).toEqual([{ marker: 'q2', offset: 0 }]);
+  });
+
   it('replaces the marker in place when the active verse already opens its own multi-verse block', () => {
     const rows = [
       verse(1, 'First.'),
