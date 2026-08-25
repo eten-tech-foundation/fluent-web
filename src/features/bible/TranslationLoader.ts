@@ -1,3 +1,5 @@
+import { redirect } from '@tanstack/react-router';
+
 import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
 import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
@@ -39,8 +41,12 @@ export const translationLoader = async ({
   await hydrationPromise;
   const { userdetail, currentProjectItem, setCurrentProjectItem } = useAppStore.getState();
 
+  // A fresh session (deep link, new tab, shared URL) has no store state to translate the URL
+  // into an assignment. That is a navigation problem, not an application error: send the user to
+  // the dashboard, where opening the assignment populates everything this loader needs
+  // (fluent-web#427).
   if (!userdetail) {
-    throw new Error('User details are missing.');
+    throw redirect({ to: '/' });
   }
   const locationStateItem = location.state?.projectItem;
   let projectItem = currentProjectItem;
@@ -56,12 +62,13 @@ export const translationLoader = async ({
   }
 
   if (!projectItem) {
-    throw new Error('Project item is missing. Please navigate from the project list.');
+    throw redirect({ to: '/' });
   }
   setCurrentProjectItem(projectItem);
 
-  const search = location.search as { t?: string };
-  const cacheParam = search.t ?? Date.now().toString();
+  // Both routes declare `validateSearch`, so the router always supplies `search` — but the type
+  // says it's optional, so read it as one instead of asserting it away.
+  const cacheParam = location.search?.t ?? Date.now().toString();
 
   const [sourceVerseData, targetVerseData] = await Promise.all([
     fetchBibleText(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber),
