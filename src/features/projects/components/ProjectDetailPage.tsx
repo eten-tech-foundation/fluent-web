@@ -19,11 +19,12 @@ import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBoo
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getConnectivityProfileDisplay } from '@/lib/formatters';
+import { getConnectivityProfileDisplay, getLastActivityDisplay } from '@/lib/formatters';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
-  UserRole,
+  ROLES,
   type ChapterAssignmentProgress,
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
   type ChapterStatusCounts,
@@ -44,6 +45,7 @@ interface ProjectDetailPageProps {
   projectTargetLanguageName: string;
   projectSource: string;
   projectConnectivityProfile?: string | null;
+  projectLastActivityAt?: string | null;
   projectChapterStatusCounts: ChapterStatusCounts;
   projectWorkflowConfig: WorkflowStep[];
   isAddUserOpen?: boolean;
@@ -122,6 +124,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   projectTargetLanguageName,
   projectSource,
   projectConnectivityProfile,
+  projectLastActivityAt,
   projectChapterStatusCounts,
   projectWorkflowConfig,
   isAddUserOpen = false,
@@ -151,7 +154,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     projectId ? projectId.toString() : '0'
   );
 
-  const isManager = userdetail?.role === UserRole.PROJECT_MANAGER;
+  const activeOrgId = userdetail?.lastActiveOrgId;
+  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+
+  const isManager = useMemo(
+    () => isProjectManager(activeGrants, projectId),
+    [activeGrants, projectId]
+  );
 
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
@@ -162,14 +171,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const projectTranslators = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
     );
   }, [projectUsers, selectedPeerChecker]);
 
   const availablePeerCheckers = useMemo(() => {
     if (!projectUsers) return [];
     return projectUsers.filter(
-      pu => pu.roleID === UserRole.TRANSLATOR && pu.userId.toString() !== selectedDrafter
+      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedDrafter
     );
   }, [projectUsers, selectedDrafter]);
 
@@ -418,6 +427,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {getConnectivityProfileDisplay(projectConnectivityProfile)}
                 </p>
+
+                <label className='text-base font-bold'>Last Activity</label>
+                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
+                  {getLastActivityDisplay(projectLastActivityAt)}
+                </p>
               </div>
               <CardProgressBar
                 chapterStatusCounts={projectChapterStatusCounts}
@@ -430,6 +444,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
+                chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
                 projectId={projectId}
                 referenceHeight={detailsHeight}
@@ -467,7 +482,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     selectedAssignments.length === 0 ||
                     booksLoading ||
                     isLoadingData ||
-                    (projectUsers?.filter(pu => pu.roleID === UserRole.TRANSLATOR).length ?? 0) < 2
+                    (projectUsers?.filter(pu => pu.roleName === ROLES.PROJECT_TRANSLATOR).length ??
+                      0) < 2
                   }
                   size='sm'
                   onClick={handleAddBook}

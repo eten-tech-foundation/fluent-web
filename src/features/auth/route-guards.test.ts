@@ -2,7 +2,6 @@ import { isRedirect } from '@tanstack/react-router';
 import { describe, expect, it } from 'vitest';
 
 import { type AuthContext } from '@/lib/router-context';
-import { UserRole } from '@/lib/types';
 import { Route as AuthenticatedRoute } from '@/routes/_authenticated';
 import { Route as UsersRoute } from '@/routes/_authenticated/users/index';
 import { Route as LoginRoute } from '@/routes/login';
@@ -20,7 +19,6 @@ interface RedirectShape {
 const authContext = (overrides: Partial<AuthContext> = {}): AuthContext => ({
   isAuthenticated: false,
   isLoading: false,
-  role: null,
   ...overrides,
 });
 
@@ -133,18 +131,18 @@ describe('/login route guard', () => {
 });
 
 describe('_authenticated/users route guard', () => {
-  it('redirects non-managers (translators) to the home route', () => {
+  it('redirects when user cannot view users', () => {
     const thrown = captureRedirect(usersGuard, {
-      context: { auth: authContext({ isAuthenticated: true, role: UserRole.TRANSLATOR }) },
+      context: { auth: authContext({ isAuthenticated: true, canViewUsers: false }) },
       location: { href: '/users' },
     });
     expect(isRedirect(thrown)).toBe(true);
     expect((thrown as RedirectShape).options?.to).toBe('/');
   });
 
-  it('lets project managers through', () => {
+  it('lets users with view permission through', () => {
     const thrown = captureRedirect(usersGuard, {
-      context: { auth: authContext({ isAuthenticated: true, role: UserRole.PROJECT_MANAGER }) },
+      context: { auth: authContext({ isAuthenticated: true, canViewUsers: true }) },
       location: { href: '/users' },
     });
     expect(thrown).toBeNull();

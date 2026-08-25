@@ -21,6 +21,7 @@ export interface ProjectDetails {
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
   pericopeSetId?: number | null;
+  lastActivityAt: string | null;
 }
 
 const fetchProjectDetails = async (projectId: string): Promise<ProjectDetails> => {

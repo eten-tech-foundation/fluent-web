@@ -1,3 +1,12 @@
+export interface UserGrant {
+  orgId: number | null;
+  projectId?: number | null;
+  roleId: number;
+  roleName: string;
+  permissions: string[];
+  orgName?: string | null;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -5,9 +14,12 @@ export interface User {
   lastName?: string;
   displayName?: string;
   email: string;
-  role: number;
+  grants?: UserGrant[];
+  orgGrants?: UserGrant[];
+  role: string;
   status?: string;
-  organization: number;
+  organization?: number;
+  lastActiveOrgId?: number | null;
   createdBy?: number;
   isActive?: boolean;
 }
@@ -145,11 +157,34 @@ export interface ProjectItem {
   isAiEnabled?: boolean;
 }
 
+/**
+ * One paragraph a verse opens or splits into, as `translated_verses.markers` stores it.
+ *
+ * A field added here has to be added to `sameParagraphs` in `useBibleTextDebounce.ts` too, which
+ * compares these one field at a time rather than serializing them, to keep the drafting surface
+ * from allocating a string per verse on every render.
+ */
+export interface VerseParagraph {
+  marker: string;
+  offset: number;
+}
+
+/** A verse's paragraph context (fluent-api#264). `null` mirrors a row with none stored. */
+export interface VerseMarkers {
+  paragraphs: VerseParagraph[];
+}
+
 export interface VerseData {
   projectUnitId: number;
   content: string;
   bibleTextId: number;
   assignedUserId: number;
+  /**
+   * Omitted (undefined) when the caller has no opinion — the textarea path — so the field stays
+   * out of the request. The RTE always sends a concrete value, because the API overwrites the
+   * stored markers with whatever the upsert says (omission nulls them).
+   */
+  markers?: VerseMarkers | null;
 }
 
 export interface AudioStep {
@@ -248,6 +283,8 @@ export interface TargetVerse {
   id?: number;
   content: string;
   verseNumber: number;
+  /** Loaded from the API for the RTE; undefined on rows the textarea path creates locally. */
+  markers?: VerseMarkers | null;
 }
 
 export interface DraftingUIProps {
@@ -290,10 +327,45 @@ export enum ChapterAssignmentStatus {
   CONSULTANT_CHECK = 'consultant_check',
   COMPLETE = 'complete',
 }
-export enum UserRole {
-  PROJECT_MANAGER = 1,
-  TRANSLATOR = 2,
+export const ROLES = {
+  SUPER_ADMIN: 'SuperAdmin',
+  ORG_MANAGER: 'Org Manager',
+  PROJECT_MANAGER: 'Project Manager',
+  PROJECT_TRANSLATOR: 'Project Translator',
+  PROJECT_OBSERVER: 'Project Observer',
+  ORG_MEMBER: 'Org Member',
+} as const;
+
+export type RoleName = (typeof ROLES)[keyof typeof ROLES];
+
+// Display labels for role names shown in the UI
+const roleDisplayNames: Partial<Record<RoleName, string>> = {
+  [ROLES.PROJECT_MANAGER]: 'Project Manager',
+  [ROLES.PROJECT_TRANSLATOR]: 'Translator',
+  [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_MANAGER]: 'Org Manager',
+  [ROLES.PROJECT_OBSERVER]: 'Observer',
+  [ROLES.ORG_MEMBER]: 'Organization Member',
+};
+
+export function getDisplayRole(roleName: string): string {
+  return roleDisplayNames[roleName as RoleName] ?? roleName;
 }
+
+export interface RoleOption {
+  value: RoleName;
+  label: string;
+}
+
+export const ROLE_OPTIONS: RoleOption[] = (
+  Object.entries(roleDisplayNames) as Array<[RoleName, string]>
+).map(([value, label]) => ({ value, label }));
+
+export const PROJECT_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(r =>
+  (
+    [ROLES.PROJECT_MANAGER, ROLES.PROJECT_TRANSLATOR, ROLES.PROJECT_OBSERVER] as readonly string[]
+  ).includes(r.value)
+);
 
 export const ChapterAssignmentStatusDisplay: Record<ChapterAssignmentStatus, string> = {
   [ChapterAssignmentStatus.NOT_STARTED]: 'Not Started',
