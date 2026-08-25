@@ -15,7 +15,11 @@ i18n
     // namespace on every page.
     ns: ['common'],
     load: 'languageOnly',
-    debug: true,
+    // `load` only strips the region: a browser reporting 'fr-FR' still resolves to 'fr', which
+    // the detector picks at init — before `useLanguageDetection` can fall back to 'en' — and the
+    // backend requests a directory that does not exist. Pin the list to the locales on disk.
+    supportedLngs: ['en', 'hi'],
+    debug: import.meta.env.DEV,
     interpolation: {
       escapeValue: false,
     },
