@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from 'react';
 
+import { nextRenderablePericopeVerse } from '@/features/bible/lib/pericope-navigation';
 import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPericopes';
-import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
+import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface UsePericopeProps {
   projectItem: ProjectItem;
@@ -12,7 +13,10 @@ interface UsePericopeProps {
   lastRevealedVerseHasContent: boolean;
   displayMode: string;
   getSaveStatus: (verseNumber: number) => { hasUnsavedChanges: boolean };
-  saveImmediately: (verseNumber: number, content: string) => Promise<void>;
+  saveImmediately: (
+    verseNumber: number,
+    payload: { content: string; markers?: VerseMarkers | null }
+  ) => Promise<void>;
   handleActiveVerseChange: (verseNumber: number) => void;
   revealNextVerse: () => void;
 }
@@ -130,6 +134,24 @@ export const usePericope = ({
     });
   }, [isPericopeMode, currentPericopeGroup, lastRevealedVerseHasContent, verses]);
 
+  /**
+   * Write out every verse still sitting on its debounce timer, before navigating away from it.
+   *
+   * A pericope is editable as a whole — one rich text editor, or a column of textareas — so the
+   * verse the drafter is in is not the only one that can hold an unsaved edit. Typing in verse 1,
+   * moving to verse 3 and pressing next leaves verse 1 on a timer that the unmount clears, and the
+   * edit never reaches the server.
+   */
+  const flushPendingVerses = useCallback(async () => {
+    const pending = verses.filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges);
+
+    await Promise.all(
+      pending.map(verse =>
+        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      )
+    );
+  }, [verses, getSaveStatus, saveImmediately]);
+
   const handleNextClick = useCallback(async () => {
     if (!isPericopeMode) {
       revealNextVerse();
@@ -137,13 +159,7 @@ export const usePericope = ({
     }
     if (!currentPericopeGroup) return;
 
-    const currentActiveVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (currentActiveVerse) {
-      const status = getSaveStatus(currentActiveVerse.verseNumber);
-      if (status.hasUnsavedChanges) {
-        await saveImmediately(currentActiveVerse.verseNumber, currentActiveVerse.content);
-      }
-    }
+    await flushPendingVerses();
 
     if (globalNextUntouchedVerse) {
       handleActiveVerseChange(globalNextUntouchedVerse.verseNumber);
@@ -172,12 +188,43 @@ export const usePericope = ({
     pericopes,
     currentPericopeGroup,
     activeVerseId,
-    verses,
     globalNextUntouchedVerse,
-    getSaveStatus,
-    saveImmediately,
+    flushPendingVerses,
     handleActiveVerseChange,
     revealNextVerse,
+  ]);
+
+  /**
+   * Advance to the first verse of the next pericope (#314).
+   *
+   * The rich text surface is one editor per pericope, so drafting moves pericope by pericope
+   * rather than verse by verse: there are no verse rows left to step through, and Enter is a
+   * paragraph break rather than a way to advance. Unlike `handleNextClick` this never stops at
+   * `globalNextUntouchedVerse` — an untouched verse inside the pericope the drafter is leaving is
+   * still inside the surface they can see and edit.
+   */
+  const handleNextPericopeClick = useCallback(async () => {
+    if (!isPericopeMode || !currentPericopeGroup) return;
+
+    await flushPendingVerses();
+
+    const currentIdx = pericopes.findIndex(
+      g => g.pericopeNumber === currentPericopeGroup.pericopeNumber
+    );
+    if (currentIdx === -1) return;
+
+    // Skips pericopes the grid renders nothing for, and returns null on the last one that does.
+    const nextVerseNumber = nextRenderablePericopeVerse(pericopes, currentIdx, sourceVerses);
+    if (nextVerseNumber === null) return;
+
+    handleActiveVerseChange(nextVerseNumber);
+  }, [
+    isPericopeMode,
+    pericopes,
+    currentPericopeGroup,
+    sourceVerses,
+    flushPendingVerses,
+    handleActiveVerseChange,
   ]);
 
   return {
@@ -192,5 +239,6 @@ export const usePericope = ({
     effectiveRevealedVerses,
     isNextButtonEnabled,
     handleNextClick,
+    handleNextPericopeClick,
   };
 };

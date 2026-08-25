@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Loader2, X } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
+import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
@@ -17,6 +18,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
+import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -24,6 +26,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -31,13 +34,18 @@ import {
   type DraftingUIProps,
   type ResourceName,
   type Source,
+  type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope, TargetVersesGroup } from './DraftingGridPericope';
+import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+
+const DraftingChapterView = lazy(() =>
+  import('./DraftingChapterView').then(module => ({ default: module.DraftingChapterView }))
+);
 
 /**
  * Stable empty snapshot for renders before the first check result settles —
@@ -65,6 +73,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 }) => {
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
+  // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
+  // other views' rows level, and a chapter has no rows to keep level (#397).
+  const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
 
   const addVerseMutation = useAddTranslatedVerse();
   const submitChapterMutation = useSubmitChapter();
@@ -136,20 +147,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const trackAiUsageMutation = useTrackAiUsage();
 
   const saveVerse = useCallback(
-    async (verse: number, text: string) => {
+    async (verse: number, payload: SavePayload) => {
       const sourceVerse = sourceVerses.find((v: Source) => v.verseNumber === verse);
       if (!sourceVerse) {
         Logger.warn(`Source verse ${verse} not found in sourceVerses.`);
         return;
       }
-      const trimmedText = text.trim();
+      // Marker offsets are positions in the exact string the caller measured, so that string has
+      // to be what is stored: trimming underneath them shifts every nonzero offset and can leave
+      // one past the end of the content. The textarea path carries no offsets and keeps its trim.
+      const content = payload.markers === undefined ? payload.content.trim() : payload.content;
 
       await addVerseMutation.mutateAsync({
         verseData: {
           projectUnitId: projectItem.projectUnitId,
-          content: trimmedText,
+          content,
           bibleTextId: sourceVerse.id,
           assignedUserId: userdetail.id,
+          // Only when the caller derived markers (the RTE): the API overwrites stored markers
+          // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
+          ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
         },
       });
 
@@ -242,11 +259,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     isPericopeMode,
     isPericopeLoading,
     getPericopeStyle,
+    currentPericopeGroup,
     globalNextUntouchedVerse,
     resourceVerseId,
     effectiveRevealedVerses,
     isNextButtonEnabled,
     handleNextClick,
+    handleNextPericopeClick,
   } = usePericope({
     projectItem,
     sourceVerses,
@@ -494,7 +513,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
     const savePromises = verses
       .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
-      .map(verse => saveImmediately(verse.verseNumber, verse.content));
+      .map(verse =>
+        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+      );
 
     await Promise.all(savePromises);
 
@@ -519,9 +540,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
 
   const handleTextChangeWithTracking = useCallback(
-    (verseNumber: number, text: string) => {
+    (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
       userTouchedVersesRef.current.add(verseNumber);
-      handleTextChange(verseNumber, text);
+      handleTextChange(verseNumber, text, markers);
     },
     [handleTextChange]
   );
@@ -529,19 +550,28 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   useEffect(() => {
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
-    // Check if the current active verse is empty and we have a new AI suggestion for it
-    const activeTargetVerse = verses.find(v => v.verseNumber === activeVerseId);
-    if (
-      activeTargetVerse &&
-      !activeTargetVerse.content.trim() &&
-      aiSuggestions[activeVerseId] &&
-      !userTouchedVersesRef.current.has(activeVerseId)
-    ) {
-      userTouchedVersesRef.current.add(activeVerseId);
-      handleTextChange(activeVerseId, aiSuggestions[activeVerseId]);
-    }
+    // Which verses a suggestion may land in. The textarea path shows one verse at a time, so it
+    // fills the verse in focus. The pericope editor shows the whole pericope at once, so the
+    // pericope populates progressively, verse by verse, as each suggestion arrives (#314).
+    const candidateVerseNumbers =
+      config.features.rtePericope && currentPericopeGroup
+        ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
+        : [activeVerseId];
+
+    pendingAiAutoFills({
+      candidateVerseNumbers,
+      verses,
+      suggestions: aiSuggestions,
+      touchedVerseNumbers: userTouchedVersesRef.current,
+    }).forEach(fill => {
+      userTouchedVersesRef.current.add(fill.verseNumber);
+      // The verse's own markers ride along: a fill that dropped them would null the paragraph
+      // structure of a verse the translator laid out and left empty (#400 review).
+      handleTextChange(fill.verseNumber, fill.text, fill.markers);
+    });
   }, [
     activeVerseId,
+    currentPericopeGroup,
     aiSuggestions,
     verses,
     handleTextChange,
@@ -600,8 +630,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return map;
   }, [bibleVerses]);
 
-  const lastSourceVerseNumber = sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0;
-
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
       if (isPericopeMode && pericopes) {
@@ -615,7 +643,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               </div>
             </div>
             <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map(group => {
+              {pericopes.map((group, groupIndex) => {
                 const groupVerses = sourceVerses.filter(sv =>
                   group.verses.some(gv => gv.verseNumber === sv.verseNumber)
                 );
@@ -650,20 +678,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         }
                       }}
                     >
-                      <TargetVersesGroup
+                      <PericopeTargetGroup
                         activeVerseId={activeVerseId}
                         aiSuggestions={aiSuggestions}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
+                        groupIndex={groupIndex}
                         groupVerses={groupVerses}
                         handleActiveVerseChange={handleActiveVerseChange}
                         handleKeyDown={handleKeyDown}
                         handleNextClick={handleNextClick}
+                        handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
-                        lastSourceVerseNumber={lastSourceVerseNumber}
+                        pericopes={pericopes}
+                        projectItem={projectItem}
                         readOnly={readOnly}
+                        sourceVerses={sourceVerses}
                         suggestionStatus={suggestionStatus}
                         textareaRefs={textareaRefs}
                         verses={verses}
@@ -730,10 +762,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleActiveVerseChange,
       handleKeyDown,
       handleNextClick,
+      handleNextPericopeClick,
       handleTextChangeWithTracking,
       isTranslationComplete,
       isDraft,
-      lastSourceVerseNumber,
       readOnly,
       textareaRefs,
       verses,
@@ -801,178 +833,203 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         )}
 
         <div className='w-full flex-1 overflow-hidden'>
-          <div
-            className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full w-full content-start`}
-            style={{
-              gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
-              gridTemplateRows: 'auto 1fr',
-              scrollbarGutter: 'stable',
-            }}
-          >
-            {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
-            <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
-              <button
-                className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
-                  openResourcePanel
-                    ? selectedPanel === 1
-                      ? 'border-primary border-b-2 pb-1'
-                      : 'text-muted-foreground'
-                    : ''
-                }`}
-                disabled={!openResourcePanel}
-                onClick={() => setSelectedPanel(1)}
-              >
-                {projectItem.bibleName}
-              </button>
-
-              {openResourcePanel && (
-                <>
-                  <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
-                    |
-                  </span>
-                  <button
-                    className={`cursor-pointer text-2xl font-bold transition-colors ${
-                      selectedPanel === 2
+          {isChapterMode ? (
+            <Suspense
+              fallback={
+                <div
+                  className='flex h-full items-center justify-center'
+                  data-testid='chapter-view-loading'
+                >
+                  <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                </div>
+              }
+            >
+              <DraftingChapterView
+                bibleVerseMap={bibleVerseMap}
+                handleActiveVerseChange={handleActiveVerseChange}
+                handleTextChange={handleTextChangeWithTracking}
+                projectItem={projectItem}
+                readOnly={readOnly}
+                selectedPanel={selectedPanel}
+                sourceVerses={sourceVerses}
+                verses={verses}
+              />
+            </Suspense>
+          ) : (
+            <div
+              className={`${showResources ? 'ml-0' : 'ml-2'} grid h-full w-full content-start`}
+              style={{
+                gridTemplateColumns: isPericopeMode ? '1fr 1fr' : '2rem 1fr 1fr',
+                gridTemplateRows: 'auto 1fr',
+                scrollbarGutter: 'stable',
+              }}
+            >
+              {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
+              <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
+                <button
+                  className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
+                    openResourcePanel
+                      ? selectedPanel === 1
                         ? 'border-primary border-b-2 pb-1'
                         : 'text-muted-foreground'
-                    }`}
-                    onClick={() => setSelectedPanel(2)}
-                  >
-                    {bibleTabLabel}
-                  </button>
-                  <X
-                    className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
-                    onClick={handleBibleTabClose}
-                  />
-                </>
-              )}
-            </div>
+                      : ''
+                  }`}
+                  disabled={!openResourcePanel}
+                  onClick={() => setSelectedPanel(1)}
+                >
+                  {projectItem.bibleName}
+                </button>
 
-            <div className='bg-background sticky top-0 z-10 px-6 py-3'>
-              <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
-                {projectItem.targetLanguage}
-              </h3>
-            </div>
-
-            <div
-              className={`col-span-full flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
-            >
-              <div
-                ref={targetScrollRef}
-                className='relative flex h-full flex-col overflow-y-auto'
-                style={{ scrollbarGutter: 'stable' }}
-                onScroll={() => !readOnly && updateButtonPosition()}
-              >
-                {selectedPanel === 2 &&
-                  bibleContentLoading &&
-                  renderPanelTwoPlaceholder(
-                    <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
-                    true
-                  )}
-
-                {selectedPanel === 2 &&
-                  !bibleContentLoading &&
-                  bibleVerses.length === 0 &&
-                  renderPanelTwoPlaceholder(
-                    <p className='text-muted-foreground px-6 text-center text-sm'>
-                      {t('noContentAvailable')}
-                    </p>,
-                    false
-                  )}
-
-                {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                {openResourcePanel && (
                   <>
-                    {displayMode === 'pericope' && isPericopeLoading ? (
-                      <div className='flex h-full items-center justify-center py-12'>
-                        <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
-                      </div>
-                    ) : isPericopeMode && pericopes ? (
-                      <DraftingGridPericope
-                        activeVerseId={activeVerseId}
-                        aiSuggestions={aiSuggestions}
-                        bibleVerseMap={bibleVerseMap}
-                        globalNextUntouchedVerse={globalNextUntouchedVerse}
-                        handleActiveVerseChange={handleActiveVerseChange}
-                        handleKeyDown={handleKeyDown}
-                        handleNextClick={handleNextClick}
-                        handleTextChange={handleTextChangeWithTracking}
-                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
-                        isAiThresholdMet={isAiThresholdMet ?? false}
-                        isTranslationComplete={isTranslationComplete}
-                        pericopes={pericopes}
-                        projectItem={projectItem}
-                        readOnly={readOnly}
-                        selectedPanel={selectedPanel}
-                        sourceVerses={sourceVerses}
-                        suggestionStatus={suggestionStatus}
-                        textareaRefs={textareaRefs}
-                        verseRefs={verseRefs}
-                        verses={verses}
-                      />
-                    ) : (
-                      <DraftingGridVerse
-                        activeVerseId={activeVerseId}
-                        aiSuggestions={aiSuggestions}
-                        bibleVerseMap={bibleVerseMap}
-                        effectiveRevealedVerses={effectiveRevealedVerses}
-                        getPericopeStyle={getPericopeStyle}
-                        handleActiveVerseChange={handleActiveVerseChange}
-                        handleKeyDown={handleKeyDown}
-                        handleTextChange={handleTextChangeWithTracking}
-                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
-                        isAiThresholdMet={isAiThresholdMet ?? false}
-                        readOnly={readOnly}
-                        selectedPanel={selectedPanel}
-                        sourceVerses={sourceVerses}
-                        suggestionStatus={suggestionStatus}
-                        textareaRefs={textareaRefs}
-                        verseRefs={verseRefs}
-                        verses={verses}
-                      />
-                    )}
+                    <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
+                      |
+                    </span>
+                    <button
+                      className={`cursor-pointer text-2xl font-bold transition-colors ${
+                        selectedPanel === 2
+                          ? 'border-primary border-b-2 pb-1'
+                          : 'text-muted-foreground'
+                      }`}
+                      onClick={() => setSelectedPanel(2)}
+                    >
+                      {bibleTabLabel}
+                    </button>
+                    <X
+                      className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
+                      onClick={handleBibleTabClose}
+                    />
                   </>
                 )}
+              </div>
 
-                {!readOnly &&
-                  !isPericopeMode &&
-                  !isPericopeLoading &&
-                  lastRevealedVerseNumber < totalSourceVerses && (
-                    <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
-                      <TooltipProvider delayDuration={300}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
-                                isNextButtonEnabled
-                                  ? 'hover:bg-primary-hover cursor-pointer text-white'
-                                  : 'cursor-not-allowed bg-gray-300 text-gray-500'
-                              }`}
-                              disabled={!isNextButtonEnabled}
-                              onClick={handleNextClick}
-                            >
-                              {t('nextVerse', 'Next Verse')}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            align='center'
-                            className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
-                            side='top'
-                            sideOffset={8}
-                          >
-                            <div className='flex items-center gap-2'>
-                              <span>{t('nextVerse', 'Next Verse')}</span>
-                              <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
-                                Enter ↵
-                              </span>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
+              <div className='bg-background sticky top-0 z-10 px-6 py-3'>
+                <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
+                  {projectItem.targetLanguage}
+                </h3>
+              </div>
+
+              <div
+                className={`col-span-full flex flex-col overflow-hidden ${showResources ? 'h-full rounded-md border' : ''}`}
+              >
+                <div
+                  ref={targetScrollRef}
+                  className='relative flex h-full flex-col overflow-y-auto'
+                  style={{ scrollbarGutter: 'stable' }}
+                  onScroll={() => !readOnly && updateButtonPosition()}
+                >
+                  {selectedPanel === 2 &&
+                    bibleContentLoading &&
+                    renderPanelTwoPlaceholder(
+                      <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
+                      true
+                    )}
+
+                  {selectedPanel === 2 &&
+                    !bibleContentLoading &&
+                    bibleVerses.length === 0 &&
+                    renderPanelTwoPlaceholder(
+                      <p className='text-muted-foreground px-6 text-center text-sm'>
+                        {t('noContentAvailable')}
+                      </p>,
+                      false
+                    )}
+
+                  {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                    <>
+                      {displayMode === 'pericope' && isPericopeLoading ? (
+                        <div className='flex h-full items-center justify-center py-12'>
+                          <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+                        </div>
+                      ) : isPericopeMode && pericopes ? (
+                        <DraftingGridPericope
+                          activeVerseId={activeVerseId}
+                          aiSuggestions={aiSuggestions}
+                          bibleVerseMap={bibleVerseMap}
+                          globalNextUntouchedVerse={globalNextUntouchedVerse}
+                          handleActiveVerseChange={handleActiveVerseChange}
+                          handleKeyDown={handleKeyDown}
+                          handleNextClick={handleNextClick}
+                          handleNextPericopeClick={handleNextPericopeClick}
+                          handleTextChange={handleTextChangeWithTracking}
+                          isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                          isAiThresholdMet={isAiThresholdMet ?? false}
+                          isTranslationComplete={isTranslationComplete}
+                          pericopes={pericopes}
+                          projectItem={projectItem}
+                          readOnly={readOnly}
+                          selectedPanel={selectedPanel}
+                          sourceVerses={sourceVerses}
+                          suggestionStatus={suggestionStatus}
+                          textareaRefs={textareaRefs}
+                          verseRefs={verseRefs}
+                          verses={verses}
+                        />
+                      ) : (
+                        <DraftingGridVerse
+                          activeVerseId={activeVerseId}
+                          aiSuggestions={aiSuggestions}
+                          bibleVerseMap={bibleVerseMap}
+                          effectiveRevealedVerses={effectiveRevealedVerses}
+                          getPericopeStyle={getPericopeStyle}
+                          handleActiveVerseChange={handleActiveVerseChange}
+                          handleKeyDown={handleKeyDown}
+                          handleTextChange={handleTextChangeWithTracking}
+                          isAiActive={!!(projectItem.isAiEnabled && isDraft)}
+                          isAiThresholdMet={isAiThresholdMet ?? false}
+                          readOnly={readOnly}
+                          selectedPanel={selectedPanel}
+                          sourceVerses={sourceVerses}
+                          suggestionStatus={suggestionStatus}
+                          textareaRefs={textareaRefs}
+                          verseRefs={verseRefs}
+                          verses={verses}
+                        />
+                      )}
+                    </>
                   )}
+
+                  {!readOnly &&
+                    !isPericopeMode &&
+                    !isPericopeLoading &&
+                    lastRevealedVerseNumber < totalSourceVerses && (
+                      <div className='absolute right-4 z-10' style={{ top: buttonTop }}>
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
+                                  isNextButtonEnabled
+                                    ? 'hover:bg-primary-hover cursor-pointer text-white'
+                                    : 'cursor-not-allowed bg-gray-300 text-gray-500'
+                                }`}
+                                disabled={!isNextButtonEnabled}
+                                onClick={handleNextClick}
+                              >
+                                {t('nextVerse', 'Next Verse')}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              align='center'
+                              className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
+                              side='top'
+                              sideOffset={8}
+                            >
+                              <div className='flex items-center gap-2'>
+                                <span>{t('nextVerse', 'Next Verse')}</span>
+                                <span className='bg-muted text-muted-foreground flex h-5 items-center rounded border px-1.5 font-mono text-[10px]'>
+                                  Enter ↵
+                                </span>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

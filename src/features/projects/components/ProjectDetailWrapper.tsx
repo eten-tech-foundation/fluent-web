@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 
-import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { ROLES } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { ProjectDetailPage } from './ProjectDetailPage';
@@ -28,8 +30,21 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
 
+  const location = useLocation();
+  const { userdetail } = useAppStore();
+
   const handleBack = () => {
-    void navigate({ to: '/projects' });
+    const from = (location.state as { from?: string } | undefined)?.from;
+    if (from) {
+      void navigate({ to: from, replace: true });
+      return;
+    }
+
+    if (userdetail?.role === ROLES.PROJECT_OBSERVER) {
+      void navigate({ to: '/' });
+    } else {
+      void navigate({ to: '/projects' });
+    }
   };
 
   const handleOpenExport = () => {
@@ -37,6 +52,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: { modal: 'export' as const },
+      state: location.state,
     });
   };
 
@@ -45,6 +61,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: {},
+      state: location.state,
     });
   };
 
@@ -53,6 +70,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: { modal: 'add' as const },
+      state: location.state,
     });
   };
 
@@ -61,6 +79,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       to: '/projects/$projectId',
       params: { projectId },
       search: {},
+      state: location.state,
     });
   };
 
@@ -117,6 +136,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         projectChapterStatusCounts={project.chapterStatusCounts}
         projectConnectivityProfile={project.metadata.connectivityProfile}
         projectId={project.id}
+        projectLastActivityAt={project.lastActivityAt}
         projectSource={project.sourceName}
         projectSourceLanguageName={project.sourceLanguageName}
         projectTargetLanguageName={project.targetLanguageName}

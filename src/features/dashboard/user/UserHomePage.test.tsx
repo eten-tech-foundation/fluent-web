@@ -63,7 +63,7 @@ const historyChapter = assignment({
 describe('UserHomePage tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppStore.setState({ userdetail: { id: 7, role: 2 } as unknown as User });
+    useAppStore.setState({ userdetail: { id: 7, role: 'some-role-name' } as unknown as User });
     mockUseSearch.mockReturnValue({});
     mockUseChapterAssignments.mockReturnValue({
       data: { assignedChapters: [workChapter, historyChapter], peerCheckChapters: [] },

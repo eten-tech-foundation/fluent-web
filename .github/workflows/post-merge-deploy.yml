@@ -40,6 +40,7 @@ jobs:
           VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
           VITE_ENVIRONMENT: development
           VITE_APP_VERSION: ${{ format('dev-{0}', github.sha) }}
+          VITE_RTE_PERICOPE: 'true'
           VITE_BETTER_AUTH_URL: ${{secrets.VITE_BETTER_AUTH_URL}}
           VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
           VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}

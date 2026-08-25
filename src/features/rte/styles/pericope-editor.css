@@ -1,0 +1,24 @@
+/*
+ * Fits the editor into the drafting page's pericope boxes. The theme reset every surface needs
+ * lives in `editor-shared.css`; what is left here is what only a pericope box wants.
+ */
+
+/* Chapter number: correct to carry in the USJ (it keeps verse references resolvable), wrong to
+   show, since the pericope heading above already says which chapter this is. */
+.pericope-editor .chapter {
+  display: none;
+}
+
+.pericope-editor .editor-input {
+  padding: 0;
+  min-height: 0;
+}
+
+.pericope-editor p {
+  margin: 0 0 0.65em;
+  line-height: 1.7;
+}
+
+.pericope-editor p:last-child {
+  margin-bottom: 0;
+}
