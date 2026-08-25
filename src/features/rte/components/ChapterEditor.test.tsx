@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -460,8 +460,9 @@ describe('scoped block formatting (#427)', () => {
     await userEvent.click(screen.getByText('Poetry Line'));
 
     // Reloading the document leaves no selection, and the plugin only acts on a verse it has not
-    // just been given — so the verse has to be let go of before it can be asked for again.
-    expect(editor.askedForVerses).toEqual([0, 2]);
+    // just been given — so the verse has to be let go of before it can be asked for again. Both
+    // halves wait for the load, which lands a task after the click handler that started it.
+    await waitFor(() => expect(editor.askedForVerses).toEqual([0, 2]));
   });
 
   it('keeps the editor-native path when the active verse already is its own block', async () => {
