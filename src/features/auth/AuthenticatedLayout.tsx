@@ -7,18 +7,19 @@ import { SettingsModal } from '@/components/SettingsModal';
 import Header from '@/features/header/components/index';
 import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
 import { type User } from '@/lib/types';
-import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
   const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
+  const { applyUser } = useRefreshUserDetail();
   const updateUserMutation = useUpdateUser();
-  const { setUserDetail } = useAppStore();
+
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
 
@@ -55,25 +56,15 @@ export function AuthenticatedLayout(): React.JSX.Element {
 
     setFetchInitiated(true);
 
+    // Handle email-verification status upgrade before refreshing the store.
     fetchUserDetails(user.email, {
       onSuccess: userDetails => {
         void (async () => {
           if (userDetails.status !== 'verified' && user.emailVerified) {
             userDetails.status = 'verified';
-            await updateUserMutation.mutateAsync({
-              userData: userDetails as User,
-            });
+            await updateUserMutation.mutateAsync({ userData: userDetails as User });
           }
-          setUserDetail({
-            id: userDetails.id,
-            email: userDetails.email,
-            username: userDetails.username,
-            role: userDetails.role,
-            organization: userDetails.organization,
-            firstName: userDetails.firstName,
-            lastName: userDetails.lastName,
-            status: userDetails.status,
-          });
+          applyUser(userDetails);
           setUserDetailsFetched(true);
         })();
       },
@@ -95,7 +86,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
     user,
     fetchInitiated,
     fetchUserDetails,
-    setUserDetail,
+    applyUser,
     updateUserMutation,
     navigate,
   ]);

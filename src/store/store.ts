@@ -3,21 +3,28 @@ import { persist } from 'zustand/middleware';
 
 import { type ProjectItem, type User } from '@/lib/types';
 
+/** The drafting views a chapter can be presented in (#396). */
+export type DisplayMode = 'verse' | 'pericope' | 'chapter';
+
 interface AppState {
   userdetail: User | null;
   currentProjectItem: ProjectItem | null;
   presenceWarning: string | null;
   _hasHydrated: boolean;
-  displayMode: 'verse' | 'pericope';
+  displayMode: DisplayMode;
   isAiThresholdMet: boolean | null;
+  isAiSyncPending: boolean;
+  aiAutoEnablePreferences: Record<number, boolean | undefined>;
   setUserDetail: (user: User) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
   clearUserDetail: () => void;
   clearCurrentProjectItem: () => void;
   setHasHydrated: (state: boolean) => void;
   setPresenceWarning: (msg: string | null) => void;
-  setDisplayMode: (mode: 'verse' | 'pericope') => void;
+  setDisplayMode: (mode: DisplayMode) => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
+  setIsAiSyncPending: (pending: boolean) => void;
+  setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
 let hydrationResolve: (() => void) | null = null;
 export const hydrationPromise = new Promise<void>(resolve => {
@@ -33,6 +40,8 @@ export const useAppStore = create<AppState>()(
       _hasHydrated: false,
       displayMode: 'verse',
       isAiThresholdMet: null,
+      isAiSyncPending: false,
+      aiAutoEnablePreferences: {},
       setUserDetail: (userdetail: User) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
         const currentId = get().currentProjectItem?.chapterAssignmentId;
@@ -50,8 +59,19 @@ export const useAppStore = create<AppState>()(
       clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
-      setDisplayMode: (displayMode: 'verse' | 'pericope') => set({ displayMode }),
+      setDisplayMode: (displayMode: DisplayMode) => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
+      setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
+      setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
+        set(state => {
+          const next = { ...state.aiAutoEnablePreferences };
+          if (status === undefined) {
+            delete next[userId];
+          } else {
+            next[userId] = status;
+          }
+          return { aiAutoEnablePreferences: next };
+        }),
     }),
     {
       name: 'app-store',
@@ -59,6 +79,7 @@ export const useAppStore = create<AppState>()(
         userdetail: state.userdetail,
         currentProjectItem: state.currentProjectItem,
         displayMode: state.displayMode,
+        aiAutoEnablePreferences: state.aiAutoEnablePreferences,
       }),
       onRehydrateStorage: () => state => {
         state?.setHasHydrated(true);

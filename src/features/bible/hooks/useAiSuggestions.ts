@@ -64,11 +64,14 @@ export function useAiSuggestions(
   const { data: fetchedSuggestions, refetch } = useQuery({
     queryKey: ['ai-suggestions', projectUnitId, idsStr],
     queryFn: async () => {
-      const url = `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}`;
+      const url = `${config.api.url}/ai-suggestions?projectUnitId=${projectUnitId}&bibleTextIds=${idsStr}&t=${Date.now()}`;
       const res = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
         },
       });
       if (!res.ok) {
