@@ -11,7 +11,7 @@ jobs:
     environment: development
     steps:
       - name: Close Azure Static Web Apps Preview
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -19,7 +19,7 @@ jobs:
 
       - name: Delete merged branch
         if: github.event.pull_request.merged == true
-        uses: dawidd6/action-delete-branch@v3
+        uses: dawidd6/action-delete-branch@d1efac9a6f7a9b408d4e8ff663a99c1fbac17b3f # v3.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branches: ${{ github.event.pull_request.head.ref }}
