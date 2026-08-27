@@ -98,12 +98,13 @@ export const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
               </div>
             ) : (
               filteredLanguages.map(lang => (
-                <div
+                <button
                   key={lang.code}
                   className={cn(
-                    'hover:bg-accent hover:text-accent-foreground relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none select-none',
+                    'hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm select-none',
                     selectedLanguage === lang.code && 'bg-accent/50'
                   )}
+                  type='button'
                   onClick={() => {
                     onSelect(lang.code);
                     setOpen(false);
@@ -124,7 +125,7 @@ export const LanguageDropdown: React.FC<LanguageDropdownProps> = ({
                       <span className='text-muted-foreground text-xs'>{lang.englishDisplay}</span>
                     )}
                   </div>
-                </div>
+                </button>
               ))
             )}
             {search.trim() === '' && availableLanguages.length > 50 && (

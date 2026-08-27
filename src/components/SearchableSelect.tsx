@@ -140,7 +140,7 @@ export function SearchableSelect({
               'dark:bg-input/30 dark:hover:bg-input/50 w-full cursor-default bg-transparent pr-8 hover:bg-transparent focus:cursor-text',
               className
             )}
-            disabled={disabled || options.length === 0}
+            disabled={disabled}
             placeholder={selectedOption ? selectedOption.label : placeholder}
             value={open ? search : selectedOption ? selectedOption.label : ''}
             onChange={e => {
