@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +11,7 @@ import {
 
 import type { StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
+import type { SerializedVerseRef } from '@sillsdev/scripture';
 
 /**
  * The document-keeping stand-in `PericopeEditor.test.tsx` uses, plus the two things chapter view
@@ -28,6 +29,9 @@ const editor = vi.hoisted(() => ({
   formatPara: vi.fn<(marker: string) => void>(),
   commit: undefined as ((usj: Usj) => void) | undefined,
   reportState: undefined as ((snapshot: StateChangeSnapshot) => void) | undefined,
+  reportScrRef: undefined as ((scrRef: SerializedVerseRef) => void) | undefined,
+  /** Every verse the editor has been asked to put the cursor in, in order. */
+  askedForVerses: [] as number[],
 }));
 
 vi.mock('@eten-tech-foundation/platform-editor', async () => {
@@ -35,16 +39,25 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
 
   interface StubProps {
     defaultUsj?: Usj;
+    scrRef?: SerializedVerseRef;
+    onScrRefChange?: (scrRef: SerializedVerseRef) => void;
     onStateChange?: (snapshot: StateChangeSnapshot) => void;
     onUsjChange?: (usj: Usj) => void;
   }
 
   return {
     Editorial: react.forwardRef<unknown, StubProps>(
-      ({ defaultUsj, onStateChange, onUsjChange }, ref) => {
+      ({ defaultUsj, scrRef, onScrRefChange, onStateChange, onUsjChange }, ref) => {
         editor.usj ??= defaultUsj;
         editor.commit = onUsjChange;
         editor.reportState = onStateChange;
+        editor.reportScrRef = onScrRefChange;
+
+        // The real plugin places the cursor when the verse it is handed changes, and only then.
+        const askedForVerse = scrRef?.verseNum;
+        react.useEffect(() => {
+          if (askedForVerse !== undefined) editor.askedForVerses.push(askedForVerse);
+        }, [askedForVerse]);
         react.useImperativeHandle(
           ref,
           () => ({
@@ -121,6 +134,7 @@ describe('ChapterEditor', () => {
     editor.commit = undefined;
     editor.reportState = undefined;
     editor.echoOnMount = true;
+    editor.askedForVerses = [];
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
   });
@@ -384,5 +398,93 @@ describe('ChapterEditor', () => {
 
       expect(documentVerses()).toEqual(inDocumentSpace(WITH_SUGGESTION));
     });
+  });
+});
+
+describe('scoped block formatting (#427)', () => {
+  beforeEach(() => {
+    editor.usj = undefined;
+    editor.commit = undefined;
+    editor.reportState = undefined;
+    editor.reportScrRef = undefined;
+    editor.echoOnMount = true;
+    editor.askedForVerses = [];
+    editor.setUsj.mockClear();
+    editor.formatPara.mockClear();
+  });
+
+  const wholeChapter: PericopeVerseText[] = [
+    { verseNumber: 1, text: 'First.', markers: null },
+    { verseNumber: 2, text: 'Second.', markers: null },
+    { verseNumber: 3, text: 'Third.', markers: null },
+  ];
+
+  it('applies the format to the active verse only when its paragraph spans further', async () => {
+    const onVersesChange = vi.fn();
+    render(
+      <ChapterEditor {...CHAPTER_PROPS} verses={wholeChapter} onVersesChange={onVersesChange} />
+    );
+    act(() => {
+      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
+      editor.reportState?.({
+        canRedo: false,
+        canUndo: false,
+        blockMarker: 'p',
+        contextMarker: undefined,
+      });
+    });
+
+    await userEvent.click(screen.getByText('Poetry Line'));
+
+    expect(editor.formatPara).not.toHaveBeenCalled();
+    expect(editor.setUsj).toHaveBeenCalledTimes(1);
+    expect(onVersesChange).toHaveBeenCalledWith([
+      { verseNumber: 2, text: 'Second.', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+      { verseNumber: 3, text: 'Third.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+    ]);
+  });
+
+  it('asks for the active verse back after the reload, so the next click still lands', async () => {
+    render(<ChapterEditor {...CHAPTER_PROPS} verses={wholeChapter} onVersesChange={vi.fn()} />);
+    act(() => {
+      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
+      editor.reportState?.({
+        canRedo: false,
+        canUndo: false,
+        blockMarker: 'p',
+        contextMarker: undefined,
+      });
+    });
+    editor.askedForVerses = [];
+
+    await userEvent.click(screen.getByText('Poetry Line'));
+
+    // Reloading the document leaves no selection, and the plugin only acts on a verse it has not
+    // just been given — so the verse has to be let go of before it can be asked for again. Both
+    // halves wait for the load, which lands a task after the click handler that started it.
+    await waitFor(() => expect(editor.askedForVerses).toEqual([0, 2]));
+  });
+
+  it('keeps the editor-native path when the active verse already is its own block', async () => {
+    const scoped: PericopeVerseText[] = [
+      { verseNumber: 1, text: 'First.', markers: null },
+      { verseNumber: 2, text: 'Second.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+      { verseNumber: 3, text: 'Third.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+    ];
+    render(<ChapterEditor {...CHAPTER_PROPS} verses={scoped} onVersesChange={vi.fn()} />);
+    act(() => {
+      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
+      editor.reportState?.({
+        canRedo: false,
+        canUndo: false,
+        blockMarker: 'p',
+        contextMarker: undefined,
+      });
+    });
+
+    await userEvent.click(screen.getByText('Poetry Line'));
+
+    expect(editor.formatPara).toHaveBeenCalledWith('q1');
+    expect(editor.setUsj).not.toHaveBeenCalled();
   });
 });
