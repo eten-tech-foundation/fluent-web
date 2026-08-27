@@ -23,20 +23,49 @@ DOCKER_REF = %r{\Adocker://.+@sha256:[0-9a-f]{64}\z}
 
 SCAN_DIRS = ['.github/workflows', '.github/actions'].freeze
 
+# Map every anchor name to the node it labels. Aliases carry an `anchor`
+# attribute too (the name they point at), so they must not register themselves.
+def collect_anchors(node, anchors = {})
+  if !node.is_a?(Psych::Nodes::Alias) &&
+     node.respond_to?(:anchor) && node.anchor && !node.anchor.empty?
+    anchors[node.anchor] ||= node
+  end
+  node.children&.each { |child| collect_anchors(child, anchors) }
+  anchors
+end
+
 # Yield [value, line] for every `uses:` key anywhere in the document tree.
-def each_uses(node, &blk)
+#
+# A `uses:` value may be a YAML alias (`uses: *act`) rather than a literal.
+# Resolving it matters: an alias pointing at an un-pinned ref would otherwise
+# be skipped entirely and the file would pass with zero references found.
+def each_uses(node, anchors, &blk)
   case node
   when Psych::Nodes::Mapping
     node.children.each_slice(2) do |key, value|
-      if key.is_a?(Psych::Nodes::Scalar) && key.value == 'uses' &&
-         value.is_a?(Psych::Nodes::Scalar)
-        blk.call(value.value, value.start_line + 1)
+      if key.is_a?(Psych::Nodes::Scalar) && key.value == 'uses'
+        line = value.start_line + 1
+        case value
+        when Psych::Nodes::Scalar
+          blk.call(value.value, line)
+        when Psych::Nodes::Alias
+          target = anchors[value.anchor]
+          if target.is_a?(Psych::Nodes::Scalar)
+            blk.call(target.value, line)
+          else
+            # Unresolvable, or pointing at a collection: cannot be a valid
+            # action reference, so report rather than skip.
+            blk.call("*#{value.anchor} (unresolved alias)", line)
+          end
+        else
+          each_uses(value, anchors, &blk)
+        end
       else
-        each_uses(value, &blk)
+        each_uses(value, anchors, &blk)
       end
     end
   when Psych::Nodes::Sequence, Psych::Nodes::Document, Psych::Nodes::Stream
-    node.children.each { |child| each_uses(child, &blk) }
+    node.children.each { |child| each_uses(child, anchors, &blk) }
   end
 end
 
@@ -64,7 +93,7 @@ files.each do |file|
     exit 2
   end
 
-  each_uses(doc) do |ref, line|
+  each_uses(doc, collect_anchors(doc)) do |ref, line|
     checked += 1
     violations << [file, line, ref] unless pinned?(ref)
   end

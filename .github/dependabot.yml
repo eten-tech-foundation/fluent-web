@@ -18,6 +18,13 @@ updates:
       github-actions:
         patterns:
           - '*'
+      # Security advisories arrive as a separate update type and default to
+      # their own PR per action, which is the sprawl the group above exists to
+      # avoid. Same wildcard, scoped to security updates.
+      github-actions-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
     labels:
       - 'github_actions'
       - 'dependencies'
