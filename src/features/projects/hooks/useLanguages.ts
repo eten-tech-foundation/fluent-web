@@ -15,6 +15,7 @@ export interface Language {
 const fetchLanguages = async (): Promise<Language[]> => {
   const res = await fetch(`${config.api.url}/languages`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
