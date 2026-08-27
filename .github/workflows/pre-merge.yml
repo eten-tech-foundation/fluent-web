@@ -7,6 +7,20 @@ on:
     branches: [main]
 
 jobs:
+  workflow-pins:
+    name: Action pins
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify every action is pinned to a commit SHA
+        run: ./.github/scripts/check-action-pins.sh
+
   validate:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}

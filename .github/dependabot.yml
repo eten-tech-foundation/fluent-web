@@ -8,3 +8,18 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    open-pull-requests-limit: 5
+    # Batch every action bump into one PR. These workflows are SHA-pinned, so
+    # an ungrouped run opens a separate PR per action, each needing its own
+    # review and merge. A wildcard rather than an enumerated vendor list: this
+    # ecosystem only ever contains actions, and a list silently drops any
+    # vendor nobody remembered to add -- an enumerated one would miss pnpm/*.
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    labels:
+      - 'github_actions'
+      - 'dependencies'
+    commit-message:
+      prefix: 'build(deps)'
