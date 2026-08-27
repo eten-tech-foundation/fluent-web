@@ -38,10 +38,11 @@ jobs:
             const pr = context.payload.pull_request;
             const branch = pr.head.ref;
 
-            // A fork's head ref names a branch in the fork, not here. Deleting
+            // head.repo is null once a fork has been deleted, and a fork's head
+            // ref names a branch in the fork rather than here — deleting
             // `heads/<branch>` would target a same-named branch in this repo.
-            if (pr.head.repo.full_name !== context.payload.repository.full_name) {
-              core.info(`Skipping fork branch: ${pr.head.repo.full_name}:${branch}`);
+            if (!pr.head.repo || pr.head.repo.full_name !== context.payload.repository.full_name) {
+              core.info(`Skipping branch from a fork or deleted repository: ${branch}`);
               return;
             }
 
@@ -51,6 +52,16 @@ jobs:
               return;
             }
 
+            // Dependabot deletes its own branches after merge, and GitHub's
+            // "Delete branch" button races this job, so an absent ref is
+            // success. 422 is NOT absence on its own — it also covers
+            // default-branch deletion and spam rejection, which must stay
+            // failures — so only trust it when the message says so.
+            const isAbsent = (error) =>
+              error.status === 404 ||
+              (error.status === 422 &&
+                /reference does not exist/i.test(error.message ?? ''));
+
             try {
               await github.rest.git.deleteRef({
                 owner: context.repo.owner,
@@ -59,9 +70,7 @@ jobs:
               });
               core.info(`Deleted branch: ${branch}`);
             } catch (error) {
-              // Dependabot deletes its own branches after merge, and GitHub's
-              // "Delete branch" button races this job. Already gone is success.
-              if (error.status === 404 || error.status === 422) {
+              if (isAbsent(error)) {
                 core.info(`Branch already deleted: ${branch}`);
                 return;
               }
