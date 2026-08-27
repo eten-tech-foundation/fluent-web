@@ -30,6 +30,7 @@ export interface Bible {
 const fetchBibleBooks = async (bibleId: number): Promise<BibleBook[]> => {
   const res = await fetch(`${config.api.url}/bible-books/bible/${bibleId}`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
