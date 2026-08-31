@@ -4,6 +4,7 @@ import { Info, Loader2, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -183,7 +184,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <DialogTitle>Error</DialogTitle>
           </DialogHeader>
           <div className='py-6'>
-            <p className='text-red-600'>Failed to load languages. Please try again.</p>
+            <p className='text-destructive'>Failed to load languages. Please try again.</p>
           </div>
           <div className='flex justify-end'>
             <Button onClick={onClose}>Close</Button>
@@ -205,7 +206,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         <div className='space-y-6 py-6'>
           <div className='space-y-2'>
             <Label className='gap-1' htmlFor='title'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('projectTitle')}
             </Label>
             <Input id='title' maxLength={100} value={formData.title} onChange={handleTitleChange} />
@@ -213,94 +214,71 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           <div className='space-y-2'>
             <Label className='gap-1'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('sourceLanguage')}
             </Label>
-            <Select
+            <SearchableSelect
               disabled={languagesLoading}
+              options={
+                languages?.map(lang => ({
+                  value: lang.id.toString(),
+                  label: `${lang.langName} (${lang.langCodeIso6393})`,
+                })) ?? []
+              }
+              placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
               value={formData.sourceLanguage?.toString() ?? ''}
-              onValueChange={value => updateFormData('sourceLanguage', parseInt(value))}
-            >
-              <SelectTrigger className='w-full bg-white'>
-                <SelectValue
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {languages?.map(language => (
-                  <SelectItem key={language.id} value={language.id.toString()}>
-                    {language.langName} ({language.langCodeIso6393})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={value => updateFormData('sourceLanguage', parseInt(value, 10))}
+            />
           </div>
 
           <div className='space-y-2'>
             <Label className='gap-1'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('sourceBible')}
             </Label>
-            <Select
+            <SearchableSelect
               disabled={!formData.sourceLanguage || sourceBiblesLoading}
+              emptyText='No bibles for this language'
+              options={
+                sourceBibles?.map(bible => ({
+                  value: bible.id.toString(),
+                  label: `${bible.name} (${bible.abbreviation})`,
+                })) ?? []
+              }
+              placeholder={
+                !formData.sourceLanguage
+                  ? 'Select Source Language First'
+                  : sourceBiblesLoading
+                    ? 'Loading bibles...'
+                    : 'Select Source Bible'
+              }
               value={formData.sourceBible?.toString() ?? ''}
-              onValueChange={value => updateFormData('sourceBible', parseInt(value))}
-            >
-              <SelectTrigger className='w-full bg-white'>
-                <SelectValue
-                  placeholder={
-                    !formData.sourceLanguage
-                      ? 'Select Source Language First'
-                      : sourceBiblesLoading
-                        ? 'Loading bibles...'
-                        : 'Select Source Bible'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {!sourceBibles || sourceBibles.length === 0 ? (
-                  <div className='p-1 text-center text-sm text-gray-500'>
-                    No bibles for this language
-                  </div>
-                ) : (
-                  sourceBibles.map(bible => (
-                    <SelectItem key={bible.id} value={bible.id.toString()}>
-                      {bible.name} ({bible.abbreviation})
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+              onChange={value => updateFormData('sourceBible', parseInt(value, 10))}
+            />
           </div>
 
           <div className='space-y-2'>
             <Label className='gap-1'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('targetLanguage')}
             </Label>
-            <Select
+            <SearchableSelect
               disabled={languagesLoading}
+              options={
+                languages?.map(lang => ({
+                  value: lang.id.toString(),
+                  label: `${lang.langName} (${lang.langCodeIso6393})`,
+                })) ?? []
+              }
+              placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
               value={formData.targetLanguage?.toString() ?? ''}
-              onValueChange={value => updateFormData('targetLanguage', parseInt(value))}
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {languages?.map(language => (
-                  <SelectItem key={language.id} value={language.id.toString()}>
-                    {language.langName} ({language.langCodeIso6393})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={value => updateFormData('targetLanguage', parseInt(value, 10))}
+            />
           </div>
 
           <div className='space-y-2'>
             <Label className='gap-1'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('books')}
             </Label>
             {booksLoading && formData.sourceBible ? (
@@ -353,7 +331,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 )
               }
             >
-              <SelectTrigger className='w-full bg-white' id='connectivityProfile'>
+              <SelectTrigger className='w-full' id='connectivityProfile'>
                 <SelectValue placeholder={t('connectivityProfilePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
@@ -371,15 +349,15 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           <div className='space-y-2'>
             <Label className='gap-1' htmlFor='pericopeSet'>
-              <span style={{ color: 'red' }}>*</span>
+              <span className='text-destructive'>*</span>
               {t('pericopeSet', 'Pericope Set')}
             </Label>
             <Select
               disabled={pericopeSetsLoading}
               value={formData.pericopeSetId?.toString() ?? ''}
-              onValueChange={value => updateFormData('pericopeSetId', parseInt(value))}
+              onValueChange={value => updateFormData('pericopeSetId', parseInt(value, 10))}
             >
-              <SelectTrigger className='w-full bg-white' id='pericopeSet'>
+              <SelectTrigger className='w-full' id='pericopeSet'>
                 <SelectValue
                   placeholder={
                     pericopeSetsLoading
@@ -401,13 +379,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           <div className='flex items-center justify-end pt-4'>
             {error && (
               <div className='mr-4 flex w-full items-center justify-center gap-2'>
-                <TriangleAlert className='h-4 w-4 text-red-500' />
-                <p className='text-sm font-medium text-red-600'>Error: Project not created.</p>
+                <TriangleAlert className='text-destructive h-4 w-4' />
+                <p className='text-destructive text-sm font-medium'>Error: Project not created.</p>
               </div>
             )}
 
             <Button
-              className='bg-primary hover:bg-primary/90 text-white hover:cursor-pointer'
+              className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
               disabled={isButtonDisabled}
               type='button'
               onClick={handleSubmit}

@@ -6,20 +6,73 @@ on:
     types: [closed]
 
 jobs:
-  cleanup:
+  # Runs on every closed PR, merged or not — the preview should be torn down
+  # either way. Left on the default token deliberately: this action uses
+  # repo_token for GitHub deployment statuses and PR comments, and narrowing it
+  # blind risks breaking preview teardown. Scoping it belongs in its own PR,
+  # where a real preview can verify the result.
+  close-preview:
     runs-on: ubuntu-latest
     environment: development
     steps:
       - name: Close Azure Static Web Apps Preview
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "close"
 
+  # A separate job so a failed preview teardown cannot skip branch deletion,
+  # and so this half can hold a tightly scoped token.
+  delete-branch:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
       - name: Delete merged branch
-        if: github.event.pull_request.merged == true
-        uses: dawidd6/action-delete-branch@v3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branches: ${{ github.event.pull_request.head.ref }}
+          script: |
+            const pr = context.payload.pull_request;
+            const branch = pr.head.ref;
+
+            // head.repo is null once a fork has been deleted, and a fork's head
+            // ref names a branch in the fork rather than here — deleting
+            // `heads/<branch>` would target a same-named branch in this repo.
+            if (!pr.head.repo || pr.head.repo.full_name !== context.payload.repository.full_name) {
+              core.info(`Skipping branch from a fork or deleted repository: ${branch}`);
+              return;
+            }
+
+            const protectedBranches = ['main', 'master', 'develop'];
+            if (protectedBranches.includes(branch)) {
+              core.info(`Refusing to delete protected branch: ${branch}`);
+              return;
+            }
+
+            // Dependabot deletes its own branches after merge, and GitHub's
+            // "Delete branch" button races this job, so an absent ref is
+            // success. 422 is NOT absence on its own — it also covers
+            // default-branch deletion and spam rejection, which must stay
+            // failures — so only trust it when the message says so.
+            const isAbsent = (error) =>
+              error.status === 404 ||
+              (error.status === 422 &&
+                /reference does not exist/i.test(error.message ?? ''));
+
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${branch}`,
+              });
+              core.info(`Deleted branch: ${branch}`);
+            } catch (error) {
+              if (isAbsent(error)) {
+                core.info(`Branch already deleted: ${branch}`);
+                return;
+              }
+              throw error;
+            }
