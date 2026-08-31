@@ -575,10 +575,13 @@ describe('DraftingUI — end-of-chapter prompt', () => {
     await nextChapterOptions?.flushPendingWork();
 
     // The debounced save is committed for the ACTIVE verse, not the whole page.
-    expect(mockSaveImmediately).toHaveBeenCalledWith(
-      1,
-      'En el principio creó Dios los cielos y la tierra.'
-    );
+    // `saveImmediately` takes a SavePayload since the RTE landed; the verse's own
+    // markers ride along, which for this textarea-authored fixture is `undefined`
+    // — the value that tells the save path to keep its trim.
+    expect(mockSaveImmediately).toHaveBeenCalledWith(1, {
+      content: 'En el principio creó Dios los cielos y la tierra.',
+      markers: undefined,
+    });
   });
 
   it('does not look for a next chapter while the feature is off', () => {
