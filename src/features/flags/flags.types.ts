@@ -19,7 +19,7 @@
  *
  * ── ⚠️ KNOWN, DELIBERATE GAP: `aiSuggestions` is missing here ───────────────
  * fluent-api publishes THREE flags (`repeatedWordCheck`, `aiSuggestions`,
- * `sourceTts` once its Phase-04 change lands); this union lists only two. The
+ * `sourceAudio` once its Phase-04 change lands); this union lists only two. The
  * omission is real, not an oversight of the API contract:
  *
  *   • `EN_FEATURE_AI_SUGGESTIONS` → wire key `aiSuggestions` exists in
@@ -36,13 +36,13 @@
  * **If you are here resolving a merge conflict:** whoever wires the
  * AI-suggestions UI to its flag will add `aiSuggestions` to this union and to
  * `failClosedFeatures()` below. That is the intended resolution — keep their
- * key AND `sourceTts`; the union is additive and the two changes do not
+ * key AND `sourceAudio`; the union is additive and the two changes do not
  * conflict semantically even when git says they do. Delete this whole comment
  * block once `aiSuggestions` is present and actually gating something.
  * *(gap found 2026-08-06 while implementing source-TTS; see the source-tts
  * harness note for the fuller write-up.)*
  */
-export type FeatureName = 'repeatedWordCheck' | 'sourceTts';
+export type FeatureName = 'repeatedWordCheck' | 'sourceAudio';
 
 /** The published feature map: every known flag, always present as a boolean. */
 export type Features = Record<FeatureName, boolean>;
@@ -65,8 +65,9 @@ export const failClosedFeatures = (): Features => ({
   // `FeatureName` above. This is the second of the two places a merge conflict
   // will land when that flag is finally wired up; the resolution is additive.
   repeatedWordCheck: false,
-  // Source-Text TTS (source-tts proposal T12/§6.3). Off by default like every
-  // flag here: the controls must not appear before the API confirms the
-  // feature, since the synthesis path depends on fluent-ai being wired.
-  sourceTts: false,
+  // Source Audio — recorded OR synthesized (source-tts proposal T12/§6.3;
+  // renamed from `sourceTts` per Q11, since one gate covers both provenances).
+  // Off by default like every flag here: the controls must not appear before the
+  // API confirms the feature.
+  sourceAudio: false,
 });

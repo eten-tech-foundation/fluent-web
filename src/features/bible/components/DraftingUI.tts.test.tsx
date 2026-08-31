@@ -160,7 +160,7 @@ vi.mock('@/features/bible/hooks/usePericope', () => ({
   }),
 }));
 
-// ── Flags: every feature ON by default; tests flip sourceTts off ────────────
+// ── Flags: every feature ON by default; tests flip sourceAudio off ────────────
 const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
 let mockOverrides: Record<string, boolean> = {};
 vi.mock('@/features/flags', () => ({
@@ -168,7 +168,7 @@ vi.mock('@/features/flags', () => ({
   // DraftingUI takes BOTH the merged flag and the raw override from this one
   // hook, because `flagOverrides.ts` permits exactly one override read site.
   useFeatureFlags: () => ({
-    features: { sourceTts: mockFeatureFlag('sourceTts'), repeatedWordCheck: true },
+    features: { sourceAudio: mockFeatureFlag('sourceAudio'), repeatedWordCheck: true },
     overrides: mockOverrides,
   }),
 }));
@@ -355,7 +355,7 @@ const selectReferenceBible = async () => {
 
 describe('DraftingUI — source-TTS gate', () => {
   it('renders no controls and no prompt when the feature is off', () => {
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
     mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
     boundaryOpen = true;
 
@@ -365,10 +365,10 @@ describe('DraftingUI — source-TTS gate', () => {
     expect(screen.queryByTestId('tts-boundary-prompt')).not.toBeInTheDocument();
   });
 
-  it('asks the flag service for sourceTts by name', () => {
+  it('asks the flag service for sourceAudio by name', () => {
     renderDrafting();
 
-    expect(mockFeatureFlag).toHaveBeenCalledWith('sourceTts');
+    expect(mockFeatureFlag).toHaveBeenCalledWith('sourceAudio');
   });
 
   it('shows one set of controls per source verse when the feature is on', () => {
@@ -535,7 +535,7 @@ describe('DraftingUI — keyboard shortcuts', () => {
   });
 
   it('is silent while the feature is off (§6.3)', async () => {
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
 
     renderDrafting();
 
@@ -582,7 +582,7 @@ describe('DraftingUI — end-of-chapter prompt', () => {
   });
 
   it('does not look for a next chapter while the feature is off', () => {
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
 
     renderDrafting();
 
@@ -596,7 +596,7 @@ describe('DraftingUI — end-of-chapter prompt', () => {
     // for showing the prompt deliberately satisfied.
     mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
     boundaryOpen = true;
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
 
     renderDrafting();
 
@@ -626,7 +626,7 @@ describe('DraftingUI — the playback gate is wired, not just the controls', () 
   });
 
   it('tells playback the feature is off, so it claims nothing and stops', () => {
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
 
     renderDrafting();
 
@@ -817,7 +817,7 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     // Without this the assertions pass on an idle page and prove nothing —
     // which is how the invisible pericope marker got shipped in the first place.
     activeVerseRef = '1';
-    mockFeatureFlag.mockImplementation((name: string) => name !== 'sourceTts');
+    mockFeatureFlag.mockImplementation((name: string) => name !== 'sourceAudio');
 
     renderDrafting();
 
@@ -846,7 +846,7 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
  */
 describe('DraftingUI — the serving tint', () => {
   it('keeps the ordinary wash for a clip generated on this listen', () => {
-    mockOverrides = { sourceTts: true };
+    mockOverrides = { sourceAudio: true };
     activeVerseRef = '1';
     ttsServed = { '1': 'wav' };
 
@@ -858,7 +858,7 @@ describe('DraftingUI — the serving tint', () => {
   });
 
   it('turns the wash purple when the clip came from the bucket', () => {
-    mockOverrides = { sourceTts: true };
+    mockOverrides = { sourceAudio: true };
     activeVerseRef = '1';
     ttsServed = { '1': 'ogg' };
 
@@ -872,7 +872,7 @@ describe('DraftingUI — the serving tint', () => {
   });
 
   it('uses a darker purple for an mp3 artifact, so the two are told apart', () => {
-    mockOverrides = { sourceTts: true };
+    mockOverrides = { sourceAudio: true };
     activeVerseRef = '1';
     ttsServed = { '1': 'mp3' };
 
@@ -897,7 +897,7 @@ describe('DraftingUI — the serving tint', () => {
 
   it('tints the pericope group by the verse being read inside it', () => {
     enterPericopeMode();
-    mockOverrides = { sourceTts: true };
+    mockOverrides = { sourceAudio: true };
     activeVerseRef = '1';
     ttsServed = { '1': 'ogg' };
 
