@@ -1,0 +1,57 @@
+name: Promote to Production
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'QA-approved release tag to promote (e.g. v26.08.3)'
+        required: true
+
+concurrency: production-deploy
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Validate tag format
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [[ ! "$TAG" =~ ^v[0-9]{2}\.(0[1-9]|1[0-2])\.[1-9][0-9]*$ ]]; then
+            echo "::error::Tag '$TAG' does not match required CalVer format vYY.MM.SERIAL"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          submodules: true
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.13.0'
+
+      - name: Deploy to Azure
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: /
+          output_location: dist
+          app_build_command: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile && pnpm build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_APP_INSIGHTS_KEY: ${{ secrets.VITE_APP_INSIGHTS_KEY }}
+          VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
+          VITE_ENVIRONMENT: production
+          VITE_APP_VERSION: ${{ inputs.tag }}
+          VITE_BETTER_AUTH_URL: ${{ secrets.VITE_BETTER_AUTH_URL }}
+          VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
+          VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
+          VITE_YOUVERSION_API_URL: ${{ secrets.VITE_YOUVERSION_API_URL }}
+          VITE_YOUVERSION_API_KEY: ${{ secrets.VITE_YOUVERSION_API_KEY }}
