@@ -1,0 +1,60 @@
+# Verifies that every action reference in this repo is pinned to a commit SHA.
+#
+# Runs on `pull_request_target`, which means both this workflow definition and
+# the checker script are taken from the base branch. A pull request therefore
+# cannot weaken its own gate by editing either one -- under `pull_request`,
+# GitHub composes the workflow from the merge commit, so a PR could replace the
+# check with a no-op while keeping the job and check names intact.
+#
+# `pull_request_target` is normally dangerous because it grants a privileged
+# token to a workflow that may run fork code. That does not apply here:
+#
+#   * the token is restricted to `contents: read`, and no secrets are used;
+#   * the pull request tree is checked out only to be *read as YAML data* by a
+#     script that comes from the base branch. Nothing from the pull request is
+#     ever executed -- no install step, no build, no PR-supplied script;
+#   * the checker parses with Psych's AST API, not `YAML.load`, so untrusted
+#     YAML cannot instantiate objects.
+#
+# Keep it that way. Adding any step that runs pull-request code to this
+# workflow would turn it into a genuine privilege-escalation path.
+name: Action pins
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-pins:
+    name: Action pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted checker from the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: base
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Check out pull request (read as data only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          persist-credentials: false
+
+      - name: Verify every action is pinned to a commit SHA
+        working-directory: pr
+        run: |
+          checker=../base/.github/scripts/check-action-pins.rb
+          if [[ ! -f "$checker" ]]; then
+            echo "::error::Trusted checker is missing from the default branch; refusing to fall back to the pull request's copy."
+            exit 1
+          fi
+          ruby "$checker"
