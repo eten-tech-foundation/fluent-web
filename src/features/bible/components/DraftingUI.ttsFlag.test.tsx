@@ -236,7 +236,7 @@ const settle = async (calls: { count: number }) => {
 
 describe('DraftingUI — source-TTS gate through the real flag stack', () => {
   it('hides the controls until the published flag has actually arrived', async () => {
-    publishFlags({ sourceTts: true });
+    publishFlags({ sourceAudio: true });
 
     renderDrafting();
 
@@ -247,7 +247,7 @@ describe('DraftingUI — source-TTS gate through the real flag stack', () => {
 
   it('keeps the controls hidden when /config/features is unreachable', async () => {
     // The server WOULD have said on; an unreachable flag service must still hide.
-    const calls = publishFlags({ sourceTts: true }, 500);
+    const calls = publishFlags({ sourceAudio: true }, 500);
 
     renderDrafting();
     await settle(calls);
@@ -256,7 +256,7 @@ describe('DraftingUI — source-TTS gate through the real flag stack', () => {
   });
 
   it('keeps the controls hidden when the API publishes the flag off', async () => {
-    const calls = publishFlags({ sourceTts: false });
+    const calls = publishFlags({ sourceAudio: false });
 
     renderDrafting();
     await settle(calls);
@@ -267,8 +267,8 @@ describe('DraftingUI — source-TTS gate through the real flag stack', () => {
   it('shows the controls under a local force-on, with no override wiring here (O3)', async () => {
     // Phase 2b merges overrides at the single `useFeatureFlags` choke point, so
     // this feature adds none of its own — the force-on arrives for free.
-    publishFlags({ sourceTts: false });
-    setFlagOverride('sourceTts', true);
+    publishFlags({ sourceAudio: false });
+    setFlagOverride('sourceAudio', true);
 
     renderDrafting();
 
@@ -277,7 +277,7 @@ describe('DraftingUI — source-TTS gate through the real flag stack', () => {
 });
 
 /**
- * Phase 2b left one check to whoever shipped the first `sourceTts` UI: force the
+ * Phase 2b left one check to whoever shipped the first `sourceAudio` UI: force the
  * flag on where no backend exists and confirm the failure is visible rather than
  * silent. Both dependencies are absent here — the flag service is down AND
  * `/ai/tts/generate` 404s — which is exactly the dark-shipped state.
@@ -285,7 +285,7 @@ describe('DraftingUI — source-TTS gate through the real flag stack', () => {
 describe('DraftingUI — forced-on with no TTS backend (phase 2b hand-off)', () => {
   it('shows the controls, really calls generate, and surfaces the failure as a toast', async () => {
     const flagCalls = publishFlags({}, 500);
-    setFlagOverride('sourceTts', true);
+    setFlagOverride('sourceAudio', true);
 
     const generateCalls: { count: number; body: unknown } = { count: 0, body: null };
     server.use(
@@ -337,7 +337,7 @@ describe('DraftingUI — forced-on with no TTS backend (phase 2b hand-off)', () 
  */
 describe('DraftingUI — a continuation armed elsewhere must not fire with the flag off', () => {
   it('issues no /ai/tts/* request when the flag is off', async () => {
-    const flagCalls = publishFlags({ sourceTts: false });
+    const flagCalls = publishFlags({ sourceAudio: false });
 
     const generateCalls = { count: 0 };
     server.use(

@@ -55,7 +55,7 @@ describe('failClosedFeatures', () => {
   it('returns every known flag off, and a fresh object each call', () => {
     const a = failClosedFeatures();
     const b = failClosedFeatures();
-    expect(a).toEqual({ repeatedWordCheck: false, sourceTts: false });
+    expect(a).toEqual({ repeatedWordCheck: false, sourceAudio: false });
     expect(a).not.toBe(b); // not a shared mutable singleton
   });
 });

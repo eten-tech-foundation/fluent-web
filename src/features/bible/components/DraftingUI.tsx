@@ -399,7 +399,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // keeps that invariant; a second `useFlagOverrides()` here would be the
   // drift it warns about.
   const { features: ttsFeatures, overrides: ttsOverrides } = useFeatureFlags();
-  const ttsEnabled = ttsFeatures.sourceTts;
+  const ttsEnabled = ttsFeatures.sourceAudio;
 
   // Verification affordance, NOT a product feature (§9.2): tint the playback
   // wash when a clip came from the artifact store, so a deployer can see that
@@ -412,7 +412,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // easy switch to reach for while verifying. Costs nothing to compute — the
   // container is read off the clip URL the engine already has — so only the
   // DISPLAY is gated, not the recording.
-  const ttsShowServing = ttsOverrides.sourceTts === true;
+  const ttsShowServing = ttsOverrides.sourceAudio === true;
 
   // The single writer for the occurrence-rule map: `useSuppressions` does the
   // read-modify-write and hands the next full map back here; updating state
