@@ -12,6 +12,9 @@
 .pericope-editor .editor-input {
   padding: 0;
   min-height: 0;
+  /* The vendored sheet pins the surface to 15px; the source column beside it is the app's 16px.
+     Inheriting keeps the two columns in step wherever the page size goes. */
+  font-size: inherit;
 }
 
 .pericope-editor p {
@@ -21,4 +24,27 @@
 
 .pericope-editor p:last-child {
   margin-bottom: 0;
+}
+
+/*
+ * Match the source column (chadw-eten, 28 Aug, and fluent-design/drafting.html): the source box
+ * renders verse numbers full-size, bold, on the baseline, with the paragraph flush left. The
+ * vendored stylesheet instead indents every paragraph's first line (`.text-spacing .usfm_p`) and
+ * shrinks verse numbers to superscripts (`.formatted-font .usfm_v`) — Platform.Bible's print-like
+ * look. Same specificity as those rules; this file is imported after them, so it wins.
+ */
+.pericope-editor .usfm_p {
+  text-indent: 0;
+}
+
+/* `editor-shared.css` fades verse numbers to 65% for the chapter surface, where whole chapters
+   of them would shout. A pericope box holds a handful, and the source column shows them at full
+   strength — beside it, faded numbers read as a mismatch rather than restraint. */
+.pericope-editor .usfm_v {
+  font-size: 100%;
+  vertical-align: baseline;
+  opacity: 1;
+  /* `.formatted-font .verse` chips every number grey; neither the source column nor the design
+     demo marks them that way. */
+  background: none;
 }
