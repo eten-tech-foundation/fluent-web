@@ -176,7 +176,7 @@ vi.mock('@/features/flags', () => ({
   // exactly one override read site. No override here: the verification tint
   // stays off and the playback wash is the ordinary one.
   useFeatureFlags: () => ({
-    features: { sourceTts: mockFeatureFlag('sourceTts'), repeatedWordCheck: true },
+    features: { sourceAudio: mockFeatureFlag('sourceAudio'), repeatedWordCheck: true },
     overrides: {},
   }),
 }));

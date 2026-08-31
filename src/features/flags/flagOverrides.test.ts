@@ -170,11 +170,11 @@ describe('helpers', () => {
     const published = { ...failClosedFeatures(), repeatedWordCheck: true };
     expect(applyFlagOverrides(published, {})).toEqual({
       repeatedWordCheck: true,
-      sourceTts: false,
+      sourceAudio: false,
     });
     expect(applyFlagOverrides(published, { repeatedWordCheck: false })).toEqual({
       repeatedWordCheck: false,
-      sourceTts: false,
+      sourceAudio: false,
     });
     // Does not mutate its input.
     expect(published.repeatedWordCheck).toBe(true);
