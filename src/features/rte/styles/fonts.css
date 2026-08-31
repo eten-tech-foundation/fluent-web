@@ -1,0 +1,72 @@
+/*
+ * The fonts the scripture surface needs, bundled instead of assumed (#444).
+ *
+ * `usj-nodes.css` asks for Charis SIL through four `@font-face` rules whose only source is
+ * `local()`, and no font file ships in the repo or in any dependency. So the text rendered in
+ * Charis SIL only on machines that already had it installed, and fell through to Times New Roman
+ * everywhere else, with nothing telling the translator it had happened. These packages ship the
+ * real files; Vite emits them into our own build, so `font-src 'self'` already covers them and
+ * the CSP needs no change.
+ *
+ * IMPORT ORDER MATTERS: this file has to be imported after `usj-nodes.css`. The vendored rules
+ * carry no `unicode-range`, so they match every character, and when two faces of one family match
+ * the later declaration wins. Imported first, the vendored `local()`-only face would win for text
+ * it cannot render, and a machine without Charis SIL installed would still get Times New Roman.
+ *
+ * The weights are imported one file at a time rather than through each package's `index.css`,
+ * because that entry point declares weight 400 normal only. The editor renders bold verse numbers
+ * and USFM's bold and italic character markers, and left to synthesise those the browser smears
+ * Indic conjuncts and skews Arabic. Italic is imported only where upstream ships a drawn one.
+ *
+ * Every face carries a `unicode-range`, so the browser fetches a file only when the text on screen
+ * actually uses that range, in that weight and style. A translator working in Latin never
+ * downloads the Devanagari or Arabic files.
+ */
+
+/* Latin, Latin-ext, Cyrillic, Cyrillic-ext and Vietnamese, in the four faces the vendored
+   stylesheet declares. Russian needs nothing beyond this. */
+@import '@fontsource/charis-sil/400.css';
+@import '@fontsource/charis-sil/400-italic.css';
+@import '@fontsource/charis-sil/700.css';
+@import '@fontsource/charis-sil/700-italic.css';
+
+/* The scripts #444 lists for the first pass. These families ship upright faces only, which matches
+   how the scripts are set: italic is not a convention in any of them. */
+@import '@fontsource/noto-serif-devanagari/400.css';
+@import '@fontsource/noto-serif-devanagari/700.css';
+@import '@fontsource/noto-serif-gujarati/400.css';
+@import '@fontsource/noto-serif-gujarati/700.css';
+@import '@fontsource/noto-serif-malayalam/400.css';
+@import '@fontsource/noto-serif-malayalam/700.css';
+@import '@fontsource/noto-serif-kannada/400.css';
+@import '@fontsource/noto-serif-kannada/700.css';
+@import '@fontsource/noto-serif-telugu/400.css';
+@import '@fontsource/noto-serif-telugu/700.css';
+
+/* Tamil is the one Noto Serif family here that ships a drawn italic, so \it on Tamil text gets a
+   real face instead of a synthesised slant. */
+@import '@fontsource/noto-serif-tamil/400.css';
+@import '@fontsource/noto-serif-tamil/400-italic.css';
+@import '@fontsource/noto-serif-tamil/700.css';
+@import '@fontsource/noto-serif-tamil/700-italic.css';
+
+/* Arabic, for the RTL work. Naskh is the style Noto ships and it renders in every browser; the
+   Nastaliq the Urdu community prefers is a Graphite font and Firefox-only, which #444 defers. */
+@import '@fontsource/noto-naskh-arabic/400.css';
+@import '@fontsource/noto-naskh-arabic/700.css';
+
+/*
+ * Charis SIL stays first, so Latin and Cyrillic are unchanged. Fallback runs per character, so a
+ * Devanagari codepoint skips Charis and lands on Noto Serif Devanagari rather than dropping the
+ * whole run to one substitute font.
+ *
+ * Scoped under `.rte-editor` so it outranks the vendored `.usfm.formatted-font` rule on
+ * specificity and not only on import order. Both editor wrappers carry that class. Only the family
+ * is overridden; the vendored `font-size` still applies.
+ */
+.rte-editor .usfm.formatted-font {
+  font-family:
+    'Charis SIL', 'Noto Serif Devanagari', 'Noto Serif Gujarati', 'Noto Serif Malayalam',
+    'Noto Serif Kannada', 'Noto Serif Telugu', 'Noto Serif Tamil', 'Noto Naskh Arabic',
+    'Times New Roman', 'Liberation Serif', 'DejaVu Serif', Georgia, serif;
+}

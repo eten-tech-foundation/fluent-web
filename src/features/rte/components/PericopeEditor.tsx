@@ -10,6 +10,7 @@ import {
 } from '../lib/pericope-usj';
 
 import '../styles/usj-nodes.css';
+import '../styles/fonts.css';
 import '../styles/editor.css';
 import '../styles/editor-shared.css';
 import '../styles/pericope-editor.css';

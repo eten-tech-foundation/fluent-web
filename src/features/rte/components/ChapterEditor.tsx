@@ -14,6 +14,7 @@ import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 import { FormatBar } from './FormatBar';
 
 import '../styles/usj-nodes.css';
+import '../styles/fonts.css';
 import '../styles/editor.css';
 import '../styles/editor-shared.css';
 import '../styles/chapter-editor.css';
