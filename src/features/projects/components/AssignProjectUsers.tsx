@@ -34,6 +34,7 @@ import {
 } from '@/features/projects/hooks/useProjectUsers';
 import { useCreateUser } from '@/hooks/useUsers';
 import {
+  ChapterAssignmentStatus,
   getDisplayRole,
   PROJECT_ROLE_OPTIONS,
   ROLES,
@@ -286,14 +287,32 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [removeProjectUserMutation]
   );
 
-  // "Active" work = not yet submitted, matching the definition UserHomePage
-  // already uses for unsubmitted assignments.
   const getActiveAssignmentCount = useCallback(
     (userId: number) => {
       if (!chapterAssignments) return 0;
-      return chapterAssignments.filter(
-        a => !a.submittedTime && (a.assignedUser?.id === userId || a.peerChecker?.id === userId)
-      ).length;
+      return chapterAssignments.filter(a => {
+        const isDrafter = a.assignedUser?.id === userId;
+        const isPeerChecker = a.peerChecker?.id === userId;
+
+        // 1. Drafter cannot be deleted if assigned to any chapter (DRAFT, PEER_CHECK, or beyond)
+        if (isDrafter) {
+          return true;
+        }
+
+        // 2. Peer Checker cannot be deleted once status reaches PEER_CHECK or moves beyond PEER_CHECK
+        if (isPeerChecker) {
+          return (
+            a.status === ChapterAssignmentStatus.PEER_CHECK ||
+            a.status === ChapterAssignmentStatus.COMMUNITY_REVIEW ||
+            a.status === ChapterAssignmentStatus.LINGUIST_CHECK ||
+            a.status === ChapterAssignmentStatus.THEOLOGICAL_CHECK ||
+            a.status === ChapterAssignmentStatus.CONSULTANT_CHECK ||
+            a.status === ChapterAssignmentStatus.COMPLETE
+          );
+        }
+
+        return false;
+      }).length;
     },
     [chapterAssignments]
   );
