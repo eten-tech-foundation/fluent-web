@@ -20,4 +20,4 @@ jobs:
       environment: development
       vite_environment: development
       app_version: ${{ format('dev-{0}', github.sha) }}
-      rte_pericope: 'true'
+      rte_pericope: true
