@@ -1,0 +1,44 @@
+# Lints every GitHub Actions workflow in this repo.
+#
+# Nothing else validated these files. `Pre-merge` runs eslint/tsc/vitest over
+# src/ and never opens one; `Action pins` reads a single field per `uses:`. A
+# workflow could reach main with an unresolvable `needs.*.outputs.*`, a typo'd
+# context, a key that is illegal on a reusable-workflow-call job, or an
+# unquoted shell variable, and nothing would object until it ran for real --
+# which for a deploy workflow means finding out during a release.
+#
+# Deliberately NOT filtered with `paths:`. This is a required check, and a
+# required check that never runs never reports: every PR that did not touch
+# .github/ would sit forever on "Expected — Waiting for status to be reported".
+# The job takes seconds; filtering it would cost more than it saves.
+name: Actionlint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The author's own image, pinned by digest. It bundles shellcheck, so the
+      # `run:` blocks are linted too -- that is where the deploy workflows do
+      # their tag validation and provenance checks.
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # v1.7.12
+        with:
+          args: -color
