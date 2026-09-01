@@ -1,0 +1,48 @@
+# Deploys an existing tag to QA, out of band from `cut-release.yml`.
+#
+# The happy path deploys QA automatically as part of cutting a release. This
+# exists for tags pushed by hand -- hotfixes cut from an existing tag rather
+# than from main (see docs/runbooks/deployment/) -- so they can be tested in
+# QA and then promoted normally, instead of being forced through
+# `promote-to-prod.yml`'s emergency bypass.
+#
+# Run it with the TAG selected in the ref picker ("Use workflow from"), not a
+# branch. There is deliberately no tag input: GitHub records a deployment
+# against the workflow RUN's commit, so a run on `main` deploying some other
+# tag would file its QA deployment under main's commit and `promote-to-prod`
+# would not find it. Taking the tag from the ref makes that mismatch
+# impossible rather than merely detectable.
+name: Deploy to QA
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a CalVer tag ref
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::This workflow must be run against a tag, not the $REF_TYPE '$TAG'. Re-run it and pick the release tag in the ref selector."
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]{2}\.(0[1-9]|1[0-2])\.[1-9][0-9]*$ ]]; then
+            echo "::error::Tag '$TAG' does not match required CalVer format vYY.MM.SERIAL (e.g. v26.07.1)"
+            exit 1
+          fi
+          echo "Deploying '$TAG' to QA."
+
+  deploy-qa:
+    needs: validate
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ github.ref_name }}
+      environment: qa
+      # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
+      vite_environment: staging
+      app_version: ${{ github.ref_name }}
+    secrets: inherit
