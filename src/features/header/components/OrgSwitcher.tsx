@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Building2, Check, ChevronDown } from 'lucide-react';
+import { Building2, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { useUpdateActiveOrg } from '@/hooks/useUsers';
@@ -38,12 +39,13 @@ const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
   });
 
 export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
-  const { userdetail, setUserDetail } = useAppStore();
+  const { userdetail, setUserDetail, setIsOrgSwitching } = useAppStore();
   const updateActiveOrg = useUpdateActiveOrg();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return null;
@@ -59,7 +61,6 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   const activeOrgId = userdetail.lastActiveOrgId ?? Array.from(orgMap.keys())[0];
   const activeOrgName = orgMap.get(activeOrgId) ?? 'Unknown Organization';
   const activeRoleName = userdetail.role;
-  // Active org first, then the rest in original order
   const organizations = Array.from(orgMap.entries())
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => (a.id === activeOrgId ? -1 : b.id === activeOrgId ? 1 : 0));
@@ -74,7 +75,6 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     rolesByOrg.set(grant.orgId, existing);
   });
 
-  // Rule: Only show "Organization Member" in the list if no other roles exist for that org
   rolesByOrg.forEach((roles, orgId) => {
     const hasFunctionalRole = roles.some(r => r.roleName !== ROLES.ORG_MEMBER);
     if (hasFunctionalRole) {
@@ -113,36 +113,53 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     }
   };
 
-  const handleSelectRole = async (orgId: number, roleName: string) => {
+  const handleSelectRole = async (targetOrgId: number, targetRoleName: string) => {
+    if (isSwitching) return;
     setIsExpanded(false);
-    if (orgId === activeOrgId && roleName === activeRoleName) {
+    if (targetOrgId === activeOrgId && targetRoleName === activeRoleName) {
       onAfterSelect?.();
       return;
     }
 
-    try {
-      await updateActiveOrg.mutateAsync({ orgId });
+    setIsSwitching(true);
+    setIsOrgSwitching(true);
+    const isOrgChange = targetOrgId !== activeOrgId;
+    const prevOrgId = activeOrgId;
+    const prevRoleName = activeRoleName;
 
+    try {
+      if (isOrgChange) {
+        await updateActiveOrg.mutateAsync({ orgId: targetOrgId });
+      }
       setUserDetail({
         ...userdetail,
-        lastActiveOrgId: orgId,
-        role: roleName,
+        lastActiveOrgId: targetOrgId,
+        role: targetRoleName,
       });
 
-      await Promise.all([
+      navigateForRole(targetOrgId, targetRoleName);
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
         queryClient.invalidateQueries({ queryKey: ['user-projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['chapter-assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['userChapterAssignments'] }),
         queryClient.invalidateQueries({ queryKey: ['users'] }),
-        queryClient.invalidateQueries({ queryKey: ['userDetails'] }),
       ]);
-
-      navigateForRole(orgId, roleName);
     } catch (error) {
+      setUserDetail({
+        ...userdetail,
+        lastActiveOrgId: prevOrgId,
+        role: prevRoleName,
+      });
+
+      navigateForRole(prevOrgId, prevRoleName);
+      toast.error('Failed to switch role. Please try again.');
+
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
       });
     } finally {
+      setIsSwitching(false);
+      setIsOrgSwitching(false);
       onAfterSelect?.();
     }
   };
@@ -154,21 +171,28 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
         className={`hover:bg-popover-hover text-text-primary h-10 w-full cursor-pointer justify-start px-4 py-2 transition-colors duration-150 ${
           isExpanded ? 'bg-popover-hover' : ''
         }`}
+        disabled={isSwitching}
         variant='ghost'
         onClick={() => setIsExpanded(prev => !prev)}
       >
         <span className='text-text-primary mr-3'>
-          <Building2 size={18} />
+          {isSwitching ? (
+            <Loader2 className='text-primary h-4.5 w-4.5 animate-spin' />
+          ) : (
+            <Building2 size={18} />
+          )}
         </span>
         <span className='flex-1 truncate text-left text-sm font-medium' title={activeOrgName}>
-          {activeOrgName}
+          {isSwitching ? 'Switching...' : activeOrgName}
         </span>
-        <ChevronDown
-          className={`text-text-primary ml-2 shrink-0 transition-transform ${
-            isExpanded ? 'rotate-180' : ''
-          }`}
-          size={16}
-        />
+        {!isSwitching && (
+          <ChevronDown
+            className={`text-text-primary ml-2 shrink-0 transition-transform ${
+              isExpanded ? 'rotate-180' : ''
+            }`}
+            size={16}
+          />
+        )}
       </Button>
 
       {isExpanded && (
@@ -209,7 +233,8 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
                             isActiveRole
                               ? 'bg-primary text-primary-foreground'
                               : 'border-border bg-background text-foreground hover:bg-accent border'
-                          }`}
+                          } ${isSwitching ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                          disabled={isSwitching}
                           onClick={() => handleSelectRole(org.id, role.roleName)}
                         >
                           {getDisplayRole(role.roleName)}
