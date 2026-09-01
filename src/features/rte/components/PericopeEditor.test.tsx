@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
@@ -18,6 +18,8 @@ import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 const editor = vi.hoisted(() => ({
   usj: undefined as Usj | undefined,
   setUsj: vi.fn<(usj: Usj) => void>(),
+  undo: vi.fn<() => void>(),
+  redo: vi.fn<() => void>(),
   commit: undefined as ((usj: Usj) => void) | undefined,
 }));
 
@@ -36,6 +38,8 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
               editor.usj = usj;
               editor.setUsj(usj);
             },
+            undo: editor.undo,
+            redo: editor.redo,
           }),
           []
         );
@@ -300,5 +304,29 @@ describe('PericopeEditor', () => {
     editor.commit?.(split('and continues here. '));
 
     expect(onVersesChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('history shortcuts (#427)', () => {
+  it('Ctrl+Z and Ctrl+Y reach the editor as undo/redo commands', () => {
+    editor.undo.mockClear();
+    editor.redo.mockClear();
+    const verses: PericopeVerseText[] = [
+      { verseNumber: 1, text: 'In the beginning', markers: null },
+    ];
+    const { getByTestId } = render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='history-shortcuts'
+        verses={verses}
+        onVersesChange={vi.fn()}
+      />
+    );
+    fireEvent.keyDown(getByTestId('pericope-editor'), { key: 'z', ctrlKey: true });
+    expect(editor.undo).toHaveBeenCalledTimes(1);
+    expect(editor.redo).not.toHaveBeenCalled();
+    fireEvent.keyDown(getByTestId('pericope-editor'), { key: 'y', ctrlKey: true });
+    expect(editor.redo).toHaveBeenCalledTimes(1);
   });
 });
