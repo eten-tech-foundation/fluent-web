@@ -43,8 +43,8 @@ on:
       rte_pericope:
         description: 'Baked into VITE_RTE_PERICOPE (#314)'
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
     outputs:
       url:
         description: 'URL of the deployed Static Web App'

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { fireEvent, renderWithProviders, screen, waitFor } from '@/test/render';
+import { act, fireEvent, renderWithProviders, screen, waitFor } from '@/test/render';
 
 import { type ProjectFormData } from './ProjectFormFields';
 import { UsfmImportTab } from './UsfmImportTab';
@@ -49,6 +49,36 @@ const drop = (files: File[]) => {
   fireEvent.drop(screen.getByTestId('usfm-drop-area'), {
     dataTransfer: { files, types: ['Files'] },
   });
+};
+
+/** A file whose read only finishes when the returned handle is called. */
+const pendingUsfmFile = (name: string) => {
+  let finish!: (text: string) => void;
+  const file = new File([''], name, { type: 'text/plain' });
+  Object.defineProperty(file, 'text', {
+    value: () =>
+      new Promise<string>(resolve => {
+        finish = resolve;
+      }),
+  });
+  return { file, finish: (text: string) => finish(text) };
+};
+
+/**
+ * jsdom leaves a file input's `value` empty throughout and fires a change event whether or not
+ * it changed, so neither half of the browser behaviour shows up on its own. The value is stood
+ * up by hand here to make the reset observable, since that reset is the whole mechanism.
+ */
+const trackInputValue = (input: HTMLInputElement, initial: string) => {
+  const state = { value: initial };
+  Object.defineProperty(input, 'value', {
+    configurable: true,
+    get: () => state.value,
+    set: (next: string) => {
+      state.value = next;
+    },
+  });
+  return state;
 };
 
 const GEN = '\\id GEN Genesis\n\\c 1\n\\v 1 text';
@@ -103,6 +133,41 @@ describe('UsfmImportTab upload and validation (#418)', () => {
       target: { files: [usfmFile('mat.usfm', MAT)] },
     });
     await waitFor(() => expect(onFilesAccepted).toHaveBeenCalled());
+  });
+
+  // A browser fires no change event when the input's value has not changed, so holding on to
+  // the last filename strands the user: correcting that file and picking it again does nothing.
+  it('clears the file input so the same file can be picked again after a failure', async () => {
+    renderTab();
+    const input: HTMLInputElement = screen.getByTestId('usfm-file-input');
+    const tracked = trackInputValue(input, 'C:\\fakepath\\bad.usfm');
+
+    fireEvent.change(input, { target: { files: [usfmFile('bad.usfm', 'no markers here')] } });
+    await waitFor(() => expect(screen.getByText('errorNotValidUsfm')).toBeInTheDocument());
+
+    expect(tracked.value).toBe('');
+  });
+
+  // Reading a file is async, so two quick selections can finish out of order. The newer one is
+  // what the user is looking at, so a slow older batch must not overwrite it.
+  it('ignores a batch a newer selection has superseded', async () => {
+    const onFilesAccepted = vi.fn();
+    renderTab({ onFilesAccepted });
+
+    const slow = pendingUsfmFile('bad.usfm');
+    drop([slow.file]);
+    drop([usfmFile('gen.usfm', '\\id GEN Genesis')]);
+    await waitFor(() => expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN'));
+
+    slow.finish('no markers here');
+    // Let the superseded batch resume, so it gets its chance to clobber the newer result.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(screen.queryByText('errorNotValidUsfm')).not.toBeInTheDocument();
+    expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN');
+    expect(onFilesAccepted).toHaveBeenCalledTimes(1);
   });
 });
 
