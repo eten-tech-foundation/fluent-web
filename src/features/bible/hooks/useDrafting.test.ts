@@ -87,3 +87,54 @@ describe('useDrafting with markers', () => {
     });
   });
 });
+
+describe('useDrafting reveal rules', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reveals a verse that gets content without ever being the active one', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = draft(onSave);
+
+    // The pericope editor is one surface over the whole group, so the translator can write
+    // into verse 2 while the cursor never leaves verse 1 (#434).
+    expect(result.current.revealedVerses.has(2)).toBe(false);
+
+    act(() => {
+      result.current.handleTextChange(2, 'Written from the pericope editor.');
+    });
+
+    expect(result.current.activeVerseId).toBe(1);
+    expect(result.current.revealedVerses.has(2)).toBe(true);
+  });
+
+  it('keeps a verse revealed after its content is cleared', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = draft(onSave);
+
+    act(() => {
+      result.current.handleTextChange(2, 'Written, then taken back.');
+    });
+    act(() => {
+      result.current.handleTextChange(2, '');
+    });
+
+    expect(result.current.revealedVerses.has(2)).toBe(true);
+  });
+
+  it('does not reveal a verse for whitespace alone', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = draft(onSave);
+
+    act(() => {
+      result.current.handleTextChange(2, '   ');
+    });
+
+    expect(result.current.revealedVerses.has(2)).toBe(false);
+  });
+});

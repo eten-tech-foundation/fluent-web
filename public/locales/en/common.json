@@ -43,6 +43,7 @@
   "formatBar": "Formatting",
   "blockParagraph": "Paragraph",
   "blockSectionHeading": "Section Heading",
+  "blockSectionHeadingUnavailable": "Section headings are not available yet",
   "blockPoetryLine": "Poetry Line",
   "blockOther": "Other",
   "headingLevel": "Level",

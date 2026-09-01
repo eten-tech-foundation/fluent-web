@@ -8,6 +8,13 @@ on:
       - 'src/features/flags/FeatureFlagsDiagnostics.tsx'
       - '.github/workflows/**'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-version-injection-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-vite-version:
     runs-on: ubuntu-latest
