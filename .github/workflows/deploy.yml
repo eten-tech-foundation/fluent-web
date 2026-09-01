@@ -9,6 +9,16 @@
 # Secrets are resolved from the GitHub Environment named by `environment`, so
 # every environment supplies the same secret NAMES with its own values. Do not
 # reintroduce `_QA`/`_PROD` suffixes -- the environment is the scope.
+#
+# EVERY CALLER MUST PASS `secrets: inherit`. A called workflow receives no
+# secrets at all unless the caller passes them, so dropping that line does not
+# fall back to anything -- it silently supplies empty strings, the build still
+# succeeds because Vite happily inlines "", and the deploy fails at the Azure
+# step with "deployment_token was not provided". Dev deploys broke exactly this
+# way in run 33504166678. It cannot be replaced with an explicit `secrets:`
+# mapping either: that maps from the CALLER's context, and a `uses:` job cannot
+# declare an `environment:`, so the environment-scoped values are not in scope
+# there and would resolve empty too.
 name: Deploy
 
 on:
@@ -33,8 +43,8 @@ on:
       rte_pericope:
         description: 'Baked into VITE_RTE_PERICOPE (#314)'
         required: false
-        type: string
-        default: 'false'
+        type: boolean
+        default: false
     outputs:
       url:
         description: 'URL of the deployed Static Web App'
