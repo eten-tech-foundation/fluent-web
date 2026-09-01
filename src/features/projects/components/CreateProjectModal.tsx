@@ -29,6 +29,8 @@ import {
 } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
 
+import { UsfmImportTab } from './UsfmImportTab';
+
 export interface CreateProjectData {
   title: string;
   targetLanguage: number;
@@ -419,6 +421,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               </div>
             </div>
           </TabsContent>
+          {config.features.usfmImport && (
+            <TabsContent value='import'>
+              {/* No-op for now: #420 is what does something with the accepted files. */}
+              <UsfmImportTab onFilesAccepted={() => {}} />
+            </TabsContent>
+          )}
         </Tabs>
       </DialogContent>
     </Dialog>
