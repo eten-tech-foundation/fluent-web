@@ -77,6 +77,7 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/deploy.yml
+    secrets: inherit
     with:
       ref: ${{ needs.tag.outputs.tag }}
       environment: qa
@@ -89,6 +90,7 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/deploy.yml
+    secrets: inherit
     with:
       ref: ${{ needs.tag.outputs.tag }}
       environment: production
