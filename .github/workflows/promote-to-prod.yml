@@ -1,0 +1,98 @@
+# Deploys an already-cut tag to production, out of band from `cut-release.yml`.
+#
+# This is the redeploy and roll-forward path (see docs/runbooks/deployment/),
+# not the happy path. It refuses tags that have no successful QA deployment,
+# so the QA stage cannot be skipped by taking this route instead. Production's
+# required reviewers still apply on top.
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'QA-approved release tag to promote (e.g. v26.08.3)'
+        required: true
+        type: string
+      skip_qa_check:
+        description: 'Emergency only: promote a tag with no successful QA deploy'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      # `${{ }}` is substituted into the script before the shell sees it, so a
+      # crafted input would execute ahead of any check below. Pass through env.
+      - name: Validate tag format
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]{2}\.(0[1-9]|1[0-2])\.[1-9][0-9]*$ ]]; then
+            echo "::error::Tag '$TAG' does not match required CalVer format vYY.MM.SERIAL (e.g. v26.07.1)"
+            exit 1
+          fi
+
+      - name: Resolve tag to a commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          sha=$(gh api "repos/$REPO/commits/$TAG" --jq '.sha') || {
+            echo "::error::Tag '$TAG' does not exist in $REPO."
+            exit 1
+          }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Tag '$TAG' is $sha."
+
+      - name: Confirm the tag passed QA
+        if: ${{ !inputs.skip_qa_check }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A deployment's `ref` is the ref of the workflow RUN, not whatever the
+          # job checked out: cut-release is dispatched on main, so its QA deploy
+          # is recorded against `main`. Match on the commit the tag points at.
+          ids=$(gh api "repos/$REPO/deployments?environment=qa&sha=$SHA" --jq '.[].id')
+          if [ -z "$ids" ]; then
+            echo "::error::No QA deployment found for '$TAG' ($SHA). Deploy it to QA before promoting."
+            exit 1
+          fi
+          for id in $ids; do
+            if gh api "repos/$REPO/deployments/$id/statuses" --jq '.[].state' | grep -qx success; then
+              echo "Tag '$TAG' has a successful QA deployment (deployment $id)."
+              exit 0
+            fi
+          done
+          echo "::error::Tag '$TAG' was deployed to QA but no deployment succeeded."
+          exit 1
+
+      - name: Warn on skipped QA check
+        if: ${{ inputs.skip_qa_check }}
+        env:
+          TAG: ${{ inputs.tag }}
+          ACTOR: ${{ github.actor }}
+        run: echo "::warning::QA verification skipped for '$TAG' by $ACTOR."
+
+  deploy-prod:
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
+      environment: production
+      vite_environment: production
+      app_version: ${{ inputs.tag }}
+    secrets: inherit

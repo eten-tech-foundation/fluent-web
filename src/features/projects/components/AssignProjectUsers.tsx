@@ -286,13 +286,11 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [removeProjectUserMutation]
   );
 
-  // "Active" work = not yet submitted, matching the definition UserHomePage
-  // already uses for unsubmitted assignments.
   const getActiveAssignmentCount = useCallback(
     (userId: number) => {
       if (!chapterAssignments) return 0;
       return chapterAssignments.filter(
-        a => !a.submittedTime && (a.assignedUser?.id === userId || a.peerChecker?.id === userId)
+        a => a.assignedUser?.id === userId || a.peerChecker?.id === userId
       ).length;
     },
     [chapterAssignments]

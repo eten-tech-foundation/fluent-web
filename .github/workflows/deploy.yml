@@ -1,0 +1,94 @@
+# Builds and deploys the SPA to one Azure Static Web App.
+#
+# Every deploy in this repo goes through here -- dev on merge to main, QA and
+# prod from `cut-release.yml`, and prod again from `promote-to-prod.yml`.
+# Keeping one definition is not just DRY: the three copies it replaces had
+# already drifted (differing secret names, inconsistent `${{ }}` spacing), and
+# a drifted deploy job is a QA stage that tests something prod won't ship.
+#
+# Secrets are resolved from the GitHub Environment named by `environment`, so
+# every environment supplies the same secret NAMES with its own values. Do not
+# reintroduce `_QA`/`_PROD` suffixes -- the environment is the scope.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref (tag, branch or SHA) to build and deploy'
+        required: true
+        type: string
+      environment:
+        description: 'GitHub Environment supplying the secrets: development | qa | production'
+        required: true
+        type: string
+      vite_environment:
+        description: 'Baked into VITE_ENVIRONMENT. Must be one of the values src/lib/config.ts accepts: development | staging | production'
+        required: true
+        type: string
+      app_version:
+        description: 'Baked into VITE_APP_VERSION and surfaced in the diagnostics footer'
+        required: true
+        type: string
+      rte_pericope:
+        description: 'Baked into VITE_RTE_PERICOPE (#314)'
+        required: false
+        type: string
+        default: 'false'
+    outputs:
+      url:
+        description: 'URL of the deployed Static Web App'
+        value: ${{ jobs.deploy.outputs.url }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    # Serialise per environment, so two tags cut in quick succession cannot
+    # race the same Static Web App. Queue rather than cancel: a half-finished
+    # deploy that loses to a newer one leaves the app in an unknown state.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    outputs:
+      url: ${{ steps.deploy.outputs.static_web_app_url }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: true
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.13.0'
+
+      - name: Deploy to Azure
+        id: deploy
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: /
+          output_location: dist
+          app_build_command: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile && pnpm build
+        env:
+          # Vite inlines every VITE_* var into the bundle at build time, so each
+          # environment is a separate build -- there is no artifact to promote.
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.VITE_APP_INSIGHTS_CONNECTION_STRING }}
+          VITE_ENVIRONMENT: ${{ inputs.vite_environment }}
+          VITE_APP_VERSION: ${{ inputs.app_version }}
+          VITE_RTE_PERICOPE: ${{ inputs.rte_pericope }}
+          VITE_BETTER_AUTH_URL: ${{ secrets.VITE_BETTER_AUTH_URL }}
+          VITE_AQUIFER_API_URL: ${{ secrets.VITE_AQUIFER_API_URL }}
+          VITE_AQUIFER_API_KEY: ${{ secrets.VITE_AQUIFER_API_KEY }}
+          VITE_YOUVERSION_API_URL: ${{ secrets.VITE_YOUVERSION_API_URL }}
+          VITE_YOUVERSION_API_KEY: ${{ secrets.VITE_YOUVERSION_API_KEY }}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
 import { useHistoryShortcuts } from '../lib/history-shortcuts';
 import {
   changedVerses,
@@ -9,6 +10,7 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
+import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 
 import { FormatBar } from './FormatBar';
 
@@ -137,9 +139,34 @@ export function ChapterEditor({
     [onVersesChange]
   );
 
+  const activeVerseRef = useRef<number | undefined>(undefined);
+  /**
+   * The editor's ScriptureReferencePlugin only mounts when `scrRef` is passed alongside
+   * `onScrRefChange` — a callback alone is never called. Held as state so the pair forms the
+   * controlled loop the editor expects (its plugin compares by value, so echoing the reported
+   * ref back does not move the cursor).
+   */
+  const [scrRef, setScrRef] = useState<SerializedVerseRef>(() => ({
+    book: bookCode ?? '',
+    chapterNum: chapterNumber,
+    verseNum: 1,
+  }));
+
+  const { restoreAfterLoad, cancelRestore } = useVerseCursorRestore(scrRef, setScrRef);
+
+  useEffect(() => {
+    activeVerseRef.current = undefined;
+    cancelRestore();
+    setScrRef({ book: bookCode ?? '', chapterNum: chapterNumber, verseNum: 1 });
+  }, [bookCode, cancelRestore, chapterNumber, contentKey]);
+
   const handleScrRefChange = useCallback(
-    (scrRef: SerializedVerseRef) => {
-      if (scrRef.verseNum > 0) onActiveVerseChange?.(scrRef.verseNum);
+    (nextRef: SerializedVerseRef) => {
+      setScrRef(nextRef);
+      if (nextRef.verseNum > 0) {
+        activeVerseRef.current = nextRef.verseNum;
+        onActiveVerseChange?.(nextRef.verseNum);
+      }
     },
     [onActiveVerseChange]
   );
@@ -148,16 +175,44 @@ export function ChapterEditor({
     setBlockMarker(snapshot.blockMarker);
   }, []);
 
-  const handleFormat = useCallback((marker: string) => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    editor.formatPara(marker);
-    // The editor reports the new block through onStateChange, but only once it has committed;
-    // reflecting it now keeps the bar from lagging a click behind. Only where there was a block
-    // to act on, though: with no cursor `formatPara` has nothing to format, and a bar that
-    // claimed otherwise would keep claiming it until the next selection change.
-    setBlockMarker(current => (current === undefined ? current : marker));
-  }, []);
+  const handleFormat = useCallback(
+    (marker: string) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      // A fresh chapter is one paragraph holding every verse, and the editor's own block
+      // formatting restyles the whole block — one click would turn 31 verses into poetry (#427).
+      // When the active verse's paragraph spans further than itself, the format is scoped to that
+      // verse by rewriting the rows; the editor-native path stays for already-scoped blocks, where
+      // it does the same thing and keeps the cursor.
+      const activeVerse = activeVerseRef.current;
+      const scoped =
+        activeVerse === undefined
+          ? null
+          : scopeBlockFormatToVerse(knownVersesRef.current, activeVerse, marker);
+      if (scoped && activeVerse !== undefined) {
+        loadIntoEditor(scoped.updated);
+        // Report what the document ended up holding, not the rows we handed it: the load
+        // re-derives them, and the parent's copy has to be the one the next commit is diffed
+        // against or an edit somewhere else would come back as a change to this verse.
+        const loaded = knownVersesRef.current;
+        onVersesChange(
+          scoped.changed.map(
+            row => loaded.find(verse => verse.verseNumber === row.verseNumber) ?? row
+          )
+        );
+        // The load leaves the editor with no selection, and it only lands a task from now.
+        restoreAfterLoad(activeVerse);
+      } else {
+        editor.formatPara(marker);
+      }
+      // The editor reports the new block through onStateChange, but only once it has committed;
+      // reflecting it now keeps the bar from lagging a click behind. Only where there was a block
+      // to act on, though: with no cursor `formatPara` has nothing to format, and a bar that
+      // claimed otherwise would keep claiming it until the next selection change.
+      setBlockMarker(current => (current === undefined ? current : marker));
+    },
+    [loadIntoEditor, onVersesChange, restoreAfterLoad]
+  );
 
   const handleHistoryKeys = useHistoryShortcuts(editorRef);
 
@@ -178,6 +233,7 @@ export function ChapterEditor({
             hasSpellCheck: false,
             textDirection: 'auto',
           }}
+          scrRef={scrRef}
           onScrRefChange={handleScrRefChange}
           onStateChange={handleStateChange}
           onUsjChange={handleUsjChange}
