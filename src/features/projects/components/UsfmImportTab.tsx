@@ -28,6 +28,9 @@ export function UsfmImportTab({ onFilesAccepted }: UsfmImportTabProps) {
   const [accepted, setAccepted] = useState<AcceptedUsfmFile[]>([]);
   const [error, setError] = useState<ErrorKey | null>(null);
 
+  /** Which selection is current. Reading a file is async, so an older batch can finish last. */
+  const selectionRef = useRef(0);
+
   /**
    * #418 rejects the entire import if any single file fails, so nothing is kept unless the
    * whole batch passes — that is why the accepted list is cleared before every early return
@@ -37,11 +40,18 @@ export function UsfmImportTab({ onFilesAccepted }: UsfmImportTabProps) {
     async (files: File[]) => {
       if (files.length === 0) return;
 
+      const selection = ++selectionRef.current;
       const results: AcceptedUsfmFile[] = [];
       const seen = new Set<string>();
 
       for (const file of files) {
-        const result = validateUsfmFile(await file.text());
+        const text = await file.text();
+
+        // Someone selected again while this batch was still reading. The newer one wins, so
+        // drop this batch instead of letting a stale result overwrite what is on screen.
+        if (selection !== selectionRef.current) return;
+
+        const result = validateUsfmFile(text);
 
         if (!result.ok) {
           setAccepted([]);
@@ -91,7 +101,13 @@ export function UsfmImportTab({ onFilesAccepted }: UsfmImportTabProps) {
           className='hidden'
           data-testid='usfm-file-input'
           type='file'
-          onChange={event => void handleFiles(Array.from(event.target.files ?? []))}
+          onChange={event => {
+            const files = Array.from(event.target.files ?? []);
+            // Clearing the value is what lets the same filename be picked twice. Without it the
+            // browser sees no change on the second pick, so a corrected file cannot be retried.
+            event.target.value = '';
+            void handleFiles(files);
+          }}
         />
       </div>
 
