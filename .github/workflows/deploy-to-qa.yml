@@ -20,6 +20,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Require a CalVer tag ref
         env:
@@ -38,9 +39,11 @@ jobs:
 
   deploy-qa:
     needs: validate
+    permissions:
+      contents: read
     uses: ./.github/workflows/deploy.yml
     with:
-      ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
       environment: qa
       # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
       vite_environment: staging

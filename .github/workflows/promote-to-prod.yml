@@ -25,6 +25,8 @@ jobs:
     permissions:
       contents: read
       deployments: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
       # `${{ }}` is substituted into the script before the shell sees it, so a
       # crafted input would execute ahead of any check below. Pass through env.
@@ -37,20 +39,34 @@ jobs:
             exit 1
           fi
 
-      - name: Confirm the tag passed QA
-        if: ${{ !inputs.skip_qa_check }}
+      - name: Resolve tag to a commit
+        id: resolve
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
           REPO: ${{ github.repository }}
         run: |
+          sha=$(gh api "repos/$REPO/commits/$TAG" --jq '.sha') || {
+            echo "::error::Tag '$TAG' does not exist in $REPO."
+            exit 1
+          }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Tag '$TAG' is $sha."
+
+      - name: Confirm the tag passed QA
+        if: ${{ !inputs.skip_qa_check }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
           # A deployment's `ref` is the ref of the workflow RUN, not whatever the
           # job checked out: cut-release is dispatched on main, so its QA deploy
           # is recorded against `main`. Match on the commit the tag points at.
-          sha=$(gh api "repos/$REPO/commits/$TAG" --jq '.sha')
-          ids=$(gh api "repos/$REPO/deployments?environment=qa&sha=$sha" --jq '.[].id')
+          ids=$(gh api "repos/$REPO/deployments?environment=qa&sha=$SHA" --jq '.[].id')
           if [ -z "$ids" ]; then
-            echo "::error::No QA deployment found for '$TAG' ($sha). Deploy it to QA before promoting."
+            echo "::error::No QA deployment found for '$TAG' ($SHA). Deploy it to QA before promoting."
             exit 1
           fi
           for id in $ids; do
@@ -64,13 +80,18 @@ jobs:
 
       - name: Warn on skipped QA check
         if: ${{ inputs.skip_qa_check }}
-        run: echo "::warning::QA verification skipped for '${{ inputs.tag }}' by ${{ github.actor }}."
+        env:
+          TAG: ${{ inputs.tag }}
+          ACTOR: ${{ github.actor }}
+        run: echo "::warning::QA verification skipped for '$TAG' by $ACTOR."
 
   deploy-prod:
     needs: validate
+    permissions:
+      contents: read
     uses: ./.github/workflows/deploy.yml
     with:
-      ref: ${{ inputs.tag }}
+      ref: ${{ needs.validate.outputs.sha }}
       environment: production
       vite_environment: production
       app_version: ${{ inputs.tag }}

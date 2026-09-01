@@ -74,6 +74,8 @@ jobs:
 
   deploy-qa:
     needs: tag
+    permissions:
+      contents: read
     uses: ./.github/workflows/deploy.yml
     with:
       ref: ${{ needs.tag.outputs.tag }}
@@ -81,14 +83,14 @@ jobs:
       # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
       vite_environment: staging
       app_version: ${{ needs.tag.outputs.tag }}
-    secrets: inherit
 
   deploy-prod:
     needs: [tag, deploy-qa]
+    permissions:
+      contents: read
     uses: ./.github/workflows/deploy.yml
     with:
       ref: ${{ needs.tag.outputs.tag }}
       environment: production
       vite_environment: production
       app_version: ${{ needs.tag.outputs.tag }}
-    secrets: inherit

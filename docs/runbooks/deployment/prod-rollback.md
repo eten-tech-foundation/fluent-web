@@ -23,4 +23,4 @@ If a release is bad, prefer **rolling forward** — cut a hotfix that reverts th
 
 ## If Azure itself is the problem
 
-If the deploy pipeline cannot reach Azure at all, use the Azure Portal to swap to a previous Static Web Apps deployment, or the Azure Static Web Apps CLI to restore a previous build. Treat this as out-of-band: nothing in GitHub will record it, so note it in the incident channel and re-run a matching **Promote to Production** afterwards so the two agree.
+If the deploy pipeline cannot reach Azure at all, there is no native Azure feature to swap to a previous Static Web Apps deployment slot for production. You must escalate to Azure Support or wait for the Azure incident to resolve. Treat any manual artifact redeployments via CLI as out-of-band: note it in the incident channel and re-run a matching **Promote to Production** afterwards so the two agree.
