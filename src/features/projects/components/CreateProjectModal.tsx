@@ -215,7 +215,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           {config.features.usfmImport && (
             <TabsContent value='import'>
               {/* No-op for now: #420 is what does something with the accepted files. */}
-              <UsfmImportTab onFilesAccepted={() => {}} />
+              <UsfmImportTab
+                formData={formData}
+                isSubmitting={isLoading || isSubmitting}
+                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
+                onFieldChange={updateFormData}
+                onSubmit={() => void handleSubmit()}
+              />
             </TabsContent>
           )}
         </Tabs>
