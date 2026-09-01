@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +27,8 @@ const editor = vi.hoisted(() => ({
   echoOnMount: true,
   setUsj: vi.fn<(usj: Usj) => void>(),
   formatPara: vi.fn<(marker: string) => void>(),
+  undo: vi.fn<() => void>(),
+  redo: vi.fn<() => void>(),
   commit: undefined as ((usj: Usj) => void) | undefined,
   reportState: undefined as ((snapshot: StateChangeSnapshot) => void) | undefined,
   reportScrRef: undefined as ((scrRef: SerializedVerseRef) => void) | undefined,
@@ -68,6 +70,8 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
             formatPara: (marker: string) => {
               editor.formatPara(marker);
             },
+            undo: editor.undo,
+            redo: editor.redo,
           }),
           []
         );
@@ -425,6 +429,33 @@ describe('ChapterEditor', () => {
 
       expect(documentVerses()).toEqual(inDocumentSpace(WITH_SUGGESTION));
     });
+  });
+});
+
+describe('history shortcuts (#427)', () => {
+  it('Ctrl+Z and Ctrl+Y reach the editor as undo/redo commands', () => {
+    editor.undo.mockClear();
+    editor.redo.mockClear();
+    const verses: PericopeVerseText[] = [
+      { verseNumber: 1, text: 'In the beginning', markers: null },
+    ];
+    render(
+      <ChapterEditor
+        chapterNumber={CHAPTER}
+        contentKey='history-shortcuts'
+        verses={verses}
+        onVersesChange={vi.fn()}
+      />
+    );
+    fireEvent.keyDown(screen.getByTestId('chapter-editor'), { key: 'z', ctrlKey: true });
+    expect(editor.undo).toHaveBeenCalledTimes(1);
+    expect(editor.redo).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId('chapter-editor'), {
+      key: 'z',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(editor.redo).toHaveBeenCalledTimes(1);
   });
 });
 
