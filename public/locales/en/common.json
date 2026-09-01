@@ -54,5 +54,7 @@
   "pericope": "Pericope",
   "chapter": "Chapter",
   "mainMenu": "Main menu",
-  "userMenu": "User menu"
+  "userMenu": "User menu",
+  "newTab": "New",
+  "importTab": "Import"
 }
