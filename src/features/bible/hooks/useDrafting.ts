@@ -112,6 +112,13 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
           verse.verseNumber === verseId ? { ...verse, content: text, markers } : verse
         );
       });
+      // Reveal follows the content, not the cursor. The verse column hides whatever is not
+      // revealed, and the pericope editor is one surface over the whole group, so it writes
+      // verses that were never the active one — those stayed hidden until a reload (#434).
+      // Clearing the text does not take the reveal back; the row is being edited.
+      if (text.trim()) {
+        setRevealedVerses(prev => (prev.has(verseId) ? prev : new Set(prev).add(verseId)));
+      }
       debouncedSave(verseId, { content: text, markers });
       const textarea = textareaRefs.current[verseId];
       if (textarea) autoResizeTextarea(textarea);
