@@ -40,7 +40,11 @@ jobs:
     needs: validate
     uses: ./.github/workflows/deploy.yml
     with:
-      ref: ${{ github.ref_name }}
+      # The commit, not the tag: a tag is mutable, and moving it between this
+      # dispatch and the checkout would deploy something nobody validated.
+      # `github.sha` is this run's commit, which is the tag's commit because the
+      # run is on the tag. VITE_APP_VERSION keeps the human-readable tag name.
+      ref: ${{ github.sha }}
       environment: qa
       # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
       vite_environment: staging

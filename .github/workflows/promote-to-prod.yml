@@ -25,6 +25,8 @@ jobs:
     permissions:
       contents: read
       deployments: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
       # `${{ }}` is substituted into the script before the shell sees it, so a
       # crafted input would execute ahead of any check below. Pass through env.
@@ -37,20 +39,42 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # need tags and history to resolve and diff against them
+          persist-credentials: false
+
+      # Everything downstream keys off this commit rather than the tag name. A
+      # tag is mutable: resolving once and passing the sha to the deploy means a
+      # tag moved after this point cannot put an unvalidated commit into prod.
+      - name: Resolve tag to commit
+        id: resolve
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          # `refs/tags/` explicitly -- `git rev-parse "$TAG"` would also match a
+          # branch of the same name, which is not what was validated or QA'd.
+          if ! sha=$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}"); then
+            echo "::error::Tag '$TAG' does not exist. Cut it first, or check the spelling."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Tag '$TAG' resolves to $sha."
+
       - name: Confirm the tag passed QA
         if: ${{ !inputs.skip_qa_check }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
           REPO: ${{ github.repository }}
+          SHA: ${{ steps.resolve.outputs.sha }}
         run: |
           # A deployment's `ref` is the ref of the workflow RUN, not whatever the
           # job checked out: cut-release is dispatched on main, so its QA deploy
-          # is recorded against `main`. Match on the commit the tag points at.
-          sha=$(gh api "repos/$REPO/commits/$TAG" --jq '.sha')
-          ids=$(gh api "repos/$REPO/deployments?environment=qa&sha=$sha" --jq '.[].id')
+          # is recorded against `main`. Match on the commit instead.
+          ids=$(gh api "repos/$REPO/deployments?environment=qa&sha=$SHA" --jq '.[].id')
           if [ -z "$ids" ]; then
-            echo "::error::No QA deployment found for '$TAG' ($sha). Deploy it to QA before promoting."
+            echo "::error::No QA deployment found for '$TAG' ($SHA). Deploy it to QA before promoting."
             exit 1
           fi
           for id in $ids; do
@@ -62,15 +86,36 @@ jobs:
           echo "::error::Tag '$TAG' was deployed to QA but no deployment succeeded."
           exit 1
 
+      # A local `uses: ./…` reference loads deploy.yml from the CALLER's commit.
+      # This workflow runs on the default branch, but Deploy to QA runs on the
+      # tag -- so if the tag's deploy.yml differs from this one, QA exercised a
+      # different build definition than the one about to ship. A warning, not a
+      # failure: rolling back to an old tag legitimately hits this every time.
+      - name: Warn if QA used a different build definition
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          if ! git diff --quiet "$SHA" HEAD -- .github/workflows/deploy.yml; then
+            echo "::warning::deploy.yml differs between $SHA and this run — QA built this tag with a different deploy definition. Review the diff below before approving."
+            git diff "$SHA" HEAD -- .github/workflows/deploy.yml
+          else
+            echo "deploy.yml matches the revision QA used."
+          fi
+
       - name: Warn on skipped QA check
         if: ${{ inputs.skip_qa_check }}
-        run: echo "::warning::QA verification skipped for '${{ inputs.tag }}' by ${{ github.actor }}."
+        env:
+          TAG: ${{ inputs.tag }}
+          ACTOR: ${{ github.actor }}
+        run: echo "::warning::QA verification skipped for '$TAG' by $ACTOR."
 
   deploy-prod:
     needs: validate
     uses: ./.github/workflows/deploy.yml
     with:
-      ref: ${{ inputs.tag }}
+      # The commit `validate` resolved and checked, not the tag name — see the
+      # "Resolve tag to commit" step. VITE_APP_VERSION keeps the tag.
+      ref: ${{ needs.validate.outputs.sha }}
       environment: production
       vite_environment: production
       app_version: ${{ inputs.tag }}
