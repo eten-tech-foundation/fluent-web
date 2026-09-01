@@ -1,4 +1,6 @@
-import { Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -29,6 +31,9 @@ interface ChapterAssignmentsTableProps {
   onCheckboxChange: (assignmentId: number, checked: boolean) => void;
 }
 
+type SortableColumn = 'drafter' | 'peerChecker' | 'status';
+type SortDirection = 'asc' | 'desc';
+
 const formatProgress = (completedVerses: number, totalVerses: number): string =>
   `${completedVerses} of ${totalVerses}`;
 
@@ -42,6 +47,63 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   onRowClick,
   onCheckboxChange,
 }) => {
+  const [sortColumn, setSortColumn] = useState<SortableColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
+
+  const handleSort = (column: SortableColumn) => {
+    if (sortColumn !== column) {
+      setSortColumn(column);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      setSortDirection('desc');
+    } else {
+      setSortColumn(null);
+      setSortDirection(null);
+    }
+  };
+
+  const sortedAssignments = useMemo(() => {
+    if (!sortColumn || !sortDirection) {
+      return assignments;
+    }
+    return [...assignments].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      switch (sortColumn) {
+        case 'drafter':
+          valA = a.assignedUser?.displayName ?? '';
+          valB = b.assignedUser?.displayName ?? '';
+          break;
+        case 'peerChecker':
+          valA = a.peerChecker?.displayName ?? '';
+          valB = b.peerChecker?.displayName ?? '';
+          break;
+        case 'status':
+          valA = a.status;
+          valB = b.status;
+          break;
+      }
+      if (!valA) return 1;
+      if (!valB) return -1;
+      const cmp = valA.localeCompare(valB);
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [assignments, sortColumn, sortDirection]);
+
+  const getSortIcon = (column: SortableColumn) => {
+    if (sortColumn !== column) return <ArrowUpDown className='h-3 w-3 opacity-50' />;
+    return sortDirection === 'asc' ? (
+      <ArrowUp className='h-3 w-3' />
+    ) : (
+      <ArrowDown className='h-3 w-3' />
+    );
+  };
+
+  const getAriaSortValue = (column: SortableColumn): 'ascending' | 'descending' | undefined => {
+    if (sortColumn !== column) return undefined;
+    return sortDirection === 'asc' ? 'ascending' : 'descending';
+  };
+
   return (
     <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border'>
       {isLoading ? (
@@ -72,22 +134,53 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                   <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Chapter
                   </TableHead>
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                    Drafter
+                  <TableHead
+                    aria-sort={getAriaSortValue('drafter')}
+                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                  >
+                    <button
+                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      type='button'
+                      onClick={() => handleSort('drafter')}
+                    >
+                      Drafter
+                      {getSortIcon('drafter')}
+                    </button>
                   </TableHead>
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                    <TruncatedTableText text='Peer Checker' />
+                  <TableHead
+                    aria-sort={getAriaSortValue('peerChecker')}
+                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                  >
+                    <button
+                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      type='button'
+                      onClick={() => handleSort('peerChecker')}
+                    >
+                      <TruncatedTableText text='Peer Checker' />
+                      {getSortIcon('peerChecker')}
+                    </button>
                   </TableHead>
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
-                    Status
+                  <TableHead
+                    aria-sort={getAriaSortValue('status')}
+                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                  >
+                    <button
+                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      type='button'
+                      onClick={() => handleSort('status')}
+                    >
+                      Status
+                      {getSortIcon('status')}
+                    </button>
                   </TableHead>
+
                   <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Progress
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className='divide-border divide-y'>
-                {assignments.map(assignment => (
+                {sortedAssignments.map(assignment => (
                   <TableRow
                     key={assignment.assignmentId}
                     className='align-center cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
