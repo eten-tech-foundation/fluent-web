@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -45,6 +45,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   const navigate = useNavigate();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const currentSwitchIdRef = useRef(0);
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return null;
@@ -120,13 +121,21 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
       return;
     }
 
+    const switchId = ++currentSwitchIdRef.current;
     setIsOrgSwitching(true);
     const isOrgChange = targetOrgId !== activeOrgId;
 
     try {
       if (isOrgChange) {
-        await updateActiveOrg.mutateAsync({ orgId: targetOrgId });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Organization switch timed out')), 10000)
+        );
+
+        await Promise.race([updateActiveOrg.mutateAsync({ orgId: targetOrgId }), timeoutPromise]);
       }
+
+      if (switchId !== currentSwitchIdRef.current) return;
+
       setUserDetail({
         ...userdetail,
         lastActiveOrgId: targetOrgId,
@@ -141,14 +150,18 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
         queryClient.invalidateQueries({ queryKey: ['users'] }),
       ]);
     } catch (error) {
+      if (switchId !== currentSwitchIdRef.current) return;
+
       toast.error('Failed to switch organization. Please try again.');
 
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
       });
     } finally {
-      setIsOrgSwitching(false);
-      onAfterSelect?.();
+      if (switchId === currentSwitchIdRef.current) {
+        setIsOrgSwitching(false);
+        onAfterSelect?.();
+      }
     }
   };
 
