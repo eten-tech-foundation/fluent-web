@@ -25,6 +25,17 @@ const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string }> = [
 ];
 
 /**
+ * Kinds the bar shows but will not apply. Section Heading is off until the API can store one
+ * (#432): a heading is a paragraph carrying its own words, while a verse row holds one verse's
+ * text, so applying it here puts the verse *inside* the heading and exports invalid USFM.
+ *
+ * It stays in the bar rather than being removed, because the bar's job is to report the block the
+ * cursor is in. Drop the button and an existing heading would show three unpressed buttons, which
+ * reads as "no formatting here" — the same lie the "Other" badge exists to prevent.
+ */
+const UNAVAILABLE_KINDS: ReadonlySet<BlockKind> = new Set<BlockKind>(['heading']);
+
+/**
  * The chapter view's structural authoring control (#397): always visible, always reflecting the
  * block the cursor is in.
  *
@@ -50,20 +61,31 @@ export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
       role='toolbar'
     >
       <div className='flex items-center gap-1'>
-        {KINDS.map(option => (
-          <Button
-            key={option.kind}
-            aria-pressed={kind === option.kind}
-            className={`h-7 cursor-pointer rounded-md px-3 text-xs font-semibold transition-colors ${
-              kind === option.kind
-                ? 'bg-primary text-white'
-                : 'text-muted-foreground hover:bg-hover bg-transparent'
-            }`}
-            onClick={() => onFormat(markerFor(option.kind, level))}
-          >
-            {t(option.labelKey, option.fallback)}
-          </Button>
-        ))}
+        {KINDS.map(option => {
+          const unavailable = UNAVAILABLE_KINDS.has(option.kind);
+          return (
+            <Button
+              key={option.kind}
+              aria-pressed={kind === option.kind}
+              className={`h-7 rounded-md px-3 text-xs font-semibold transition-colors ${
+                unavailable ? 'cursor-not-allowed' : 'cursor-pointer'
+              } ${
+                kind === option.kind
+                  ? 'bg-primary text-white'
+                  : 'text-muted-foreground hover:bg-hover bg-transparent'
+              }`}
+              disabled={unavailable}
+              title={
+                unavailable
+                  ? t('blockSectionHeadingUnavailable', 'Section headings are not available yet')
+                  : undefined
+              }
+              onClick={() => onFormat(markerFor(option.kind, level))}
+            >
+              {t(option.labelKey, option.fallback)}
+            </Button>
+          );
+        })}
       </div>
 
       {kind === 'other' && (

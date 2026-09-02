@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@eten-tech-foundation/platform-editor':
-        specifier: ^0.8.14
-        version: 0.8.14(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
+        specifier: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz
+        version: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
       '@eten-tech-foundation/scripture-utilities':
         specifier: ^0.1.6
         version: 0.1.6
@@ -657,8 +657,9 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eten-tech-foundation/platform-editor@0.8.14':
-    resolution: {integrity: sha512-H6FhN6nwHEh68bSYMi7JiwqCxHLLI8trleY1rghpXCCnofnWBHKnXOI40iQ1HgL0el2y7EU1ihKQR9GliAwe+A==}
+  '@eten-tech-foundation/platform-editor@file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz':
+    resolution: {integrity: sha512-E4E4ZoXKDCQUiADzYqrm5i7tRn3KDcdJig4txI9hfk5zFRLrfAe+QDaY9zrbQ6dnQhzLKNtevtujn43lMCWqWw==, tarball: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz}
+    version: 0.8.15
     peerDependencies:
       react: '>=18.3.1'
       react-dom: '>=18.3.1'
@@ -670,14 +671,8 @@ packages:
   '@eten-tech-foundation/scripture-utilities@0.1.6':
     resolution: {integrity: sha512-FNGpt2WK6qc+Et3lE5oH1M7mD17pLdJuqFXsIgTU8EqJKo/Fq1/EGydJOmD3Jh0/Tk4x3K/L10t/aWRUcaHe5w==}
 
-  '@floating-ui/core@1.7.5':
-    resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
-
   '@floating-ui/core@1.8.0':
     resolution: {integrity: sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==}
-
-  '@floating-ui/dom@1.7.6':
-    resolution: {integrity: sha512-9gZSAI5XM36880PPMm//9dfiEngYoC6Am2izES1FF406YFsjvyBMmeJ2g4SAju3xWwtuynNRFL2s9hgxpLI5SQ==}
 
   '@floating-ui/dom@1.8.0':
     resolution: {integrity: sha512-yXSrzeHZBTZadLOlfyhCkJHNeLJnHRnRInwdZ40L7ZiaAtrBwoYlsDrX3v5zB1Utk7CLfzcOVnVVWoXEky7Ceg==}
@@ -699,9 +694,6 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
       react-dom: '>=17.0.0'
-
-  '@floating-ui/utils@0.2.11':
-    resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
@@ -5325,10 +5317,11 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@eten-tech-foundation/platform-editor@0.8.14(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)':
+  '@eten-tech-foundation/platform-editor@file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)':
     dependencies:
       '@eten-tech-foundation/scripture-utilities': 0.1.6
-      '@floating-ui/dom': 1.7.6
+      '@floating-ui/dom': 1.8.0
+      '@lexical/html': 0.43.0
       '@lexical/react': 0.43.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
       '@lexical/selection': 0.43.0
       '@lexical/text': 0.43.0
@@ -5347,18 +5340,9 @@ snapshots:
     dependencies:
       '@xmldom/xmldom': 0.9.10
 
-  '@floating-ui/core@1.7.5':
-    dependencies:
-      '@floating-ui/utils': 0.2.11
-
   '@floating-ui/core@1.8.0':
     dependencies:
       '@floating-ui/utils': 0.2.12
-
-  '@floating-ui/dom@1.7.6':
-    dependencies:
-      '@floating-ui/core': 1.7.5
-      '@floating-ui/utils': 0.2.11
 
   '@floating-ui/dom@1.8.0':
     dependencies:
@@ -5367,7 +5351,7 @@ snapshots:
 
   '@floating-ui/react-dom@2.1.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@floating-ui/dom': 1.7.6
+      '@floating-ui/dom': 1.8.0
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -5384,8 +5368,6 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       tabbable: 6.5.0
-
-  '@floating-ui/utils@0.2.11': {}
 
   '@floating-ui/utils@0.2.12': {}
 

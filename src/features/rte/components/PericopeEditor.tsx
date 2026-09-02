@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useHistoryShortcuts } from '../lib/history-shortcuts';
 import {
   changedVerses,
   pericopeVersesToUsj,
@@ -128,8 +129,14 @@ export function PericopeEditor({
     [onActiveVerseChange]
   );
 
+  const handleHistoryKeys = useHistoryShortcuts(editorRef);
+
   return (
-    <div className='pericope-editor rte-editor' data-testid='pericope-editor'>
+    <div
+      className='pericope-editor rte-editor'
+      data-testid='pericope-editor'
+      onKeyDownCapture={handleHistoryKeys}
+    >
       <Editorial
         ref={editorRef}
         defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}

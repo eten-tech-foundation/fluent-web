@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
+import { useHistoryShortcuts } from '../lib/history-shortcuts';
 import {
   changedVerses,
   pericopeVersesToUsj,
@@ -214,8 +215,14 @@ export function ChapterEditor({
     [loadIntoEditor, onVersesChange, restoreAfterLoad]
   );
 
+  const handleHistoryKeys = useHistoryShortcuts(editorRef);
+
   return (
-    <div className='chapter-editor flex h-full min-h-0 flex-col' data-testid='chapter-editor'>
+    <div
+      className='chapter-editor flex h-full min-h-0 flex-col'
+      data-testid='chapter-editor'
+      onKeyDownCapture={handleHistoryKeys}
+    >
       {!readOnly && <FormatBar blockMarker={blockMarker} onFormat={handleFormat} />}
       <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
         <Editorial

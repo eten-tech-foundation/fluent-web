@@ -28,7 +28,7 @@
     "set-env": "node scripts/set-env.ts"
   },
   "dependencies": {
-    "@eten-tech-foundation/platform-editor": "^0.8.14",
+    "@eten-tech-foundation/platform-editor": "file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz",
     "@eten-tech-foundation/scripture-utilities": "^0.1.6",
     "@fontsource/charis-sil": "^5.3.0",
     "@fontsource/noto-naskh-arabic": "^5.3.0",
