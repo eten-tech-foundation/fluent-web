@@ -39,13 +39,12 @@ const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
   });
 
 export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
-  const { userdetail, setUserDetail, setIsOrgSwitching } = useAppStore();
+  const { userdetail, setUserDetail, isOrgSwitching, setIsOrgSwitching } = useAppStore();
   const updateActiveOrg = useUpdateActiveOrg();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return null;
@@ -114,18 +113,15 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   };
 
   const handleSelectRole = async (targetOrgId: number, targetRoleName: string) => {
-    if (isSwitching) return;
+    if (isOrgSwitching) return;
     setIsExpanded(false);
     if (targetOrgId === activeOrgId && targetRoleName === activeRoleName) {
       onAfterSelect?.();
       return;
     }
 
-    setIsSwitching(true);
     setIsOrgSwitching(true);
     const isOrgChange = targetOrgId !== activeOrgId;
-    const prevOrgId = activeOrgId;
-    const prevRoleName = activeRoleName;
 
     try {
       if (isOrgChange) {
@@ -145,20 +141,12 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
         queryClient.invalidateQueries({ queryKey: ['users'] }),
       ]);
     } catch (error) {
-      setUserDetail({
-        ...userdetail,
-        lastActiveOrgId: prevOrgId,
-        role: prevRoleName,
-      });
-
-      navigateForRole(prevOrgId, prevRoleName);
-      toast.error('Failed to switch role. Please try again.');
+      toast.error('Failed to switch organization. Please try again.');
 
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
       });
     } finally {
-      setIsSwitching(false);
       setIsOrgSwitching(false);
       onAfterSelect?.();
     }
@@ -171,21 +159,21 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
         className={`hover:bg-popover-hover text-text-primary h-10 w-full cursor-pointer justify-start px-4 py-2 transition-colors duration-150 ${
           isExpanded ? 'bg-popover-hover' : ''
         }`}
-        disabled={isSwitching}
+        disabled={isOrgSwitching}
         variant='ghost'
         onClick={() => setIsExpanded(prev => !prev)}
       >
         <span className='text-text-primary mr-3'>
-          {isSwitching ? (
+          {isOrgSwitching ? (
             <Loader2 className='text-primary h-4.5 w-4.5 animate-spin' />
           ) : (
             <Building2 size={18} />
           )}
         </span>
         <span className='flex-1 truncate text-left text-sm font-medium' title={activeOrgName}>
-          {isSwitching ? 'Switching...' : activeOrgName}
+          {isOrgSwitching ? 'Switching...' : activeOrgName}
         </span>
-        {!isSwitching && (
+        {!isOrgSwitching && (
           <ChevronDown
             className={`text-text-primary ml-2 shrink-0 transition-transform ${
               isExpanded ? 'rotate-180' : ''
@@ -233,8 +221,8 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
                             isActiveRole
                               ? 'bg-primary text-primary-foreground'
                               : 'border-border bg-background text-foreground hover:bg-accent border'
-                          } ${isSwitching ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                          disabled={isSwitching}
+                          } ${isOrgSwitching ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                          disabled={isOrgSwitching}
                           onClick={() => handleSelectRole(org.id, role.roleName)}
                         >
                           {getDisplayRole(role.roleName)}

@@ -125,11 +125,10 @@ export function UserHomePage() {
   // entry — Back from My History lands on My Work instead of leaving the page.
   const { tab } = useSearch({ from: '/_authenticated/' });
   const isHistory = tab === 'my-history';
-  const {
-    data: chapterAssignmentsData,
-    isLoading: loading,
-    isFetching,
-  } = useChapterAssignmentsByUserId((userdetail as User).id, userdetail?.lastActiveOrgId);
+  const { data: chapterAssignmentsData, isLoading: loading } = useChapterAssignmentsByUserId(
+    (userdetail as User).id,
+    userdetail?.lastActiveOrgId
+  );
 
   // Reset filters when switching tabs
   useEffect(() => {
@@ -311,7 +310,7 @@ export function UserHomePage() {
       )}
 
       <div className='bg-card flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
-        {loading || isFetching ? (
+        {loading ? (
           <div className='flex items-center justify-center gap-2 py-12'>
             <Loader2 className='text-muted-foreground h-5 w-5 animate-spin' />
             <span className='text-muted-foreground'>Loading...</span>

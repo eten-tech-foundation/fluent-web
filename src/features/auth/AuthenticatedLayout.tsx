@@ -16,12 +16,25 @@ import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const { isOrgSwitching } = useAppStore();
+  const { isOrgSwitching, setIsOrgSwitching } = useAppStore();
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
   const { applyUser } = useRefreshUserDetail();
   const updateUserMutation = useUpdateUser();
+
+  useEffect(() => {
+    if (!isOrgSwitching) return;
+
+    const timer = setTimeout(() => {
+      setIsOrgSwitching(false);
+      Logger.logEvent('OrgSwitchingTimeout', {
+        message: 'isOrgSwitching auto-cleared after safety timeout',
+      });
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, [isOrgSwitching, setIsOrgSwitching]);
 
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
