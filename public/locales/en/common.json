@@ -54,5 +54,12 @@
   "pericope": "Pericope",
   "chapter": "Chapter",
   "mainMenu": "Main menu",
-  "userMenu": "User menu"
+  "userMenu": "User menu",
+  "newTab": "New",
+  "importTab": "Import",
+  "selectFile": "Select File",
+  "dropUsfmFiles": "or drag and drop USFM files here",
+  "errorNotValidUsfm": "File is not valid USFM",
+  "errorMissingBookData": "Missing book data",
+  "errorDuplicateBook": "Two files have the same book code"
 }

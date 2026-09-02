@@ -37,6 +37,14 @@ const envSchema = z.object({
     value => (value === '' ? undefined : value),
     z.enum(['true', 'false']).optional()
   ),
+  // The USFM import tab on project creation (#418). Off by default: the tab can validate
+  // files, but nothing can create a project out of them until #419 lands, so a visible tab
+  // would dead-end. Same preprocess as RTE_PERICOPE — a blank value has to read as unset
+  // rather than stop the app booting.
+  USFM_IMPORT: z.preprocess(
+    value => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).optional()
+  ),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -54,6 +62,7 @@ const processEnv = {
   YOUVERSION_API_KEY: import.meta.env.VITE_YOUVERSION_API_KEY as string,
   BETTER_AUTH_URL: import.meta.env.VITE_BETTER_AUTH_URL as string,
   RTE_PERICOPE: import.meta.env.VITE_RTE_PERICOPE as string | undefined,
+  USFM_IMPORT: import.meta.env.VITE_USFM_IMPORT as string | undefined,
 };
 
 /**
@@ -108,6 +117,8 @@ export const config = {
   features: {
     /** Rich text editing in the pericope view instead of per-verse textareas (#314). */
     rtePericope: validatedEnv.RTE_PERICOPE === 'true',
+    /** The USFM import tab on the project creation dialog (#418). */
+    usfmImport: validatedEnv.USFM_IMPORT === 'true',
   },
 };
 
