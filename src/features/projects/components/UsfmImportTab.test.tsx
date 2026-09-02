@@ -25,6 +25,7 @@ const COMPLETE_FORM: ProjectFormData = {
   sourceLanguage: 1,
   sourceBible: 10,
   targetLanguage: 2,
+  pericopeSetId: 1,
 };
 
 /** jsdom's File has no usable `text()`, so the component's read path needs one supplied. */
@@ -206,7 +207,14 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeDisabled();
   });
 
-  it('enables Create Project once title, source bible and target language are set', async () => {
+  it('keeps Create Project disabled without a pericope set, since the modal would refuse it', async () => {
+    renderTab({ formData: { ...COMPLETE_FORM, pericopeSetId: null } });
+    drop([usfmFile('gen.usfm', GEN)]);
+    await waitFor(() => expect(screen.getByText('createProject')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'createProject' })).toBeDisabled();
+  });
+
+  it('enables Create Project once title, source bible, target language and pericope set are set', async () => {
     renderTab({ formData: COMPLETE_FORM });
     drop([usfmFile('gen.usfm', GEN)]);
     await waitFor(() => expect(screen.getByText('createProject')).toBeInTheDocument());

@@ -99,13 +99,15 @@ export function UsfmImportTab({
   };
 
   /**
-   * #420's rule, which is not the New tab's: Book(s) comes from the files rather than a picker,
-   * and Pericope Set is not part of it.
+   * #420's rule plus the pericope set: Book(s) comes from the files rather than a picker, and a
+   * project cannot exist without a pericope set, so the button must not light up before one is
+   * chosen — the modal would only refuse the submit silently.
    */
   const canSubmit =
     Boolean(formData.title.trim()) &&
     Boolean(formData.sourceBible) &&
     Boolean(formData.targetLanguage) &&
+    Boolean(formData.pericopeSetId) &&
     accepted.length > 0;
 
   // Before any file is accepted the tab is only the upload area; afterwards it is replaced by the
