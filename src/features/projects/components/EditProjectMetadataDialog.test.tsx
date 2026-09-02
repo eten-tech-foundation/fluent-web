@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EditProjectMetadataDialog } from '@/features/projects/components/EditProjectMetadataDialog';
 import { type BookDetails } from '@/features/projects/hooks/useBookDetails';
@@ -10,6 +11,8 @@ import { renderWithProviders, screen, waitFor } from '@/test/render';
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
 const genesis: BookDetails = {
   bookId: 1,
@@ -70,6 +73,10 @@ function renderDialog(onClose = vi.fn()) {
 const bookTrigger = (name: string) => screen.findByRole('button', { name: new RegExp(name) });
 
 describe('EditProjectMetadataDialog', () => {
+  beforeEach(() => {
+    vi.mocked(toast.error).mockClear();
+  });
+
   it('lists the books of the project collapsed', async () => {
     mockApi();
     renderDialog();
@@ -156,5 +163,79 @@ describe('EditProjectMetadataDialog', () => {
     await user.tab();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('must not contain pipes');
+  });
+
+  it('waits for an in-flight save before sending the next one for the same field', async () => {
+    const patches: Patch[] = [];
+    let release: (() => void) | undefined;
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+
+    server.use(
+      http.get(listUrl, () => HttpResponse.json([genesis, exodus])),
+      http.patch(`${listUrl}/:bookId`, async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, string | null>;
+        patches.push({ bookId: String(params.bookId), body });
+        if (patches.length === 1) await held;
+        return HttpResponse.json({ ...genesis, ...body });
+      })
+    );
+
+    const { user } = renderDialog();
+    await user.click(await bookTrigger('Genesis'));
+    const longName = screen.getByPlaceholderText('bookLongNamePlaceholder');
+
+    await user.type(longName, 'A');
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(1));
+
+    await user.type(longName, 'B');
+    await user.tab();
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // The second PATCH must not be on the wire while the first is unanswered - a late 'A'
+    // response would otherwise land on top of 'AB'.
+    expect(patches).toHaveLength(1);
+
+    release?.();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches.map(patch => patch.body)).toEqual([{ tocLongName: 'A' }, { tocLongName: 'AB' }]);
+    await waitFor(() => expect(longName).toHaveValue('AB'));
+  });
+
+  it('keeps an edit whose close-time save failed and reports it outside the dialog', async () => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+
+    server.use(
+      http.get(listUrl, () => HttpResponse.json([genesis, exodus])),
+      http.patch(`${listUrl}/:bookId`, async () => {
+        await held;
+        return HttpResponse.json({ message: 'must not contain pipes' }, { status: 400 });
+      })
+    );
+
+    const onClose = vi.fn();
+    const { user, rerender } = renderWithProviders(
+      <EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />
+    );
+
+    await user.click(await bookTrigger('Genesis'));
+    await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'a|b');
+    await user.click(screen.getByRole('button', { name: 'close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // The wrapper drives `isOpen` from the URL, so the dialog is gone before the PATCH answers.
+    rerender(<EditProjectMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
+    release?.();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('must not contain pipes'));
+
+    // Reopening still shows what the user typed: the failed edit was not thrown away.
+    rerender(<EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />);
+    await user.click(await bookTrigger('Genesis'));
+    expect(screen.getByPlaceholderText('bookLongNamePlaceholder')).toHaveValue('a|b');
   });
 });

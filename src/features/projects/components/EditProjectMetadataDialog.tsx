@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 import {
   Accordion,
@@ -88,10 +89,11 @@ export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps>
   const [openBooks, setOpenBooks] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Mirrors of the state that blur and close read synchronously. A blur that fires while the
-  // dialog is closing must see the same drafts the close handler just flushed.
+  // Mirror of the drafts state, because blur and close read and write it synchronously: a blur
+  // and the close flush can land in the same tick, before React has re-rendered.
   const draftsRef = useRef<Drafts>({});
   const inFlightRef = useRef<Record<string, string>>({});
+  const saveChainRef = useRef<Record<number, Promise<void>>>({});
   const isOpenRef = useRef(isOpen);
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -139,45 +141,61 @@ export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps>
     setDrafts(draftsRef.current);
   };
 
-  const save = async (book: BookDetails, patch: BookDetailsPatch) => {
+  /**
+   * A PATCH answers with the whole book row, so two saves for the same book must not overlap:
+   * a late response would put back the value the newer save has already replaced, both in the
+   * cache and on the server. Saves are chained per book; different books stay independent.
+   */
+  const save = (book: BookDetails, patch: BookDetailsPatch) => {
     const fields = Object.keys(patch) as TocField[];
     if (projectUnitId === null || fields.length === 0) return;
 
+    const variables = { projectUnitId, bookId: book.bookId, fields: patch };
     for (const field of fields) {
       inFlightRef.current[inFlightKey(book.bookId, field)] = patch[field] ?? '';
     }
 
-    try {
-      await updateBookDetails.mutateAsync({ projectUnitId, bookId: book.bookId, fields: patch });
-      settleDrafts(book.bookId, patch);
-      if (isOpenRef.current) setSaveError(null);
-    } catch (err) {
-      if (isOpenRef.current) {
-        setSaveError(err instanceof Error ? err.message : t('bookDetailsSaveFailed'));
+    const run = async () => {
+      try {
+        await updateBookDetails.mutateAsync(variables);
+        settleDrafts(book.bookId, patch);
+        if (isOpenRef.current) setSaveError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : t('bookDetailsSaveFailed');
+        // While the dialog is up the message belongs next to the fields. Once it is gone a
+        // toast is the only way to tell the user their edit did not land.
+        if (isOpenRef.current) setSaveError(message);
+        else toast.error(message);
+        Logger.logException(err, {
+          context: 'Book details save failed',
+          projectUnitId: variables.projectUnitId,
+          bookId: book.bookId,
+          fields: fields.join(','),
+        });
+      } finally {
+        for (const field of fields) {
+          const key = inFlightKey(book.bookId, field);
+          // Only if a newer save has not claimed the field in the meantime.
+          if (inFlightRef.current[key] === (patch[field] ?? '')) delete inFlightRef.current[key];
+        }
       }
-      Logger.logException(err, {
-        context: 'Book details save failed',
-        projectUnitId,
-        bookId: book.bookId,
-        fields: fields.join(','),
-      });
-    } finally {
-      for (const field of fields) {
-        delete inFlightRef.current[inFlightKey(book.bookId, field)];
-      }
-    }
+    };
+
+    saveChainRef.current[book.bookId] = (
+      saveChainRef.current[book.bookId] ?? Promise.resolve()
+    ).then(run);
   };
 
   const handleBlur = (book: BookDetails, field: TocField) => {
-    void save(book, dirtyFields(book, field));
+    save(book, dirtyFields(book, field));
   };
 
   const handleClose = () => {
     for (const book of books ?? []) {
-      void save(book, dirtyFields(book));
+      save(book, dirtyFields(book));
     }
-    draftsRef.current = {};
-    setDrafts({});
+    // Drafts are not wiped here. `settleDrafts` drops each one as the server confirms it, so an
+    // edit whose close-time save fails stays in the field instead of being thrown away silently.
     setOpenBooks([]);
     setSaveError(null);
     onClose();

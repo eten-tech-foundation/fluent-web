@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -33,6 +34,13 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   const location = useLocation();
   const { userdetail } = useAppStore();
+
+  // Same check the page uses to show the button, repeated here so `?modal=metadata`
+  // typed straight into the URL cannot open the editor for a non-manager.
+  const isManager = isProjectManager(
+    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
+    project?.id
+  );
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
@@ -178,7 +186,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       />
 
       <EditProjectMetadataDialog
-        isOpen={modal === 'metadata'}
+        isOpen={isManager && modal === 'metadata'}
         projectUnitId={projectUnitId}
         onClose={handleCloseMetadata}
       />
