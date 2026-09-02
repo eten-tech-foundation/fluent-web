@@ -13,13 +13,16 @@ import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
 export interface AcceptedUsfmFile {
   file: File;
   bookCode: string;
+  /** The file's text, read once at validation so submit does not read it again (#419). */
+  usfm: string;
 }
 
 interface UsfmImportTabProps {
   formData: ProjectFormData;
   onFieldChange: <K extends keyof ProjectFormData>(field: K, value: ProjectFormData[K]) => void;
   onBooksChange: (books: number[]) => void;
-  onSubmit: () => void;
+  /** Create the project from these files plus the fields (#419). */
+  onSubmit: (files: AcceptedUsfmFile[]) => void;
   isSubmitting?: boolean;
   /** Called with the whole batch once every file in it validates. */
   onFilesAccepted?: (files: AcceptedUsfmFile[]) => void;
@@ -80,7 +83,7 @@ export function UsfmImportTab({
         }
 
         seen.add(result.bookCode);
-        results.push({ file, bookCode: result.bookCode });
+        results.push({ file, bookCode: result.bookCode, usfm: text });
       }
 
       setError(null);
@@ -169,7 +172,7 @@ export function UsfmImportTab({
           className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
           disabled={!canSubmit || isSubmitting}
           type='button'
-          onClick={onSubmit}
+          onClick={() => onSubmit(accepted)}
         >
           {isSubmitting ? (
             <div className='flex items-center gap-2'>

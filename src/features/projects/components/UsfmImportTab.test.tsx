@@ -222,5 +222,9 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'createProject' }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+    // The files go with the submit, text included, so nothing has to be read again (#419).
+    expect(onSubmit).toHaveBeenCalledWith([
+      expect.objectContaining({ bookCode: 'GEN', usfm: GEN }),
+    ]);
   });
 });

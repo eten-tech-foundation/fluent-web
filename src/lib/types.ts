@@ -82,6 +82,8 @@ export interface CreateProject {
   sourceLanguage: number;
   targetLanguage: number;
   pericopeSetId?: number;
+  /** Create-from-existing-data (#419): one validated USFM file per book. */
+  usfmFiles?: Array<{ fileName: string; bookCode: string; usfm: string }>;
 }
 
 export interface Chapter {
