@@ -9,6 +9,7 @@ import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
+import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { ProjectDetailPage } from './ProjectDetailPage';
 
@@ -57,6 +58,24 @@ export const ProjectDetailWrapper: React.FC = () => {
   };
 
   const handleCloseExport = () => {
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: {},
+      state: location.state,
+    });
+  };
+
+  const handleOpenMetadata = () => {
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: { modal: 'metadata' as const },
+      state: location.state,
+    });
+  };
+
+  const handleCloseMetadata = () => {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
@@ -145,6 +164,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         onAddUser={handleOpenAddUser}
         onBack={handleBack}
         onCloseAddUser={handleCloseAddUser}
+        onEditMetadata={handleOpenMetadata}
         onExport={handleOpenExport}
       />
 
@@ -155,6 +175,12 @@ export const ProjectDetailWrapper: React.FC = () => {
         projectName={project.name}
         projectUnitId={projectUnitId}
         onClose={handleCloseExport}
+      />
+
+      <EditProjectMetadataDialog
+        isOpen={modal === 'metadata'}
+        projectUnitId={projectUnitId}
+        onClose={handleCloseMetadata}
       />
     </>
   );
