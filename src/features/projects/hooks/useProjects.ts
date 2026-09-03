@@ -50,9 +50,9 @@ const createProject = async (
   return data;
 };
 
-export const useProjects = (enabled: boolean = true) => {
+export const useProjects = (enabled: boolean = true, orgId?: number | null) => {
   return useQuery<Project[]>({
-    queryKey: ['projects'],
+    queryKey: ['projects', orgId],
     queryFn: () => fetchProjects(),
     enabled,
   });
@@ -83,7 +83,7 @@ export const useProjectsByRole = (user: User | null | undefined) => {
   const activeRoleGrants = activeGrants.filter(g => g.roleName === user?.role);
   const isAnyManager = isManager(activeRoleGrants);
 
-  const managerQuery = useProjects(isAnyManager);
+  const managerQuery = useProjects(isAnyManager, user?.lastActiveOrgId);
   const translatorQuery = useUserProjects(!isAnyManager ? user : null);
   return isAnyManager ? managerQuery : translatorQuery;
 };
