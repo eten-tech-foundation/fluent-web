@@ -270,9 +270,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   label: `${lang.langName} (${lang.langCodeIso6393})`,
                 })) ?? []
               }
-              placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
+              placeholder={
+                languagesLoading ? 'Loading languages...' : 'Search by language name or code'
+              }
               value={formData.targetLanguage?.toString() ?? ''}
               onChange={value => updateFormData('targetLanguage', parseInt(value, 10))}
+              onClear={() => updateFormData('targetLanguage', null)}
             />
           </div>
 

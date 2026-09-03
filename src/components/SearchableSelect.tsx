@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, X } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -16,6 +16,7 @@ interface SearchableSelectProps {
   options: SearchableSelectOption[];
   value: string;
   onChange: (value: string) => void;
+  onClear?: () => void;
   placeholder?: string;
   disabled?: boolean;
   emptyText?: string;
@@ -26,6 +27,7 @@ export function SearchableSelect({
   options,
   value,
   onChange,
+  onClear,
   placeholder = 'Select an option...',
   disabled = false,
   emptyText = 'No options found.',
@@ -161,12 +163,29 @@ export function SearchableSelect({
             }}
             onKeyDown={handleKeyDown}
           />
-          <ChevronsUpDown className='pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 opacity-50' />
+          {value && onClear ? (
+            <button
+              aria-label='Clear selection'
+              className='absolute top-1/2 right-3 -translate-y-1/2 rounded-sm opacity-50 hover:opacity-100 focus:outline-none'
+              tabIndex={-1}
+              type='button'
+              onClick={e => {
+                e.stopPropagation();
+                onClear();
+                setSearch('');
+                setOpen(false);
+              }}
+            >
+              <X className='h-4 w-4' />
+            </button>
+          ) : (
+            <ChevronsUpDown className='pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 opacity-50' />
+          )}
         </div>
       </PopoverTrigger>
       <PopoverContent
         align='start'
-        className='w-[var(--radix-popover-trigger-width)] p-0'
+        className='w-(--radix-popover-trigger-width) p-0'
         onOpenAutoFocus={e => e.preventDefault()}
       >
         <div
