@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Outlet, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
+import { Loader2 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SettingsModal } from '@/components/SettingsModal';
@@ -11,9 +12,11 @@ import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
 import { type User } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { isOrgSwitching } = useAppStore();
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
@@ -100,7 +103,17 @@ export function AuthenticatedLayout(): React.JSX.Element {
     <ErrorBoundary>
       <div className='flex h-screen flex-col overflow-hidden'>
         <Header />
-        <main className='flex-1 overflow-hidden p-4'>
+        <main className='relative flex-1 overflow-hidden p-4'>
+          {isOrgSwitching && (
+            <div className='bg-background/80 absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-xs transition-all duration-200'>
+              <div className='bg-card border-border flex items-center gap-3 rounded-lg border px-6 py-4 shadow-lg'>
+                <Loader2 className='text-primary h-6 w-6 animate-spin' />
+                <span className='text-foreground text-sm font-medium'>
+                  Switching organization...
+                </span>
+              </div>
+            </div>
+          )}
           <Outlet />
           <SettingsModal isOpen={modal === 'settings'} onClose={handleModalClose} />
           <EditProfile isOpen={modal === 'profile'} onClose={handleModalClose} />
