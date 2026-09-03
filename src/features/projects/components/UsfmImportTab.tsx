@@ -99,12 +99,15 @@ export function UsfmImportTab({
   };
 
   /**
-   * #420's rule plus the pericope set: Book(s) comes from the files rather than a picker, and a
-   * project cannot exist without a pericope set, so the button must not light up before one is
-   * chosen — the modal would only refuse the submit silently.
+   * #420's rule plus the fields a project cannot exist without: Book(s) comes from the files
+   * rather than a picker, and every field the modal's submit guard checks is named here, so the
+   * button cannot light up on a form the modal would then refuse silently. Source Language is
+   * already implied by Source Bible, which is gated on it, but listing it keeps the enable rule
+   * and the guard from drifting apart.
    */
   const canSubmit =
     Boolean(formData.title.trim()) &&
+    Boolean(formData.sourceLanguage) &&
     Boolean(formData.sourceBible) &&
     Boolean(formData.targetLanguage) &&
     Boolean(formData.pericopeSetId) &&
