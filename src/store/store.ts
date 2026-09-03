@@ -14,6 +14,7 @@ interface AppState {
   displayMode: DisplayMode;
   isAiThresholdMet: boolean | null;
   isAiSyncPending: boolean;
+  isOrgSwitching: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
   setUserDetail: (user: User) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
@@ -24,6 +25,7 @@ interface AppState {
   setDisplayMode: (mode: DisplayMode) => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
   setIsAiSyncPending: (pending: boolean) => void;
+  setIsOrgSwitching: (switching: boolean) => void;
   setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
 let hydrationResolve: (() => void) | null = null;
@@ -41,6 +43,7 @@ export const useAppStore = create<AppState>()(
       displayMode: 'verse',
       isAiThresholdMet: null,
       isAiSyncPending: false,
+      isOrgSwitching: false,
       aiAutoEnablePreferences: {},
       setUserDetail: (userdetail: User) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
@@ -62,6 +65,7 @@ export const useAppStore = create<AppState>()(
       setDisplayMode: (displayMode: DisplayMode) => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
       setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
+      setIsOrgSwitching: (isOrgSwitching: boolean) => set({ isOrgSwitching }),
       setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
         set(state => {
           const next = { ...state.aiAutoEnablePreferences };
