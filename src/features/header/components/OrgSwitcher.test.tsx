@@ -11,10 +11,10 @@ import { createTestQueryClient } from '@/test/render';
 
 import { OrgSwitcher } from './OrgSwitcher';
 
-const { mockNavigate, mockMutateAsync, mockRefresh } = vi.hoisted(() => ({
+const { mockNavigate, mockMutateAsync, mockRefreshAsync } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockMutateAsync: vi.fn(),
-  mockRefresh: vi.fn(),
+  mockRefreshAsync: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -33,7 +33,8 @@ vi.mock('@/hooks/useUsers', () => ({
 
 vi.mock('@/hooks/useRefreshUserDetail', () => ({
   useRefreshUserDetail: () => ({
-    refresh: mockRefresh,
+    refresh: vi.fn(),
+    refreshAsync: mockRefreshAsync,
     applyUser: vi.fn(),
   }),
 }));
@@ -118,10 +119,10 @@ describe('OrgSwitcher - Abort & Timeout handling', () => {
     expect(toast.error).toHaveBeenCalledWith(
       'Organization switch timed out. Reconciling user details...'
     );
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(mockRefreshAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('handles immediate AbortError and triggers refreshUserDetail', async () => {
+  it('handles immediate AbortError and triggers refreshUserDetailAsync', async () => {
     mockMutateAsync.mockRejectedValueOnce(
       new DOMException('The operation was aborted', 'AbortError')
     );
@@ -140,6 +141,6 @@ describe('OrgSwitcher - Abort & Timeout handling', () => {
     expect(toast.error).toHaveBeenCalledWith(
       'Organization switch timed out. Reconciling user details...'
     );
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(mockRefreshAsync).toHaveBeenCalledTimes(1);
   });
 });

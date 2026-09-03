@@ -42,7 +42,7 @@ const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
 export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   const { userdetail, setUserDetail, isOrgSwitching, setIsOrgSwitching } = useAppStore();
   const updateActiveOrg = useUpdateActiveOrg();
-  const { refresh: refreshUserDetail } = useRefreshUserDetail();
+  const { refreshAsync: refreshUserDetailAsync } = useRefreshUserDetail();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -162,7 +162,15 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
 
       if (isAbortError) {
         toast.error('Organization switch timed out. Reconciling user details...');
-        refreshUserDetail();
+        try {
+          await refreshUserDetailAsync();
+        } catch (refreshError) {
+          Logger.logException(
+            refreshError instanceof Error ? refreshError : new Error(String(refreshError)),
+            { source: 'Failed to refresh user details after active-org timeout' }
+          );
+        }
+        if (switchId !== currentSwitchIdRef.current) return;
       } else {
         toast.error('Failed to switch organization. Please try again.');
       }
