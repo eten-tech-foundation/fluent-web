@@ -13,7 +13,8 @@ import { useAppStore } from '@/store/store';
 export function useRefreshUserDetail() {
   const { user: authUser } = useAuth();
   const { userdetail, setUserDetail } = useAppStore();
-  const { mutate: fetchUserDetails } = useGetUserDetailsMutation();
+  const { mutate: fetchUserDetails, mutateAsync: fetchUserDetailsAsync } =
+    useGetUserDetailsMutation();
 
   const applyUser = useCallback(
     (freshUser: User) => {
@@ -73,5 +74,13 @@ export function useRefreshUserDetail() {
     });
   }, [authUser?.email, fetchUserDetails, applyUser]);
 
-  return { refresh, applyUser };
+  /** Awaitable version of refresh — resolves after the user data has been fetched and applied. */
+  const refreshAsync = useCallback(async () => {
+    if (!authUser?.email) return;
+
+    const freshUser = await fetchUserDetailsAsync(authUser.email);
+    applyUser(freshUser);
+  }, [authUser?.email, fetchUserDetailsAsync, applyUser]);
+
+  return { refresh, refreshAsync, applyUser };
 }

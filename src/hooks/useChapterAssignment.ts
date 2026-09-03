@@ -79,9 +79,9 @@ export const useChapterAssignments = (projectId: string) => {
   });
 };
 
-export const useChapterAssignmentsByUserId = (userId: number) => {
+export const useChapterAssignmentsByUserId = (userId: number, orgId?: number | null) => {
   return useQuery<ChapterAssignmentsByUser>({
-    queryKey: ['userChapterAssignments', userId],
+    queryKey: ['userChapterAssignments', userId, orgId],
     queryFn: () => fetchChapterAssignmentsByUserId(userId),
     enabled: !!userId,
   });

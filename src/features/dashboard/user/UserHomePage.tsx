@@ -126,7 +126,8 @@ export function UserHomePage() {
   const { tab } = useSearch({ from: '/_authenticated/' });
   const isHistory = tab === 'my-history';
   const { data: chapterAssignmentsData, isLoading: loading } = useChapterAssignmentsByUserId(
-    (userdetail as User).id
+    (userdetail as User).id,
+    userdetail?.lastActiveOrgId
   );
 
   // Reset filters when switching tabs
