@@ -13,47 +13,290 @@
  * the later declaration wins. Imported first, the vendored `local()`-only face would win for text
  * it cannot render, and a machine without Charis SIL installed would still get Times New Roman.
  *
- * The weights are imported one file at a time rather than through each package's `index.css`,
- * because that entry point declares weight 400 normal only. The editor renders bold verse numbers
- * and USFM's bold and italic character markers, and left to synthesise those the browser smears
- * Indic conjuncts and skews Arabic. Italic is imported only where upstream ships a drawn one.
+ * Every face here carries a `unicode-range`, so the browser fetches a file only when the text on
+ * screen actually uses that range, in that weight and style. A translator working in Latin never
+ * downloads the Devanagari or Arabic files. That descriptor is what keeps the fallback list cheap:
+ * without it the browser cannot tell which family covers a character without downloading it first,
+ * so it walks the whole list fetching as it goes.
  *
- * Every face carries a `unicode-range`, so the browser fetches a file only when the text on screen
- * actually uses that range, in that weight and style. A translator working in Latin never
- * downloads the Devanagari or Arabic files.
+ * Charis SIL comes in through the package entry points. Every subset they declare is one we want:
+ * latin, latin-ext, cyrillic, cyrillic-ext and vietnamese. Russian needs nothing beyond this.
  */
 
-/* Latin, Latin-ext, Cyrillic, Cyrillic-ext and Vietnamese, in the four faces the vendored
-   stylesheet declares. Russian needs nothing beyond this. */
 @import '@fontsource/charis-sil/400.css';
 @import '@fontsource/charis-sil/400-italic.css';
 @import '@fontsource/charis-sil/700.css';
 @import '@fontsource/charis-sil/700-italic.css';
 
-/* The scripts #444 lists for the first pass. These families ship upright faces only, which matches
-   how the scripts are set: italic is not a convention in any of them. */
-@import '@fontsource/noto-serif-devanagari/400.css';
-@import '@fontsource/noto-serif-devanagari/700.css';
-@import '@fontsource/noto-serif-gujarati/400.css';
-@import '@fontsource/noto-serif-gujarati/700.css';
-@import '@fontsource/noto-serif-malayalam/400.css';
-@import '@fontsource/noto-serif-malayalam/700.css';
-@import '@fontsource/noto-serif-kannada/400.css';
-@import '@fontsource/noto-serif-kannada/700.css';
-@import '@fontsource/noto-serif-telugu/400.css';
-@import '@fontsource/noto-serif-telugu/700.css';
+/*
+ * The Noto faces are written out here rather than imported, one script subset per family.
+ *
+ * Their `400.css` and `700.css` entry points also declare that family's latin and latin-ext faces,
+ * plus math and symbols for Gujarati and Naskh Arabic. Charis SIL sits ahead of every Noto and its
+ * latin and latin-ext ranges are identical to theirs, so none of those faces can ever win a match;
+ * they were 40 files of dead weight in the build. Fontsource does ship per-script entry points
+ * (`devanagari-400.css` and friends), but those declare the face with no `unicode-range` at all,
+ * which would make every Noto match every character: rendering one line of Arabic then fetches all
+ * six Indic fonts on the way down the list instead of just Noto Naskh Arabic.
+ *
+ * So each rule below is the package's own declaration for the script subset, copied verbatim from
+ * its entry point with the `unicode-range` intact, and only the `url()` rewritten to a specifier
+ * Vite can resolve from here. Behaviour for these scripts is unchanged; what goes away is the
+ * latin, latin-ext, math and symbols weight. Dropping math and symbols means a codepoint Charis
+ * lacks now falls past Noto to the system serif, which is where it already went for any script we
+ * do not bundle.
+ *
+ * Weights are per face, not per package: the editor renders bold verse numbers and USFM's bold and
+ * italic character markers, and left to synthesise those the browser smears Indic conjuncts and
+ * skews Arabic. Italic is declared only where upstream ships a drawn one, which is Charis SIL and
+ * Noto Serif Tamil.
+ */
 
-/* Tamil is the one Noto Serif family here that ships a drawn italic, so \it on Tamil text gets a
-   real face instead of a synthesised slant. */
-@import '@fontsource/noto-serif-tamil/400.css';
-@import '@fontsource/noto-serif-tamil/400-italic.css';
-@import '@fontsource/noto-serif-tamil/700.css';
-@import '@fontsource/noto-serif-tamil/700-italic.css';
+/* noto-serif-devanagari-devanagari-400-normal */
+@font-face {
+  font-family: 'Noto Serif Devanagari';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-devanagari/files/noto-serif-devanagari-devanagari-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-devanagari/files/noto-serif-devanagari-devanagari-400-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF,
+    U+11B00-11B09;
+}
 
-/* Arabic, for the RTL work. Naskh is the style Noto ships and it renders in every browser; the
-   Nastaliq the Urdu community prefers is a Graphite font and Firefox-only, which #444 defers. */
-@import '@fontsource/noto-naskh-arabic/400.css';
-@import '@fontsource/noto-naskh-arabic/700.css';
+/* noto-serif-devanagari-devanagari-700-normal */
+@font-face {
+  font-family: 'Noto Serif Devanagari';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-devanagari/files/noto-serif-devanagari-devanagari-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-devanagari/files/noto-serif-devanagari-devanagari-700-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF,
+    U+11B00-11B09;
+}
+
+/* noto-serif-gujarati-gujarati-400-normal */
+@font-face {
+  font-family: 'Noto Serif Gujarati';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-gujarati/files/noto-serif-gujarati-gujarati-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-gujarati/files/noto-serif-gujarati-gujarati-400-normal.woff')
+      format('woff');
+  unicode-range: U+0951-0952, U+0964-0965, U+0A80-0AFF, U+200C-200D, U+20B9, U+25CC, U+A830-A839;
+}
+
+/* noto-serif-gujarati-gujarati-700-normal */
+@font-face {
+  font-family: 'Noto Serif Gujarati';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-gujarati/files/noto-serif-gujarati-gujarati-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-gujarati/files/noto-serif-gujarati-gujarati-700-normal.woff')
+      format('woff');
+  unicode-range: U+0951-0952, U+0964-0965, U+0A80-0AFF, U+200C-200D, U+20B9, U+25CC, U+A830-A839;
+}
+
+/* noto-serif-malayalam-malayalam-400-normal */
+@font-face {
+  font-family: 'Noto Serif Malayalam';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-malayalam/files/noto-serif-malayalam-malayalam-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-malayalam/files/noto-serif-malayalam-malayalam-400-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0307, U+0323, U+0951-0952, U+0964-0965, U+0D00-0D7F, U+1CDA, U+1CF2, U+200C-200D, U+20B9,
+    U+25CC, U+A830-A832;
+}
+
+/* noto-serif-malayalam-malayalam-700-normal */
+@font-face {
+  font-family: 'Noto Serif Malayalam';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-malayalam/files/noto-serif-malayalam-malayalam-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-malayalam/files/noto-serif-malayalam-malayalam-700-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0307, U+0323, U+0951-0952, U+0964-0965, U+0D00-0D7F, U+1CDA, U+1CF2, U+200C-200D, U+20B9,
+    U+25CC, U+A830-A832;
+}
+
+/* noto-serif-kannada-kannada-400-normal */
+@font-face {
+  font-family: 'Noto Serif Kannada';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-kannada/files/noto-serif-kannada-kannada-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-kannada/files/noto-serif-kannada-kannada-400-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0951-0952, U+0964-0965, U+0C80-0CF3, U+1CD0, U+1CD2-1CD3, U+1CDA, U+1CF2, U+1CF4, U+200C-200D,
+    U+20B9, U+25CC, U+A830-A835;
+}
+
+/* noto-serif-kannada-kannada-700-normal */
+@font-face {
+  font-family: 'Noto Serif Kannada';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-kannada/files/noto-serif-kannada-kannada-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-kannada/files/noto-serif-kannada-kannada-700-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0951-0952, U+0964-0965, U+0C80-0CF3, U+1CD0, U+1CD2-1CD3, U+1CDA, U+1CF2, U+1CF4, U+200C-200D,
+    U+20B9, U+25CC, U+A830-A835;
+}
+
+/* noto-serif-telugu-telugu-400-normal */
+@font-face {
+  font-family: 'Noto Serif Telugu';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-telugu/files/noto-serif-telugu-telugu-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-telugu/files/noto-serif-telugu-telugu-400-normal.woff')
+      format('woff');
+  unicode-range: U+0951-0952, U+0964-0965, U+0C00-0C7F, U+1CDA, U+1CF2, U+200C-200D, U+25CC;
+}
+
+/* noto-serif-telugu-telugu-700-normal */
+@font-face {
+  font-family: 'Noto Serif Telugu';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-telugu/files/noto-serif-telugu-telugu-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-telugu/files/noto-serif-telugu-telugu-700-normal.woff')
+      format('woff');
+  unicode-range: U+0951-0952, U+0964-0965, U+0C00-0C7F, U+1CDA, U+1CF2, U+200C-200D, U+25CC;
+}
+
+/* noto-serif-tamil-tamil-400-normal */
+@font-face {
+  font-family: 'Noto Serif Tamil';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-400-normal.woff') format('woff');
+  unicode-range: U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC;
+}
+
+/* noto-serif-tamil-tamil-400-italic */
+@font-face {
+  font-family: 'Noto Serif Tamil';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-400-italic.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-400-italic.woff') format('woff');
+  unicode-range: U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC;
+}
+
+/* noto-serif-tamil-tamil-700-normal */
+@font-face {
+  font-family: 'Noto Serif Tamil';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-700-normal.woff') format('woff');
+  unicode-range: U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC;
+}
+
+/* noto-serif-tamil-tamil-700-italic */
+@font-face {
+  font-family: 'Noto Serif Tamil';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-700-italic.woff2')
+      format('woff2'),
+    url('@fontsource/noto-serif-tamil/files/noto-serif-tamil-tamil-700-italic.woff') format('woff');
+  unicode-range: U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC;
+}
+
+/* noto-naskh-arabic-arabic-400-normal */
+@font-face {
+  font-family: 'Noto Naskh Arabic';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url('@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-400-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-400-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E,
+    U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB,
+    U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22,
+    U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49,
+    U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F,
+    U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+    U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
+
+/* noto-naskh-arabic-arabic-700-normal */
+@font-face {
+  font-family: 'Noto Naskh Arabic';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src:
+    url('@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-700-normal.woff2')
+      format('woff2'),
+    url('@fontsource/noto-naskh-arabic/files/noto-naskh-arabic-arabic-700-normal.woff')
+      format('woff');
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E,
+    U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB,
+    U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22,
+    U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49,
+    U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F,
+    U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+    U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
 
 /*
  * Charis SIL stays first, so Latin and Cyrillic are unchanged. Fallback runs per character, so a
