@@ -6,6 +6,7 @@ import { Building2, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useUpdateActiveOrg } from '@/hooks/useUsers';
 import { isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
@@ -41,6 +42,7 @@ const sortRolesByDisplayOrder = (roles: OrgRole[]): OrgRole[] =>
 export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   const { userdetail, setUserDetail, isOrgSwitching, setIsOrgSwitching } = useAppStore();
   const updateActiveOrg = useUpdateActiveOrg();
+  const { refresh: refreshUserDetail } = useRefreshUserDetail();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -125,13 +127,15 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     setIsOrgSwitching(true);
     const isOrgChange = targetOrgId !== activeOrgId;
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+
     try {
       if (isOrgChange) {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Organization switch timed out')), 10000)
-        );
-
-        await Promise.race([updateActiveOrg.mutateAsync({ orgId: targetOrgId }), timeoutPromise]);
+        await updateActiveOrg.mutateAsync({
+          orgId: targetOrgId,
+          signal: controller.signal,
+        });
       }
 
       if (switchId !== currentSwitchIdRef.current) return;
@@ -152,12 +156,22 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
     } catch (error) {
       if (switchId !== currentSwitchIdRef.current) return;
 
-      toast.error('Failed to switch organization. Please try again.');
+      const isAbortError =
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && error.name === 'AbortError');
+
+      if (isAbortError) {
+        toast.error('Organization switch timed out. Reconciling user details...');
+        refreshUserDetail();
+      } else {
+        toast.error('Failed to switch organization. Please try again.');
+      }
 
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'Failed to update active org/role',
       });
     } finally {
+      window.clearTimeout(timeoutId);
       if (switchId === currentSwitchIdRef.current) {
         setIsOrgSwitching(false);
         onAfterSelect?.();
