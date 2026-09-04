@@ -61,5 +61,18 @@
   "dropUsfmFiles": "or drag and drop USFM files here",
   "errorNotValidUsfm": "File is not valid USFM",
   "errorMissingBookData": "Missing book data",
-  "errorDuplicateBook": "Two files have the same book code"
+  "errorDuplicateBook": "Two files have the same book code",
+  "editProjectMetadata": "Edit Project Metadata",
+  "editProjectMetadataDescription": "Names used for the table of contents of each book in this project.",
+  "bookLongName": "Long Name",
+  "bookShortName": "Short Name",
+  "bookAbbreviation": "Abbreviation",
+  "bookLongNamePlaceholder": "Full book name",
+  "bookShortNamePlaceholder": "Short book name",
+  "bookAbbreviationPlaceholder": "Book abbreviation",
+  "storedAsMarker": "Stored as {{marker}}",
+  "loadingBooks": "Loading books...",
+  "noBooksInProject": "No books found in this project",
+  "bookDetailsSaveFailed": "Failed to save changes",
+  "close": "Close"
 }
