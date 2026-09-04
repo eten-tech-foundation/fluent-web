@@ -214,7 +214,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </TabsContent>
           {config.features.usfmImport && (
             <TabsContent value='import'>
-              {/* No-op for now: #420 is what does something with the accepted files. */}
               <UsfmImportTab
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}
