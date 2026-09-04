@@ -9,7 +9,7 @@ fi
 
 allowed=(features runbooks guides tasks)
 status=0
-shopt -s nullglob
+shopt -s nullglob dotglob
 
 for entry in docs/*; do
   name="$(basename "$entry")"
