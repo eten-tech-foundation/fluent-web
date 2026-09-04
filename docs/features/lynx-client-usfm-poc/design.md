@@ -16,7 +16,7 @@ Fluent stores translations as **per-verse plain text** and only ever materialize
 - JoEllen's "easy win" framing: integrate the Lynx interface with the existing punctuation checker first; Greek Room provider later.
 - Kasey's idea: run Lynx as a **linter over USFM exports**.
 
-Meanwhile, the merged-on-main **Repeated Word Check UI proposal** (`docs/proposals/repeated-word-check/`, PR #305) designs a Checks tab + per-check accordion panel with Ignore Here/Everywhere suppression — explicitly anticipating more checks (Wildebeest, spell check). Each new check currently implies bespoke plumbing (hook, identity keys, suppression cascade). Lynx's `DiagnosticProvider` / `Diagnostic.fingerprint` / `DiagnosticDismissalStore` are the general form of exactly those parts.
+Meanwhile, the merged-on-main **Repeated Word Check UI proposal** (`docs/features/repeated-word-check/`, PR #305) designs a Checks tab + per-check accordion panel with Ignore Here/Everywhere suppression — explicitly anticipating more checks (Wildebeest, spell check). Each new check currently implies bespoke plumbing (hook, identity keys, suppression cascade). Lynx's `DiagnosticProvider` / `Diagnostic.fingerprint` / `DiagnosticDismissalStore` are the general form of exactly those parts.
 
 ## 2. Goal
 
