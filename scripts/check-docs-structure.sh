@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd "$(git rev-parse --show-toplevel)"
+if [[ ! -d docs ]]; then
+  echo "::error::docs/ not found — run this script from within the repo"
+  exit 1
+fi
+
 allowed=(features runbooks guides tasks)
 status=0
 shopt -s nullglob
