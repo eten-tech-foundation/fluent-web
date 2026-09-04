@@ -19,7 +19,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
-import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
+import { SourceBiblePicker } from '@/features/projects/components/SourceBiblePicker';
+import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
 import {
@@ -82,9 +83,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const { data: languages, isLoading: languagesLoading, error: languagesError } = useLanguages();
-  const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
-    formData.sourceLanguage
-  );
   const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
 
   useEffect(() => {
@@ -101,25 +99,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
     setIsSubmitting(false);
   }, [isOpen]);
-
-  useEffect(() => {
-    if (formData.sourceLanguage) {
-      setFormData(prev => ({
-        ...prev,
-        sourceBible: null,
-        books: [],
-      }));
-    }
-  }, [formData.sourceLanguage]);
-
-  useEffect(() => {
-    if (formData.sourceBible) {
-      setFormData(prev => ({
-        ...prev,
-        books: [],
-      }));
-    }
-  }, [formData.sourceBible]);
 
   const isFormValid = (): boolean => {
     return Boolean(
@@ -201,7 +180,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className='max-h-[90vh] overflow-y-auto sm:max-w-[500px]'
+        className='max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-[500px]'
         onInteractOutside={e => e.preventDefault()}
       >
         <DialogHeader>
@@ -229,50 +208,20 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 />
               </div>
 
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('sourceLanguage')}
-                </Label>
-                <SearchableSelect
-                  disabled={languagesLoading}
-                  options={
-                    languages?.map(lang => ({
-                      value: lang.id.toString(),
-                      label: `${lang.langName} (${lang.langCodeIso6393})`,
-                    })) ?? []
-                  }
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
-                  value={formData.sourceLanguage?.toString() ?? ''}
-                  onChange={value => updateFormData('sourceLanguage', parseInt(value, 10))}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('sourceBible')}
-                </Label>
-                <SearchableSelect
-                  disabled={!formData.sourceLanguage || sourceBiblesLoading}
-                  emptyText='No bibles for this language'
-                  options={
-                    sourceBibles?.map(bible => ({
-                      value: bible.id.toString(),
-                      label: `${bible.name} (${bible.abbreviation})`,
-                    })) ?? []
-                  }
-                  placeholder={
-                    !formData.sourceLanguage
-                      ? 'Select Source Language First'
-                      : sourceBiblesLoading
-                        ? 'Loading bibles...'
-                        : 'Select Source Bible'
-                  }
-                  value={formData.sourceBible?.toString() ?? ''}
-                  onChange={value => updateFormData('sourceBible', parseInt(value, 10))}
-                />
-              </div>
+              <SourceBiblePicker
+                value={{
+                  sourceBible: formData.sourceBible,
+                  sourceLanguage: formData.sourceLanguage,
+                }}
+                onChange={selection => {
+                  setFormData(prev => ({
+                    ...prev,
+                    sourceBible: selection?.sourceBible ?? null,
+                    sourceLanguage: selection?.sourceLanguage ?? null,
+                    books: [],
+                  }));
+                }}
+              />
 
               <div className='space-y-2'>
                 <Label className='gap-1'>
@@ -287,9 +236,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       label: `${lang.langName} (${lang.langCodeIso6393})`,
                     })) ?? []
                   }
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
+                  placeholder={
+                    languagesLoading ? 'Loading languages...' : 'Search by language name or code'
+                  }
                   value={formData.targetLanguage?.toString() ?? ''}
                   onChange={value => updateFormData('targetLanguage', parseInt(value, 10))}
+                  onClear={() => updateFormData('targetLanguage', null)}
                 />
               </div>
 

@@ -139,7 +139,7 @@ export function SearchableSelect({
         <div className='relative w-full'>
           <Input
             className={cn(
-              'dark:bg-input/30 dark:hover:bg-input/50 w-full cursor-default bg-transparent pr-8 hover:bg-transparent focus:cursor-text',
+              'bg-background border-input hover:bg-background w-full cursor-default pr-8 focus:cursor-text',
               className
             )}
             disabled={disabled}
@@ -166,7 +166,7 @@ export function SearchableSelect({
           {value && onClear ? (
             <button
               aria-label='Clear selection'
-              className='absolute top-1/2 right-3 -translate-y-1/2 rounded-sm opacity-50 hover:opacity-100 focus:outline-none'
+              className='text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none'
               tabIndex={-1}
               type='button'
               onClick={e => {
@@ -179,13 +179,13 @@ export function SearchableSelect({
               <X className='h-4 w-4' />
             </button>
           ) : (
-            <ChevronsUpDown className='pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 opacity-50' />
+            <ChevronsUpDown className='text-muted-foreground pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 opacity-60' />
           )}
         </div>
       </PopoverTrigger>
       <PopoverContent
         align='start'
-        className='w-(--radix-popover-trigger-width) p-0'
+        className='bg-sidebar dark:bg-sidebar border-border z-50 w-(--radix-popover-trigger-width) rounded-lg p-1.5 shadow-xl'
         onOpenAutoFocus={e => e.preventDefault()}
       >
         <div
@@ -213,11 +213,11 @@ export function SearchableSelect({
                   <div
                     key={opt.value}
                     className={cn(
-                      'hover:bg-accent hover:text-accent-foreground relative flex cursor-pointer items-center rounded-sm pr-8 pl-2 text-sm outline-none select-none',
+                      'hover:bg-background/80 hover:text-foreground relative flex cursor-pointer items-center rounded-md pr-8 pl-2.5 text-sm transition-colors outline-none select-none',
                       isFocused
-                        ? 'bg-accent text-accent-foreground'
+                        ? 'bg-background text-foreground shadow-2xs'
                         : isSelected
-                          ? 'bg-accent/50'
+                          ? 'bg-background/60 font-semibold'
                           : ''
                     )}
                     style={{
@@ -243,7 +243,7 @@ export function SearchableSelect({
                       )}
                     </div>
                     {isSelected && (
-                      <span className='absolute right-2 flex size-3.5 items-center justify-center'>
+                      <span className='text-primary absolute right-2 flex size-3.5 items-center justify-center'>
                         <Check className='size-4' />
                       </span>
                     )}
