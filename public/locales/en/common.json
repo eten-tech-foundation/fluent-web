@@ -61,5 +61,6 @@
   "dropUsfmFiles": "or drag and drop USFM files here",
   "errorNotValidUsfm": "File is not valid USFM",
   "errorMissingBookData": "Missing book data",
-  "errorDuplicateBook": "Two files have the same book code"
+  "errorDuplicateBook": "Two files have the same book code",
+  "usfmFilesValidated": "USFM file(s) validated"
 }

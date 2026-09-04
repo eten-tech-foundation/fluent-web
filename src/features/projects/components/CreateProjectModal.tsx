@@ -1,35 +1,25 @@
 import { useEffect, useState } from 'react';
 
-import { Info, Loader2, TriangleAlert } from 'lucide-react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
-import { SearchableSelect } from '@/components/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
-import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
-import {
-  CONNECTIVITY_PROFILE_NONE,
-  CONNECTIVITY_PROFILE_OPTIONS,
-  type ConnectivityProfile,
-} from '@/lib/constants/connectivityProfiles';
+import { type ConnectivityProfile } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
 
-import { UsfmImportTab } from './UsfmImportTab';
+import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
+import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
+
+/** One validated USFM file, as the API takes it (#419). */
+export interface UsfmFilePayload {
+  fileName: string;
+  bookCode: string;
+  usfm: string;
+}
 
 export interface CreateProjectData {
   title: string;
@@ -39,6 +29,8 @@ export interface CreateProjectData {
   books: number[];
   connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number;
+  /** Present only when creating from existing data: the server derives the books from these. */
+  usfmFiles?: UsfmFilePayload[];
 }
 
 interface CreateProjectModalProps {
@@ -47,16 +39,6 @@ interface CreateProjectModalProps {
   onSave: (projectData: CreateProjectData) => Promise<void>;
   isLoading?: boolean;
   error?: string | null;
-}
-
-interface FormData {
-  title: string;
-  targetLanguage: number | null;
-  sourceLanguage: number | null;
-  sourceBible: number | null;
-  books: number[];
-  connectivityProfile: ConnectivityProfile | null;
-  pericopeSetId: number | null;
 }
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -69,7 +51,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<ProjectFormData>({
     title: '',
     targetLanguage: null,
     sourceLanguage: null,
@@ -79,13 +61,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     pericopeSetId: null,
   });
 
-  const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
-
-  const { data: languages, isLoading: languagesLoading, error: languagesError } = useLanguages();
-  const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
-    formData.sourceLanguage
-  );
-  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
+  // ProjectFormFields runs the field queries; this one stays because a languages failure
+  // replaces the whole dialog with an error rather than rendering the form.
+  const { error: languagesError } = useLanguages();
 
   useEffect(() => {
     if (isOpen) {
@@ -133,7 +111,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     );
   };
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async (files?: AcceptedUsfmFile[]): Promise<void> => {
     if (isSubmitting) {
       return;
     }
@@ -155,6 +133,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         books: formData.books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
+        ...(files && {
+          usfmFiles: files.map(item => ({
+            fileName: item.file.name,
+            bookCode: item.bookCode,
+            usfm: item.usfm,
+          })),
+        }),
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -165,17 +150,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   };
 
   const updateFormData = (
-    field: keyof FormData,
+    field: keyof ProjectFormData,
     value: string | number | number[] | null
   ): void => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    if (value.length <= 100) {
-      updateFormData('title', value);
-    }
   };
 
   const isButtonDisabled = isLoading || isSubmitting || !isFormValid();
@@ -216,182 +194,11 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           )}
           <TabsContent value='new'>
             <div className='space-y-6 py-6'>
-              <div className='space-y-2'>
-                <Label className='gap-1' htmlFor='title'>
-                  <span className='text-destructive'>*</span>
-                  {t('projectTitle')}
-                </Label>
-                <Input
-                  id='title'
-                  maxLength={100}
-                  value={formData.title}
-                  onChange={handleTitleChange}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('sourceLanguage')}
-                </Label>
-                <SearchableSelect
-                  disabled={languagesLoading}
-                  options={
-                    languages?.map(lang => ({
-                      value: lang.id.toString(),
-                      label: `${lang.langName} (${lang.langCodeIso6393})`,
-                    })) ?? []
-                  }
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
-                  value={formData.sourceLanguage?.toString() ?? ''}
-                  onChange={value => updateFormData('sourceLanguage', parseInt(value, 10))}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('sourceBible')}
-                </Label>
-                <SearchableSelect
-                  disabled={!formData.sourceLanguage || sourceBiblesLoading}
-                  emptyText='No bibles for this language'
-                  options={
-                    sourceBibles?.map(bible => ({
-                      value: bible.id.toString(),
-                      label: `${bible.name} (${bible.abbreviation})`,
-                    })) ?? []
-                  }
-                  placeholder={
-                    !formData.sourceLanguage
-                      ? 'Select Source Language First'
-                      : sourceBiblesLoading
-                        ? 'Loading bibles...'
-                        : 'Select Source Bible'
-                  }
-                  value={formData.sourceBible?.toString() ?? ''}
-                  onChange={value => updateFormData('sourceBible', parseInt(value, 10))}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('targetLanguage')}
-                </Label>
-                <SearchableSelect
-                  disabled={languagesLoading}
-                  options={
-                    languages?.map(lang => ({
-                      value: lang.id.toString(),
-                      label: `${lang.langName} (${lang.langCodeIso6393})`,
-                    })) ?? []
-                  }
-                  placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
-                  value={formData.targetLanguage?.toString() ?? ''}
-                  onChange={value => updateFormData('targetLanguage', parseInt(value, 10))}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1'>
-                  <span className='text-destructive'>*</span>
-                  {t('books')}
-                </Label>
-                {booksLoading && formData.sourceBible ? (
-                  <div className='flex items-center gap-2 rounded-md border p-3'>
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                    <span>Loading books...</span>
-                  </div>
-                ) : (
-                  <BibleBookMultiSelectPopover
-                    books={availableBooks ?? []}
-                    disabled={!formData.sourceBible}
-                    value={formData.books}
-                    onChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
-                  />
-                )}
-              </div>
-
-              <div className='space-y-2'>
-                <div className='flex items-center gap-1'>
-                  <Label htmlFor='connectivityProfile'>{t('connectivityProfile')}</Label>
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          aria-label={t('connectivityProfileInfo')}
-                          className='text-muted-foreground hover:text-foreground h-6 w-6 p-0'
-                          size='sm'
-                          type='button'
-                          variant='ghost'
-                        >
-                          <Info className='h-4 w-4' />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className='max-w-xs' side='top'>
-                        <ul className='space-y-1'>
-                          {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
-                            <li key={option.value}>{t(option.descKey)}</li>
-                          ))}
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Select
-                  value={formData.connectivityProfile ?? ''}
-                  onValueChange={value =>
-                    updateFormData(
-                      'connectivityProfile',
-                      value === CONNECTIVITY_PROFILE_NONE ? null : (value as ConnectivityProfile)
-                    )
-                  }
-                >
-                  <SelectTrigger className='w-full' id='connectivityProfile'>
-                    <SelectValue placeholder={t('connectivityProfilePlaceholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={CONNECTIVITY_PROFILE_NONE}>
-                      {t('connectivityProfileNone')}
-                    </SelectItem>
-                    {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {t(option.labelKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className='space-y-2'>
-                <Label className='gap-1' htmlFor='pericopeSet'>
-                  <span className='text-destructive'>*</span>
-                  {t('pericopeSet', 'Pericope Set')}
-                </Label>
-                <Select
-                  disabled={pericopeSetsLoading}
-                  value={formData.pericopeSetId?.toString() ?? ''}
-                  onValueChange={value => updateFormData('pericopeSetId', parseInt(value, 10))}
-                >
-                  <SelectTrigger className='w-full' id='pericopeSet'>
-                    <SelectValue
-                      placeholder={
-                        pericopeSetsLoading
-                          ? 'Loading pericope sets...'
-                          : 'Select pericope set for the project'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pericopeSets?.map(set => (
-                      <SelectItem key={set.id} value={set.id.toString()}>
-                        {set.description ?? set.name} ({set.name})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ProjectFormFields
+                formData={formData}
+                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
+                onFieldChange={updateFormData}
+              />
 
               <div className='flex items-center justify-end pt-4'>
                 {error && (
@@ -407,7 +214,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
                   disabled={isButtonDisabled}
                   type='button'
-                  onClick={handleSubmit}
+                  onClick={() => void handleSubmit()}
                 >
                   {isLoading ? (
                     <div className='flex items-center gap-2'>
@@ -424,7 +231,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           {config.features.usfmImport && (
             <TabsContent value='import'>
               {/* No-op for now: #420 is what does something with the accepted files. */}
-              <UsfmImportTab onFilesAccepted={() => {}} />
+              <UsfmImportTab
+                formData={formData}
+                isSubmitting={isLoading || isSubmitting}
+                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
+                onFieldChange={updateFormData}
+                onSubmit={files => void handleSubmit(files)}
+              />
             </TabsContent>
           )}
         </Tabs>
