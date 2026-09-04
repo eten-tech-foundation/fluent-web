@@ -39,6 +39,6 @@ describe('CreateProjectModal tabs (#418)', () => {
     config.features.usfmImport = true;
     renderWithProviders(<CreateProjectModal {...props} />);
     expect(screen.getByText('projectTitle')).toBeInTheDocument();
-    expect(screen.getByText('sourceLanguage')).toBeInTheDocument();
+    expect(screen.getByText('sourceLanguageBible')).toBeInTheDocument();
   });
 });
