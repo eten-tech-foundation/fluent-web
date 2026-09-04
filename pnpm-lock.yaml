@@ -13,11 +13,35 @@ importers:
   .:
     dependencies:
       '@eten-tech-foundation/platform-editor':
-        specifier: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz
-        version: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
+        specifier: 0.8.15
+        version: 0.8.15(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
       '@eten-tech-foundation/scripture-utilities':
         specifier: ^0.1.6
         version: 0.1.6
+      '@fontsource/charis-sil':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-naskh-arabic':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-devanagari':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-gujarati':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-kannada':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-malayalam':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-tamil':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-telugu':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@microsoft/applicationinsights-web':
         specifier: ^3.3.8
         version: 3.3.11(tslib@2.8.1)
@@ -633,9 +657,8 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eten-tech-foundation/platform-editor@file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz':
-    resolution: {integrity: sha512-E4E4ZoXKDCQUiADzYqrm5i7tRn3KDcdJig4txI9hfk5zFRLrfAe+QDaY9zrbQ6dnQhzLKNtevtujn43lMCWqWw==, tarball: file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz}
-    version: 0.8.15
+  '@eten-tech-foundation/platform-editor@0.8.15':
+    resolution: {integrity: sha512-y9lT2vetWDhyT6uLWmJU6E5Qs41EwZQQTuGlmqWSPKC244frxTY1u9hJri6bNpR7Bp6JyKfgMIFlyz1BD3oFSQ==}
     peerDependencies:
       react: '>=18.3.1'
       react-dom: '>=18.3.1'
@@ -653,12 +676,6 @@ packages:
   '@floating-ui/dom@1.8.0':
     resolution: {integrity: sha512-yXSrzeHZBTZadLOlfyhCkJHNeLJnHRnRInwdZ40L7ZiaAtrBwoYlsDrX3v5zB1Utk7CLfzcOVnVVWoXEky7Ceg==}
 
-  '@floating-ui/react-dom@2.1.8':
-    resolution: {integrity: sha512-cC52bHwM/n/CxS87FH0yWdngEZrjdtLW/qVruo68qg+prK7ZQ4YGdut2GyDVpoGeAYe/h899rVeOVm6Oi40k2A==}
-    peerDependencies:
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
-
   '@floating-ui/react-dom@2.1.9':
     resolution: {integrity: sha512-JDjEFGCpImxDCA7JJKviA0M9+RtmJdj0m/NVU5IMgBK+AmZouAQQ7/+2GLH0GXXY0YMw9oXPB8hKdbPYg5QLYg==}
     peerDependencies:
@@ -673,6 +690,30 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource/charis-sil@5.3.0':
+    resolution: {integrity: sha512-dYGYYfCsGKQ3SxHayhR3XS4OUPk57UiODUgI4KCOBH7edqPZi2ZfZB/opwk7vu1FhztMaQc3uHJmgjpgikeIsA==}
+
+  '@fontsource/noto-naskh-arabic@5.3.0':
+    resolution: {integrity: sha512-S/GDgQ6mh/PKo4mz5+eXNYbEarvpI7yh6eCdOz8tTVbeM7+OUiacIEscaYEibr/+egDtGbO2ZB00sjy1bJC1kQ==}
+
+  '@fontsource/noto-serif-devanagari@5.3.0':
+    resolution: {integrity: sha512-POketgM+TcAbtQCpl5GUmlCVvV7zGnFmLlQTIVxp0ePZkKTJ1UhpeyscIpgljOzHjrVzXPj7x1lSXl2W/wI3Gg==}
+
+  '@fontsource/noto-serif-gujarati@5.3.0':
+    resolution: {integrity: sha512-bppn0e8KHf4SWQj1MsF+9G0BZM0WsBTcdl2KGXD6qwY1Ye+uCgYjhrxAUalcshAPCRonzevq/b1bgWRbNTov9w==}
+
+  '@fontsource/noto-serif-kannada@5.3.0':
+    resolution: {integrity: sha512-YwBraVBPat9zUSpzxkKOOay+reitD8JNxD2Yob7GxW0zC4A9VWf0JplUxqnesAb0RnTwvuPOHRl/Y6/DJA1l5Q==}
+
+  '@fontsource/noto-serif-malayalam@5.3.0':
+    resolution: {integrity: sha512-VxpndrkwYlSkS4x6m6D5lTktMfqzuLBGvxhMu5Wk/gn8qBKYXaaIHtNcNPCEZ/LLsSQvZYDc5eFV14Rvv/wWEA==}
+
+  '@fontsource/noto-serif-tamil@5.3.0':
+    resolution: {integrity: sha512-Ksc/mqtACXTPzFQac1DF4xi4Cu4YhMYGQavu/DJX/wNxCIoCD/YUtYlK2tFDGs/uvKa8YbPXvGbIZP/j3C+7pQ==}
+
+  '@fontsource/noto-serif-telugu@5.3.0':
+    resolution: {integrity: sha512-/svhIKXbxW9F9cz/zYj0uiB1lBDlul9krYFGxrhdZn0Kyyss7lzYL7PXMJKiD1IlCCEzhg8MvDh3SsJT6bYJXQ==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -5269,7 +5310,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@eten-tech-foundation/platform-editor@file:vendor/eten-tech-foundation-platform-editor-0.8.15.tgz(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)':
+  '@eten-tech-foundation/platform-editor@0.8.15(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)':
     dependencies:
       '@eten-tech-foundation/scripture-utilities': 0.1.6
       '@floating-ui/dom': 1.8.0
@@ -5301,12 +5342,6 @@ snapshots:
       '@floating-ui/core': 1.8.0
       '@floating-ui/utils': 0.2.12
 
-  '@floating-ui/react-dom@2.1.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@floating-ui/dom': 1.8.0
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-
   '@floating-ui/react-dom@2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@floating-ui/dom': 1.8.0
@@ -5322,6 +5357,22 @@ snapshots:
       tabbable: 6.5.0
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource/charis-sil@5.3.0': {}
+
+  '@fontsource/noto-naskh-arabic@5.3.0': {}
+
+  '@fontsource/noto-serif-devanagari@5.3.0': {}
+
+  '@fontsource/noto-serif-gujarati@5.3.0': {}
+
+  '@fontsource/noto-serif-kannada@5.3.0': {}
+
+  '@fontsource/noto-serif-malayalam@5.3.0': {}
+
+  '@fontsource/noto-serif-tamil@5.3.0': {}
+
+  '@fontsource/noto-serif-telugu@5.3.0': {}
 
   '@humanfs/core@0.19.1': {}
 
@@ -6298,7 +6349,7 @@ snapshots:
 
   '@radix-ui/react-popper@1.2.8(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@floating-ui/react-dom': 2.1.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@floating-ui/react-dom': 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-arrow': 1.1.7(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-compose-refs': 1.1.2(@types/react@18.3.28)(react@18.3.1)
       '@radix-ui/react-context': 1.1.2(@types/react@18.3.28)(react@18.3.1)
@@ -6316,7 +6367,7 @@ snapshots:
 
   '@radix-ui/react-popper@1.3.3(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@floating-ui/react-dom': 2.1.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@floating-ui/react-dom': 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-arrow': 1.1.11(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-compose-refs': 1.1.3(@types/react@18.3.28)(react@18.3.1)
       '@radix-ui/react-context': 1.2.0(@types/react@18.3.28)(react@18.3.1)
