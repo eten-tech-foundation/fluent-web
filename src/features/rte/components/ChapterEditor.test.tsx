@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +27,8 @@ const editor = vi.hoisted(() => ({
   echoOnMount: true,
   setUsj: vi.fn<(usj: Usj) => void>(),
   formatPara: vi.fn<(marker: string) => void>(),
+  undo: vi.fn<() => void>(),
+  redo: vi.fn<() => void>(),
   commit: undefined as ((usj: Usj) => void) | undefined,
   reportState: undefined as ((snapshot: StateChangeSnapshot) => void) | undefined,
   reportScrRef: undefined as ((scrRef: SerializedVerseRef) => void) | undefined,
@@ -68,6 +70,8 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
             formatPara: (marker: string) => {
               editor.formatPara(marker);
             },
+            undo: editor.undo,
+            redo: editor.redo,
           }),
           []
         );
@@ -301,9 +305,36 @@ describe('ChapterEditor', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
       reportBlock('p');
-      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+      await user.click(screen.getByRole('button', { name: 'Poetry Line' }));
 
-      expect(editor.formatPara).toHaveBeenCalledWith('s1');
+      expect(editor.formatPara).toHaveBeenCalledWith('q1');
+    });
+
+    it('does not author a section heading while the model cannot hold one', async () => {
+      const user = userEvent.setup();
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+
+      reportBlock('p');
+      const heading = screen.getByRole('button', { name: 'Section Heading' });
+      expect(heading).toBeDisabled();
+
+      await user.click(heading);
+      expect(editor.formatPara).not.toHaveBeenCalled();
+    });
+
+    it('still reports a heading the cursor is already in', () => {
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+
+      // Disabling authoring must not make the bar lie about where the cursor is. An imported
+      // heading still reads as one, and the other two blocks remain the way out of it.
+      reportBlock('s1');
+      expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(screen.queryByTestId('other-block')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Paragraph' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Poetry Line' })).toBeEnabled();
     });
 
     it('keeps the level and indent controls with the block they belong to', () => {
@@ -338,10 +369,10 @@ describe('ChapterEditor', () => {
 
       // Nothing reported, so nothing is selected and `formatPara` has nothing to act on. The
       // editor is still asked, but the bar must not sit there claiming a block that never took.
-      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+      await user.click(screen.getByRole('button', { name: 'Poetry Line' }));
 
-      expect(editor.formatPara).toHaveBeenCalledWith('s1');
-      expect(screen.queryByTestId('heading-levels')).not.toBeInTheDocument();
+      expect(editor.formatPara).toHaveBeenCalledWith('q1');
+      expect(screen.queryByTestId('poetry-indent')).not.toBeInTheDocument();
     });
 
     it('says so when the cursor is in a block it cannot author', () => {
@@ -398,6 +429,33 @@ describe('ChapterEditor', () => {
 
       expect(documentVerses()).toEqual(inDocumentSpace(WITH_SUGGESTION));
     });
+  });
+});
+
+describe('history shortcuts (#427)', () => {
+  it('Ctrl+Z and Ctrl+Y reach the editor as undo/redo commands', () => {
+    editor.undo.mockClear();
+    editor.redo.mockClear();
+    const verses: PericopeVerseText[] = [
+      { verseNumber: 1, text: 'In the beginning', markers: null },
+    ];
+    render(
+      <ChapterEditor
+        chapterNumber={CHAPTER}
+        contentKey='history-shortcuts'
+        verses={verses}
+        onVersesChange={vi.fn()}
+      />
+    );
+    fireEvent.keyDown(screen.getByTestId('chapter-editor'), { key: 'z', ctrlKey: true });
+    expect(editor.undo).toHaveBeenCalledTimes(1);
+    expect(editor.redo).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId('chapter-editor'), {
+      key: 'z',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(editor.redo).toHaveBeenCalledTimes(1);
   });
 });
 

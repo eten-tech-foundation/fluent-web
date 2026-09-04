@@ -43,6 +43,7 @@
   "formatBar": "Formatting",
   "blockParagraph": "Paragraph",
   "blockSectionHeading": "Section Heading",
+  "blockSectionHeadingUnavailable": "Section headings are not available yet",
   "blockPoetryLine": "Poetry Line",
   "blockOther": "Other",
   "headingLevel": "Level",
@@ -53,5 +54,12 @@
   "pericope": "Pericope",
   "chapter": "Chapter",
   "mainMenu": "Main menu",
-  "userMenu": "User menu"
+  "userMenu": "User menu",
+  "newTab": "New",
+  "importTab": "Import",
+  "selectFile": "Select File",
+  "dropUsfmFiles": "or drag and drop USFM files here",
+  "errorNotValidUsfm": "File is not valid USFM",
+  "errorMissingBookData": "Missing book data",
+  "errorDuplicateBook": "Two files have the same book code"
 }
