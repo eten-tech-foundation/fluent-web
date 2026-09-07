@@ -46,7 +46,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
   const [selectedMeta, setSelectedMeta] = useState<SelectedSourceBible | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { data: searchResults, isLoading } = useSourceBibleSearch(search);
+  const { data: searchResults, isLoading, error: searchError } = useSourceBibleSearch(search);
 
   // If value is cleared from outside, clear selectedMeta
   useEffect(() => {
@@ -74,9 +74,10 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
   }, [value.sourceBible, value.sourceLanguage, selectedMeta, searchResults]);
 
   const handleSelectBible = (bible: SourceSearchBible) => {
+    if (!bible.languageId) return;
     const meta: SelectedSourceBible = {
       sourceBible: bible.id,
-      sourceLanguage: bible.languageId ?? 0,
+      sourceLanguage: bible.languageId,
       bibleName: bible.name,
       bibleAbbreviation: bible.abbreviation,
       languageName: bible.languageName ?? '',
@@ -86,7 +87,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
     setSelectedMeta(meta);
     onChange({
       sourceBible: bible.id,
-      sourceLanguage: bible.languageId ?? 0,
+      sourceLanguage: bible.languageId,
     });
     setOpen(false);
     setSearch('');
@@ -149,7 +150,8 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
           </div>
           <button
             aria-label='Clear source bible selection'
-            className='text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 cursor-pointer rounded-md p-1 transition-colors focus:outline-none'
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring shrink-0 cursor-pointer rounded-md p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
+            disabled={disabled}
             type='button'
             onClick={handleClear}
           >
@@ -213,6 +215,10 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                   <div className='text-muted-foreground flex items-center justify-center p-4 text-sm'>
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' /> Loading...
                   </div>
+                ) : searchError ? (
+                  <div className='text-destructive p-4 text-center text-sm'>
+                    Search failed. Please try again.
+                  </div>
                 ) : !hasResults ? (
                   <div className='text-muted-foreground p-4 text-center text-sm'>
                     No languages or Bibles found matching &quot;{search}&quot;.
@@ -227,9 +233,10 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                         </div>
                         <div className='space-y-0.5'>
                           {languagesList.map(lang => (
-                            <div
+                            <button
                               key={`lang-${lang.id}`}
-                              className='hover:bg-background/80 hover:text-foreground flex cursor-pointer flex-col rounded-md px-2.5 py-1.5 text-sm transition-colors'
+                              className='hover:bg-background/80 hover:text-foreground focus-visible:ring-ring flex w-full cursor-pointer flex-col rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none'
+                              type='button'
                               onClick={() => handleSelectLanguage(lang)}
                             >
                               <span className='text-foreground truncate font-semibold'>
@@ -240,7 +247,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                                 {lang.bibleCount} {lang.bibleCount === 1 ? 'Bible' : 'Bibles'}{' '}
                                 available
                               </span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -254,9 +261,10 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                         </div>
                         <div className='space-y-1.5'>
                           {biblesList.map(bible => (
-                            <div
+                            <button
                               key={`bible-${bible.id}`}
-                              className='bg-background border-border/60 hover:border-primary/50 flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-lg border p-2.5 transition-all hover:shadow-xs'
+                              className='bg-background border-border/60 hover:border-primary/50 focus-visible:ring-ring flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-lg border p-2.5 text-left transition-all hover:shadow-xs focus-visible:ring-2 focus-visible:outline-none'
+                              type='button'
                               onClick={() => handleSelectBible(bible)}
                             >
                               <div className='w-0 min-w-0 flex-1 space-y-0.5 overflow-hidden'>
@@ -272,7 +280,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                               <Badge className='bg-primary/10 text-primary hover:bg-primary/15 shrink-0 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase'>
                                 {bible.provider.toUpperCase()}
                               </Badge>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>

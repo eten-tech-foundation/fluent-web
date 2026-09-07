@@ -166,8 +166,8 @@ export function SearchableSelect({
           {value && onClear ? (
             <button
               aria-label='Clear selection'
-              className='text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none'
-              tabIndex={-1}
+              className='text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed'
+              disabled={disabled}
               type='button'
               onClick={e => {
                 e.stopPropagation();
