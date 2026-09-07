@@ -1,4 +1,4 @@
-import { Info, Loader2 } from 'lucide-react';
+import { Info, Loader2, Headphones, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
@@ -114,6 +114,7 @@ export function ProjectFormFields({
             sourceBibles?.map(bible => ({
               value: bible.id.toString(),
               label: `${bible.name} (${bible.abbreviation})`,
+              icon: bible.hasAudio ? <Headphones className='h-4 w-4' /> : undefined,
             })) ?? []
           }
           placeholder={
@@ -126,6 +127,21 @@ export function ProjectFormFields({
           value={formData.sourceBible?.toString() ?? ''}
           onChange={value => onFieldChange('sourceBible', parseInt(value, 10))}
         />
+        {formData.sourceBible && sourceBibles?.find(b => b.id === formData.sourceBible) && (
+          <div className='text-muted-foreground mt-2 flex items-center gap-2 text-sm'>
+            {sourceBibles.find(b => b.id === formData.sourceBible)?.hasAudio ? (
+              <>
+                <Headphones className='text-primary h-4 w-4 shrink-0' />
+                <span>Audio available — included as offline source</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className='h-4 w-4 shrink-0 opacity-50' />
+                <span>No audio version available for this Bible</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className='space-y-2'>
