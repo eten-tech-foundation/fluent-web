@@ -1,7 +1,7 @@
 # What Lynx Can Do for Fluent
 
 **Companion to:** [`design.md`](design.md) · the running demo at `/lynx-usfm` (authenticated route) on the reference branch `poc/lynx-client-usfm` ([PR #327](https://github.com/eten-tech-foundation/fluent-web/pull/327)).
-**Grounding:** the 2026-02-10 Lynx|Fluent technical discovery session (Damien Daspit, Benjamin King, JoEllen Magnus / Joel Mathew, Kasey W), the Repeated Word Check UI proposal (`docs/proposals/repeated-word-check/`, PR #305), and what this PoC empirically proved.
+**Grounding:** the 2026-02-10 Lynx|Fluent technical discovery session (Damien Daspit, Benjamin King, JoEllen Magnus / Joel Mathew, Kasey W), the Repeated Word Check UI proposal (`docs/features/repeated-word-check/`, PR #305), and what this PoC empirically proved.
 
 ## 1. What Lynx is
 
@@ -13,15 +13,15 @@ In the February meeting Joel framed the need precisely: Fluent wants an increasi
 
 Fluent's first check is now designed: the Repeated Word Check UI proposal builds a Checks tab + per-check accordion panel with Ignore Here/Everywhere suppression, refreshed on auto-save, explicitly anticipating sibling checks (Wildebeest, spell check). Every concept in that proposal has a general Lynx counterpart:
 
-| Repeated Word Check proposal (bespoke) | Lynx (general) |
-| --- | --- |
-| `useRepeatedWordsCheck` hook per check | `DiagnosticProvider` per check behind one `Workspace` |
-| Findings envelope from the fluent-ai proxy | `Diagnostic { source, range, severity, message, data }` |
-| `snt_id` + word + ordinal occurrence identity | `Diagnostic.fingerprint` (landing on Lynx HEAD) |
+| Repeated Word Check proposal (bespoke)                             | Lynx (general)                                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `useRepeatedWordsCheck` hook per check                             | `DiagnosticProvider` per check behind one `Workspace`                                                   |
+| Findings envelope from the fluent-ai proxy                         | `Diagnostic { source, range, severity, message, data }`                                                 |
+| `snt_id` + word + ordinal occurrence identity                      | `Diagnostic.fingerprint` (landing on Lynx HEAD)                                                         |
 | Ignore Here / Everywhere cascade in editor-state / `user_settings` | `DiagnosticDismissalStore` interface (**Lynx HEAD only**) — Fluent implements it over those same stores |
-| "Show Ignored" + Undo | dismissal filtering built into `Workspace` (**Lynx HEAD only**) |
-| deferred "Drop duplicate" one-click fix | `DiagnosticFix` (edits) — the machinery already exists |
-| chapter re-check on every auto-save | `DocumentManager.fireChanged` + push-based `diagnosticsChanged$` |
+| "Show Ignored" + Undo                                              | dismissal filtering built into `Workspace` (**Lynx HEAD only**)                                         |
+| deferred "Drop duplicate" one-click fix                            | `DiagnosticFix` (edits) — the machinery already exists                                                  |
+| chapter re-check on every auto-save                                | `DocumentManager.fireChanged` + push-based `diagnosticsChanged$`                                        |
 
 Rows marked **Lynx HEAD only** do not exist in the published 0.3.5 the PoC pins, so the PoC contracts dismissal and occurrence keying app-side instead (`source|code|anchor|occurrence` — see the design doc §4). Everything else in the table is available on 0.3.5 today.
 
@@ -36,7 +36,7 @@ Run it from the reference branch: `/lynx-usfm` (any authenticated user; sample l
 1. **USFM parses to a typed document in the browser** — chapters, verses, paragraphs walked from the node tree, rendered as a formatted scripture preview and a node inspector; ~3 ms for the sample, ~28 ms for a real 31-verse chapter. No server round-trips after load.
 2. **Real checks run live**: the four `StandardRuleSets.English` providers (quotation pairing, allowed characters, paired punctuation, punctuation context) plus a vendored verse-order provider (the template for Fluent-authored providers). Diagnostics carry ranges → inline underlines in the editor and **verse references** (via the node tree) → verse-grouped rows in a Checks-panel-shaped UI with fix/ignore/undo.
 3. **Quick fixes and on-type formatting work end-to-end**: "Insert missing verse" splices a correct `\v 4` edit; typing `"` autocorrects to the context-correct curly quote at the caret.
-4. **One canonical representation**: the PoC assembles USFM from verses with the *same logic as the server export* (`generateUSFMText` mirrored), fetched from the same bible-texts endpoint the drafting page uses — Kasey's "lint the export" idea, running before anything leaves the browser. The same module works in fluent-api tests.
+4. **One canonical representation**: the PoC assembles USFM from verses with the _same logic as the server export_ (`generateUSFMText` mirrored), fetched from the same bible-texts endpoint the drafting page uses — Kasey's "lint the export" idea, running before anything leaves the browser. The same module works in fluent-api tests.
 5. **It fits the stack**: Vite 8 + React 18 + TS 6 + TanStack Router; the whole feature is one lazy route chunk (75 KB gzip); 14 vitest specs cover the non-UI modules.
 6. **Three packaging hazards found and worked around** (browser-first consumer feedback SIL doesn't have yet — see design.md §5): file-based `UsfmStylesheet` construction, module-scope Node calls in `@sillsdev/machine`, and bundler-hostile locale loading in the checker package.
 7. **Rule sets must be per-language**: English rules over Gujarati text → ~2,600 allowed-character warnings. The configs are builder-based (`QuotationConfig`, `CharacterRegexWhitelist`…); deriving them from the project's target language is a real integration workstream — and a concrete collaboration topic with SIL.
@@ -70,4 +70,4 @@ Run it from the reference branch: `/lynx-usfm` (any authenticated user; sample l
 2. File the three packaging issues on sillsdev/lynx + sillsdev/machine (offer the PoC's workarounds as PRs).
 3. Spike a Hindi/Gujarati rule set to size the per-language configuration work.
 4. Decide the engine question for the Checks panel at check #2: adopt `Workspace` + write the Greek Room provider against the existing proxy.
-5. Feed Fluent's suppression-cascade requirements into SIL's in-flight dismissal design (it is being built for pluggable stores *right now* — February transcript).
+5. Feed Fluent's suppression-cascade requirements into SIL's in-flight dismissal design (it is being built for pluggable stores _right now_ — February transcript).
