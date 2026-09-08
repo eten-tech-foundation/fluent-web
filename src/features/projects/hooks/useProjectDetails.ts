@@ -22,6 +22,7 @@ export interface ProjectDetails {
   workflowConfig: WorkflowStep[];
   pericopeSetId?: number | null;
   lastActivityAt: string | null;
+  sourceBibleId: number;
 }
 
 const fetchProjectDetails = async (projectId: string): Promise<ProjectDetails> => {

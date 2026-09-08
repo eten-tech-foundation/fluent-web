@@ -1,7 +1,9 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,9 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
-import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
@@ -35,15 +35,19 @@ import { useAppStore } from '@/store/store';
 
 import { AssignProjectUsers } from './AssignProjectUsers';
 import { AssignUsersDialog } from './AssignUsersDialog';
+import { CardProgressBar } from './CardProgressBar';
 import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
+import { ManageMilestoneBooksDialog } from './ManageMilestoneBooksDialog';
 import { TruncatedCardText } from './TruncatedText';
 
-interface ProjectDetailPageProps {
+interface MilestoneDetailPageProps {
   projectId?: number | null;
+  milestoneId?: number | null;
   projectTitle: string;
   projectSourceLanguageName: string;
   projectTargetLanguageName: string;
   projectSource: string;
+  projectSourceBibleId: number;
   projectConnectivityProfile?: string | null;
   projectLastActivityAt?: string | null;
   projectChapterStatusCounts: ChapterStatusCounts;
@@ -55,74 +59,14 @@ interface ProjectDetailPageProps {
   onCloseAddUser?: () => void;
 }
 
-const CardProgressBar: React.FC<{
-  chapterStatusCounts: ChapterStatusCounts;
-  workflowConfig: WorkflowStep[];
-}> = ({ chapterStatusCounts, workflowConfig }) => {
-  const { legendItems, calculateProgressSegments } = useProgressBar(workflowConfig);
-  const segments = calculateProgressSegments(chapterStatusCounts);
-
-  return (
-    <div className='space-y-2'>
-      <TooltipProvider delayDuration={100}>
-        <div className='flex h-[10px] w-full overflow-hidden rounded-full'>
-          {segments.length === 0 ? (
-            <div className='bg-primary/10 h-full w-full' />
-          ) : (
-            segments.map((segment, index) => (
-              <Tooltip key={`${segment.status}-${index}`}>
-                <TooltipTrigger asChild>
-                  <div
-                    className='h-full cursor-default hover:brightness-95'
-                    style={{
-                      width: `${segment.widthPercentage}%`,
-                      backgroundColor: segment.color,
-                    }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent
-                  className='bg-popover text-popover-foreground border-border rounded-md border px-2.5 py-1 text-xs font-semibold shadow-md'
-                  side='top'
-                >
-                  {segment.subSegments ? (
-                    <div className='space-y-0.5'>
-                      {segment.subSegments.map(sub => (
-                        <div key={sub.label}>
-                          {sub.label}: {sub.percentage}%
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    `${segment.displayName}: ${Math.round(segment.widthPercentage)}%`
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            ))
-          )}
-        </div>
-      </TooltipProvider>
-
-      <div className='grid grid-cols-2 gap-x-8 gap-y-2 pt-1'>
-        {legendItems.map(item => (
-          <div key={item.key} className='flex items-center gap-2'>
-            <div
-              className='h-4 w-4 shrink-0 rounded-none'
-              style={{ backgroundColor: item.color }}
-            />
-            <span className='text-muted-foreground text-xs'>{item.displayName}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
+export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   projectId,
+  milestoneId,
   projectTitle,
   projectSourceLanguageName,
   projectTargetLanguageName,
   projectSource,
+  projectSourceBibleId,
   projectConnectivityProfile,
   projectLastActivityAt,
   projectChapterStatusCounts,
@@ -135,9 +79,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 }) => {
   const { userdetail } = useAppStore();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [selectedBook, setSelectedBook] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isManageBooksOpen, setIsManageBooksOpen] = useState(false);
   const [selectedDrafter, setSelectedDrafter] = useState<string>('');
   const [selectedPeerChecker, setSelectedPeerChecker] = useState<string>('');
   const [selectedAssignments, setSelectedAssignments] = useState<number[]>([]);
@@ -344,15 +290,29 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       setIsRefreshingAfterAssignment(true);
       setSelectedDrafter('');
-      setSelectedPeerChecker('');
-      setSelectedAssignments([]);
-      setSelectedAssignmentsStatuses([]);
+      await queryClient.invalidateQueries({
+        queryKey: ['chapterAssignments', projectId ? projectId.toString() : '0'],
+      });
       setIsDialogOpen(false);
+      toast.success('Assignment updated successfully');
     } catch (error) {
-      Logger.logException(error, { context: 'Error Assigning/Unassigning Chapters' });
+      Logger.logException(error);
+      toast.error('Failed to assign user');
+    }
+  }, [
+    selectedDrafter,
+    selectedPeerChecker,
+    selectedAssignments,
+    projectId,
+    assignChapterMutation,
+    queryClient,
+  ]);
+
+  useEffect(() => {
+    if (isRefreshingAfterAssignment && !assignmentsFetching) {
       setIsRefreshingAfterAssignment(false);
     }
-  }, [selectedDrafter, selectedPeerChecker, selectedAssignments, projectId, assignChapterMutation]);
+  }, [isRefreshingAfterAssignment, assignmentsFetching]);
 
   const handleCheckboxChange = useCallback((assignmentId: number, checked: boolean) => {
     setSelectedAssignments(prev => {
@@ -363,10 +323,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       }
     });
   }, []);
-
-  if (isRefreshingAfterAssignment && !assignmentsFetching) {
-    setIsRefreshingAfterAssignment(false);
-  }
 
   if (!projectId) {
     return (
@@ -384,15 +340,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
-          <Button
-            className='border-primary text-primary hover flex items-center gap-2 border-2'
-            disabled={isDisabled}
-            size='sm'
-            variant={'outline'}
-            onClick={onExport}
-          >
-            Export Project
-          </Button>
+          <div className='flex items-center gap-2'>
+            {isManager && (
+              <Button
+                className='border-primary text-primary hover flex items-center gap-2 border-2'
+                size='sm'
+                variant='outline'
+                onClick={() => setIsManageBooksOpen(true)}
+              >
+                Manage Books
+              </Button>
+            )}
+            <Button
+              className='border-primary text-primary hover flex items-center gap-2 border-2'
+              disabled={isDisabled}
+              size='sm'
+              variant={'outline'}
+              onClick={onExport}
+            >
+              Export Project
+            </Button>
+          </div>
         }
         title={headerTitle}
         onBack={onBack}
@@ -525,6 +493,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         onDrafterChange={setSelectedDrafter}
         onPeerCheckerChange={setSelectedPeerChecker}
       />
+      {isManageBooksOpen && milestoneId && projectId && (
+        <ManageMilestoneBooksDialog
+          initialSelectedBookIds={
+            chapterAssignments
+              ?.filter(a => a.projectUnitId === milestoneId)
+              .map(a => a.bookId)
+              .filter((v, i, a) => a.indexOf(v) === i) ?? []
+          }
+          isOpen={isManageBooksOpen}
+          milestoneId={milestoneId}
+          projectId={Number(projectId)}
+          sourceBibleId={projectSourceBibleId}
+          onClose={() => setIsManageBooksOpen(false)}
+        />
+      )}
     </div>
   );
 };

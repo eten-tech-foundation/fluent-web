@@ -14,7 +14,6 @@ const EMPTY_FORM: ProjectFormData = {
   targetLanguage: null,
   sourceLanguage: null,
   sourceBible: null,
-  books: [],
   connectivityProfile: null,
   pericopeSetId: null,
 };
@@ -39,7 +38,6 @@ const renderTab = (overrides: Partial<Parameters<typeof UsfmImportTab>[0]> = {})
   renderWithProviders(
     <UsfmImportTab
       formData={EMPTY_FORM}
-      onBooksChange={vi.fn()}
       onFieldChange={vi.fn()}
       onSubmit={vi.fn()}
       {...overrides}
@@ -158,7 +156,7 @@ describe('UsfmImportTab upload and validation (#418)', () => {
     const slow = pendingUsfmFile('bad.usfm');
     drop([slow.file]);
     drop([usfmFile('gen.usfm', '\\id GEN Genesis')]);
-    await waitFor(() => expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN'));
+    await waitFor(() => expect(screen.getByTestId('accepted-files')).toHaveTextContent('gen.usfm'));
 
     slow.finish('no markers here');
     // Let the superseded batch resume, so it gets its chance to clobber the newer result.
@@ -167,7 +165,7 @@ describe('UsfmImportTab upload and validation (#418)', () => {
     });
 
     expect(screen.queryByText('errorNotValidUsfm')).not.toBeInTheDocument();
-    expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN');
+    expect(screen.getByTestId('accepted-files')).toHaveTextContent('gen.usfm');
     expect(onFilesAccepted).toHaveBeenCalledTimes(1);
   });
 });
@@ -186,12 +184,6 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     await waitFor(() => expect(screen.getByTestId('accepted-files')).toBeInTheDocument());
     expect(screen.getByText('gen.usfm')).toBeInTheDocument();
     expect(screen.getByText('mat.usfm')).toBeInTheDocument();
-  });
-
-  it('shows the detected books read-only rather than as a picker', async () => {
-    renderTab();
-    drop([usfmFile('gen.usfm', GEN), usfmFile('mat.usfm', MAT)]);
-    await waitFor(() => expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN, MAT'));
   });
 
   it('keeps the validation success message with the fields', async () => {

@@ -19,7 +19,6 @@ export interface CreateProjectData {
   targetLanguage: number;
   sourceLanguage: number;
   sourceBible: number;
-  books: number[];
   connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number;
 }
@@ -47,7 +46,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     targetLanguage: null,
     sourceLanguage: null,
     sourceBible: null,
-    books: [],
     connectivityProfile: null,
     pericopeSetId: null,
   });
@@ -63,7 +61,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: null,
         sourceLanguage: null,
         sourceBible: null,
-        books: [],
         connectivityProfile: null,
         pericopeSetId: null,
       });
@@ -76,19 +73,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       setFormData(prev => ({
         ...prev,
         sourceBible: null,
-        books: [],
       }));
     }
   }, [formData.sourceLanguage]);
-
-  useEffect(() => {
-    if (formData.sourceBible) {
-      setFormData(prev => ({
-        ...prev,
-        books: [],
-      }));
-    }
-  }, [formData.sourceBible]);
 
   const isFormValid = (): boolean => {
     return Boolean(
@@ -97,7 +84,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       formData.targetLanguage &&
       formData.sourceLanguage &&
       formData.sourceBible &&
-      formData.books.length > 0 &&
       formData.pericopeSetId
     );
   };
@@ -121,7 +107,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: formData.targetLanguage,
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
-        books: formData.books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
       });
@@ -178,11 +163,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           )}
           <TabsContent value='new'>
             <div className='space-y-6 py-6'>
-              <ProjectFormFields
-                formData={formData}
-                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
-                onFieldChange={updateFormData}
-              />
+              <ProjectFormFields formData={formData} onFieldChange={updateFormData} />
 
               <div className='flex items-center justify-end pt-4'>
                 {error && (
@@ -217,7 +198,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <UsfmImportTab
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}
-                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
                 onFieldChange={updateFormData}
                 onSubmit={() => void handleSubmit()}
               />

@@ -1,7 +1,6 @@
-import { Info, Loader2 } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
-import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
+import { useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import {
   CONNECTIVITY_PROFILE_NONE,
@@ -29,7 +28,6 @@ export interface ProjectFormData {
   targetLanguage: number | null;
   sourceLanguage: number | null;
   sourceBible: number | null;
-  books: number[];
   connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number | null;
 }
@@ -37,13 +35,6 @@ export interface ProjectFormData {
 interface ProjectFormFieldsProps {
   formData: ProjectFormData;
   onFieldChange: <K extends keyof ProjectFormData>(field: K, value: ProjectFormData[K]) => void;
-  onBooksChange: (books: number[]) => void;
-  /**
-   * Import only. When present, Book(s) is the set of books detected in the uploaded files and is
-   * shown read-only — #420 has the user close and reopen the dialog to change the files rather
-   * than editing the list here.
-   */
-  detectedBookCodes?: string[];
 }
 
 /**
@@ -53,18 +44,12 @@ interface ProjectFormFieldsProps {
  * second caller reads the same cache instead of issuing a second request, and it keeps this
  * component from needing a dozen data props.
  */
-export function ProjectFormFields({
-  formData,
-  onFieldChange,
-  onBooksChange,
-  detectedBookCodes,
-}: ProjectFormFieldsProps) {
+export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
   const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
     formData.sourceLanguage
   );
-  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =
@@ -140,33 +125,6 @@ export function ProjectFormFields({
           value={formData.targetLanguage?.toString() ?? ''}
           onChange={value => onFieldChange('targetLanguage', parseInt(value, 10))}
         />
-      </div>
-
-      <div className='space-y-2'>
-        <Label className='gap-1'>
-          <span className='text-destructive'>*</span>
-          {t('books')}
-        </Label>
-        {detectedBookCodes ? (
-          <div
-            className='text-muted-foreground rounded-md border p-3 text-sm'
-            data-testid='detected-books'
-          >
-            {detectedBookCodes.join(', ')}
-          </div>
-        ) : booksLoading && formData.sourceBible ? (
-          <div className='flex items-center gap-2 rounded-md border p-3'>
-            <Loader2 className='h-4 w-4 animate-spin' />
-            <span>Loading books...</span>
-          </div>
-        ) : (
-          <BibleBookMultiSelectPopover
-            books={availableBooks ?? []}
-            disabled={!formData.sourceBible}
-            value={formData.books}
-            onChange={onBooksChange}
-          />
-        )}
       </div>
 
       <div className='space-y-2'>

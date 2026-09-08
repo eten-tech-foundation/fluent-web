@@ -3,21 +3,18 @@ import { useMemo } from 'react';
 import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
-import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { ROLES } from '@/lib/types';
-import { useAppStore } from '@/store/store';
 
 import { ExportProjectDialog } from './ExportProjectDialog';
-import { ProjectHubPage } from './ProjectHubPage';
+import { MilestoneDetailPage } from './ProjectDetailPage';
 
-const routeApi = getRouteApi('/_authenticated/projects/$projectId/');
+const routeApi = getRouteApi('/_authenticated/projects/$projectId/milestones/$milestoneId');
 
-export const ProjectDetailWrapper: React.FC = () => {
+export const MilestoneDetailWrapper: React.FC = () => {
   const navigate = useNavigate();
-  const { projectId } = routeApi.useParams();
+  const { projectId, milestoneId } = routeApi.useParams();
   const { modal } = routeApi.useSearch();
 
   const {
@@ -25,15 +22,11 @@ export const ProjectDetailWrapper: React.FC = () => {
     isLoading: projectLoading,
     error: projectError,
   } = useProjectDetails(projectId);
-
   const { data: chapterAssignments, isLoading: assignmentsLoading } =
     useChapterAssignments(projectId);
-
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
-  const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
 
   const location = useLocation();
-  const { userdetail } = useAppStore();
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
@@ -41,36 +34,23 @@ export const ProjectDetailWrapper: React.FC = () => {
       void navigate({ to: from, replace: true });
       return;
     }
+    // Go back to the project hub
+    void navigate({ to: '/projects/$projectId', params: { projectId } });
+  };
 
-    if (userdetail?.role === ROLES.PROJECT_OBSERVER) {
-      void navigate({ to: '/' });
-    } else {
-      void navigate({ to: '/projects' });
-    }
+  const handleOpenExport = () => {
+    void navigate({
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
+      search: { modal: 'export' as const },
+      state: location.state,
+    });
   };
 
   const handleCloseExport = () => {
     void navigate({
-      to: '/projects/$projectId',
-      params: { projectId },
-      search: {},
-      state: location.state,
-    });
-  };
-
-  const handleOpenAddUser = () => {
-    void navigate({
-      to: '/projects/$projectId',
-      params: { projectId },
-      search: { modal: 'add' as const },
-      state: location.state,
-    });
-  };
-
-  const handleCloseAddUser = () => {
-    void navigate({
-      to: '/projects/$projectId',
-      params: { projectId },
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
       search: {},
       state: location.state,
     });
@@ -84,15 +64,19 @@ export const ProjectDetailWrapper: React.FC = () => {
   const exportBooks = useMemo(() => {
     if (!books || !chapterAssignments) return [];
 
+    const assignmentsByBook = new Map<string, typeof chapterAssignments>();
+    for (const a of chapterAssignments) {
+      if (!assignmentsByBook.has(a.bookNameEng)) {
+        assignmentsByBook.set(a.bookNameEng, []);
+      }
+      assignmentsByBook.get(a.bookNameEng)?.push(a);
+    }
+
     return books.map(book => {
-      const bookAssignments = chapterAssignments.filter(
-        assignment => assignment.bookNameEng === book.engDisplayName
-      );
-
+      const bookAssignments = assignmentsByBook.get(book.engDisplayName) ?? [];
       const completedChapters = bookAssignments.filter(
-        assignment => assignment.completedVerses === assignment.totalVerses
+        a => a.completedVerses === a.totalVerses
       ).length;
-
       return {
         bookId: book.bookId,
         engDisplayName: book.engDisplayName,
@@ -107,36 +91,42 @@ export const ProjectDetailWrapper: React.FC = () => {
     return (
       <div className='flex h-full items-center justify-center gap-2'>
         <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
-        <span className='text-gray-500'>Loading project details...</span>
+        <span className='text-gray-500'>Loading milestone details...</span>
       </div>
     );
   }
 
   if (projectError || !project) {
     return (
-      <div className='flex h-full items-center justify-center'>
-        <span className='text-red-500'>
-          {projectError ? 'Failed to load project details' : 'Project not found'}
-        </span>
+      <div className='flex h-full flex-col items-center justify-center gap-4'>
+        <span className='text-red-500'>Milestone not found</span>
+        <button
+          className='rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600'
+          onClick={handleBack}
+        >
+          Go Back
+        </button>
       </div>
     );
   }
 
   return (
     <>
-      <ProjectHubPage
-        isAddUserOpen={modal === 'add'}
-        isManager={true}
-        milestones={milestones}
-        milestonesLoading={milestonesLoading}
-        project={project}
-        users={[]}
-        usersLoading={false}
-        onAddUser={handleOpenAddUser}
+      <MilestoneDetailPage
+        milestoneId={Number(milestoneId)}
+        projectChapterStatusCounts={project.chapterStatusCounts}
+        projectConnectivityProfile={project.metadata.connectivityProfile}
+        projectId={project.id}
+        projectLastActivityAt={project.lastActivityAt}
+        projectSource={project.sourceName}
+        projectSourceBibleId={project.sourceBibleId}
+        projectSourceLanguageName={project.sourceLanguageName}
+        projectTargetLanguageName={project.targetLanguageName}
+        projectTitle={project.name}
+        projectWorkflowConfig={project.workflowConfig}
         onBack={handleBack}
-        onCloseAddUser={handleCloseAddUser}
+        onExport={handleOpenExport}
       />
-
       <ExportProjectDialog
         books={exportBooks}
         isLoading={assignmentsLoading || booksLoading}

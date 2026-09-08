@@ -51,6 +51,7 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  milestoneCount?: number;
   pericopeSetId?: number | null;
 }
 

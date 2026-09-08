@@ -18,7 +18,7 @@ export interface AcceptedUsfmFile {
 interface UsfmImportTabProps {
   formData: ProjectFormData;
   onFieldChange: <K extends keyof ProjectFormData>(field: K, value: ProjectFormData[K]) => void;
-  onBooksChange: (books: number[]) => void;
+
   onSubmit: () => void;
   isSubmitting?: boolean;
   /** Called with the whole batch once every file in it validates. */
@@ -30,7 +30,6 @@ type ErrorKey = 'errorNotValidUsfm' | 'errorMissingBookData' | 'errorDuplicateBo
 export function UsfmImportTab({
   formData,
   onFieldChange,
-  onBooksChange,
   onSubmit,
   isSubmitting = false,
   onFilesAccepted,
@@ -157,12 +156,7 @@ export function UsfmImportTab({
         ))}
       </ul>
 
-      <ProjectFormFields
-        detectedBookCodes={accepted.map(item => item.bookCode)}
-        formData={formData}
-        onBooksChange={onBooksChange}
-        onFieldChange={onFieldChange}
-      />
+      <ProjectFormFields formData={formData} onFieldChange={onFieldChange} />
 
       <div className='flex items-center justify-between pt-4'>
         <p className='flex items-center gap-2 text-sm font-medium text-(--success)'>

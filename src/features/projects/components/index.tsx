@@ -64,7 +64,7 @@ export const ProjectsWrapper: React.FC = () => {
         targetLanguage: projectData.targetLanguage,
         sourceLanguage: projectData.sourceLanguage,
         bibleId: projectData.sourceBible,
-        bookId: projectData.books,
+        bookId: [],
         organization: activeOrgId,
         createdBy: Number(userdetail.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -134,26 +133,6 @@ const deriveStatusChip = (
 
 type EnrichedProject = Project & { statusChip: StatusChip };
 
-const StatusChipCell: React.FC<{ chip: StatusChip }> = ({ chip }) => {
-  const badgeClass =
-    'inline-flex items-center rounded-md border-0 px-2.5 py-1 text-xs leading-tight font-medium whitespace-normal text-center';
-  if (!chip)
-    return (
-      <Badge
-        className={badgeClass}
-        style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-      >
-        Active
-      </Badge>
-    );
-
-  return (
-    <Badge className={badgeClass} style={{ backgroundColor: chip.bg, color: chip.text }}>
-      {chip.label}
-    </Badge>
-  );
-};
-
 export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   loading,
   projects,
@@ -166,12 +145,12 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const columns = [
-    { key: 'title', label: t('title') },
-    { key: 'sourceLanguage', label: t('sourceLanguage') },
-    { key: 'targetLanguage', label: t('targetLanguage') },
-    { key: 'sourceBible', label: t('sourceBible') },
-    { key: 'status', label: t('status') },
-    { key: 'progress', label: t('Progress') },
+    { key: 'title', label: t('projectName', 'Project Name') },
+    { key: 'sourceLanguage', label: t('sourceLanguage', 'Source Lang') },
+    { key: 'targetLanguage', label: t('targetLanguage', 'Target Lang') },
+    { key: 'sourceBible', label: t('sourceBible', 'Source Bible') },
+    { key: 'milestones', label: t('milestones', 'Milestones') },
+    { key: 'progress', label: t('overallProgress', 'Overall Progress') },
   ];
 
   const colWidth = `${(100 / columns.length).toFixed(4)}%`;
@@ -302,10 +281,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           <TruncatedText text={project.sourceName} />
                         </TableCell>
                         <TableCell
-                          className='text-popover-foreground overflow-visible px-6 py-4 text-sm text-clip whitespace-normal'
+                          className='text-popover-foreground px-6 py-4 text-sm'
                           style={{ width: colWidth }}
                         >
-                          <StatusChipCell chip={project.statusChip} />
+                          {project.milestoneCount ?? 0}
                         </TableCell>
                         <TableCell
                           className='text-popover-foreground px-6 py-4 text-sm'
