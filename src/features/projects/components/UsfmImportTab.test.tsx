@@ -231,6 +231,26 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeEnabled();
   });
 
+  it('does not fetch the book picker data for detected import books', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      renderTab({ formData: COMPLETE_FORM });
+      drop([usfmFile('gen.usfm', GEN)]);
+      await screen.findByTestId('detected-books');
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/bibles/language/1'),
+          expect.anything()
+        )
+      );
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/bible-books/bible/'))).toBe(
+        false
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('submits through the parent when Create Project is clicked', async () => {
     const onSubmit = vi.fn();
     renderTab({ formData: COMPLETE_FORM, onSubmit });

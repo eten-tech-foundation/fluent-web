@@ -10,16 +10,10 @@ import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
 import { type ConnectivityProfile } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
+import { type UsfmFilePayload } from '@/lib/types';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
 import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
-
-/** One validated USFM file, as the API takes it (#419). */
-export interface UsfmFilePayload {
-  fileName: string;
-  bookCode: string;
-  usfm: string;
-}
 
 export interface CreateProjectData {
   title: string;
@@ -145,6 +139,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'create project submit',
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -230,7 +225,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </TabsContent>
           {config.features.usfmImport && (
             <TabsContent value='import'>
-              {/* No-op for now: #420 is what does something with the accepted files. */}
               <UsfmImportTab
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}

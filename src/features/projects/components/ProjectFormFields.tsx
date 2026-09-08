@@ -64,7 +64,9 @@ export function ProjectFormFields({
   const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
     formData.sourceLanguage
   );
-  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
+  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(
+    detectedBookCodes ? null : formData.sourceBible
+  );
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =
