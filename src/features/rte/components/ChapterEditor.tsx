@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
+import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
+import { headingErrorIn, isHeadingMarker, type HeadingError } from '../lib/heading-markers';
 import { useHistoryShortcuts } from '../lib/history-shortcuts';
 import {
   changedVerses,
@@ -13,6 +15,8 @@ import {
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 
 import { FormatBar } from './FormatBar';
+import { HeadingValidationMessage } from './HeadingValidationMessage';
+import { SectionHeadingDialog } from './SectionHeadingDialog';
 
 import '../styles/usj-nodes.css';
 import '../styles/fonts.css';
@@ -61,6 +65,8 @@ export function ChapterEditor({
   onActiveVerseChange,
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
+  const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);
   const loadedKeyRef = useRef(contentKey);
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
@@ -78,6 +84,15 @@ export function ChapterEditor({
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
   const [blockMarker, setBlockMarker] = useState<string | undefined>();
+  const [headingError, setHeadingError] = useState<HeadingError>(null);
+  const [pendingHeading, setPendingHeading] = useState<{
+    verseNumber: number;
+    marker: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setPendingHeading(null);
+  }, [contentKey, readOnly]);
 
   const initialUsj = useMemo(
     () => pericopeVersesToUsj(verses, chapterNumber, bookCode),
@@ -89,6 +104,7 @@ export function ChapterEditor({
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
+      setHeadingError(null);
       const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
       knownVersesRef.current = usjToPericopeVerses(usj);
       suppressedJsonRef.current = JSON.stringify(usj);
@@ -102,7 +118,7 @@ export function ChapterEditor({
   // next commit reports the verse as emptied and writes the suggestion away. Verses the editor
   // already has text in are left alone, since that text is what the translator is looking at.
   useEffect(() => {
-    if (contentKey !== loadedKeyRef.current) return;
+    if (contentKey !== loadedKeyRef.current || headingError) return;
 
     const known = knownVersesRef.current;
     const merged = known.map(verse => {
@@ -113,7 +129,7 @@ export function ChapterEditor({
 
     // Untouched entries come back by reference, so identity is the whole test.
     if (merged.some((verse, index) => verse !== known[index])) loadIntoEditor(merged);
-  }, [contentKey, loadIntoEditor, verses]);
+  }, [contentKey, headingError, loadIntoEditor, verses]);
 
   useEffect(() => {
     if (contentKey === loadedKeyRef.current) return;
@@ -128,6 +144,9 @@ export function ChapterEditor({
       suppressedJsonRef.current = json;
 
       const derived = usjToPericopeVerses(usj);
+      const error = headingErrorIn(derived);
+      setHeadingError(error);
+      if (error) return;
       const changed = changedVerses(knownVersesRef.current, derived);
       if (changed.length === 0) return;
 
@@ -179,7 +198,29 @@ export function ChapterEditor({
   const handleFormat = useCallback(
     (marker: string) => {
       const editor = editorRef.current;
-      if (!editor) return;
+      if (!editor || readOnly || headingError) return;
+      if (selectionSpansBlocks(editor.getSelection())) return;
+      // Headings own their text, so changing their level must never scope to the preceding
+      // scripture reference. Body formats would fold those words into a verse on save.
+      if (isHeadingMarker(blockMarker)) {
+        if (isHeadingMarker(marker)) {
+          const selection = formatHeadingLevel(editor, marker, handleUsjChange);
+          if (selection) {
+            setBlockMarker(marker);
+            clearTimeout(headingSelectionTimer.current);
+            headingSelectionTimer.current = setTimeout(() => editor.setSelection(selection), 0);
+          }
+        }
+        return;
+      }
+      if (isHeadingMarker(marker)) {
+        const verseNumber = activeVerseRef.current;
+        const verse = knownVersesRef.current.find(row => row.verseNumber === verseNumber);
+        if (verse && (verse.markers?.headings?.length ?? 0) < 4) {
+          setPendingHeading({ verseNumber: verse.verseNumber, marker });
+        }
+        return;
+      }
       // A fresh chapter is one paragraph holding every verse, and the editor's own block
       // formatting restyles the whole block — one click would turn 31 verses into poetry (#427).
       // When the active verse's paragraph spans further than itself, the format is scoped to that
@@ -212,34 +253,84 @@ export function ChapterEditor({
       // claimed otherwise would keep claiming it until the next selection change.
       setBlockMarker(current => (current === undefined ? current : marker));
     },
-    [loadIntoEditor, onVersesChange, restoreAfterLoad]
+    [
+      blockMarker,
+      readOnly,
+      headingError,
+      handleUsjChange,
+      loadIntoEditor,
+      onVersesChange,
+      restoreAfterLoad,
+    ]
   );
+
+  const addHeading = (text: string) => {
+    if (!pendingHeading || readOnly || headingError) return;
+    const { verseNumber, marker } = pendingHeading;
+    const before = knownVersesRef.current;
+    const updated = before.map(verse =>
+      verse.verseNumber === verseNumber
+        ? {
+            ...verse,
+            markers: {
+              ...verse.markers,
+              headings: [...(verse.markers?.headings ?? []), { marker, text }],
+            },
+          }
+        : verse
+    );
+    loadIntoEditor(updated);
+    onVersesChange(changedVerses(before, knownVersesRef.current));
+    setPendingHeading(null);
+    restoreAfterLoad(verseNumber);
+  };
 
   const handleHistoryKeys = useHistoryShortcuts(editorRef);
 
   return (
-    <div
-      className='chapter-editor flex h-full min-h-0 flex-col'
-      data-testid='chapter-editor'
-      onKeyDownCapture={handleHistoryKeys}
-    >
-      {!readOnly && <FormatBar blockMarker={blockMarker} onFormat={handleFormat} />}
-      <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
-        <Editorial
-          ref={editorRef}
-          defaultUsj={initialUsj}
-          options={{
-            isReadonly: readOnly,
-            hasExternalUI: true,
-            hasSpellCheck: false,
-            textDirection: 'auto',
-          }}
-          scrRef={scrRef}
-          onScrRefChange={handleScrRefChange}
-          onStateChange={handleStateChange}
-          onUsjChange={handleUsjChange}
+    <>
+      {pendingHeading && !readOnly && (
+        <SectionHeadingDialog
+          verseNumber={pendingHeading.verseNumber}
+          onAdd={addHeading}
+          onClose={() => setPendingHeading(null)}
         />
+      )}
+      <div
+        className='chapter-editor flex h-full min-h-0 flex-col'
+        data-testid='chapter-editor'
+        onKeyDownCapture={handleHistoryKeys}
+      >
+        {!readOnly && (
+          <FormatBar
+            blockMarker={blockMarker}
+            canAddHeading={
+              activeVerseRef.current !== undefined &&
+              (knownVersesRef.current.find(row => row.verseNumber === activeVerseRef.current)
+                ?.markers?.headings?.length ?? 0) < 4
+            }
+            disabled={Boolean(headingError)}
+            onFormat={handleFormat}
+          />
+        )}
+        <HeadingValidationMessage error={headingError} />
+        <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
+          <Editorial
+            ref={editorRef}
+            defaultUsj={initialUsj}
+            options={{
+              isReadonly: readOnly,
+              hasExternalUI: true,
+              hasSpellCheck: false,
+              textDirection: 'auto',
+            }}
+            scrRef={scrRef}
+            onScrRefChange={handleScrRefChange}
+            onStateChange={handleStateChange}
+            onUsjChange={handleUsjChange}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
 import { useHistoryShortcuts } from '../lib/history-shortcuts';
 import {
   changedVerses,
@@ -9,6 +10,8 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
+
+import { HeadingValidationMessage } from './HeadingValidationMessage';
 
 import '../styles/usj-nodes.css';
 import '../styles/fonts.css';
@@ -56,6 +59,7 @@ export function PericopeEditor({
   onActiveVerseChange,
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
+  const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
@@ -71,6 +75,7 @@ export function PericopeEditor({
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
+      setHeadingError(null);
       const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
       knownVersesRef.current = usjToPericopeVerses(usj);
       suppressedJsonRef.current = JSON.stringify(usj);
@@ -84,7 +89,7 @@ export function PericopeEditor({
   // next commit reports the verse as emptied and writes the suggestion away. Verses the editor
   // already has text in are left alone, since that text is what the translator is looking at.
   useEffect(() => {
-    if (contentKey !== loadedKeyRef.current) return;
+    if (contentKey !== loadedKeyRef.current || headingError) return;
 
     const known = knownVersesRef.current;
     const merged = known.map(verse => {
@@ -95,7 +100,7 @@ export function PericopeEditor({
 
     // Untouched entries come back by reference, so identity is the whole test.
     if (merged.some((verse, index) => verse !== known[index])) loadIntoEditor(merged);
-  }, [contentKey, loadIntoEditor, verses]);
+  }, [contentKey, headingError, loadIntoEditor, verses]);
 
   useEffect(() => {
     if (contentKey === loadedKeyRef.current) return;
@@ -110,6 +115,9 @@ export function PericopeEditor({
       suppressedJsonRef.current = json;
 
       const derived = usjToPericopeVerses(usj);
+      const error = headingErrorIn(derived);
+      setHeadingError(error);
+      if (error) return;
       const changed = changedVerses(knownVersesRef.current, derived);
       if (changed.length === 0) return;
 
@@ -137,6 +145,7 @@ export function PericopeEditor({
       data-testid='pericope-editor'
       onKeyDownCapture={handleHistoryKeys}
     >
+      <HeadingValidationMessage error={headingError} />
       <Editorial
         ref={editorRef}
         defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}

@@ -17,6 +17,25 @@ const verse = (
 const unsplit = [verse(1, 'First.'), verse(2, 'Second.'), verse(3, 'Third.')];
 
 describe('scopeBlockFormatToVerse', () => {
+  it('keeps headings when formatting the verse body and stops at a following heading', () => {
+    const headings = [{ marker: 's1', text: 'The Creation' }];
+    const rows = [
+      { ...unsplit[0], markers: { headings } },
+      unsplit[1],
+      { ...unsplit[2], markers: { headings } },
+    ];
+    const result = scopeBlockFormatToVerse(rows, 1, 'q1')!;
+    expect(result.updated[0].markers).toEqual({
+      headings,
+      paragraphs: [{ marker: 'q1', offset: 0 }],
+    });
+    expect(result.updated[1].markers).toEqual({ paragraphs: [{ marker: 'p', offset: 0 }] });
+    expect(result.updated[2]).toBe(rows[2]);
+    const beforeHeading = scopeBlockFormatToVerse(rows, 2, 'q1')!;
+    expect(beforeHeading.changed.map(row => row.verseNumber)).toEqual([2]);
+    expect(beforeHeading.updated[2]).toBe(rows[2]);
+  });
+
   it('scopes the format to the active verse and reopens the surrounding block after it', () => {
     const result = scopeBlockFormatToVerse(unsplit, 2, 'q1');
     expect(result).not.toBeNull();

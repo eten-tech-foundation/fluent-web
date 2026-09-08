@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { VerseMarkers, VerseParagraph } from '@/lib/types';
+import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
 
 /**
  * What one verse save carries. `markers` undefined means the caller has no opinion (the textarea
@@ -28,12 +28,24 @@ const sameParagraphs = (left: VerseParagraph[] | null, right: VerseParagraph[] |
   );
 };
 
+const sameHeadings = (left: VerseHeading[] | null, right: VerseHeading[] | null): boolean => {
+  if (left === null || right === null) return left === right;
+  return (
+    left.length === right.length &&
+    left.every(
+      (heading, index) =>
+        heading.marker === right[index].marker && heading.text === right[index].text
+    )
+  );
+};
+
 const samePayload = (a: SavePayload | undefined, b: SavePayload | undefined): boolean => {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
   return (
     a.content === b.content &&
-    sameParagraphs(a.markers?.paragraphs ?? null, b.markers?.paragraphs ?? null)
+    sameParagraphs(a.markers?.paragraphs ?? null, b.markers?.paragraphs ?? null) &&
+    sameHeadings(a.markers?.headings ?? null, b.markers?.headings ?? null)
   );
 };
 

@@ -14,6 +14,31 @@ const SPLIT: VerseMarkers = {
 };
 
 describe('useBibleTextDebounce with markers', () => {
+  it('saves title-only edits, level changes, reordering and removal', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    const first = { marker: 's1', text: 'First heading' };
+    const second = { marker: 's2', text: 'Second heading' };
+    result.current.setInitialContent(1, {
+      content: 'Verse.',
+      markers: { headings: [first, second] },
+    });
+    for (const headings of [
+      [{ ...first, text: 'Edited heading' }, second],
+      [{ ...first, marker: 's3' }, second],
+      [second, first],
+      undefined,
+    ]) {
+      const payload = { content: 'Verse.', markers: headings ? { headings } : null };
+      result.current.debouncedSave(1, payload);
+      expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(true);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(onSave).toHaveBeenLastCalledWith(1, payload);
+      expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+    }
+    expect(onSave).toHaveBeenCalledTimes(4);
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
