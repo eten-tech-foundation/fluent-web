@@ -64,8 +64,11 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   );
 
   return (
-    <div className='grid h-full min-h-0 w-full' style={{ gridTemplateColumns: '1fr 1fr' }}>
-      <div className='min-h-0 overflow-y-auto px-6 py-4' style={{ scrollbarGutter: 'stable' }}>
+    <div className='grid h-full min-h-0 w-full grid-cols-2'>
+      <div
+        className='min-h-0 min-w-0 overflow-y-auto px-6 py-4'
+        style={{ scrollbarGutter: 'stable' }}
+      >
         <h4 className='mb-3 text-2xl font-bold text-slate-800 dark:text-slate-100'>
           {projectItem.chapterNumber}
         </h4>
@@ -83,12 +86,13 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         </p>
       </div>
 
-      <div className='border-border min-h-0 border-l' style={{ scrollbarGutter: 'stable' }}>
+      <div className='border-border min-h-0 min-w-0 border-l' style={{ scrollbarGutter: 'stable' }}>
         <ChapterEditor
           bookCode={projectItem.bookCode}
           chapterNumber={projectItem.chapterNumber}
           contentKey={contentKey}
           readOnly={readOnly}
+          targetLanguage={projectItem.targetLanguage}
           verses={editorVerses}
           onActiveVerseChange={handleActiveVerseChange}
           onVersesChange={handleVersesChange}
