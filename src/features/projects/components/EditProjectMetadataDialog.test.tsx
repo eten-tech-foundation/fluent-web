@@ -1,3 +1,5 @@
+import { QueryClientProvider } from '@tanstack/react-query';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +8,7 @@ import { EditProjectMetadataDialog } from '@/features/projects/components/EditPr
 import { type BookDetails } from '@/features/projects/hooks/useBookDetails';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
-import { renderWithProviders, screen, waitFor } from '@/test/render';
+import { createTestQueryClient, render, renderWithProviders, screen, waitFor } from '@/test/render';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -64,10 +66,13 @@ function mockApi(options: { patchStatus?: number; patchMessage?: string } = {}):
 }
 
 function renderDialog(onClose = vi.fn()) {
-  const utils = renderWithProviders(
-    <EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />
-  );
-  return { ...utils, onClose };
+  const queryClient = createTestQueryClient();
+  const utils = render(<EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+  return { ...utils, onClose, queryClient, user: userEvent.setup() };
 }
 
 const bookTrigger = (name: string) => screen.findByRole('button', { name: new RegExp(name) });
@@ -156,13 +161,15 @@ describe('EditProjectMetadataDialog', () => {
 
   it('shows the API message when a save fails', async () => {
     mockApi({ patchStatus: 400, patchMessage: 'must not contain pipes' });
-    const { user } = renderDialog();
+    const { user, unmount } = renderDialog();
 
     await user.click(await bookTrigger('Genesis'));
     await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'a|b');
     await user.tab();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('must not contain pipes');
+    unmount();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('must not contain pipes'));
   });
 
   it('waits for an in-flight save before sending the next one for the same field', async () => {
@@ -219,7 +226,7 @@ describe('EditProjectMetadataDialog', () => {
     );
 
     const onClose = vi.fn();
-    const { user, rerender } = renderWithProviders(
+    const { user, rerender, unmount } = renderWithProviders(
       <EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />
     );
 
@@ -237,5 +244,96 @@ describe('EditProjectMetadataDialog', () => {
     rerender(<EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />);
     await user.click(await bookTrigger('Genesis'));
     expect(screen.getByPlaceholderText('bookLongNamePlaceholder')).toHaveValue('a|b');
+    unmount();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+  });
+
+  it('saves pending changes when the URL closes the dialog without a blur', async () => {
+    const patches = mockApi();
+    const { user, rerender, onClose, queryClient } = renderDialog();
+
+    await user.click(await bookTrigger('Genesis'));
+    await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'Genesis');
+
+    rerender(<EditProjectMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(patches[0]).toEqual({ bookId: '1', body: { tocLongName: 'Genesis' } });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('saves pending changes when navigation unmounts the dialog', async () => {
+    const patches = mockApi();
+    const { user, unmount, queryClient } = renderDialog();
+
+    await user.click(await bookTrigger('Genesis'));
+    await user.type(screen.getByPlaceholderText('bookAbbreviationPlaceholder'), 'Gn');
+    unmount();
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(patches[0]).toEqual({ bookId: '1', body: { tocAbbreviation: 'Gn' } });
+  });
+
+  it('isolates drafts and late save responses when the project changes', async () => {
+    const patches: Array<Patch & { projectUnitId: string }> = [];
+    let release: (() => void) | undefined;
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${config.api.url}/project-units/:projectUnitId/book-details`, ({ params }) =>
+        HttpResponse.json([
+          { ...genesis, tocLongName: params.projectUnitId === '7' ? 'Project A' : 'Project B' },
+        ])
+      ),
+      http.patch(
+        `${config.api.url}/project-units/:projectUnitId/book-details/:bookId`,
+        async ({ params, request }) => {
+          const body = (await request.json()) as Record<string, string | null>;
+          patches.push({
+            projectUnitId: String(params.projectUnitId),
+            bookId: String(params.bookId),
+            body,
+          });
+          if (params.projectUnitId === '7') await held;
+          return HttpResponse.json({ ...genesis, ...body });
+        }
+      )
+    );
+    const { user, rerender, onClose, queryClient } = renderDialog();
+
+    await user.click(await bookTrigger('Genesis'));
+    await user.clear(screen.getByPlaceholderText('bookLongNamePlaceholder'));
+    await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'Shared title');
+
+    rerender(<EditProjectMetadataDialog isOpen projectUnitId={8} onClose={onClose} />);
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({
+      projectUnitId: '7',
+      bookId: '1',
+      body: { tocLongName: 'Shared title' },
+    });
+    expect(await bookTrigger('Genesis')).toHaveAttribute('aria-expanded', 'false');
+    await user.click(await bookTrigger('Genesis'));
+    const longName = screen.getByPlaceholderText('bookLongNamePlaceholder');
+    expect(longName).toHaveValue('Project B');
+    await user.clear(longName);
+    await user.type(longName, 'Shared title');
+
+    release?.();
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    // Project A's matching response must not settle Project B's unsaved draft.
+    expect(longName).toHaveValue('Shared title');
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(patches[1]).toEqual({
+      projectUnitId: '8',
+      bookId: '1',
+      body: { tocLongName: 'Shared title' },
+    });
   });
 });

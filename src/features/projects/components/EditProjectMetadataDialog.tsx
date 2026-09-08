@@ -76,7 +76,13 @@ const serverValues = (book: BookDetails): TocValues => ({
 
 const inFlightKey = (bookId: number, field: TocField) => `${bookId}:${field}`;
 
-export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps> = ({
+// A new project gets its own drafts, save queue and callbacks. An old PATCH can finish
+// without settling a matching draft in the newly selected project.
+export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps> = props => (
+  <ProjectMetadataSession key={props.projectUnitId} {...props} />
+);
+
+const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
   isOpen,
   projectUnitId,
   onClose,
@@ -95,9 +101,7 @@ export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps>
   const inFlightRef = useRef<Record<string, string>>({});
   const saveChainRef = useRef<Record<number, Promise<void>>>({});
   const isOpenRef = useRef(isOpen);
-  useEffect(() => {
-    isOpenRef.current = isOpen;
-  }, [isOpen]);
+  const flushRef = useRef<() => void>(() => {});
 
   const valueOf = (book: BookDetails, field: TocField): string =>
     drafts[book.bookId]?.[field] ?? serverValues(book)[field];
@@ -190,10 +194,36 @@ export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps>
     save(book, dirtyFields(book, field));
   };
 
-  const handleClose = () => {
-    for (const book of books ?? []) {
-      save(book, dirtyFields(book));
+  // Keep the latest books and project-bound save function available to lifecycle cleanup.
+  useEffect(() => {
+    flushRef.current = () => {
+      for (const book of books ?? []) {
+        save(book, dirtyFields(book));
+      }
+    };
+  });
+
+  useEffect(() => {
+    if (isOpenRef.current && !isOpen) {
+      // A URL change (including browser Back) bypasses Radix's onOpenChange.
+      flushRef.current();
+      setOpenBooks([]);
+      setSaveError(null);
     }
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(
+    () => () => {
+      isOpenRef.current = false;
+      // Route changes can unmount the dialog while a field still has focus.
+      flushRef.current();
+    },
+    []
+  );
+
+  const handleClose = () => {
+    flushRef.current();
     // Drafts are not wiped here. `settleDrafts` drops each one as the server confirms it, so an
     // edit whose close-time save fails stays in the field instead of being thrown away silently.
     setOpenBooks([]);

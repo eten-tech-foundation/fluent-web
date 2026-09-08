@@ -74,5 +74,6 @@
   "loadingBooks": "Loading books...",
   "noBooksInProject": "No books found in this project",
   "bookDetailsSaveFailed": "Failed to save changes",
-  "close": "Close"
+  "close": "Close",
+  "usfmFilesValidated": "USFM file(s) validated"
 }
