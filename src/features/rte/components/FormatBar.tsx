@@ -1,6 +1,18 @@
+import {
+  AlignLeft,
+  Heading,
+  Heading1,
+  Heading2,
+  Heading3,
+  Heading4,
+  IndentDecrease,
+  IndentIncrease,
+  Pilcrow,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@/components/ui/button';
+import { Button, type ButtonProps } from '@/components/ui/button';
 
 import {
   blockKindOf,
@@ -18,11 +30,25 @@ export interface FormatBarProps {
   onFormat: (marker: string) => void;
 }
 
-const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string }> = [
-  { kind: 'paragraph', labelKey: 'blockParagraph', fallback: 'Paragraph' },
-  { kind: 'heading', labelKey: 'blockSectionHeading', fallback: 'Section Heading' },
-  { kind: 'poetry', labelKey: 'blockPoetryLine', fallback: 'Poetry Line' },
+const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string; icon: LucideIcon }> = [
+  { kind: 'paragraph', labelKey: 'blockParagraph', fallback: 'Paragraph', icon: Pilcrow },
+  { kind: 'heading', labelKey: 'blockSectionHeading', fallback: 'Section Heading', icon: Heading },
+  { kind: 'poetry', labelKey: 'blockPoetryLine', fallback: 'Poetry Line', icon: AlignLeft },
 ];
+
+const HEADING_ICONS = { 1: Heading1, 2: Heading2, 3: Heading3, 4: Heading4 };
+
+/** Disabled buttons ignore pointer events, so their wrapper owns the hover tooltip. */
+function FormatButton({ title, ...props }: ButtonProps & { title: string }) {
+  return (
+    <span
+      className={props.disabled ? 'inline-flex cursor-not-allowed' : 'inline-flex'}
+      title={title}
+    >
+      <Button {...props} title={title} />
+    </span>
+  );
+}
 
 /**
  * Kinds the bar shows but will not apply. Section Heading is off until the API can store one
@@ -57,17 +83,23 @@ export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
   return (
     <div
       aria-label={t('formatBar', 'Formatting')}
-      className='border-border bg-background sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b px-6 py-2'
+      className='ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2'
       role='toolbar'
     >
       <div className='flex items-center gap-1'>
         {KINDS.map(option => {
           const unavailable = UNAVAILABLE_KINDS.has(option.kind);
+          const Icon = option.icon;
+          const label = t(option.labelKey, option.fallback);
+          const tooltip = unavailable
+            ? t('blockSectionHeadingUnavailable', 'Section headings are not available yet')
+            : label;
           return (
-            <Button
+            <FormatButton
               key={option.kind}
+              aria-label={label}
               aria-pressed={kind === option.kind}
-              className={`h-7 rounded-md px-3 text-xs font-semibold transition-colors ${
+              className={`h-7 w-7 rounded-md p-0 transition-colors ${
                 unavailable ? 'cursor-not-allowed' : 'cursor-pointer'
               } ${
                 kind === option.kind
@@ -75,15 +107,11 @@ export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
                   : 'text-muted-foreground hover:bg-hover bg-transparent'
               }`}
               disabled={unavailable}
-              title={
-                unavailable
-                  ? t('blockSectionHeadingUnavailable', 'Section headings are not available yet')
-                  : undefined
-              }
+              title={tooltip}
               onClick={() => onFormat(markerFor(option.kind, level))}
             >
-              {t(option.labelKey, option.fallback)}
-            </Button>
+              <Icon aria-hidden='true' className='h-4 w-4' />
+            </FormatButton>
           );
         })}
       </div>
@@ -95,49 +123,56 @@ export function FormatBar({ blockMarker, onFormat }: FormatBarProps) {
       )}
 
       {kind === 'heading' && (
-        <div className='flex items-center gap-1 pl-2' data-testid='heading-levels'>
-          <span className='text-muted-foreground text-xs'>{t('headingLevel', 'Level')}</span>
-          {HEADING_LEVELS.map(headingLevel => (
-            <Button
-              key={headingLevel}
-              aria-pressed={level === headingLevel}
-              className={`h-7 w-7 cursor-pointer rounded-md p-0 text-xs font-semibold transition-colors ${
-                level === headingLevel
-                  ? 'bg-primary text-white'
-                  : 'text-muted-foreground hover:bg-hover bg-transparent'
-              }`}
-              onClick={() => onFormat(markerFor('heading', headingLevel))}
-            >
-              {headingLevel}
-            </Button>
-          ))}
+        <div className='flex flex-wrap items-center justify-end gap-1' data-testid='heading-levels'>
+          {HEADING_LEVELS.map(headingLevel => {
+            const Icon = HEADING_ICONS[headingLevel];
+            const label = `${t('headingLevel', 'Level')} ${headingLevel}`;
+            return (
+              <FormatButton
+                key={headingLevel}
+                aria-label={label}
+                aria-pressed={level === headingLevel}
+                className={`h-7 w-7 cursor-pointer rounded-md p-0 text-xs font-semibold transition-colors ${
+                  level === headingLevel
+                    ? 'bg-primary text-white'
+                    : 'text-muted-foreground hover:bg-hover bg-transparent'
+                }`}
+                title={label}
+                onClick={() => onFormat(markerFor('heading', headingLevel))}
+              >
+                <Icon aria-hidden='true' className='h-4 w-4' />
+              </FormatButton>
+            );
+          })}
         </div>
       )}
 
       {kind === 'poetry' && (
-        <div className='flex items-center gap-1 pl-2' data-testid='poetry-indent'>
-          <Button
+        <div className='flex items-center gap-1' data-testid='poetry-indent'>
+          <FormatButton
             aria-label={t('decreaseIndent', 'Decrease indent')}
-            className='text-muted-foreground hover:bg-hover h-7 cursor-pointer rounded-md bg-transparent px-2 text-xs font-semibold'
+            className='text-muted-foreground hover:bg-hover h-7 w-7 cursor-pointer rounded-md bg-transparent p-0'
             disabled={!canOutdent}
+            title={t('decreaseIndent', 'Decrease indent')}
             onClick={() => {
               const marker = outdentedMarker(blockMarker);
               if (marker) onFormat(marker);
             }}
           >
-            ⇤
-          </Button>
-          <Button
+            <IndentDecrease aria-hidden='true' className='h-4 w-4' />
+          </FormatButton>
+          <FormatButton
             aria-label={t('increaseIndent', 'Increase indent')}
-            className='text-muted-foreground hover:bg-hover h-7 cursor-pointer rounded-md bg-transparent px-2 text-xs font-semibold'
+            className='text-muted-foreground hover:bg-hover h-7 w-7 cursor-pointer rounded-md bg-transparent p-0'
             disabled={!canIndent}
+            title={t('increaseIndent', 'Increase indent')}
             onClick={() => {
               const marker = indentedMarker(blockMarker);
               if (marker) onFormat(marker);
             }}
           >
-            ⇥
-          </Button>
+            <IndentIncrease aria-hidden='true' className='h-4 w-4' />
+          </FormatButton>
         </div>
       )}
     </div>

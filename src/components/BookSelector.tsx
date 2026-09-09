@@ -82,11 +82,11 @@ export function BibleBookMultiSelectPopover({
   if (disabled) {
     return (
       <div ref={wrapperRef} className='w-full'>
-        <div className='box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-left text-sm'>
+        <div className='bg-background border-input text-muted-foreground flex h-9 w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-left text-sm opacity-60 shadow-2xs'>
           <span className='truncate'>
             {books.length === 0 ? 'No books available' : 'Select a bible first'}
           </span>
-          <ChevronDown className='ml-2 h-4 w-4 shrink-0' />
+          <ChevronDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
         </div>
       </div>
     );
@@ -95,18 +95,22 @@ export function BibleBookMultiSelectPopover({
   return (
     <div ref={wrapperRef} className='w-full'>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger className='box-border flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800'>
+        <PopoverTrigger className='bg-background border-input hover:bg-background focus:ring-ring/50 flex h-9 w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-sm shadow-2xs transition-colors focus:ring-2 focus:outline-none'>
           <span
-            className={selectedLabels.length === 0 ? 'text-muted-foreground truncate' : 'truncate'}
+            className={
+              selectedLabels.length === 0
+                ? 'text-muted-foreground truncate'
+                : 'text-foreground truncate font-medium'
+            }
           >
             {displayText}
           </span>
-          <ChevronDown className='ml-2 h-4 w-4 shrink-0' />
+          <ChevronDown className='text-muted-foreground ml-2 h-4 w-4 shrink-0 opacity-70' />
         </PopoverTrigger>
 
         <PopoverContent
           align='start'
-          className='text-popover-foreground pointer-events-auto rounded-md border p-0 shadow-md'
+          className='bg-sidebar dark:bg-sidebar border-border text-foreground pointer-events-auto z-50 rounded-lg p-1.5 shadow-xl'
           side='top'
           style={{
             width: wrapperWidth ? `${Math.round(wrapperWidth)}px` : undefined,
@@ -116,20 +120,20 @@ export function BibleBookMultiSelectPopover({
           onOpenAutoFocus={e => e.preventDefault()}
         >
           <div
-            className='max-h-82 overflow-y-auto py-1'
+            className='max-h-82 space-y-0.5 overflow-y-auto py-0.5'
             onTouchMove={e => e.stopPropagation()}
             onWheel={e => e.stopPropagation()}
           >
             {books.length === 0 ? (
-              <div className='px-3 py-2 text-sm'>No books available</div>
+              <div className='text-muted-foreground px-3 py-2 text-sm'>No books available</div>
             ) : (
               books.map(book => {
                 const checked = value.includes(book.book.id);
                 return (
                   <label
                     key={book.book.id}
-                    className={`hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm ${
-                      checked ? 'bg-accent/40' : ''
+                    className={`hover:bg-background/80 hover:text-foreground flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                      checked ? 'bg-background font-semibold shadow-2xs' : ''
                     }`}
                   >
                     <Checkbox
