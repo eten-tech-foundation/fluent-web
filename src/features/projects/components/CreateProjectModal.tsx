@@ -74,25 +74,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setIsSubmitting(false);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (formData.sourceLanguage) {
-      setFormData(prev => ({
-        ...prev,
-        sourceBible: null,
-        books: [],
-      }));
-    }
-  }, [formData.sourceLanguage]);
-
-  useEffect(() => {
-    if (formData.sourceBible) {
-      setFormData(prev => ({
-        ...prev,
-        books: [],
-      }));
-    }
-  }, [formData.sourceBible]);
-
   const isFormValid = (): boolean => {
     return Boolean(
       formData.title.trim() &&
@@ -144,11 +125,15 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
   };
 
-  const updateFormData = (
-    field: keyof ProjectFormData,
-    value: string | number | number[] | null
+  const updateFormData = <K extends keyof ProjectFormData>(
+    field: K,
+    value: ProjectFormData[K]
   ): void => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBooksChange = (books: number[]): void => {
+    setFormData(prev => ({ ...prev, books }));
   };
 
   const isButtonDisabled = isLoading || isSubmitting || !isFormValid();
@@ -174,7 +159,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className='max-h-[90vh] overflow-y-auto sm:max-w-[500px]'
+        className='max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-[500px]'
         onInteractOutside={e => e.preventDefault()}
       >
         <DialogHeader>
@@ -191,7 +176,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             <div className='space-y-6 py-6'>
               <ProjectFormFields
                 formData={formData}
-                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
+                onBooksChange={handleBooksChange}
                 onFieldChange={updateFormData}
               />
 
@@ -228,7 +213,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <UsfmImportTab
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}
-                onBooksChange={newBooks => setFormData(prev => ({ ...prev, books: newBooks }))}
+                onBooksChange={handleBooksChange}
                 onFieldChange={updateFormData}
                 onSubmit={files => void handleSubmit(files)}
               />
