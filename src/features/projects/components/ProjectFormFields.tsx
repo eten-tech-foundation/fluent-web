@@ -1,4 +1,4 @@
-import { Info, Loader2, Headphones, VolumeX } from 'lucide-react';
+import { Info, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
-import { useBibleBooks, useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
+import { SourceBiblePicker } from '@/features/projects/components/SourceBiblePicker';
+import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import {
   CONNECTIVITY_PROFILE_NONE,
@@ -61,9 +62,6 @@ export function ProjectFormFields({
 }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
-  const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
-    formData.sourceLanguage
-  );
   const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
@@ -88,61 +86,17 @@ export function ProjectFormFields({
         />
       </div>
 
-      <div className='space-y-2'>
-        <Label className='gap-1'>
-          <span className='text-destructive'>*</span>
-          {t('sourceLanguage')}
-        </Label>
-        <SearchableSelect
-          disabled={languagesLoading}
-          options={languageOptions}
-          placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
-          value={formData.sourceLanguage?.toString() ?? ''}
-          onChange={value => onFieldChange('sourceLanguage', parseInt(value, 10))}
-        />
-      </div>
-
-      <div className='space-y-2'>
-        <Label className='gap-1'>
-          <span className='text-destructive'>*</span>
-          {t('sourceBible')}
-        </Label>
-        <SearchableSelect
-          disabled={!formData.sourceLanguage || sourceBiblesLoading}
-          emptyText='No bibles for this language'
-          options={
-            sourceBibles?.map(bible => ({
-              value: bible.id.toString(),
-              label: `${bible.name} (${bible.abbreviation})`,
-              icon: bible.hasAudio ? <Headphones className='h-4 w-4' /> : undefined,
-            })) ?? []
-          }
-          placeholder={
-            !formData.sourceLanguage
-              ? 'Select Source Language First'
-              : sourceBiblesLoading
-                ? 'Loading bibles...'
-                : 'Select Source Bible'
-          }
-          value={formData.sourceBible?.toString() ?? ''}
-          onChange={value => onFieldChange('sourceBible', parseInt(value, 10))}
-        />
-        {formData.sourceBible && sourceBibles?.find(b => b.id === formData.sourceBible) && (
-          <div className='text-muted-foreground mt-2 flex items-center gap-2 text-sm'>
-            {sourceBibles.find(b => b.id === formData.sourceBible)?.hasAudio ? (
-              <>
-                <Headphones className='text-primary h-4 w-4 shrink-0' />
-                <span>Audio available — included as offline source</span>
-              </>
-            ) : (
-              <>
-                <VolumeX className='h-4 w-4 shrink-0 opacity-50' />
-                <span>No audio version available for this Bible</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <SourceBiblePicker
+        value={{
+          sourceBible: formData.sourceBible,
+          sourceLanguage: formData.sourceLanguage,
+        }}
+        onChange={selection => {
+          onFieldChange('sourceBible', selection?.sourceBible ?? null);
+          onFieldChange('sourceLanguage', selection?.sourceLanguage ?? null);
+          onBooksChange([]);
+        }}
+      />
 
       <div className='space-y-2'>
         <Label className='gap-1'>
