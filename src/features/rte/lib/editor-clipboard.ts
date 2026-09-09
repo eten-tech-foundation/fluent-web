@@ -1,4 +1,12 @@
-import type { ClipboardEvent } from 'react';
+import type { ClipboardEvent, MouseEvent } from 'react';
+
+/** The built-in Paste menu also uses the permission-gated Clipboard API. */
+export function handleEditorContextMenu(event: MouseEvent<HTMLElement>) {
+  if (event.target instanceof HTMLElement && event.target.closest('.editor-input')) {
+    // Leave the default action intact so the browser can supply its native clipboard menu.
+    event.stopPropagation();
+  }
+}
 
 /** Keep the shared editor's tab-to-space cleanup when using native paste events. */
 export function handleEditorPaste(event: ClipboardEvent<HTMLElement>) {

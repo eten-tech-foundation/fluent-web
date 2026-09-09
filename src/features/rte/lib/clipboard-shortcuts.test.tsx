@@ -50,6 +50,24 @@ describe.each([
     Reflect.deleteProperty(Range.prototype, 'getClientRects');
   });
 
+  it('keeps the native context menu available for mouse copy and paste', async () => {
+    const { container } = render(
+      <Editor
+        bookCode='GEN'
+        chapterNumber={1}
+        contentKey='context-menu'
+        verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
+        onVersesChange={vi.fn()}
+      />
+    );
+    await waitFor(() =>
+      expect(container.querySelector('.editor-input')).toHaveTextContent('First verse text.')
+    );
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    fireEvent(container.querySelector('.editor-input [data-lexical-text]')!, event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it.each(
     ['c', 'x', 'v', 'V'].flatMap(key => ['ctrlKey', 'metaKey'].map(modifier => ({ key, modifier })))
   )(

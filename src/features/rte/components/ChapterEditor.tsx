@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
-import { handleEditorPaste } from '../lib/editor-clipboard';
+import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import {
   changedVerses,
@@ -222,6 +222,7 @@ export function ChapterEditor({
     <div
       className='chapter-editor flex h-full min-h-0 flex-col'
       data-testid='chapter-editor'
+      onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={handleEditorKeys}
       onPasteCapture={handleEditorPaste}
     >

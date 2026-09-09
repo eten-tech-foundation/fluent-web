@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
-import { handleEditorPaste } from '../lib/editor-clipboard';
+import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import {
   changedVerses,
@@ -136,6 +136,7 @@ export function PericopeEditor({
     <div
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
+      onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={handleEditorKeys}
       onPasteCapture={handleEditorPaste}
     >
