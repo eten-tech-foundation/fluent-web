@@ -29,6 +29,7 @@ export interface ChapterEditorProps {
   /** Every verse of the chapter, in order. */
   verses: PericopeVerseText[];
   chapterNumber: number;
+  targetLanguage: string;
   bookCode?: string;
   readOnly?: boolean;
   /** Reloads the editor from `verses` when this changes, e.g. on chapter navigation. */
@@ -55,6 +56,7 @@ export interface ChapterEditorProps {
 export function ChapterEditor({
   verses,
   chapterNumber,
+  targetLanguage,
   bookCode,
   readOnly = false,
   contentKey,
@@ -220,13 +222,21 @@ export function ChapterEditor({
 
   return (
     <div
-      className='chapter-editor flex h-full min-h-0 flex-col'
+      className='chapter-editor flex h-full min-h-0 min-w-0 flex-col'
       data-testid='chapter-editor'
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={handleEditorKeys}
       onPasteCapture={handleEditorPaste}
     >
-      {!readOnly && <FormatBar blockMarker={blockMarker} onFormat={handleFormat} />}
+      <div className='border-border bg-background z-10 flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-2'>
+        <h3
+          className='dark:text-foreground line-clamp-2 min-w-0 flex-[1_1_10rem] text-left text-2xl font-bold [overflow-wrap:anywhere] text-slate-800'
+          title={targetLanguage}
+        >
+          {targetLanguage}
+        </h3>
+        {!readOnly && <FormatBar blockMarker={blockMarker} onFormat={handleFormat} />}
+      </div>
       <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
         <Editorial
           ref={editorRef}
