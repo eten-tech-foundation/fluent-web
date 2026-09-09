@@ -1,10 +1,13 @@
-# Cuts a CalVer release and walks it through QA to production.
+# Cuts a CalVer release, tags it, and deploys it to QA.
 #
-# One run, one audit trail: `deploy-prod` deploys `needs.tag.outputs.tag`, the
-# exact tag `deploy-qa` just built, so prod cannot ship something QA never saw.
-# The pause before prod is the `production` Environment's required reviewers --
-# an environment rule rather than a gate job, so it also covers the other route
-# to prod (`promote-to-prod.yml`). A gate job would only guard this workflow.
+# Deliberately stops at QA. Promoting the tag to production is a separate,
+# explicit action -- run `promote-to-prod.yml` with this tag after QA
+# sign-off. That workflow already refuses tags with no successful QA
+# deployment, so the QA stage cannot be skipped by using it instead of this
+# one. Keeping prod out of this workflow means shipping to production never
+# happens as a side effect of cutting a release -- it always takes its own
+# deliberate run, regardless of how the `production` Environment's reviewer
+# rules are configured.
 name: Cut release
 
 on:
@@ -83,16 +86,4 @@ jobs:
       environment: qa
       # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
       vite_environment: staging
-      app_version: ${{ needs.tag.outputs.tag }}
-
-  deploy-prod:
-    needs: [tag, deploy-qa]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/deploy.yml
-    secrets: inherit
-    with:
-      ref: ${{ needs.tag.outputs.tag }}
-      environment: production
-      vite_environment: production
       app_version: ${{ needs.tag.outputs.tag }}

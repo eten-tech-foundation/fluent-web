@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,22 @@ const resourceTabs = [
   { id: 'aq-1', label: 'ULT' },
   { id: 'yv-2', label: 'NIV' },
 ];
+
+function ControlledTabs({ onSelect }: { onSelect: (id: string) => void }) {
+  const [activeTabId, setActiveTabId] = useState('yv-2');
+  return (
+    <BibleTabList
+      activeTabId={activeTabId}
+      resourceTabs={resourceTabs}
+      sourceLabel='WEB'
+      onClose={vi.fn()}
+      onSelect={id => {
+        setActiveTabId(id);
+        onSelect(id);
+      }}
+    />
+  );
+}
 
 describe('BibleTabList', () => {
   it('keeps the source Bible first when several resource Bibles are open', () => {
@@ -49,15 +67,7 @@ describe('BibleTabList', () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
 
-    render(
-      <BibleTabList
-        activeTabId='yv-2'
-        resourceTabs={resourceTabs}
-        sourceLabel='WEB'
-        onClose={vi.fn()}
-        onSelect={onSelect}
-      />
-    );
+    render(<ControlledTabs onSelect={onSelect} />);
 
     await user.click(screen.getByRole('tab', { name: 'WEB' }));
     await user.click(screen.getByRole('tab', { name: 'ULT' }));
@@ -69,15 +79,7 @@ describe('BibleTabList', () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
 
-    render(
-      <BibleTabList
-        activeTabId='yv-2'
-        resourceTabs={resourceTabs}
-        sourceLabel='WEB'
-        onClose={vi.fn()}
-        onSelect={onSelect}
-      />
-    );
+    render(<ControlledTabs onSelect={onSelect} />);
 
     const sourceTab = screen.getByRole('tab', { name: 'WEB' });
     const firstResourceTab = screen.getByRole('tab', { name: 'ULT' });

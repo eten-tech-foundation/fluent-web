@@ -8,7 +8,11 @@ import { SOURCE_BIBLE_TAB_ID, type ResourceBibleTab } from './BibleTabList';
 import { DraftingChapterView } from './DraftingChapterView';
 
 vi.mock('@/features/rte/components/ChapterEditor', () => ({
-  ChapterEditor: () => <div data-testid='chapter-editor' />,
+  ChapterEditor: ({ targetLanguage }: { targetLanguage: string }) => (
+    <div data-testid='chapter-editor'>
+      <h3>{targetLanguage}</h3>
+    </div>
+  ),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -49,10 +53,11 @@ const resourceBibleTabs: ResourceBibleTab[] = [
   {
     id: 'aq-alternative',
     label: 'Alternative Bible',
+    language: 'eng',
     verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
     isLoading: false,
   },
-  { id: 'yv-empty', label: 'Empty Bible', verses: [], isLoading: false },
+  { id: 'yv-empty', label: 'Empty Bible', language: 'eng', verses: [], isLoading: false },
 ];
 
 const commonProps = {

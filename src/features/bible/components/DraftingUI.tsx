@@ -606,26 +606,23 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [moveToNextVerse]
   );
 
-  const resetBibleState = useCallback(() => {
-    clearBibleRef.current?.();
-    setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
-    setResourceBibleTabs([]);
-    setResourcePanelSelectedBibleId(null);
-  }, []);
+  const handleBibleSelect = useCallback(
+    (bible: { id: string; label: string; language: string }) => {
+      setResourcePanelSelectedBibleId(bible.id);
+      setResourceBibleTabs(currentTabs => {
+        const existing = currentTabs.find(tab => tab.id === bible.id);
+        if (existing) {
+          if (existing.label === bible.label && existing.language === bible.language)
+            return currentTabs;
+          return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
+        }
 
-  const handleBibleSelect = useCallback((bible: { id: string; label: string }) => {
-    setResourcePanelSelectedBibleId(bible.id);
-    setResourceBibleTabs(currentTabs => {
-      const existing = currentTabs.find(tab => tab.id === bible.id);
-      if (existing) {
-        if (existing.label === bible.label) return currentTabs;
-        return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, label: bible.label } : tab));
-      }
-
-      return [...currentTabs, { ...bible, verses: [], isLoading: true }];
-    });
-    setActiveBibleTabId(bible.id);
-  }, []);
+        return [...currentTabs, { ...bible, verses: [], isLoading: true }];
+      });
+      setActiveBibleTabId(bible.id);
+    },
+    []
+  );
 
   const handleBibleTabSelect = useCallback(
     (tabId: string) => {
@@ -633,9 +630,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       if (tabId === SOURCE_BIBLE_TAB_ID) return;
 
       setResourcePanelSelectedBibleId(tabId);
-      if (resourceBibleTabs.find(tab => tab.id === tabId)?.isLoading) {
+      const tab = resourceBibleTabs.find(tab => tab.id === tabId);
+      if (tab) setCurrentLanguage(tab.language);
+      if (tab?.isLoading) {
         setCurrentResource(BIBLES_RESOURCE);
         setActiveLeftTab('resources');
+        setShowResources(true);
       }
     },
     [resourceBibleTabs]
@@ -654,18 +654,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, []);
 
   const toggleResources = useCallback(() => {
-    setShowResources(prev => {
-      const nextShow = !prev;
-
-      // When hiding the resource panel, ResourcePanel unmounts and loses its
-      // internal hook state (selectedBible resets to null).
-      if (!nextShow) {
-        resetBibleState();
-      }
-
-      return nextShow;
-    });
-  }, [resetBibleState]);
+    setShowResources(prev => !prev);
+  }, []);
 
   const handleBibleTabClose = useCallback(
     (bibleId: string) => {

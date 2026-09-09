@@ -95,12 +95,6 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         />
       </div>
 
-      <div className='border-border bg-background border-l px-6 py-3'>
-        <h3 className='dark:text-foreground text-2xl font-bold text-slate-800'>
-          {projectItem.targetLanguage}
-        </h3>
-      </div>
-
       <div className='min-h-0 overflow-y-auto px-6 py-4' style={{ scrollbarGutter: 'stable' }}>
         {selectedPanel === 2 && bibleContentLoading ? (
           <div className='flex h-full items-center justify-center'>
@@ -135,12 +129,16 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         )}
       </div>
 
-      <div className='border-border min-h-0 border-l' style={{ scrollbarGutter: 'stable' }}>
+      <div
+        className='border-border col-start-2 row-span-2 row-start-1 min-h-0 min-w-0 border-l'
+        style={{ scrollbarGutter: 'stable' }}
+      >
         <ChapterEditor
           bookCode={projectItem.bookCode}
           chapterNumber={projectItem.chapterNumber}
           contentKey={contentKey}
           readOnly={readOnly}
+          targetLanguage={projectItem.targetLanguage}
           verses={editorVerses}
           onActiveVerseChange={handleActiveVerseChange}
           onVersesChange={handleVersesChange}

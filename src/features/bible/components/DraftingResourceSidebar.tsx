@@ -16,7 +16,7 @@ interface DraftingResourceSidebarProps {
   currentLanguage: string;
   currentResource: ResourceName;
   clearBibleRef: React.MutableRefObject<(() => void) | null>;
-  onBibleSelect: (bible: { id: string; label: string }) => void;
+  onBibleSelect: (bible: { id: string; label: string; language: string }) => void;
   onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
   onBibleVersesChange: (bibleId: string, verses: BibleVerse[]) => void;
   selectedBibleId: string | null;

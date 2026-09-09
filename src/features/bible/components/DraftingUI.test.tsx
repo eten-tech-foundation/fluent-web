@@ -1,5 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { type ComponentProps } from 'react';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
@@ -13,6 +17,7 @@ import {
   type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+import { server } from '@/test/msw/server';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -142,70 +147,68 @@ vi.mock('@/features/flags', () => ({
   useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
 }));
 
-// Mock ResourcePanel
-vi.mock('@/features/resources/components/ResourcePanel', () => ({
-  ResourcePanel: ({
-    activeVerseId,
-    initialResource,
-    selectedBibleId,
-    onBibleLoadingChange,
-    onBibleSelect,
-    onBibleVersesChange,
-    onResourceChange,
-  }: {
-    activeVerseId: number;
-    initialResource?: { id: string; name: string };
-    selectedBibleId?: string | null;
-    onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
-    onBibleSelect: (bible: { id: string; label: string }) => void;
-    onBibleVersesChange: (
-      bibleId: string,
-      verses: Array<{ verseNumber: number; text: string }>
-    ) => void;
-    onResourceChange: (resource: { id: string; name: string }) => void;
-  }) => {
-    const handleSelectBible = () => {
-      onBibleSelect({ id: 'aq-alternative', label: 'Alternative Bible' });
-      onBibleLoadingChange('aq-alternative', false);
-      onBibleVersesChange('aq-alternative', [
-        { verseNumber: 1, text: 'Alternative verse 1 text' },
-        { verseNumber: 2, text: 'Alternative verse 2 text' },
-      ]);
-    };
-    const handleSelectSecondBible = () => {
-      onBibleSelect({ id: 'yv-second', label: 'Second Bible' });
-      onBibleLoadingChange('yv-second', false);
-      onBibleVersesChange('yv-second', [
-        { verseNumber: 1, text: 'Second Bible verse 1 text' },
-        { verseNumber: 2, text: 'Second Bible verse 2 text' },
-      ]);
-    };
-    // A Bible with nothing for this passage: panel 2 is selected but has no verses, which is what
-    // puts the drafting page on its panel-two placeholder.
-    const handleSelectEmptyBible = () => {
-      onBibleSelect({ id: 'aq-empty', label: 'Empty Bible' });
-      onBibleLoadingChange('aq-empty', false);
-      onBibleVersesChange('aq-empty', []);
-    };
-    const handleSelectLoadingBible = () => {
-      onBibleSelect({ id: 'aq-loading', label: 'Loading Bible' });
-    };
-    return (
-      <div data-testid='mock-resource-panel'>
-        <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
-        <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
-        <span data-testid='mock-current-resource'>{initialResource?.id ?? 'none'}</span>
-        <button onClick={handleSelectBible}>Select Alternative Bible</button>
-        <button onClick={handleSelectSecondBible}>Select Second Bible</button>
-        <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
-        <button onClick={handleSelectLoadingBible}>Select Loading Bible</button>
-        <button onClick={() => onResourceChange({ id: 'UWTranslationNotes', name: 'TN' })}>
-          Select Notes Resource
-        </button>
-      </div>
-    );
-  },
-}));
+const resourcePanelMode = vi.hoisted(() => ({ real: false }));
+
+// Most drafting tests isolate resources. Regression tests below use the real
+// panel and hooks with only the remote API responses intercepted.
+vi.mock('@/features/resources/components/ResourcePanel', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('@/features/resources/components/ResourcePanel')>();
+  return {
+    ResourcePanel: (props: ComponentProps<typeof actual.ResourcePanel>) => {
+      if (resourcePanelMode.real) return <actual.ResourcePanel {...props} />;
+      const {
+        activeVerseId,
+        initialResource,
+        selectedBibleId,
+        onBibleLoadingChange,
+        onBibleSelect,
+        onBibleVersesChange,
+        onResourceChange,
+      } = props;
+      const handleSelectBible = () => {
+        onBibleSelect?.({ id: 'aq-alternative', label: 'Alternative Bible', language: 'eng' });
+        onBibleLoadingChange?.('aq-alternative', false);
+        onBibleVersesChange?.('aq-alternative', [
+          { verseNumber: 1, text: 'Alternative verse 1 text' },
+          { verseNumber: 2, text: 'Alternative verse 2 text' },
+        ]);
+      };
+      const handleSelectSecondBible = () => {
+        onBibleSelect?.({ id: 'yv-second', label: 'Second Bible', language: 'eng' });
+        onBibleLoadingChange?.('yv-second', false);
+        onBibleVersesChange?.('yv-second', [
+          { verseNumber: 1, text: 'Second Bible verse 1 text' },
+          { verseNumber: 2, text: 'Second Bible verse 2 text' },
+        ]);
+      };
+      // A Bible with nothing for this passage: panel 2 is selected but has no verses, which is what
+      // puts the drafting page on its panel-two placeholder.
+      const handleSelectEmptyBible = () => {
+        onBibleSelect?.({ id: 'aq-empty', label: 'Empty Bible', language: 'eng' });
+        onBibleLoadingChange?.('aq-empty', false);
+        onBibleVersesChange?.('aq-empty', []);
+      };
+      const handleSelectLoadingBible = () => {
+        onBibleSelect?.({ id: 'aq-loading', label: 'Loading Bible', language: 'eng' });
+      };
+      return (
+        <div data-testid='mock-resource-panel'>
+          <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
+          <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
+          <span data-testid='mock-current-resource'>{initialResource?.id ?? 'none'}</span>
+          <button onClick={handleSelectBible}>Select Alternative Bible</button>
+          <button onClick={handleSelectSecondBible}>Select Second Bible</button>
+          <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
+          <button onClick={handleSelectLoadingBible}>Select Loading Bible</button>
+          <button onClick={() => onResourceChange?.({ id: 'UWTranslationNotes', name: 'TN' })}>
+            Select Notes Resource
+          </button>
+        </div>
+      );
+    },
+  };
+});
 
 const mockProjectItem: ProjectItem = {
   chapterAssignmentId: 1,
@@ -288,6 +291,7 @@ const defaultPericopeHookResult = (overrides = {}) => ({
 describe('DraftingUI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resourcePanelMode.real = false;
 
     // Default: Repeated Word Check feature ON (see mock definition above).
     mockFeatureFlag.mockReturnValue(true);
@@ -328,6 +332,155 @@ describe('DraftingUI', () => {
       isAiThresholdMet: false,
       suggestionStatus: 'idle',
     });
+  });
+
+  describe('with the real resource panel', () => {
+    let queryClient: QueryClient;
+
+    beforeEach(() => {
+      resourcePanelMode.real = true;
+      queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      server.use(
+        http.get(`${config.api.aquifer_url}/languages`, () =>
+          HttpResponse.json([
+            {
+              id: 1,
+              code: 'eng',
+              localizedDisplay: 'English',
+              englishDisplay: 'English',
+              scriptDirection: 'LTR',
+            },
+            {
+              id: 2,
+              code: 'spa',
+              localizedDisplay: 'Spanish',
+              englishDisplay: 'Spanish',
+              scriptDirection: 'LTR',
+            },
+          ])
+        ),
+        http.get(`${config.api.aquifer_url}/resources/collections/:resource`, () =>
+          HttpResponse.json({
+            availableLanguages: [
+              { languageId: 1, languageCode: 'eng', displayName: 'English', resourceItemCount: 1 },
+            ],
+          })
+        ),
+        http.get(`${config.api.aquifer_url}/resources/search`, () =>
+          HttpResponse.json({ items: [] })
+        ),
+        http.get(`${config.api.aquifer_url}/bibles`, ({ request }) => {
+          const spanish = new URL(request.url).searchParams.get('languageCode') === 'spa';
+          return HttpResponse.json([
+            {
+              id: spanish ? 2 : 1,
+              name: spanish ? 'Spanish Bible' : 'English Bible',
+              abbreviation: spanish ? 'SPA' : 'ENG',
+            },
+          ]);
+        }),
+        http.get(`${config.api.youversion_url}/bibles`, () => HttpResponse.json({ data: [] })),
+        http.get(`${config.api.aquifer_url}/bibles/:id/texts`, ({ params }) =>
+          HttpResponse.json({
+            chapters: [
+              {
+                number: 1,
+                verses: [{ number: 1, text: `Bible ${String(params.id)} verse content` }],
+              },
+            ],
+          })
+        )
+      );
+    });
+
+    afterEach(() => queryClient.clear());
+
+    const openResources = async () => {
+      const user = userEvent.setup();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as unknown as User}
+          />
+        </QueryClientProvider>
+      );
+      await user.click(screen.getByRole('button', { name: '', pressed: false }));
+      await user.click(await screen.findByRole('button', { name: 'Bibles' }));
+      return user;
+    };
+
+    const selectLanguage = async (user: ReturnType<typeof userEvent.setup>, language: string) => {
+      await user.click(await screen.findByRole('combobox'));
+      await user.click(screen.getByRole('button', { name: language }));
+    };
+
+    it('keeps both Bible tabs and their cached verses when resources are hidden and shown', async () => {
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      await selectLanguage(user, 'Spanish');
+      await user.click(await screen.findByText('SPA — Spanish Bible'));
+      expect(await screen.findByText('Bible 2 verse content')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '', pressed: true }));
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'ENG' }));
+      expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '', pressed: false }));
+      expect(await screen.findByRole('combobox')).toHaveTextContent('English');
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'SPA' }));
+      expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
+    });
+
+    it.each(['resources', 'checks', 'hidden'])(
+      'finishes an interrupted Bible request after changing language through %s',
+      async panel => {
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        let requested = false;
+        server.use(
+          http.get(`${config.api.aquifer_url}/bibles/2/texts`, async () => {
+            requested = true;
+            await pendingText;
+            return HttpResponse.json({
+              chapters: [{ number: 1, verses: [{ number: 1, text: 'Spanish request completed' }] }],
+            });
+          })
+        );
+        const user = await openResources();
+        await selectLanguage(user, 'Spanish');
+        await user.click(await screen.findByText('SPA — Spanish Bible'));
+        await waitFor(() => expect(requested).toBe(true));
+        if (panel === 'resources') {
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+        }
+        await user.click(screen.getByRole('button', { name: 'TN' }));
+        await selectLanguage(user, 'English');
+        if (panel === 'checks') {
+          await user.click(screen.getByRole('tab', { name: 'Checks' }));
+        } else if (panel === 'hidden') {
+          await user.click(screen.getByRole('button', { name: '', pressed: true }));
+        }
+        if (panel !== 'resources') expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('tab', { name: 'SPA' }));
+        expect(await screen.findByRole('combobox')).toHaveTextContent('Spanish');
+        releaseText();
+        expect(await screen.findByText('Spanish request completed')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
+      }
+    );
   });
 
   it('renders correctly in Verse Mode', () => {

@@ -26,7 +26,7 @@ interface ResourcePanelProps {
   resourceNames: ResourceName[];
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
-  onBibleSelect?: (bible: { id: string; label: string }) => void;
+  onBibleSelect?: (bible: { id: string; label: string; language: string }) => void;
   onBibleVersesChange?: (bibleId: string, verses: BibleVerse[]) => void;
   onBibleLoadingChange?: (bibleId: string, loading: boolean) => void;
   selectedBibleId?: string | null;
@@ -137,6 +137,14 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   const shouldFetchResources = isLanguageInitializedRef.current && selectedLanguage !== '';
 
+  // An open Bible tab owns its language even when another resource or Bible
+  // has changed the sidebar's current language in the meantime.
+  useEffect(() => {
+    if (isBibleResource && selectedBibleId && initialLanguage) {
+      handleLanguageChange(initialLanguage);
+    }
+  }, [handleLanguageChange, initialLanguage, isBibleResource, selectedBibleId]);
+
   // Non-Bible resource content
   const { localizeRefName, imageItems, loadingImages } = useResourceFetch(
     selectedResource,
@@ -184,7 +192,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   }, [handleBibleChange, isBibleResource, selectedBible?.id, selectedBibleId]);
 
   // Register clearSelectedBible with DraftingUI once on mount so the × button
-  // and toggleResources can call it directly to reset hook-level bible state.
+  // can call it directly to reset hook-level bible state.
   useEffect(() => {
     registerClearBible?.(clearSelectedBible);
   }, [registerClearBible, clearSelectedBible]);
@@ -219,9 +227,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const handleBibleSelect = useCallback(
     (bible: UnifiedBible) => {
       handleBibleChange(bible.id);
-      onBibleSelect?.({ id: bible.id, label: bible.abbreviation });
+      onBibleSelect?.({ id: bible.id, label: bible.abbreviation, language: selectedLanguage });
     },
-    [handleBibleChange, onBibleSelect]
+    [handleBibleChange, onBibleSelect, selectedLanguage]
   );
 
   const handleAccordionChange = async (value: string[]) => {
