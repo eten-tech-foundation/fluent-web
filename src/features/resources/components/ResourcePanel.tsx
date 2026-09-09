@@ -29,6 +29,7 @@ interface ResourcePanelProps {
   onBibleSelect?: (bible: { id: string; label: string }) => void;
   onBibleVersesChange?: (bibleId: string, verses: BibleVerse[]) => void;
   onBibleLoadingChange?: (bibleId: string, loading: boolean) => void;
+  selectedBibleId?: string | null;
   registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
   initialLanguage?: string;
@@ -43,6 +44,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onBibleSelect,
   onBibleVersesChange,
   onBibleLoadingChange,
+  selectedBibleId,
   registerClearBible,
   initialResource,
   initialLanguage,
@@ -172,6 +174,14 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     sourceData.chapterNumber,
     isBibleResource && shouldFetchResources
   );
+
+  // A tab can reactivate a Bible whose request was interrupted when another
+  // resource was selected. Reconnecting the hook resumes the keyed query and
+  // lets this panel publish its eventual content/loading state to that tab.
+  useEffect(() => {
+    if (!isBibleResource || !selectedBibleId || selectedBible?.id === selectedBibleId) return;
+    handleBibleChange(selectedBibleId);
+  }, [handleBibleChange, isBibleResource, selectedBible?.id, selectedBibleId]);
 
   // Register clearSelectedBible with DraftingUI once on mount so the × button
   // and toggleResources can call it directly to reset hook-level bible state.

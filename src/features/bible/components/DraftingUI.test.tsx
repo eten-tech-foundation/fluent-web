@@ -146,11 +146,13 @@ vi.mock('@/features/flags', () => ({
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
     activeVerseId,
+    selectedBibleId,
     onBibleLoadingChange,
     onBibleSelect,
     onBibleVersesChange,
   }: {
     activeVerseId: number;
+    selectedBibleId?: string | null;
     onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
     onBibleSelect: (bible: { id: string; label: string }) => void;
     onBibleVersesChange: (
@@ -184,6 +186,7 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
     return (
       <div data-testid='mock-resource-panel'>
         <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
+        <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
         <button onClick={handleSelectBible}>Select Alternative Bible</button>
         <button onClick={handleSelectSecondBible}>Select Second Bible</button>
         <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
@@ -457,6 +460,7 @@ describe('DraftingUI', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Alternative Bible' }));
     expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-alternative');
 
     await user.click(screen.getByRole('tab', { name: 'WEB' }));
     expect(

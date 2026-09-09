@@ -65,6 +65,38 @@ describe('BibleTabList', () => {
     expect(onSelect.mock.calls).toEqual([[SOURCE_BIBLE_TAB_ID], ['aq-1']]);
   });
 
+  it('moves focus and selection across every tab with the keyboard', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    render(
+      <BibleTabList
+        activeTabId='yv-2'
+        resourceTabs={resourceTabs}
+        sourceLabel='WEB'
+        onClose={vi.fn()}
+        onSelect={onSelect}
+      />
+    );
+
+    const sourceTab = screen.getByRole('tab', { name: 'WEB' });
+    const firstResourceTab = screen.getByRole('tab', { name: 'ULT' });
+    const lastResourceTab = screen.getByRole('tab', { name: 'NIV' });
+
+    lastResourceTab.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(firstResourceTab).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith('aq-1');
+
+    await user.keyboard('{Home}');
+    expect(sourceTab).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith(SOURCE_BIBLE_TAB_ID);
+
+    await user.keyboard('{End}');
+    expect(lastResourceTab).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith('yv-2');
+  });
+
   it('closes only the requested resource Bible', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

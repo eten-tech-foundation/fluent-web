@@ -625,6 +625,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     setActiveBibleTabId(bible.id);
   }, []);
 
+  const handleBibleTabSelect = useCallback((tabId: string) => {
+    setActiveBibleTabId(tabId);
+    if (tabId !== SOURCE_BIBLE_TAB_ID) setResourcePanelSelectedBibleId(tabId);
+  }, []);
+
   const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
     setResourceBibleTabs(currentTabs =>
       currentTabs.map(tab => (tab.id === bibleId ? { ...tab, verses: nextVerses } : tab))
@@ -861,6 +866,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             projectItem={projectItem}
             resourceNames={RESOURCE_NAMES}
             resourceVerseId={resourceVerseId}
+            selectedBibleId={resourcePanelSelectedBibleId}
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
             showChecksTab={checksEnabled}
@@ -896,7 +902,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 sourceVerses={sourceVerses}
                 verses={verses}
                 onBibleTabClose={handleBibleTabClose}
-                onBibleTabSelect={setActiveBibleTabId}
+                onBibleTabSelect={handleBibleTabSelect}
               />
             </Suspense>
           ) : (
@@ -915,7 +921,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   resourceTabs={resourceBibleTabs}
                   sourceLabel={projectItem.bibleName}
                   onClose={handleBibleTabClose}
-                  onSelect={setActiveBibleTabId}
+                  onSelect={handleBibleTabSelect}
                 />
               </div>
 

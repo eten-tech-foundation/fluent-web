@@ -19,6 +19,7 @@ interface DraftingResourceSidebarProps {
   onBibleSelect: (bible: { id: string; label: string }) => void;
   onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
   onBibleVersesChange: (bibleId: string, verses: BibleVerse[]) => void;
+  selectedBibleId: string | null;
   setCurrentLanguage: (lang: string) => void;
   setCurrentResource: (res: ResourceName) => void;
   /** Controlled active left-panel tab (Resources | Checks), persisted by the
@@ -47,6 +48,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   onBibleSelect,
   onBibleLoadingChange,
   onBibleVersesChange,
+  selectedBibleId,
   setCurrentLanguage,
   setCurrentResource,
   activeLeftTab,
@@ -130,6 +132,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
                 clearBibleRef.current = fn;
               }}
               resourceNames={resourceNames}
+              selectedBibleId={selectedBibleId}
               sourceData={projectItem}
               onBibleLoadingChange={onBibleLoadingChange}
               onBibleSelect={onBibleSelect}

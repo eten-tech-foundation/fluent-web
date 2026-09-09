@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, type KeyboardEvent, useRef } from 'react';
 
 import { X } from 'lucide-react';
 
@@ -39,15 +39,45 @@ export function BibleTabList({
   onSelect,
   onClose,
 }: BibleTabListProps) {
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+  const orderedTabIds = [SOURCE_BIBLE_TAB_ID, ...resourceTabs.map(tab => tab.id)];
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentTabId: string) => {
+    const currentIndex = orderedTabIds.indexOf(currentTabId);
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + orderedTabIds.length) % orderedTabIds.length;
+    } else if (event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % orderedTabIds.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = orderedTabIds.length - 1;
+    }
+
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTabId = orderedTabIds[nextIndex];
+    onSelect(nextTabId);
+    tabRefs.current.get(nextTabId)?.focus();
+  };
+
   return (
     <div aria-label='Bible versions' className='flex min-w-0 items-center gap-1' role='tablist'>
       <button
+        ref={element => {
+          if (element) tabRefs.current.set(SOURCE_BIBLE_TAB_ID, element);
+          else tabRefs.current.delete(SOURCE_BIBLE_TAB_ID);
+        }}
         aria-selected={activeTabId === SOURCE_BIBLE_TAB_ID}
         className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} shrink-0`}
         role='tab'
         tabIndex={activeTabId === SOURCE_BIBLE_TAB_ID ? 0 : -1}
         type='button'
         onClick={() => onSelect(SOURCE_BIBLE_TAB_ID)}
+        onKeyDown={event => handleKeyDown(event, SOURCE_BIBLE_TAB_ID)}
       >
         {sourceLabel}
       </button>
@@ -81,12 +111,17 @@ export function BibleTabList({
                     )}
                     <div className='flex items-center'>
                       <button
+                        ref={element => {
+                          if (element) tabRefs.current.set(tab.id, element);
+                          else tabRefs.current.delete(tab.id);
+                        }}
                         aria-selected={isActive}
                         className={tabClassName(isActive)}
                         role='tab'
                         tabIndex={isActive ? 0 : -1}
                         type='button'
                         onClick={() => onSelect(tab.id)}
+                        onKeyDown={event => handleKeyDown(event, tab.id)}
                       >
                         {tab.label}
                       </button>
