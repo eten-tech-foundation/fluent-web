@@ -1,7 +1,8 @@
 # Builds and deploys the SPA to one Azure Static Web App.
 #
-# Every deploy in this repo goes through here -- dev on merge to main, QA and
-# prod from `cut-release.yml`, and prod again from `promote-to-prod.yml`.
+# Every deploy in this repo goes through here -- dev on merge to main, QA
+# from `cut-release.yml` and `deploy-to-qa.yml`, and prod from
+# `promote-to-prod.yml`.
 # Keeping one definition is not just DRY: the three copies it replaces had
 # already drifted (differing secret names, inconsistent `${{ }}` spacing), and
 # a drifted deploy job is a QA stage that tests something prod won't ship.
