@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChevronDown, Headphones } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -142,9 +143,17 @@ export function BibleBookMultiSelectPopover({
                       className='h-4 w-4'
                       onCheckedChange={() => toggleBook(book.book.id.toString())}
                     />
-                    <div className='flex items-center gap-2'>
-                      {book.hasAudio && <Headphones className='text-primary h-4 w-4 shrink-0' />}
+                    <div className='flex flex-1 items-center justify-between gap-2 overflow-hidden'>
                       <span className='truncate'>{book.book.eng_display_name}</span>
+                      {book.hasAudio && (
+                        <Badge
+                          className='bg-success/15 text-success hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
+                          variant='outline'
+                        >
+                          <Headphones className='h-3 w-3' />
+                          AUDIO
+                        </Badge>
+                      )}
                     </div>
                   </label>
                 );

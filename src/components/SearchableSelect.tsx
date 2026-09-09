@@ -10,7 +10,6 @@ export interface SearchableSelectOption {
   value: string;
   label: string;
   subLabel?: string;
-  icon?: React.ReactNode;
 }
 
 interface SearchableSelectProps {
@@ -236,10 +235,7 @@ export function SearchableSelect({
                     onMouseEnter={() => setFocusedIndex(actualIndex)}
                   >
                     <div className='flex flex-col overflow-hidden'>
-                      <div className='flex items-center gap-2'>
-                        {opt.icon && <span className='shrink-0'>{opt.icon}</span>}
-                        <span className='truncate font-medium'>{opt.label}</span>
-                      </div>
+                      <span className='truncate font-medium'>{opt.label}</span>
                       {opt.subLabel && (
                         <span className='text-muted-foreground truncate text-xs'>
                           {opt.subLabel}
