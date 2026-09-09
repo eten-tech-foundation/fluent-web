@@ -57,10 +57,12 @@ const DraftingChapterView = lazy(() =>
 const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
 const EMPTY_BIBLE_VERSES: BibleVerse[] = [];
 
+const BIBLES_RESOURCE: ResourceName = { id: 'Bibles', name: 'Bibles' };
+
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
-  { id: 'Bibles', name: 'Bibles' },
+  BIBLES_RESOURCE,
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
   { id: 'TyndaleStudyNotes', name: 'OSN' },
@@ -625,10 +627,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     setActiveBibleTabId(bible.id);
   }, []);
 
-  const handleBibleTabSelect = useCallback((tabId: string) => {
-    setActiveBibleTabId(tabId);
-    if (tabId !== SOURCE_BIBLE_TAB_ID) setResourcePanelSelectedBibleId(tabId);
-  }, []);
+  const handleBibleTabSelect = useCallback(
+    (tabId: string) => {
+      setActiveBibleTabId(tabId);
+      if (tabId === SOURCE_BIBLE_TAB_ID) return;
+
+      setResourcePanelSelectedBibleId(tabId);
+      if (resourceBibleTabs.find(tab => tab.id === tabId)?.isLoading) {
+        setCurrentResource(BIBLES_RESOURCE);
+        setActiveLeftTab('resources');
+      }
+    },
+    [resourceBibleTabs]
+  );
 
   const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
     setResourceBibleTabs(currentTabs =>

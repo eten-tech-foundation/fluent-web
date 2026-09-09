@@ -146,12 +146,15 @@ vi.mock('@/features/flags', () => ({
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
     activeVerseId,
+    initialResource,
     selectedBibleId,
     onBibleLoadingChange,
     onBibleSelect,
     onBibleVersesChange,
+    onResourceChange,
   }: {
     activeVerseId: number;
+    initialResource?: { id: string; name: string };
     selectedBibleId?: string | null;
     onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
     onBibleSelect: (bible: { id: string; label: string }) => void;
@@ -159,6 +162,7 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
       bibleId: string,
       verses: Array<{ verseNumber: number; text: string }>
     ) => void;
+    onResourceChange: (resource: { id: string; name: string }) => void;
   }) => {
     const handleSelectBible = () => {
       onBibleSelect({ id: 'aq-alternative', label: 'Alternative Bible' });
@@ -183,13 +187,21 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
       onBibleLoadingChange('aq-empty', false);
       onBibleVersesChange('aq-empty', []);
     };
+    const handleSelectLoadingBible = () => {
+      onBibleSelect({ id: 'aq-loading', label: 'Loading Bible' });
+    };
     return (
       <div data-testid='mock-resource-panel'>
         <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
         <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
+        <span data-testid='mock-current-resource'>{initialResource?.id ?? 'none'}</span>
         <button onClick={handleSelectBible}>Select Alternative Bible</button>
         <button onClick={handleSelectSecondBible}>Select Second Bible</button>
         <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
+        <button onClick={handleSelectLoadingBible}>Select Loading Bible</button>
+        <button onClick={() => onResourceChange({ id: 'UWTranslationNotes', name: 'TN' })}>
+          Select Notes Resource
+        </button>
       </div>
     );
   },
@@ -467,6 +479,32 @@ describe('DraftingUI', () => {
       screen.getByText('In the beginning God created the heaven and the earth.')
     ).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
+  });
+
+  it('returns to Resources and Bibles when an interrupted tab is reactivated', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { pressed: false }));
+    await user.click(screen.getByRole('button', { name: 'Select Loading Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Select Notes Resource' }));
+    await user.click(screen.getByRole('tab', { name: 'Checks' }));
+    expect(screen.queryByTestId('mock-resource-panel')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Loading Bible' }));
+
+    expect(screen.getByRole('tab', { name: 'Resources' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('mock-current-resource')).toHaveTextContent('Bibles');
+    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-loading');
   });
 
   it('renders a vertical divider between the tabs on the Source side when the second tab is open', async () => {
