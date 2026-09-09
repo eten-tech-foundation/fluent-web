@@ -191,7 +191,7 @@ Run: `pnpm precheck && pnpm build && git diff --check && git status --short --br
 
 Expected: checks and build exit 0, the diff has no whitespace errors, and the worktree contains only intentional committed changes.
 
-- [ ] **Step 4: Push and open the linked PR**
+- [x] **Step 4: Push and open the linked PR**
 
 ```bash
 git push -u origin fix/471-chapter-source-bible-tabs
