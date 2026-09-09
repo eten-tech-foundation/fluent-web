@@ -10,6 +10,8 @@ describe.each([
   ['Pericope View', PericopeEditor],
   ['Chapter View', ChapterEditor],
 ] as const)('%s clipboard shortcuts', (_name, Editor) => {
+  const rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
+  const rangeRects = Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects');
   beforeEach(() => {
     Range.prototype.getBoundingClientRect = () => new DOMRect();
     Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
@@ -29,9 +31,10 @@ describe.each([
       'DataTransfer',
       class DataTransfer {
         files: File[] = [];
+        items = { add: (file: File) => this.files.push(file) };
         private data = new Map<string, string>();
         get types() {
-          return [...this.data.keys()];
+          return [...this.data.keys(), ...(this.files.length ? ['Files'] : [])];
         }
         getData(type: string) {
           return this.data.get(type) ?? '';
@@ -46,8 +49,59 @@ describe.each([
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(document, 'execCommand');
-    Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
-    Reflect.deleteProperty(Range.prototype, 'getClientRects');
+    if (rangeRect) Object.defineProperty(Range.prototype, 'getBoundingClientRect', rangeRect);
+    else Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
+    if (rangeRects) Object.defineProperty(Range.prototype, 'getClientRects', rangeRects);
+    else Reflect.deleteProperty(Range.prototype, 'getClientRects');
+  });
+
+  it.each([false, true])('preserves extra clipboard formats and files with tabs=%s', async tabs => {
+    const { container } = render(
+      <Editor
+        bookCode='GEN'
+        chapterNumber={1}
+        contentKey='clipboard-formats'
+        verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
+        onVersesChange={vi.fn()}
+      />
+    );
+    await waitFor(() =>
+      expect(container.querySelector('.editor-input')).toHaveTextContent('First verse text.')
+    );
+    const input = container.querySelector<HTMLElement>('.editor-input')!;
+    const received: DataTransfer[] = [];
+    input.addEventListener(
+      'paste',
+      event => {
+        received.push(event.clipboardData!);
+        // Inspect what reaches paste consumers without asking the editor to import a file.
+        event.stopImmediatePropagation();
+      },
+      { capture: true }
+    );
+    const data = new DataTransfer();
+    data.setData('text/plain', tabs ? 'one\ttwo' : 'one two');
+    data.setData('text/html', tabs ? '<em>one&#9;two</em>' : '<em>one two</em>');
+    data.setData('text/uri-list', 'https://example.com/verse');
+    data.setData('application/x-test-annotation', '{"note":"keep\tthis"}');
+    data.setData('application/x-lexical-editor', '{"nodes":[]}');
+    const file = new File(['attachment'], 'note.txt', { type: 'text/plain' });
+    data.items.add(file);
+
+    fireEvent(
+      input,
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })
+    );
+
+    expect(received).toHaveLength(1);
+    const clipboard = received[0];
+    expect(clipboard.getData('text/plain')).toBe('one two');
+    expect(clipboard.getData('text/html')).toBe('<em>one two</em>');
+    expect(clipboard.getData('text/uri-list')).toBe('https://example.com/verse');
+    expect(clipboard.getData('application/x-test-annotation')).toBe('{"note":"keep\tthis"}');
+    expect(Array.from(clipboard.files)).toEqual([file]);
+    expect(clipboard.getData('application/x-lexical-editor')).toBe(tabs ? '' : '{"nodes":[]}');
+    expect(data.getData('text/plain')).toBe(tabs ? 'one\ttwo' : 'one two');
   });
 
   it('keeps the native context menu available for mouse copy and paste', async () => {

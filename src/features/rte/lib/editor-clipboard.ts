@@ -24,6 +24,17 @@ export function handleEditorPaste(event: ClipboardEvent<HTMLElement>) {
   // Lexical creates TabNodes for native tabs, but Editorial's USJ serializer drops them,
   // joining adjacent words. Replay just this paste with spaces before Lexical imports it.
   const data = new DataTransfer();
+  for (const type of event.clipboardData.types) {
+    if (
+      type !== 'Files' &&
+      type !== 'text/plain' &&
+      type !== 'text/html' &&
+      type !== 'application/x-lexical-editor'
+    ) {
+      data.setData(type, event.clipboardData.getData(type));
+    }
+  }
+  for (const file of event.clipboardData.files) data.items.add(file);
   data.setData('text/plain', text.replace(/\t/g, ' '));
   const html = event.clipboardData.getData('text/html');
   if (html) {
@@ -36,8 +47,8 @@ export function handleEditorPaste(event: ClipboardEvent<HTMLElement>) {
     }
     data.setData('text/html', template.innerHTML);
   }
-  // For tab-containing selections use the normalized HTML/plain text, not Lexical's private
-  // JSON flavor, which would restore the unsupported TabNodes. Other pastes stay untouched.
+  // Only omit Lexical's private JSON flavor, which would restore unsupported TabNodes
+  // instead of the normalized HTML/plain text. Preserve other formats and files for consumers.
   event.preventDefault();
   event.stopPropagation();
   target.dispatchEvent(
