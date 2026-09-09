@@ -87,9 +87,12 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     [handleTextChange]
   );
 
-  const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
-  const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+  const hasPendingSuggestion = groupVerses.some(
+    verse =>
+      !aiSuggestions[verse.verseNumber] &&
+      !verses.find(target => target.verseNumber === verse.verseNumber)?.content.trim()
+  );
 
   // The pericope-level reading of the verse button's "don't advance from an empty verse" rule:
   // the whole pericope is on screen, so all of it has to be drafted before moving past it.
@@ -105,8 +108,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     isGroupActive &&
     isAiActive &&
     isAiThresholdMet &&
-    !aiSuggestions[activeVerseId] &&
-    isActiveVerseEmpty
+    hasPendingSuggestion
       ? suggestionStatus
       : undefined;
 

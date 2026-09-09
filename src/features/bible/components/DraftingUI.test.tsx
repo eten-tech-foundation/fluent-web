@@ -70,10 +70,11 @@ const mockUseAiSuggestions = vi.fn(() => ({
   isAiThresholdMet: false,
   suggestionStatus: 'idle',
 }));
+const mockTrackAiUsage = vi.fn();
 
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
   useAiSuggestions: () => mockUseAiSuggestions(),
-  useTrackAiUsage: () => ({ mutate: vi.fn(), isPending: false }),
+  useTrackAiUsage: () => ({ mutate: mockTrackAiUsage, isPending: false }),
 }));
 
 // The rich text surface is covered in `PericopeRteGroup.test.tsx`; standing it in here keeps the
@@ -579,13 +580,47 @@ describe('DraftingUI', () => {
       expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
     });
 
-    it('still fills only the verse in focus on the textarea path', () => {
+    it('populates every verse on the pericope textarea path too', () => {
       config.features.rtePericope = false;
 
       renderWithAi();
 
       expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1', undefined);
-      expect(handleTextChange).not.toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
+    });
+
+    it('logs every displayed suggestion immediately, without waiting for focus or save', () => {
+      config.features.rtePericope = true;
+      renderWithAi();
+
+      expect(mockTrackAiUsage.mock.calls).toEqual(
+        mockSourceVerses.map(verse => [
+          {
+            bibleTextId: verse.id,
+            projectUnitId: mockProjectItem.projectUnitId,
+            wasUsed: false,
+          },
+        ])
+      );
+    });
+
+    it('does not fill or log saved verses', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 1, content: 'My translation' }, EMPTY_PERICOPE[1]],
+          handleTextChange,
+        })
+      );
+      renderWithAi();
+
+      expect(handleTextChange).toHaveBeenCalledTimes(1);
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: mockSourceVerses[1].id,
+        projectUnitId: mockProjectItem.projectUnitId,
+        wasUsed: false,
+      });
     });
 
     it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {

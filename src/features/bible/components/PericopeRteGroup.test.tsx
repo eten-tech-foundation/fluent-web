@@ -138,13 +138,13 @@ describe('PericopeRteGroup', () => {
       expect(screen.getByText('Generating...')).toBeInTheDocument();
     });
 
-    it('stops once the suggestion has landed', () => {
+    it('keeps the notice until the rest of the group is ready', () => {
       renderGroup({ ...waiting, aiSuggestions: { 1: 'Sugerencia.' } });
 
-      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
     });
 
-    it('says nothing about a verse that is already drafted', () => {
+    it('still shows pending work when the focused verse is already drafted', () => {
       renderGroup({
         ...waiting,
         verses: [
@@ -153,6 +153,11 @@ describe('PericopeRteGroup', () => {
         ] as TargetVerse[],
       });
 
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
+    });
+
+    it('stops once all suggestions have landed', () => {
+      renderGroup({ ...waiting, aiSuggestions: { 1: 'First draft', 2: 'Second draft' } });
       expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
     });
   });
