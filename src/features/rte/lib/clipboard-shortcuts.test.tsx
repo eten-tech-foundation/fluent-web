@@ -61,6 +61,7 @@ describe.each([
         bookCode='GEN'
         chapterNumber={1}
         contentKey='clipboard-formats'
+        targetLanguage='English'
         verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
         onVersesChange={vi.fn()}
       />
@@ -110,6 +111,7 @@ describe.each([
         bookCode='GEN'
         chapterNumber={1}
         contentKey='context-menu'
+        targetLanguage='English'
         verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
         onVersesChange={vi.fn()}
       />
@@ -137,6 +139,7 @@ describe.each([
             bookCode='GEN'
             chapterNumber={1}
             contentKey='clipboard'
+            targetLanguage='English'
             verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
             onVersesChange={vi.fn()}
           />
@@ -176,6 +179,7 @@ describe.each([
         bookCode='GEN'
         chapterNumber={1}
         contentKey='tabs'
+        targetLanguage='English'
         verses={[{ verseNumber: 1, text: 'First verse text.', markers: null }]}
         onVersesChange={onVersesChange}
       />
