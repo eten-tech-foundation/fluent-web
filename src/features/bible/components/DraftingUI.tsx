@@ -884,14 +884,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               }
             >
               <DraftingChapterView
+                activeBibleTabId={activeBibleTabId}
+                bibleContentLoading={bibleContentLoading}
                 bibleVerseMap={bibleVerseMap}
                 handleActiveVerseChange={handleActiveVerseChange}
                 handleTextChange={handleTextChangeWithTracking}
                 projectItem={projectItem}
                 readOnly={readOnly}
+                resourceBibleTabs={resourceBibleTabs}
                 selectedPanel={selectedPanel}
                 sourceVerses={sourceVerses}
                 verses={verses}
+                onBibleTabClose={handleBibleTabClose}
+                onBibleTabSelect={setActiveBibleTabId}
               />
             </Suspense>
           ) : (
