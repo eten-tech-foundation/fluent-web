@@ -13,11 +13,18 @@ interface AiSuggestion {
   modelInfo?: string | null;
 }
 
+export interface AiHeadingSuggestion {
+  pericopeNumber: string;
+  bibleTextId: number;
+  suggestedText: string;
+}
+
 interface SuggestionOptions {
   pericope?: PericopeSuggestionScope;
   /** Read-only and non-drafting surfaces must not queue work or probe the threshold. */
   canSuggest?: boolean;
   draftedVerseNumbers?: number[];
+  titledVerseNumbers?: number[];
 }
 
 const RETRY_DELAY_MS = 5000;
@@ -35,7 +42,12 @@ export function useAiSuggestions(
   verseMapping: Record<number, number>,
   activeVerseNumber: number,
   isAiEnabled = false,
-  { pericope, canSuggest = true, draftedVerseNumbers = [] }: SuggestionOptions = {}
+  {
+    pericope,
+    canSuggest = true,
+    draftedVerseNumbers = [],
+    titledVerseNumbers = [],
+  }: SuggestionOptions = {}
 ) {
   const isAiThresholdMet = useAppStore(state => state.isAiThresholdMet);
   const setIsAiThresholdMet = useAppStore(state => state.setIsAiThresholdMet);
@@ -77,6 +89,46 @@ export function useAiSuggestions(
     retry: false,
   });
 
+  const pericopeNumbersKey = pericope?.pericopeNumbers.join(',') ?? '';
+  const titledNumbers = new Set(titledVerseNumbers);
+  const requiredTitlesKey = Object.entries(pericope?.titleVerseNumbers ?? {})
+    .filter(([, verse]) => !titledNumbers.has(verse))
+    .map(([number]) => number)
+    .join(',');
+  const fetchHeadings =
+    enabled && !!pericopeNumbersKey && Object.keys(pericope?.titleVerseNumbers ?? {}).length > 0;
+  const { data: fetchedHeadings, refetch: refetchHeadings } = useQuery({
+    queryKey: ['ai-pericope-headings', contextKey, pericopeNumbersKey],
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        projectUnitId: String(projectUnitId),
+        bibleId: String(bibleId),
+        bookCode,
+        chapterNumber: String(chapterNumber),
+        pericopeNumbers: pericopeNumbersKey,
+      });
+      const res = await fetch(`${config.api.url}/ai-suggestions/pericopes?${params}`, {
+        credentials: 'include',
+        signal,
+      });
+      if (!res.ok) throw new Error('Failed to fetch AI heading suggestions');
+      return ((await res.json()) as { data: AiHeadingSuggestion[] }).data;
+    },
+    enabled: fetchHeadings,
+    retry: false,
+  });
+  const headingSuggestions = useMemo(
+    () =>
+      enabled
+        ? Object.fromEntries(
+            (fetchedHeadings ?? [])
+              .filter(heading => heading.suggestedText.trim())
+              .map(heading => [heading.pericopeNumber, heading])
+          )
+        : {},
+    [enabled, fetchedHeadings]
+  );
+
   const suggestions = useMemo(() => {
     const map: Record<number, string> = {};
     if (!enabled) return map;
@@ -100,24 +152,40 @@ export function useAiSuggestions(
     let attempts = 0;
 
     const fetchPending = async () => {
-      const result = await refetch({ cancelRefetch: false });
+      const [result, headingResult] = await Promise.all([
+        refetch({ cancelRefetch: false }),
+        fetchHeadings ? refetchHeadings({ cancelRefetch: false }) : undefined,
+      ]);
       if (stale) return;
-      if (result.isError) {
+      if (result.isError || headingResult?.isError) {
         setSuggestionStatus('error');
         return;
       }
       const ready = new Set(
         result.data?.filter(item => item.suggestedText.trim()).map(item => item.bibleTextId)
       );
-      const activeReady = activeIds.every(id => ready.has(id));
+      const readyTitles = new Set(
+        headingResult?.data
+          ?.filter(heading => heading.suggestedText.trim())
+          .map(heading => heading.pericopeNumber)
+      );
+      const requiredTitles = requiredTitlesKey ? requiredTitlesKey.split(',') : [];
+      const activeTitle = pericopeNumbersKey.split(',')[0];
+      const activeReady =
+        activeIds.every(id => ready.has(id)) &&
+        (!requiredTitles.includes(activeTitle) || readyTitles.has(activeTitle));
       setSuggestionStatus(activeReady ? 'idle' : attempts < retries ? 'generating' : 'unavailable');
-      if (attempts < retries && requiredIds.some(id => !ready.has(id))) {
+      if (
+        attempts < retries &&
+        (requiredIds.some(id => !ready.has(id)) ||
+          requiredTitles.some(number => !readyTitles.has(number)))
+      ) {
         attempts += 1;
         timer = setTimeout(() => void fetchPending(), RETRY_DELAY_MS);
       }
     };
 
-    setSuggestionStatus(activeIds.length ? 'generating' : 'idle');
+    setSuggestionStatus(activeIds.length || requiredTitlesKey ? 'generating' : 'idle');
     void fetchPending();
     return () => {
       stale = true;
@@ -133,48 +201,54 @@ export function useAiSuggestions(
     retries,
     refetch,
     verseMapping,
+    fetchHeadings,
+    refetchHeadings,
+    requiredTitlesKey,
+    pericopeNumbersKey,
   ]);
 
-  // queue-next accepts a cursor, not a range. Visit the predecessors of every
-  // requested verse so groups longer than the server's lookahead are covered.
-  // The API deduplicates overlapping verse jobs with a per-verse singleton key.
-  const queueCursorsKey = pericope
-    ? [
-        ...new Set(
-          [...pericope.verseNumbers, ...pericope.nextVerseNumbers].map(number =>
-            Math.max(1, number - 1)
-          )
-        ),
-      ].join(',')
-    : String(activeVerseNumber);
-
+  // A single server request resolves and queues the exact active/next groups.
+  // Verse mode retains its cursor-based lookahead.
+  const isPericope = !!pericope;
+  const queueVerseNumber = isPericope
+    ? Number(activeNumbersKey.split(',')[0]) || 1
+    : activeVerseNumber;
   useEffect(() => {
-    if (!canSuggest || !idsStr || !queueCursorsKey) return;
+    if (!canSuggest || !idsStr || (isPericope && !pericopeNumbersKey)) return;
     if (!enabled && checkedThresholdsRef.current.has(contextKey)) return;
-    checkedThresholdsRef.current.add(contextKey);
     const controller = new AbortController();
-
     const queue = async () => {
-      const cursors = enabled
-        ? queueCursorsKey.split(',').map(Number)
-        : [Number(queueCursorsKey.split(',')[0])];
-      for (const currentVerse of cursors) {
-        const res = await fetch(`${config.api.url}/ai-suggestions/queue-next`, {
+      const pericopeRequest = isPericope && enabled;
+      const payload = {
+        projectUnitId,
+        bibleId,
+        bookCode,
+        chapterNumber,
+        ...(pericopeRequest
+          ? { pericopeNumbers: pericopeNumbersKey.split(',') }
+          : { currentVerse: queueVerseNumber }),
+      };
+      const res = await fetch(
+        `${config.api.url}/ai-suggestions/${pericopeRequest ? 'queue-pericopes' : 'queue-next'}`,
+        {
           method: 'POST',
           credentials: 'include',
           signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectUnitId, bibleId, bookCode, chapterNumber, currentVerse }),
-        });
-        if (!res.ok) throw new Error('Failed to queue AI suggestions');
-        const data = (await res.json()) as { thresholdMet: boolean };
-        if (controller.signal.aborted) return;
-        setIsAiThresholdMet(data.thresholdMet);
-        if (!data.thresholdMet) break;
-      }
-      if (enabled && !controller.signal.aborted) await refetch({ cancelRefetch: false });
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) throw new Error('Failed to queue AI suggestions');
+      const data = (await res.json()) as { thresholdMet: boolean };
+      if (controller.signal.aborted) return;
+      checkedThresholdsRef.current.add(contextKey);
+      setIsAiThresholdMet(data.thresholdMet);
+      if (enabled)
+        await Promise.all([
+          refetch({ cancelRefetch: false }),
+          fetchHeadings ? refetchHeadings({ cancelRefetch: false }) : undefined,
+        ]);
     };
-
     void queue().catch((error: unknown) => {
       if (controller.signal.aborted) return;
       Logger.logException(error, { context: 'Failed to queue AI suggestions' });
@@ -188,15 +262,20 @@ export function useAiSuggestions(
     chapterNumber,
     contextKey,
     idsStr,
-    queueCursorsKey,
+    isPericope,
+    pericopeNumbersKey,
+    queueVerseNumber,
     canSuggest,
     enabled,
     refetch,
+    fetchHeadings,
+    refetchHeadings,
     setIsAiThresholdMet,
   ]);
 
   return {
     suggestions,
+    headingSuggestions,
     isAiThresholdMet,
     suggestionStatus: enabled ? suggestionStatus : ('idle' as SuggestionStatus),
   };
@@ -209,19 +288,29 @@ export const useTrackAiUsage = () => {
       bibleTextId,
       projectUnitId,
       wasUsed,
+      pericopeNumber,
     }: {
       bibleTextId: number;
       projectUnitId: number;
       wasUsed: boolean;
+      pericopeNumber?: string;
     }) => {
-      const res = await fetch(`${config.api.url}/ai-suggestions/usage`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ bibleTextId, projectUnitId, wasUsed }),
-      });
+      const res = await fetch(
+        `${config.api.url}/ai-suggestions/${pericopeNumber === undefined ? '' : 'pericopes/'}usage`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            bibleTextId,
+            projectUnitId,
+            wasUsed,
+            ...(pericopeNumber === undefined ? {} : { pericopeNumber }),
+          }),
+        }
+      );
       if (!res.ok) {
         throw new Error('Failed to track AI usage');
       }

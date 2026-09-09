@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -67,6 +68,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
 
 const mockUseAiSuggestions = vi.fn(() => ({
   suggestions: {} as Record<number, string>,
+  headingSuggestions: {} as Record<string, AiHeadingSuggestion>,
   isAiThresholdMet: false,
   suggestionStatus: 'idle',
 }));
@@ -303,6 +305,7 @@ describe('DraftingUI', () => {
     mockUsePericope.mockReturnValue(defaultPericopeHookResult());
     mockUseAiSuggestions.mockReturnValue({
       suggestions: {},
+      headingSuggestions: {},
       isAiThresholdMet: false,
       suggestionStatus: 'idle',
     });
@@ -549,6 +552,7 @@ describe('DraftingUI', () => {
       );
       mockUseAiSuggestions.mockReturnValue({
         suggestions: { 1: 'Suggestion for 1', 2: 'Suggestion for 2' },
+        headingSuggestions: {},
         isAiThresholdMet: true,
         suggestionStatus: 'idle',
       });
@@ -621,6 +625,123 @@ describe('DraftingUI', () => {
         projectUnitId: mockProjectItem.projectUnitId,
         wasUsed: false,
       });
+    });
+
+    const titleSuggestion = { pericopeNumber: '1', bibleTextId: 101, suggestedText: 'La creación' };
+
+    it('fills title and first verse in one save without putting title words in scripture', () => {
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one', 2: 'Verse two' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Verse one', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+      expect(handleTextChange.mock.calls.filter(([number]) => number === 1)).toHaveLength(1);
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        pericopeNumber: '1',
+        wasUsed: false,
+      });
+    });
+
+    it('preserves an authored title when an AI heading arrives', () => {
+      const verses = [
+        {
+          verseNumber: 1,
+          content: '',
+          markers: { headings: [{ marker: 's2', text: 'My title' }] },
+        },
+        EMPTY_PERICOPE[1],
+      ];
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses, handleTextChange }));
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Verse one', verses[0].markers);
+      expect(
+        mockTrackAiUsage.mock.calls.some(
+          ([payload]) => (payload as { pericopeNumber?: string }).pericopeNumber
+        )
+      ).toBe(false);
+      expect(screen.getByLabelText('Section title')).toHaveValue('My title');
+    });
+
+    it('preserves saved verse content when only its title needs a suggestion', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 1, content: 'Saved scripture' }, EMPTY_PERICOPE[1]],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Saved scripture', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not suggest or render a title for a group without a source title', () => {
+      const group = { ...CURRENT_GROUP, pericopeTitle: null };
+      mockUsePericope.mockReturnValue(
+        defaultPericopeHookResult({
+          isPericopeMode: true,
+          currentPericopeGroup: group,
+          pericopes: [group],
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).not.toHaveBeenCalled();
+      expect(mockTrackAiUsage).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText('Section title')).not.toBeInTheDocument();
+    });
+
+    it('preserves a title being typed while a suggestion is in flight', async () => {
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: {},
+        isAiThresholdMet: true,
+        suggestionStatus: 'generating',
+      });
+      const view = renderWithAi();
+      await userEvent.setup().type(screen.getByLabelText('Section title'), 'My title');
+      handleTextChange.mockClear();
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      view.rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={EMPTY_PERICOPE}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+      expect(handleTextChange).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('Section title')).toHaveValue('My title');
     });
 
     it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {

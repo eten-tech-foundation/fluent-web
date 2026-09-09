@@ -182,6 +182,34 @@ describe('PericopeRteGroup', () => {
     ]);
   });
 
+  it('renders the title once and preserves it through scripture edits', () => {
+    const title = { marker: 's1', text: 'My section title' };
+    const secondary = { marker: 'r', text: 'A reference' };
+    renderGroup({
+      hasTitle: true,
+      verses: [
+        { verseNumber: 1, content: 'First verse', markers: { headings: [title, secondary] } },
+        { verseNumber: 2, content: '' },
+      ],
+    });
+    const props = editorProps.current as {
+      verses: Array<{ markers: { headings: unknown[] } }>;
+      onVersesChange: (changes: unknown[]) => void;
+    };
+    expect(props.verses[0].markers.headings).toEqual([secondary]);
+    props.onVersesChange([
+      {
+        verseNumber: 1,
+        text: 'Edited scripture',
+        markers: { headings: [secondary], paragraphs: [{ marker: 'p', offset: 0 }] },
+      },
+    ]);
+    expect(handleTextChange).toHaveBeenCalledWith(1, 'Edited scripture', {
+      headings: [title, secondary],
+      paragraphs: [{ marker: 'p', offset: 0 }],
+    });
+  });
+
   it('forwards editor markers to the save chain', () => {
     const split = {
       paragraphs: [

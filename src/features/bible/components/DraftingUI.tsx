@@ -27,6 +27,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -263,6 +264,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const {
     suggestions: aiSuggestions,
+    headingSuggestions = {},
     isAiThresholdMet,
     suggestionStatus,
   } = useAiSuggestions(
@@ -275,7 +277,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     projectItem.isAiEnabled && isDraft && !readOnly,
     {
       pericope: aiScope,
-      canSuggest: isDraft && !readOnly,
+      canSuggest: isDraft && !readOnly && !(displayMode === 'pericope' && isPericopeLoading),
+      titledVerseNumbers: verses
+        .filter(verse => verse.markers?.headings?.length)
+        .map(verse => verse.verseNumber),
       draftedVerseNumbers: verses
         .filter(verse => verse.content.trim())
         .map(verse => verse.verseNumber),
@@ -555,6 +560,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Keep track of verses that the user has manually typed in or that have been
   // auto-populated, so we never auto-populate a verse the user is working on.
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
+  const touchedTitlesRef = useRef(new Set<number>());
   const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
 
   const handleTextChangeWithTracking = useCallback(
@@ -563,6 +569,21 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleTextChange(verseNumber, text, markers);
     },
     [handleTextChange]
+  );
+
+  const handleTitleChange = useCallback(
+    (verseNumber: number, title: string) => {
+      touchedTitlesRef.current.add(verseNumber);
+      if (title.trim() && !isValidHeadingText(title)) return;
+      const target = verses.find(verse => verse.verseNumber === verseNumber);
+      if (!target || readOnly) return;
+      const previous = target.markers?.headings ?? [];
+      const headings = title.trim()
+        ? [{ marker: previous[0]?.marker ?? 's1', text: title }, ...previous.slice(1)]
+        : previous.slice(1);
+      handleTextChange(verseNumber, target.content, { ...target.markers, headings });
+    },
+    [verses, readOnly, handleTextChange]
   );
 
   useEffect(() => {
@@ -575,24 +596,55 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     if (justEnabled) {
       verses.forEach(verse => {
         if (!verse.content.trim()) userTouchedVersesRef.current.delete(verse.verseNumber);
+        if (!verse.markers?.headings?.length) touchedTitlesRef.current.delete(verse.verseNumber);
       });
     }
 
     // Both pericope surfaces display the whole group, independent of cursor focus.
     const candidateVerseNumbers = currentPericopeGroup
-      ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
+      ? sourceVerses
+          .filter(source =>
+            currentPericopeGroup.verses.some(verse => verse.verseNumber === source.verseNumber)
+          )
+          .map(verse => verse.verseNumber)
       : [activeVerseId];
 
-    pendingAiAutoFills({
+    const fills = pendingAiAutoFills({
       candidateVerseNumbers,
       verses,
       suggestions: aiSuggestions,
       touchedVerseNumbers: userTouchedVersesRef.current,
-    }).forEach(fill => {
+    });
+    const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
+    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
+    const titleFill =
+      currentPericopeGroup?.pericopeTitle?.trim() &&
+      firstTarget &&
+      firstSource &&
+      !firstTarget.markers?.headings?.length &&
+      !touchedTitlesRef.current.has(firstTarget.verseNumber) &&
+      heading?.bibleTextId === firstSource.id &&
+      isValidHeadingText(heading.suggestedText)
+        ? {
+            verseNumber: firstTarget.verseNumber,
+            markers: {
+              ...firstTarget.markers,
+              headings: [{ marker: 's1', text: heading.suggestedText }],
+            },
+          }
+        : undefined;
+    if (titleFill) touchedTitlesRef.current.add(titleFill.verseNumber);
+
+    fills.forEach(fill => {
       userTouchedVersesRef.current.add(fill.verseNumber);
       // The verse's own markers ride along: a fill that dropped them would null the paragraph
       // structure of a verse the translator laid out and left empty (#400 review).
-      handleTextChange(fill.verseNumber, fill.text, fill.markers);
+      handleTextChange(
+        fill.verseNumber,
+        fill.text,
+        titleFill?.verseNumber === fill.verseNumber ? titleFill.markers : fill.markers
+      );
       const source = sourceVerses.find(verse => verse.verseNumber === fill.verseNumber);
       if (source) {
         trackAiUsage({
@@ -602,8 +654,20 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         });
       }
     });
+    if (titleFill && firstTarget && firstSource && currentPericopeGroup) {
+      if (!fills.some(fill => fill.verseNumber === titleFill.verseNumber)) {
+        handleTextChange(titleFill.verseNumber, firstTarget.content, titleFill.markers);
+      }
+      trackAiUsage({
+        bibleTextId: firstSource.id,
+        projectUnitId: projectItem.projectUnitId,
+        pericopeNumber: currentPericopeGroup.pericopeNumber,
+        wasUsed: false,
+      });
+    }
   }, [
     activeVerseId,
+    headingSuggestions,
     currentPericopeGroup,
     aiSuggestions,
     verses,
@@ -725,6 +789,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         handleNextClick={handleNextClick}
                         handleNextPericopeClick={handleNextPericopeClick}
                         handleTextChange={handleTextChangeWithTracking}
+                        handleTitleChange={handleTitleChange}
                         isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                         isAiThresholdMet={isAiThresholdMet ?? false}
                         isTranslationComplete={isTranslationComplete}
@@ -800,6 +865,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       handleNextClick,
       handleNextPericopeClick,
       handleTextChangeWithTracking,
+      handleTitleChange,
       isTranslationComplete,
       isDraft,
       readOnly,
@@ -988,6 +1054,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           handleNextClick={handleNextClick}
                           handleNextPericopeClick={handleNextPericopeClick}
                           handleTextChange={handleTextChangeWithTracking}
+                          handleTitleChange={handleTitleChange}
                           isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                           isAiThresholdMet={isAiThresholdMet ?? false}
                           isTranslationComplete={isTranslationComplete}
