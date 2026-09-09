@@ -26,11 +26,9 @@ interface ResourcePanelProps {
   resourceNames: ResourceName[];
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
-  onBibleVersesChange?: (verses: BibleVerse[]) => void;
-  onBibleLoadingChange?: (loading: boolean) => void;
-  openResourceBiblePanel?: (open: boolean) => void;
-  selectPanel?: (panel: number) => void;
-  bibleResourceName: (name: string) => void;
+  onBibleSelect?: (bible: { id: string; label: string }) => void;
+  onBibleVersesChange?: (bibleId: string, verses: BibleVerse[]) => void;
+  onBibleLoadingChange?: (bibleId: string, loading: boolean) => void;
   registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
   initialLanguage?: string;
@@ -42,11 +40,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   resourceNames,
   onResourceChange,
   onLanguageChange,
+  onBibleSelect,
   onBibleVersesChange,
   onBibleLoadingChange,
-  openResourceBiblePanel,
-  selectPanel,
-  bibleResourceName,
   registerClearBible,
   initialResource,
   initialLanguage,
@@ -187,17 +183,17 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   // on reference changes that carry identical content.
   const prevBibleVersesStringRef = useRef<string>('');
   useEffect(() => {
-    if (!isBibleResource) return;
-    const versesString = JSON.stringify(bibleVerses);
+    if (!isBibleResource || !selectedBible) return;
+    const versesString = `${selectedBible.id}:${JSON.stringify(bibleVerses)}`;
     if (prevBibleVersesStringRef.current === versesString) return;
     prevBibleVersesStringRef.current = versesString;
-    onBibleVersesChange?.(bibleVerses);
-  }, [isBibleResource, bibleVerses, onBibleVersesChange]);
+    onBibleVersesChange?.(selectedBible.id, bibleVerses);
+  }, [isBibleResource, selectedBible, bibleVerses, onBibleVersesChange]);
 
   useEffect(() => {
-    if (!isBibleResource) return;
-    onBibleLoadingChange?.(loadingBibleContent);
-  }, [isBibleResource, loadingBibleContent, onBibleLoadingChange]);
+    if (!isBibleResource || !selectedBible) return;
+    onBibleLoadingChange?.(selectedBible.id, loadingBibleContent);
+  }, [isBibleResource, selectedBible, loadingBibleContent, onBibleLoadingChange]);
 
   // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {
@@ -213,11 +209,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const handleBibleSelect = useCallback(
     (bible: UnifiedBible) => {
       handleBibleChange(bible.id);
-      openResourceBiblePanel?.(true);
-      selectPanel?.(2);
-      bibleResourceName(bible.abbreviation);
+      onBibleSelect?.({ id: bible.id, label: bible.abbreviation });
     },
-    [handleBibleChange, openResourceBiblePanel, selectPanel, bibleResourceName]
+    [handleBibleChange, onBibleSelect]
   );
 
   const handleAccordionChange = async (value: string[]) => {

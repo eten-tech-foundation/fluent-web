@@ -146,38 +146,46 @@ vi.mock('@/features/flags', () => ({
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
     activeVerseId,
-    bibleResourceName,
-    openResourceBiblePanel,
+    onBibleLoadingChange,
+    onBibleSelect,
     onBibleVersesChange,
-    selectPanel,
   }: {
     activeVerseId: number;
-    bibleResourceName: (name: string) => void;
-    openResourceBiblePanel: (open: boolean) => void;
-    onBibleVersesChange: (verses: Array<{ verseNumber: number; text: string }>) => void;
-    selectPanel: (panel: number) => void;
+    onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
+    onBibleSelect: (bible: { id: string; label: string }) => void;
+    onBibleVersesChange: (
+      bibleId: string,
+      verses: Array<{ verseNumber: number; text: string }>
+    ) => void;
   }) => {
     const handleSelectBible = () => {
-      bibleResourceName('Alternative Bible');
-      openResourceBiblePanel(true);
-      selectPanel(2);
-      onBibleVersesChange([
+      onBibleSelect({ id: 'aq-alternative', label: 'Alternative Bible' });
+      onBibleLoadingChange('aq-alternative', false);
+      onBibleVersesChange('aq-alternative', [
         { verseNumber: 1, text: 'Alternative verse 1 text' },
         { verseNumber: 2, text: 'Alternative verse 2 text' },
+      ]);
+    };
+    const handleSelectSecondBible = () => {
+      onBibleSelect({ id: 'yv-second', label: 'Second Bible' });
+      onBibleLoadingChange('yv-second', false);
+      onBibleVersesChange('yv-second', [
+        { verseNumber: 1, text: 'Second Bible verse 1 text' },
+        { verseNumber: 2, text: 'Second Bible verse 2 text' },
       ]);
     };
     // A Bible with nothing for this passage: panel 2 is selected but has no verses, which is what
     // puts the drafting page on its panel-two placeholder.
     const handleSelectEmptyBible = () => {
-      bibleResourceName('Empty Bible');
-      openResourceBiblePanel(true);
-      selectPanel(2);
-      onBibleVersesChange([]);
+      onBibleSelect({ id: 'aq-empty', label: 'Empty Bible' });
+      onBibleLoadingChange('aq-empty', false);
+      onBibleVersesChange('aq-empty', []);
     };
     return (
       <div data-testid='mock-resource-panel'>
         <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
         <button onClick={handleSelectBible}>Select Alternative Bible</button>
+        <button onClick={handleSelectSecondBible}>Select Second Bible</button>
         <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
       </div>
     );
@@ -410,7 +418,7 @@ describe('DraftingUI', () => {
     await user.click(selectBibleBtn);
 
     // The name "Alternative Bible" should appear as a tab
-    expect(screen.getByRole('button', { name: 'Alternative Bible' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toBeInTheDocument();
 
     // Check if the loaded alternative verses are rendered in place of the source verses
     expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
@@ -418,11 +426,43 @@ describe('DraftingUI', () => {
 
     // Close the alternative tab
     // (X is lucide icon next to tab)
-    const closeSvg = screen.getByRole('button', { name: 'Alternative Bible' }).nextSibling;
-    if (closeSvg) {
-      await user.click(closeSvg as HTMLElement);
-    }
-    expect(screen.queryByRole('button', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close Alternative Bible' }));
+    expect(screen.queryByRole('tab', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+  });
+
+  it('keeps each opened resource Bible beside the source with its own content', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { pressed: false }));
+    await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+      'Resources',
+      'Checks',
+      'WEB',
+      'Alternative Bible',
+      'Second Bible',
+    ]);
+    expect(screen.getByText('Second Bible verse 1 text')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Alternative Bible' }));
+    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'WEB' }));
+    expect(
+      screen.getByText('In the beginning God created the heaven and the earth.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
   });
 
   it('renders a vertical divider between the tabs on the Source side when the second tab is open', async () => {
@@ -446,8 +486,8 @@ describe('DraftingUI', () => {
     await user.click(selectBibleBtn);
 
     // Verify the primary tab and alternative tab are both rendered
-    expect(screen.getByRole('button', { name: 'WEB' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Alternative Bible' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toBeInTheDocument();
 
     // Verify the divider is rendered between them
     expect(screen.getByText('|')).toBeInTheDocument();

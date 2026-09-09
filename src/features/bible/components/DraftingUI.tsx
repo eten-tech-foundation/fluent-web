@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
+import { BibleTabList, type ResourceBibleTab, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
 import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
@@ -54,6 +55,7 @@ const DraftingChapterView = lazy(() =>
  * `finding.surf` on a miss, so "empty" is always safe.
  */
 const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
+const EMPTY_BIBLE_VERSES: BibleVerse[] = [];
 
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
@@ -86,12 +88,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
 
-  // Bible tab state
-  const [selectedPanel, setSelectedPanel] = useState<1 | 2>(1);
-  const [openResourcePanel, setOpenResourcePanel] = useState(false);
-  const [bibleTabLabel, setBibleTabLabel] = useState('');
-  const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
-  const [bibleContentLoading, setBibleContentLoading] = useState(false);
+  // The source tab is permanent; every Resources Bible keeps its own keyed
+  // content so selecting another one cannot replace either the source or a
+  // previously opened resource Bible (#471).
+  const [activeBibleTabId, setActiveBibleTabId] = useState(SOURCE_BIBLE_TAB_ID);
+  const [resourceBibleTabs, setResourceBibleTabs] = useState<ResourceBibleTab[]>([]);
+  const [resourcePanelSelectedBibleId, setResourcePanelSelectedBibleId] = useState<string | null>(
+    null
+  );
+
+  const activeResourceBibleTab = resourceBibleTabs.find(tab => tab.id === activeBibleTabId);
+  const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
+  const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
+  const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
 
   // Which left-panel tab is showing (Resources | Checks). Persisted in the
   // editor-state blob as `activeLeftTab` (W11, §6.6).
@@ -597,11 +606,35 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const resetBibleState = useCallback(() => {
     clearBibleRef.current?.();
-    setSelectedPanel(1);
-    setOpenResourcePanel(false);
-    setBibleTabLabel('');
-    setBibleVerses([]);
-    setBibleContentLoading(false);
+    setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
+    setResourceBibleTabs([]);
+    setResourcePanelSelectedBibleId(null);
+  }, []);
+
+  const handleBibleSelect = useCallback((bible: { id: string; label: string }) => {
+    setResourcePanelSelectedBibleId(bible.id);
+    setResourceBibleTabs(currentTabs => {
+      const existing = currentTabs.find(tab => tab.id === bible.id);
+      if (existing) {
+        if (existing.label === bible.label) return currentTabs;
+        return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, label: bible.label } : tab));
+      }
+
+      return [...currentTabs, { ...bible, verses: [], isLoading: true }];
+    });
+    setActiveBibleTabId(bible.id);
+  }, []);
+
+  const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, verses: nextVerses } : tab))
+    );
+  }, []);
+
+  const handleBibleLoadingChange = useCallback((bibleId: string, isLoading: boolean) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isLoading } : tab))
+    );
   }, []);
 
   const toggleResources = useCallback(() => {
@@ -618,10 +651,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     });
   }, [resetBibleState]);
 
-  // Close Tab 2: reset all bible-related state, revert to panel 1
-  const handleBibleTabClose = useCallback(() => {
-    resetBibleState();
-  }, [resetBibleState]);
+  const handleBibleTabClose = useCallback(
+    (bibleId: string) => {
+      setResourceBibleTabs(currentTabs => currentTabs.filter(tab => tab.id !== bibleId));
+      setActiveBibleTabId(currentId => (currentId === bibleId ? SOURCE_BIBLE_TAB_ID : currentId));
+
+      if (resourcePanelSelectedBibleId === bibleId) {
+        clearBibleRef.current?.();
+        setResourcePanelSelectedBibleId(null);
+      }
+    },
+    [resourcePanelSelectedBibleId]
+  );
 
   // O(1) verse lookup for the bible panel left column
   const bibleVerseMap = useMemo<Map<number, string>>(() => {
@@ -820,14 +861,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             projectItem={projectItem}
             resourceNames={RESOURCE_NAMES}
             resourceVerseId={resourceVerseId}
-            setBibleContentLoading={setBibleContentLoading}
-            setBibleTabLabel={setBibleTabLabel}
-            setBibleVerses={setBibleVerses}
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
-            setOpenResourcePanel={setOpenResourcePanel}
-            setSelectedPanel={setSelectedPanel}
             showChecksTab={checksEnabled}
+            onBibleLoadingChange={handleBibleLoadingChange}
+            onBibleSelect={handleBibleSelect}
+            onBibleVersesChange={handleBibleVersesChange}
             onTabChange={handleTabChange}
           />
         )}
@@ -865,42 +904,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               }}
             >
               {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
-              <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
-                <button
-                  className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
-                    openResourcePanel
-                      ? selectedPanel === 1
-                        ? 'border-primary border-b-2 pb-1'
-                        : 'text-muted-foreground'
-                      : ''
-                  }`}
-                  disabled={!openResourcePanel}
-                  onClick={() => setSelectedPanel(1)}
-                >
-                  {projectItem.bibleName}
-                </button>
-
-                {openResourcePanel && (
-                  <>
-                    <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
-                      |
-                    </span>
-                    <button
-                      className={`cursor-pointer text-2xl font-bold transition-colors ${
-                        selectedPanel === 2
-                          ? 'border-primary border-b-2 pb-1'
-                          : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setSelectedPanel(2)}
-                    >
-                      {bibleTabLabel}
-                    </button>
-                    <X
-                      className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
-                      onClick={handleBibleTabClose}
-                    />
-                  </>
-                )}
+              <div className='bg-background sticky top-0 z-10 min-w-0 px-6 py-3'>
+                <BibleTabList
+                  activeTabId={activeBibleTabId}
+                  resourceTabs={resourceBibleTabs}
+                  sourceLabel={projectItem.bibleName}
+                  onClose={handleBibleTabClose}
+                  onSelect={setActiveBibleTabId}
+                />
               </div>
 
               <div className='bg-background sticky top-0 z-10 px-6 py-3'>
