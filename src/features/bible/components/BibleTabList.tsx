@@ -29,9 +29,8 @@ const tabClassName = (active: boolean) =>
 /**
  * Source-first Bible navigation shared by every drafting view.
  *
- * Resource tabs may outgrow the source column on smaller screens, so the row
- * scrolls horizontally instead of allowing the permanent source tab to be
- * replaced or clipped out of the layout.
+ * Resource tabs may outgrow the source column on smaller screens. Only that
+ * resource section scrolls, keeping the permanent source tab visible.
  */
 export function BibleTabList({
   sourceLabel,
@@ -41,58 +40,72 @@ export function BibleTabList({
   onClose,
 }: BibleTabListProps) {
   return (
-    <div className='min-w-0 overflow-x-auto'>
-      <div
-        aria-label='Bible versions'
-        className='flex w-max min-w-full items-center gap-1'
-        role='tablist'
+    <div aria-label='Bible versions' className='flex min-w-0 items-center gap-1' role='tablist'>
+      <button
+        aria-selected={activeTabId === SOURCE_BIBLE_TAB_ID}
+        className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} shrink-0`}
+        role='tab'
+        tabIndex={activeTabId === SOURCE_BIBLE_TAB_ID ? 0 : -1}
+        type='button'
+        onClick={() => onSelect(SOURCE_BIBLE_TAB_ID)}
       >
-        <button
-          aria-selected={activeTabId === SOURCE_BIBLE_TAB_ID}
-          className={tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)}
-          role='tab'
-          tabIndex={activeTabId === SOURCE_BIBLE_TAB_ID ? 0 : -1}
-          type='button'
-          onClick={() => onSelect(SOURCE_BIBLE_TAB_ID)}
-        >
-          {sourceLabel}
-        </button>
+        {sourceLabel}
+      </button>
 
-        {resourceTabs.map(tab => {
-          const isActive = activeTabId === tab.id;
+      {resourceTabs.length > 0 && (
+        <>
+          <span
+            aria-hidden='true'
+            className='dark:text-foreground mx-2 shrink-0 text-2xl font-bold text-slate-800 select-none'
+          >
+            |
+          </span>
+          <div
+            aria-label='Open resource Bibles'
+            className='min-w-0 flex-1 overflow-x-auto'
+            role='group'
+          >
+            <div className='flex w-max items-center gap-1'>
+              {resourceTabs.map((tab, index) => {
+                const isActive = activeTabId === tab.id;
 
-          return (
-            <Fragment key={tab.id}>
-              <span
-                aria-hidden='true'
-                className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'
-              >
-                |
-              </span>
-              <div className='flex items-center'>
-                <button
-                  aria-selected={isActive}
-                  className={tabClassName(isActive)}
-                  role='tab'
-                  tabIndex={isActive ? 0 : -1}
-                  type='button'
-                  onClick={() => onSelect(tab.id)}
-                >
-                  {tab.label}
-                </button>
-                <button
-                  aria-label={`Close ${tab.label}`}
-                  className='text-muted-foreground hover:text-foreground ml-1 cursor-pointer transition-colors'
-                  type='button'
-                  onClick={() => onClose(tab.id)}
-                >
-                  <X aria-hidden='true' className='h-4 w-4' />
-                </button>
-              </div>
-            </Fragment>
-          );
-        })}
-      </div>
+                return (
+                  <Fragment key={tab.id}>
+                    {index > 0 && (
+                      <span
+                        aria-hidden='true'
+                        className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'
+                      >
+                        |
+                      </span>
+                    )}
+                    <div className='flex items-center'>
+                      <button
+                        aria-selected={isActive}
+                        className={tabClassName(isActive)}
+                        role='tab'
+                        tabIndex={isActive ? 0 : -1}
+                        type='button'
+                        onClick={() => onSelect(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                      <button
+                        aria-label={`Close ${tab.label}`}
+                        className='text-muted-foreground hover:text-foreground ml-1 cursor-pointer transition-colors'
+                        type='button'
+                        onClick={() => onClose(tab.id)}
+                      >
+                        <X aria-hidden='true' className='h-4 w-4' />
+                      </button>
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

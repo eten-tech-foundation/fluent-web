@@ -26,6 +26,25 @@ describe('BibleTabList', () => {
     expect(screen.queryByRole('button', { name: 'Close WEB' })).not.toBeInTheDocument();
   });
 
+  it('pins the source outside the horizontally scrolling resource tabs', () => {
+    render(
+      <BibleTabList
+        activeTabId='yv-2'
+        resourceTabs={resourceTabs}
+        sourceLabel='WEB'
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />
+    );
+
+    const sourceTab = screen.getByRole('tab', { name: 'WEB' });
+    const resourceScroller = screen.getByRole('group', { name: 'Open resource Bibles' });
+
+    expect(resourceScroller).not.toContainElement(sourceTab);
+    expect(resourceScroller).toContainElement(screen.getByRole('tab', { name: 'ULT' }));
+    expect(resourceScroller).toContainElement(screen.getByRole('tab', { name: 'NIV' }));
+  });
+
   it('selects the source and resource tabs by their stable ids', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

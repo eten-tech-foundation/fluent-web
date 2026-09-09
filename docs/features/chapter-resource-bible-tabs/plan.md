@@ -16,7 +16,7 @@
 - Selecting a Bible in Resources adds or activates a tab without removing the source Bible or previously opened resource Bibles.
 - Closing a resource Bible never closes the source Bible.
 - A resource Bible with no verses displays `This Bible verse doesn't have content for this passage.` after loading finishes.
-- The tab strip remains usable at reduced width by scrolling horizontally instead of shrinking labels out of view.
+- The source tab stays pinned at reduced width while the resource-tab section scrolls horizontally.
 - Keep changes limited to the drafting/resource-Bible interaction described by issue #471.
 
 ---
@@ -155,7 +155,7 @@ Run: `pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm buil
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Commit the Chapter View behavior and plan**
+- [x] **Step 5: Commit the Chapter View behavior and plan**
 
 ```bash
 git add docs/features/chapter-resource-bible-tabs/plan.md \
@@ -177,15 +177,15 @@ git commit -m "fix: show Bible tabs in chapter view"
 - Consumes: the completed branch and local Fluent development stack.
 - Produces: browser evidence for source, multiple-resource, empty-content, and reduced-width states plus a PR linked to #471.
 
-- [ ] **Step 1: Start the app with the ETen local-stack configuration**
+- [x] **Step 1: Start a focused browser harness for Chapter View**
 
-Use the existing Fluent local-stack runbook and a port that does not conflict with other worktrees. Keep credentials and service keys in the local environment; do not commit them.
+Use an ephemeral Vite entry point that mounts the real `DraftingChapterView`, styles, editor, and i18n with controlled source and resource data. This avoids committing credentials or depending on unavailable local API environment files. Remove the harness after validation.
 
-- [ ] **Step 2: Validate the requested states in a browser**
+- [x] **Step 2: Validate the requested states in a browser**
 
 Verify Chapter View shows the source name before Resources opens; selecting two Bibles leaves all three tabs visible; switching to the source restores its content; an empty resource shows the exact message; and the tab strip remains reachable at a narrow viewport.
 
-- [ ] **Step 3: Perform the fresh completion gate**
+- [x] **Step 3: Perform the fresh completion gate**
 
 Run: `pnpm precheck && pnpm build && git diff --check && git status --short --branch`
 
