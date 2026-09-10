@@ -9,6 +9,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createTtsSegment } from '../lib/createTtsSegment';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
 import { useSourceTtsPlayback, type UseSourceTtsPlaybackOptions } from './useSourceTtsPlayback';
@@ -282,7 +283,12 @@ describe('useSourceTtsPlayback — failure surfacing (§5.2)', () => {
   it('turns a playback failure into a toast that names the verse', () => {
     setup();
 
-    act(() => queueOptions.onError?.(new Error('boom'), { verseRef: 'GEN 1:3', text: 'three' }));
+    act(() =>
+      queueOptions.onError?.(
+        new Error('boom'),
+        createTtsSegment({ verseRef: 'GEN 1:3', text: 'three' }, { engine, playableKey: 'v3' })
+      )
+    );
 
     expect(toastError).toHaveBeenCalledWith(
       'Could not play audio for verse GEN 1:3. Please try again.'

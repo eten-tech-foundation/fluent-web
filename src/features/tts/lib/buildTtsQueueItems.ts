@@ -34,11 +34,9 @@ export const isPlayableRow = (row: TtsRowDraft): boolean =>
 /**
  * Build the queue in document order, dropping unplayable rows.
  *
- * Dropping rather than including-and-halting is deliberate: the queue stops
- * cleanly on an empty item (§5.3 step 5), so a reference panel that is
- * missing a single verse would otherwise end a continuous listen mid-chapter.
- * A gap in the reference text is not a reason to stop reading the ones that
- * are there; the missing row simply has no controls of its own (§5.1).
+ * Text playability belongs here, not in the universal player (a recorded source
+ * need not have text). A gap in the reference text is not a reason to stop
+ * reading the verses that are there; the missing row has no controls of its own.
  */
 export const buildTtsQueueItems = (rows: readonly TtsRowDraft[]): TtsQueueItem[] =>
   rows.filter(isPlayableRow).map(row => ({
