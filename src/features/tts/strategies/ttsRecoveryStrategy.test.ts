@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { superviseClipPlayback } from '../engines/serverTtsEngine';
 import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
+import { superviseTtsStrategy } from '../testing/superviseTtsStrategy';
 
 import { TtsRecoveryStrategy } from './ttsRecoveryStrategy';
 
@@ -18,8 +18,8 @@ const actions = (): RecoveryRequests => ({
 });
 const error = { on: 'error' as const, source, positionMs: 0, startedPlaying: false };
 
-// The existing engine suite continues to exercise every ladder case unchanged
-// through its compatibility adapter. These cases isolate the policy/request seam.
+// The original ladder cases now live in ttsRecoveryStrategy.playback.test.ts.
+// These cases isolate policy requests from the player's arbitration machinery.
 describe('TtsRecoveryStrategy requests', () => {
   it.each(['error', 'stall'] as const)(
     'preserves the legacy %s regeneration-failure diagnostic',
@@ -29,7 +29,7 @@ describe('TtsRecoveryStrategy requests', () => {
       try {
         const element = new FakeClipElement();
         const onFailure = vi.fn();
-        superviseClipPlayback({
+        superviseTtsStrategy({
           element,
           audioUrl: source.url,
           signal: controller.signal,
@@ -43,7 +43,6 @@ describe('TtsRecoveryStrategy requests', () => {
         await vi.advanceTimersByTimeAsync(10);
         expect(onFailure).toHaveBeenCalledOnce();
         expect(onFailure.mock.calls[0][0]).toMatchObject({
-          failureClass: 'midStream',
           message:
             mode === 'stall'
               ? 'TTS stall recovery failed unexpectedly'
@@ -92,7 +91,9 @@ describe('TtsRecoveryStrategy requests', () => {
     expect(regenerate).not.toHaveBeenCalled();
     expect(typeof lazy).toBe('function');
     if (typeof lazy !== 'function') throw new Error('Expected lazy regeneration');
-    await expect(lazy()).resolves.toBe(fresh);
+    await expect(
+      lazy({ signal: new AbortController().signal, run: { forceTts: false }, requests })
+    ).resolves.toBe(fresh);
   });
 
   it('requests a single charged stall episode, with each subsequent probe scheduled by the player', async () => {

@@ -5,6 +5,7 @@ import type {
   ExhaustionAction,
   PlaybackFailure,
   PlaybackOptions,
+  PlaybackRunState,
   PollRequests,
   RecoveryRequests,
   RecoveryStrategy,
@@ -12,7 +13,7 @@ import type {
   Source,
 } from '../seam/types';
 
-/** Transitional player adapter; the queue will own this machinery when it consumes segments. */
+/** Segment supervision under the queue's run: all media, timers and budget arbitration stay here. */
 export interface PlaybackRecoveryOptions {
   element: ClipAudioElement;
   source: Source;
@@ -23,10 +24,25 @@ export interface PlaybackRecoveryOptions {
   onGiveUp: (reason: string, charge?: BudgetKey) => void;
   onAutoplayRefused: () => void;
   onMarkAi?: () => void;
+  budgets: Map<BudgetKey, number>;
+  run: Readonly<PlaybackRunState>;
+  onHandOff?: (source: Segment['source']) => void;
+  onAttach?: (recovery: RecoveryStrategy) => void;
+  onSource?: (source: Source, startOffset: number) => void;
+  onPlayed?: () => void;
+  /** An early element error observed before this controller could subscribe. */
+  initialLoadFailed?: boolean;
+}
+
+export interface PlaybackRecovery {
+  detach: () => void;
+  requests: RecoveryRequests;
+  /** Initial playback uses the same scheduled path and load identity as retries. */
+  start: (startOffset?: number) => void;
 }
 
 /** Player-owned arbitration: policy receives neither the media element nor budget results. */
-export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void) => {
+export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRecovery => {
   const { element } = options;
   const controller = new AbortController();
   const signal = controller.signal;
@@ -39,7 +55,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
   let epoch = 0;
   let loadEpoch = 0;
   let lastCharge: BudgetKey | undefined;
-  const retries = new Map<BudgetKey, number>();
+  const retries = options.budgets;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const cleanups: Array<() => void> = [];
@@ -105,16 +121,31 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
 
   const reload = async (next: Segment['source'], opts: PlaybackOptions = {}): Promise<void> => {
     const token = epoch;
-    const resolved = typeof next === 'function' ? await next() : next;
+    const resolved =
+      typeof next === 'function'
+        ? await next({ signal, run: options.run, requests: makeRequests(token, () => {}) })
+        : next;
     if (isDetached() || token !== epoch) return;
-    source = resolved;
+    // Resolution may have requested attach/markAi. Queue playback behind those
+    // requests so the policy and badge are installed before the first sample.
+    schedule(() => beginLoad(resolved, opts.startOffset, true), 0, token);
+  };
+
+  const beginLoad = async (
+    next: Source,
+    startOffset: number | undefined,
+    reset: boolean
+  ): Promise<void> => {
+    source = next;
     recovering = false;
     const loadToken = ++loadEpoch;
-    resetClipElement(element, source.url);
-    element.currentTime = opts.startOffset ?? source.window?.[0] ?? 0;
+    if (reset) resetClipElement(element, source.url);
+    element.currentTime = startOffset ?? source.window?.[0] ?? 0;
+    options.onSource?.(source, element.currentTime);
     armWatchdog();
     try {
       await element.play();
+      if (!isDetached() && loadToken === loadEpoch) options.onPlayed?.();
     } catch (error) {
       // An error event can start another diagnosis while this play promise is
       // pending. Only a newer media load (not a diagnosis) makes it obsolete.
@@ -179,6 +210,8 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
           schedule(
             () => {
               strategy = next;
+              options.onAttach?.(next);
+              if (!recovering) armWatchdog();
             },
             0,
             token
@@ -189,6 +222,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
         onWorkRequested();
         schedule(
           async () => {
+            options.onHandOff?.(next);
             retries.clear();
             lastCharge = undefined;
             playbackStarted = false;
@@ -234,9 +268,25 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
       });
   };
 
+  const playback: PlaybackRecovery = {
+    detach,
+    requests: makeRequests(epoch, () => {}),
+    start: startOffset => {
+      schedule(() => beginLoad(source, startOffset, false));
+      if (options.initialLoadFailed)
+        schedule(() =>
+          observe({
+            on: 'error',
+            source,
+            positionMs: element.currentTime * 1000,
+            startedPlaying: playbackStarted,
+          })
+        );
+    },
+  };
   if (options.signal.aborted) {
     detach();
-    return detach;
+    return playback;
   }
   options.signal.addEventListener('abort', detach, { once: true });
   cleanups.push(
@@ -256,5 +306,5 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): (() => void
     })
   );
   armWatchdog();
-  return detach;
+  return playback;
 };

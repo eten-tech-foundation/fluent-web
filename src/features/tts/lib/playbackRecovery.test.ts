@@ -23,7 +23,10 @@ const setup = (strategy = new FakeStrategy()) => {
   const onGiveUp = vi.fn();
   const onMarkAi = vi.fn();
   const onAutoplayRefused = vi.fn();
-  const detach = supervisePlayback({
+  const budgets = new Map<string, number>();
+  const playback = supervisePlayback({
+    budgets,
+    run: { forceTts: false },
     element,
     source,
     recovery: strategy,
@@ -34,13 +37,40 @@ const setup = (strategy = new FakeStrategy()) => {
     onMarkAi,
     onAutoplayRefused,
   });
-  return { element, controller, onGiveUp, onMarkAi, onAutoplayRefused, detach, strategy };
+  return {
+    element,
+    controller,
+    onGiveUp,
+    onMarkAi,
+    onAutoplayRefused,
+    detach: playback.detach,
+    strategy,
+    budgets,
+    playback,
+  };
 };
 
-// Temporary adapter coverage follows the machinery into the queue migration.
+// This same segment controller is used by the queue, not a competing recovery loop.
 describe('player recovery arbitration', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it('schedules initial attachment and AI marking before the first media play', async () => {
+    const { element, playback, onMarkAi } = setup();
+    const policy = new FakeStrategy();
+    const play = vi.spyOn(element, 'play').mockImplementation(async () => {
+      element.emit('error');
+    });
+    playback.requests.attach(policy);
+    playback.requests.markAi();
+    playback.start(9);
+    expect(onMarkAi).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onMarkAi.mock.invocationCallOrder[0]).toBeLessThan(play.mock.invocationCallOrder[0]);
+    expect(policy.recover).toHaveBeenCalledOnce();
+    expect(element.currentTime).toBe(9);
+  });
 
   it('does not wedge supervision when a policy chooses no action', async () => {
     const { element, strategy } = setup();
@@ -108,11 +138,12 @@ describe('player recovery arbitration', () => {
     strategy.recover.mockImplementation(async (_failure, requests) => {
       requests.play(lazy, 'opaque-bucket', { onExhausted: () => requests.giveUp('done') });
     });
-    const { element, onGiveUp } = setup(strategy);
+    const { element, onGiveUp, budgets } = setup(strategy);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       element.emit('error');
       await vi.advanceTimersByTimeAsync(0);
     }
+    expect(budgets.get('opaque-bucket')).toBe(3);
     expect(strategy.recover).toHaveBeenCalledTimes(3);
     expect(lazy).toHaveBeenCalledTimes(2);
     expect(element.loadCalls).toHaveLength(2);

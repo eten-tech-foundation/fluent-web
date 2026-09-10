@@ -13,12 +13,13 @@
  * `enabled` is THIS hook's job.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { buildTtsQueueItems, findTtsQueueIndex, type TtsRowDraft } from '../lib/buildTtsQueueItems';
+import { createTtsSegment } from '../lib/createTtsSegment';
 import {
   type ScrollableRow,
   scrollRowIntoViewIfNeeded,
@@ -99,8 +100,19 @@ export const useSourceTtsPlayback = (
 
   // Callbacks handed to the queue must not go stale between clips, and must
   // not re-create the queue session, so the volatile inputs live in refs.
-  const latest = useRef({ getRowElement, getViewport });
-  latest.current = { getRowElement, getViewport };
+  const latest = useRef({ getRowElement, getViewport, engine, pageKey });
+  latest.current = { getRowElement, getViewport, engine, pageKey };
+  const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
+  const segmentFor = useCallback(
+    (item: TtsQueueItem) =>
+      createTtsSegment(item, {
+        engine: latest.current.engine,
+        playableKey: JSON.stringify([latest.current.pageKey, item.audioSource, item.verseRef]),
+        onServing: (verseRef, servedAs) =>
+          setItemServing(previous => ({ ...previous, [verseRef]: servedAs })),
+      }),
+    []
+  );
 
   const items = useMemo(() => buildTtsQueueItems(rows), [rows]);
   const itemsRef = useRef<TtsQueueItem[]>(items);
@@ -128,27 +140,36 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
-    engine,
     onError: handleError,
+    onAutoplayRefused: (_snapshot, segment) =>
+      handleError(new Error('Playback requires a user gesture'), segment),
     onScrollRequest: handleScrollRequest,
   });
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
-  const playVerse = useCallback((verseRef: string) => {
-    const index = findTtsQueueIndex(itemsRef.current, verseRef);
-    if (index < 0) return; // unplayable row: controls are disabled anyway (§5.1)
-    // T1: one verse, no advance.
-    queueRef.current.playOne(itemsRef.current[index]);
-  }, []);
+  const playVerse = useCallback(
+    (verseRef: string) => {
+      const index = findTtsQueueIndex(itemsRef.current, verseRef);
+      if (index < 0) return; // unplayable row: controls are disabled anyway (§5.1)
+      // T1: one verse, no advance.
+      setItemServing({});
+      queueRef.current.playOne(segmentFor(itemsRef.current[index]));
+    },
+    [segmentFor]
+  );
 
-  const playFromVerse = useCallback((verseRef: string) => {
-    const index = findTtsQueueIndex(itemsRef.current, verseRef);
-    if (index < 0) return;
-    // T1: continuous from here through the end of this page's list.
-    queueRef.current.playFrom(itemsRef.current, index);
-  }, []);
+  const playFromVerse = useCallback(
+    (verseRef: string) => {
+      const index = findTtsQueueIndex(itemsRef.current, verseRef);
+      if (index < 0) return;
+      // T1: continuous from here through the end of this page's list.
+      setItemServing({});
+      queueRef.current.playFrom(itemsRef.current.map(segmentFor), index);
+    },
+    [segmentFor]
+  );
 
   /**
    * G3a: pericope mode reads one group and stops there.
@@ -157,26 +178,42 @@ export const useSourceTtsPlayback = (
    * whatever array it is handed, so a bounded blob is simply a SHORTER array
    * built from the page's own document-ordered, playability-filtered items.
    */
-  const playGroup = useCallback((verseRefs: readonly string[]) => {
-    const wanted = new Set(verseRefs);
-    const pageItems = itemsRef.current;
-    const groupItems = pageItems.filter(item => wanted.has(item.verseRef));
-    if (groupItems.length === 0) return; // nothing playable in this group (§5.1)
+  const playGroup = useCallback(
+    (verseRefs: readonly string[]) => {
+      const wanted = new Set(verseRefs);
+      const pageItems = itemsRef.current;
+      const groupItems = pageItems.filter(item => wanted.has(item.verseRef));
+      if (groupItems.length === 0) return; // nothing playable in this group (§5.1)
 
-    queueRef.current.playFrom(groupItems, 0);
-  }, []);
+      setItemServing({});
+      const key = JSON.stringify([
+        latest.current.pageKey,
+        groupItems[0].audioSource,
+        groupItems.map(item => item.verseRef),
+      ]);
+      queueRef.current.playFrom(
+        groupItems.map(item => ({ ...segmentFor(item), playableKey: key })),
+        0
+      );
+    },
+    [segmentFor]
+  );
 
-  const playFromGroup = useCallback((verseRefs: readonly string[]) => {
-    const wanted = new Set(verseRefs);
-    const pageItems = itemsRef.current;
-    // The group's first playable row, located in the PAGE's list so the start
-    // index is the queue's index and not a rendered-row count.
-    const index = pageItems.findIndex(item => wanted.has(item.verseRef));
-    if (index < 0) return; // nothing playable in this group (§5.1)
+  const playFromGroup = useCallback(
+    (verseRefs: readonly string[]) => {
+      const wanted = new Set(verseRefs);
+      const pageItems = itemsRef.current;
+      // The group's first playable row, located in the PAGE's list so the start
+      // index is the queue's index and not a rendered-row count.
+      const index = pageItems.findIndex(item => wanted.has(item.verseRef));
+      if (index < 0) return; // nothing playable in this group (§5.1)
 
-    // Exactly like playFromVerse: this runs to the end of the page and stops.
-    queueRef.current.playFrom(pageItems, index);
-  }, []);
+      // Exactly like playFromVerse: this runs to the end of the page and stops.
+      setItemServing({});
+      queueRef.current.playFrom(pageItems.map(segmentFor), index);
+    },
+    [segmentFor]
+  );
 
   const stop = useCallback(() => {
     queueRef.current.stop();
@@ -216,10 +253,12 @@ export const useSourceTtsPlayback = (
     [queue.itemStates]
   );
 
-  const servingFor = useCallback(
-    (verseRef: string) => queue.itemServing[verseRef],
-    [queue.itemServing]
-  );
+  // The serving wash is a TTS diagnostic, not generic player state.
+  useEffect(() => {
+    if (queue.status === 'idle') setItemServing({});
+  }, [queue.status]);
+
+  const servingFor = useCallback((verseRef: string) => itemServing[verseRef], [itemServing]);
 
   /**
    * G3a: the group-level highlight, derived from the SAME `activeVerseRef` the

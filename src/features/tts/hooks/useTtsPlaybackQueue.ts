@@ -1,124 +1,118 @@
-/**
- * `useTtsPlaybackQueue` — the continuous-mode playback queue (§5.3, T1/T7).
- *
- * Feature-agnostic: items carry their own text/langCode/refs, so the hook is
- * reusable on any source-scripture surface (T3). It never navigates — at the
- * end of the supplied list it simply goes idle.
- */
-
+/** A page-local player: L2 chooses sources; this queue owns runs, media and recovery machinery. */
 import { useEffect, useRef, useState } from 'react';
 
-import {
-  type FetchLike,
-  superviseClipPlayback,
-  type TtsRecoveryTiming,
-} from '../engines/serverTtsEngine';
 import { type ClipAudioElement, createClipAudioElement, onClipEvent } from '../lib/audioElement';
-import {
-  type TtsClip,
-  type TtsEngine,
-  type TtsQueueItem,
-  type TtsServedFormat,
-} from '../tts.types';
+import { supervisePlayback } from '../lib/playbackRecovery';
+
+import type {
+  BudgetKey,
+  PlaybackRunState,
+  PlayableKey,
+  RecoveryRequests,
+  Segment,
+  Source,
+} from '../seam/types';
 
 /**
- * §5.3 (CB1): prefetch depth stays capped at the next verse, AT MOST two,
- * ahead of the play position — never chapter-wide fan-out. Chapter-wide
- * speculative requests multiplied by concurrent users invites admission
- * pressure (§9.2) for audio that may never be heard.
+ * Lazy prefetch starts only during playback, one segment ahead, at most two,
+ * never chapter-wide. The pericope press produces its verses lazily; verse and
+ * pericope playback share the same artifacts. Recovery may also spend. There is
+ * no eager synthesis or speculative sidecar pass (requirements: prefetch/cache).
  */
 export const TTS_PREFETCH_DEPTH = 1;
 export const TTS_MAX_PREFETCH_DEPTH = 2;
-
-/** Queue-level playback status driving the controls (§5.2). */
 export type TtsPlaybackStatus = 'idle' | 'loading' | 'playing';
-
-/** Per-item state (§5.3 names these explicitly; a union, not booleans). */
 export type TtsQueueItemState = 'synthesizing' | 'buffered' | 'playing';
 
+/** A report for the host's registry, not a retained player or a resume store. */
+export interface PauseSnapshot {
+  playableKey: PlayableKey;
+  /** Index within the sounding playable, not within a multi-playable run. */
+  itemIndex: number;
+  verseRef: string;
+  /** File-absolute element time, with no window start subtracted. */
+  currentTime: number;
+  forceTts: boolean;
+}
+
 export interface UseTtsPlaybackQueueOptions {
-  engine: TtsEngine;
-  /** Toast-worthy failure of the PLAYING clip (§5.2); fired once per failure. */
-  onError?: (error: Error, item: TtsQueueItem) => void;
-  /** §5.3 step 2 — host scrolls the active row into view when needed. */
+  onError?: (error: Error, segment: Segment) => void;
+  onAutoplayRefused?: (snapshot: PauseSnapshot, segment: Segment) => void;
+  onRunComplete?: () => void;
   onScrollRequest?: (verseRef: string) => void;
-  /** Prefetch depth; clamped to `TTS_MAX_PREFETCH_DEPTH` (§5.3, CB1). */
   prefetchDepth?: number;
-  /** Element factory — injectable because jsdom has no media elements. */
   createElement?: (src: string) => ClipAudioElement;
-  /** Passed through to `superviseClipPlayback` HEAD probes (§6.1). */
-  fetchFn?: FetchLike;
-  timing?: Partial<TtsRecoveryTiming>;
+  maxRetriesPerClass?: number;
+  maxStallPolls?: number;
 }
 
 export interface TtsPlaybackQueueApi {
   status: TtsPlaybackStatus;
-  /** The playback-highlighted row, or null when idle (§5.3 step 1). */
   activeVerseRef: string | null;
-  /** Per-item states keyed by verseRef (§5.3). */
   itemStates: Readonly<Record<string, TtsQueueItemState>>;
-  /** Which container each clip was served as, for the verification tint (§9.2). */
-  itemServing: Readonly<Record<string, TtsServedFormat>>;
+  /** This run's latch; the host owns persistence of its last value. */
+  aiMarkedKeys: ReadonlySet<PlayableKey>;
   playbackRate: number;
-  /** T1: play one verse; stops at clip end, never advances. */
-  playOne: (item: TtsQueueItem) => void;
-  /** T1: play from here; advances through the list on `ended` (§6.2). */
-  playFrom: (items: TtsQueueItem[], startIndex: number) => void;
-  /** §5.1: cancel queue, pause element, clear prefetch intent + highlight. */
+  playOne: (segment: Segment, startOffset?: number) => void;
+  playFrom: (segments: Segment[], startIndex: number, startOffset?: number) => void;
+  /** No snapshot while idle or before any source position is known; always cancels the run. */
+  pause: () => PauseSnapshot | null;
   stop: () => void;
-  /** §6.2 (T11): element passthrough only — NEVER triggers synthesis. */
   setPlaybackRate: (rate: number) => void;
 }
 
-interface PrefetchEntry {
-  state: 'pending' | 'ready' | 'failed';
-  audioUrl?: string;
+type ResolutionAction = (requests: RecoveryRequests) => void;
+interface SourceEntry {
+  source?: Source;
   element?: ClipAudioElement;
+  failed: boolean;
+  error?: unknown;
   promise: Promise<void>;
-  /**
-   * Unsubscribe for the watch on the early element's `error` (§9.2). An
-   * unwatched prefetch element can fail its load — an admission `503` is the
-   * ordinary way — and leave the entry claiming `ready` while holding a corpse.
-   */
-  detachWatch?: () => void;
+  controller: AbortController;
+  /** Requests are queued until adoption; a prefetch never changes the sounding segment. */
+  actions: ResolutionAction[];
+  detachWatch: () => void;
+  dispose: () => void;
 }
 
 interface PlaybackSession {
   controller: AbortController;
-  items: TtsQueueItem[];
+  items: Segment[];
   index: number;
-  /** Prefetched clips keyed by ABSOLUTE item index — pruning keeps it ≤ depth. */
-  prefetches: Map<number, PrefetchEntry>;
+  budgets: Map<BudgetKey, number>;
+  aiMarked: Set<PlayableKey>;
+  /** Storage only. L2 reads this through its resolution context; L3 never selects from it. */
+  resolutionState: PlaybackRunState;
+  current?: { segment: Segment; source: Source; startOffset: number };
+  prefetches: Map<number, SourceEntry>;
   activeElement?: ClipAudioElement;
-  /** Teardown for the active clip: supervision detach + event unsubscribes. */
   clipCleanups: Array<() => void>;
+  startOffset?: number;
 }
 
-const isAbortError = (error: unknown): boolean =>
-  error instanceof DOMException && error.name === 'AbortError';
+const teardownActiveClip = (session: PlaybackSession): void => {
+  for (const cleanup of session.clipCleanups) cleanup();
+  session.clipCleanups = [];
+  session.activeElement?.pause();
+  session.activeElement = undefined;
+  session.current = undefined;
+};
 
-/**
- * Autoplay refusal — the browser will not start without a user gesture.
- *
- * The one `play()` rejection the recovery ladder genuinely cannot fix: nothing
- * about the clip or its URL is wrong. Every other rejection means the source
- * failed to load, which the ladder is built to classify and heal.
- */
-const isAutoplayRefusal = (error: unknown): boolean =>
-  error instanceof DOMException && error.name === 'NotAllowedError';
+const disposeSession = (session: PlaybackSession): void => {
+  teardownActiveClip(session);
+  session.controller.abort();
+  for (const entry of session.prefetches.values()) entry.dispose();
+  session.prefetches.clear();
+};
 
 export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPlaybackQueueApi => {
   const [status, setStatus] = useState<TtsPlaybackStatus>('idle');
   const [activeVerseRef, setActiveVerseRef] = useState<string | null>(null);
   const [itemStates, setItemStates] = useState<Record<string, TtsQueueItemState>>({});
-  // Parallel to itemStates rather than folded into it: that record drives the
-  // per-row loading badge, and a diagnostic must not be able to change it.
-  const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
+  const [aiMarkedKeys, setAiMarkedKeys] = useState<ReadonlySet<PlayableKey>>(new Set());
   const [playbackRate, setPlaybackRateState] = useState(1);
-
   const sessionRef = useRef<PlaybackSession | null>(null);
   const rateRef = useRef(1);
-  // Options live in a ref so session callbacks never capture stale closures.
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
@@ -128,287 +122,276 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   const setItemState = (verseRef: string, state: TtsQueueItemState | undefined): void => {
     setItemStates(previous => {
       const next = { ...previous };
-      if (state === undefined) {
-        delete next[verseRef];
-      } else {
-        next[verseRef] = state;
-      }
+      if (state === undefined) delete next[verseRef];
+      else next[verseRef] = state;
       return next;
     });
   };
 
-  const teardownActiveClip = (session: PlaybackSession): void => {
-    for (const cleanup of session.clipCleanups) cleanup();
-    session.clipCleanups = [];
-    session.activeElement?.pause();
-    session.activeElement = undefined;
-  };
-
-  /** Return to idle with NO stale highlight (§5.2). */
   const goIdle = (session: PlaybackSession): void => {
-    teardownActiveClip(session);
-    session.controller.abort(); // kills prefetch fetches + retry/watchdog timers (CB1)
-    for (const entry of session.prefetches.values()) entry.detachWatch?.();
-    session.prefetches.clear();
+    disposeSession(session);
     if (sessionRef.current === session) sessionRef.current = null;
     setStatus('idle');
     setActiveVerseRef(null);
     setItemStates({});
-    setItemServing({});
   };
 
   const stop = (): void => {
-    const session = sessionRef.current;
-    if (session) goIdle(session);
+    if (sessionRef.current) goIdle(sessionRef.current);
   };
 
-  /** Failure of the playing clip: toast once via host, back to idle (§5.2). */
-  const failSession = (session: PlaybackSession, error: Error, item: TtsQueueItem): void => {
+  const snapshotOf = (session: PlaybackSession): PauseSnapshot | null => {
+    const segment = session.items[session.index];
+    const currentTime = session.current
+      ? (session.activeElement?.currentTime ?? session.current.startOffset)
+      : session.startOffset;
+    // No file position exists before lazy resolution. Zero would fabricate a
+    // resume offset outside a yet-unknown window; pausing still cancels the run.
+    if (currentTime === undefined) return null;
+    return {
+      playableKey: segment.playableKey,
+      itemIndex: session.items
+        .slice(0, session.index)
+        .filter(item => item.playableKey === segment.playableKey).length,
+      verseRef: segment.verseRef,
+      currentTime,
+      // Copy the run instruction and this key's latch; never choose media from them.
+      forceTts: session.resolutionState.forceTts || session.aiMarked.has(segment.playableKey),
+    };
+  };
+
+  const pause = (): PauseSnapshot | null => {
+    const session = sessionRef.current;
+    if (!session?.items[session.index]) return null;
+    const snapshot = snapshotOf(session);
+    goIdle(session);
+    return snapshot;
+  };
+
+  const giveUp = (session: PlaybackSession, error: Error, segment: Segment): void => {
     if (!isCurrent(session)) return;
     goIdle(session);
-    optionsRef.current.onError?.(error, item);
+    optionsRef.current.onError?.(error, segment);
   };
 
-  const synthesizeItem = async (session: PlaybackSession, item: TtsQueueItem): Promise<TtsClip> => {
-    const clip = await optionsRef.current.engine.synthesize(
-      { text: item.text, langCode: item.langCode },
-      session.controller.signal
-    );
-    // Free: the engine read this off the URL it was already handed. Recorded
-    // here because this is the ONE place every clip comes from — prefetch,
-    // direct play and regenerate all route through it — and because running
-    // per synthesis is what keeps the answer current: a verse that streamed on
-    // its first listen is named as compressed once the tail has landed.
-    const servedAs = clip.servedAs;
-    if (servedAs !== undefined) {
-      setItemServing(previous => ({ ...previous, [item.verseRef]: servedAs }));
-    }
-    return clip;
+  const markAi = (session: PlaybackSession, key: PlayableKey): void => {
+    if (!isCurrent(session)) return;
+    session.aiMarked.add(key);
+    setAiMarkedKeys(new Set(session.aiMarked));
   };
 
-  /**
-   * §5.3 step 4: while verse N plays, request N+1 — `generate` plus an EARLY
-   * element (`preload="auto"` + `load()`; §6.1). Prefetch failures stay
-   * SILENT (§6.1): the clip simply synthesizes fresh when its turn arrives.
-   */
+  const createEntry = (session: PlaybackSession, index: number): SourceEntry => {
+    const segment = session.items[index];
+    const controller = new AbortController();
+    const abort = (): void => controller.abort();
+    session.controller.signal.addEventListener('abort', abort, { once: true });
+    const entry: SourceEntry = {
+      controller,
+      failed: false,
+      actions: [],
+      promise: Promise.resolve(),
+      detachWatch: () => {},
+      dispose: () => {
+        controller.abort();
+        entry.detachWatch();
+        entry.element?.pause();
+        session.controller.signal.removeEventListener('abort', abort);
+      },
+    };
+    entry.promise = (async () => {
+      try {
+        const next = segment.source;
+        const source = await (typeof next === 'function'
+          ? next({
+              signal: controller.signal,
+              run: session.resolutionState,
+              requests: {
+                attach: strategy => {
+                  entry.actions.push(requests => requests.attach(strategy));
+                },
+                markAi: () => {
+                  entry.actions.push(requests => requests.markAi());
+                },
+              },
+            })
+          : next);
+        if (!isCurrent(session) || controller.signal.aborted) return;
+        entry.source = source;
+        const element = (optionsRef.current.createElement ?? createClipAudioElement)(source.url);
+        entry.element = element;
+        // A failed early load cannot be adopted as buffered media.
+        entry.detachWatch = onClipEvent(element, 'error', () => {
+          entry.failed = true;
+          if (session.prefetches.get(index) === entry) setItemState(segment.verseRef, undefined);
+        });
+        if (session.prefetches.get(index) === entry) setItemState(segment.verseRef, 'buffered');
+      } catch (error) {
+        entry.failed = true;
+        entry.error = error;
+      }
+    })();
+    return entry;
+  };
+
   const schedulePrefetch = (session: PlaybackSession, playingIndex: number): void => {
+    if (!isCurrent(session) || session.index !== playingIndex) return;
     const depth = Math.min(
       Math.max(optionsRef.current.prefetchDepth ?? TTS_PREFETCH_DEPTH, 0),
       TTS_MAX_PREFETCH_DEPTH
     );
-    const createElement = optionsRef.current.createElement ?? createClipAudioElement;
     for (let ahead = 1; ahead <= depth; ahead += 1) {
       const index = playingIndex + ahead;
-      const item = session.items[index] as TtsQueueItem | undefined;
-      if (!item || item.text.trim() === '' || session.prefetches.has(index)) continue;
-      const entry: PrefetchEntry = { state: 'pending', promise: Promise.resolve() };
-      entry.promise = (async () => {
-        try {
-          const clip = await synthesizeItem(session, item);
-          if (!isCurrent(session)) return;
-          entry.audioUrl = clip.audioUrl;
-          const early = createElement(clip.audioUrl);
-          entry.element = early;
-          entry.state = 'ready';
-          // §9.2: `generate` cannot refuse on admission — it writes a sidecar
-          // and spends nothing — so a refusal lands HERE, on the early
-          // element's own fetch of the audio. Without this watch the entry
-          // stays `ready` over a dead element, `advance` adopts it, `play()`
-          // rejects, and the recovery ladder attached at adoption never sees
-          // the `error` that already fired. Found in a browser against a
-          // one-slot service: verse 1 spoke, verse 2 was silent (phase 09).
-          entry.detachWatch = onClipEvent(early, 'error', () => {
-            entry.state = 'failed';
-            entry.element = undefined;
-            // The row is not buffered after all; a stale badge would lie.
-            if (session.prefetches.get(index) === entry) {
-              setItemState(item.verseRef, undefined);
-            }
-          });
-          if (session.prefetches.get(index) === entry) {
-            setItemState(item.verseRef, 'buffered');
-          }
-        } catch {
-          entry.state = 'failed'; // silent — §6.1
-        }
-      })();
-      session.prefetches.set(index, entry);
-      setItemState(item.verseRef, 'synthesizing');
+      const segment = session.items[index] as Segment | undefined;
+      if (!segment || session.prefetches.has(index)) continue;
+      setItemState(segment.verseRef, 'synthesizing');
+      session.prefetches.set(index, createEntry(session, index));
     }
   };
 
-  /**
-   * §5.3 per-clip transition sequence, in the proposal's order: mark active
-   * row → request scroll → play buffered clip or show loading → request the
-   * following clip → stop cleanly on missing text or Stop. Advance happens on
-   * `ended` ONLY — never a duration countdown (§6.2: streaming clips have
-   * indeterminate duration).
-   */
-  const advance = async (session: PlaybackSession, index: number): Promise<void> => {
+  const handOff = (session: PlaybackSession, segment: Segment, next: Segment['source']): void => {
+    session.resolutionState.forceTts = true;
+    segment.source = next;
+    // The downgrade covers the remaining RUN, even across playable boundaries.
+    // Cancel all speculative choices; the same L2 thunks resolve them afresh.
+    for (const [index, entry] of session.prefetches) {
+      entry.dispose();
+      setItemState(session.items[index].verseRef, undefined);
+    }
+    session.prefetches.clear();
+  };
+
+  const advance = async (
+    session: PlaybackSession,
+    index: number,
+    startOffset?: number
+  ): Promise<void> => {
     if (!isCurrent(session)) return;
     teardownActiveClip(session);
     session.index = index;
-
-    const item = session.items[index] as TtsQueueItem | undefined;
-    if (!item) {
+    session.startOffset = startOffset;
+    session.budgets.clear();
+    const segment = session.items[index] as Segment | undefined;
+    if (!segment) {
       goIdle(session);
+      optionsRef.current.onRunComplete?.();
       return;
     }
-    if (item.text.trim() === '') {
-      // §5.3 step 5: no playable text ⇒ stop cleanly.
-      goIdle(session);
-      return;
+    if (startOffset === undefined && typeof segment.source !== 'function') {
+      session.startOffset = segment.source.window?.[0] ?? 0;
     }
-
-    // §5.3 steps 1–2: mark the active row, ask the host to scroll it into view.
-    setActiveVerseRef(item.verseRef);
-    optionsRef.current.onScrollRequest?.(item.verseRef);
-
-    // Consume (then prune) the prefetch window behind/at the play position.
-    const prefetched = session.prefetches.get(index);
-    for (const key of [...session.prefetches.keys()]) {
-      if (key <= index) {
-        // Entries dropped unheard take their element watch with them; the one
-        // about to be adopted keeps watching until the decision below, so a
-        // refusal arriving mid-await still disqualifies it.
-        if (key !== index) session.prefetches.get(key)?.detachWatch?.();
+    setActiveVerseRef(segment.verseRef);
+    optionsRef.current.onScrollRequest?.(segment.verseRef);
+    setStatus('loading');
+    let entry = session.prefetches.get(index);
+    session.prefetches.delete(index);
+    for (const [key, old] of session.prefetches) {
+      if (key < index) {
+        old.dispose();
         session.prefetches.delete(key);
       }
     }
-
-    let audioUrl: string;
-    let element: ClipAudioElement | undefined;
-    if (prefetched) {
-      await prefetched.promise;
-      if (!isCurrent(session)) return;
-    }
-    // Supervision takes over from here, so the prefetch-era watch stands down.
-    prefetched?.detachWatch?.();
-    if (prefetched?.state === 'ready' && prefetched.audioUrl !== undefined) {
-      // §5.3 step 3: start the already-buffered clip.
-      audioUrl = prefetched.audioUrl;
-      element = prefetched.element;
-      setStatus('loading');
-    } else {
-      // First-listen miss: synthesize now and show the loading state (§5.2).
-      setStatus('loading');
-      setItemState(item.verseRef, 'synthesizing');
-      try {
-        const clip = await synthesizeItem(session, item);
-        audioUrl = clip.audioUrl;
-      } catch (error) {
-        if (isAbortError(error) || !isCurrent(session)) return;
-        failSession(session, error instanceof Error ? error : new Error(String(error)), item);
-        return;
+    if (entry) {
+      // Keep its early-error watch until adoption, including while it resolves.
+      session.clipCleanups.push(entry.dispose);
+      await entry.promise;
+      if (!isCurrent(session) || session.index !== index) return;
+      if (entry.failed) {
+        entry.dispose();
+        entry = undefined;
       }
-      if (!isCurrent(session)) return;
     }
-
-    const createElement = optionsRef.current.createElement ?? createClipAudioElement;
-    element ??= createElement(audioUrl);
+    if (!entry) {
+      setItemState(segment.verseRef, 'synthesizing');
+      entry = createEntry(session, index);
+      session.clipCleanups.push(entry.dispose);
+      await entry.promise;
+    }
+    if (!isCurrent(session) || session.index !== index) return;
+    if (!entry.source || !entry.element) {
+      giveUp(
+        session,
+        entry.error instanceof Error
+          ? entry.error
+          : new Error(String(entry.error ?? 'Source unavailable')),
+        segment
+      );
+      return;
+    }
+    entry.detachWatch();
+    session.startOffset = startOffset ?? entry.source.window?.[0] ?? 0;
+    const element = entry.element;
     session.activeElement = element;
-    element.playbackRate = rateRef.current; // §6.2: passthrough only (T11)
-
-    // §6.1 recovery ladder guards the playing clip; its timers all live under
-    // the session signal, so Stop/advance cancels them immediately (CB1).
-    const detachSupervision = superviseClipPlayback({
+    element.playbackRate = rateRef.current;
+    const supervision = supervisePlayback({
       element,
-      audioUrl,
-      signal: session.controller.signal,
-      regenerate: () => synthesizeItem(session, item).then(clip => clip.audioUrl),
-      onFailure: error => {
-        failSession(session, error, item);
+      source: entry.source,
+      recovery: segment.recovery,
+      initialLoadFailed: entry.failed,
+      signal: entry.controller.signal,
+      run: session.resolutionState,
+      budgets: session.budgets,
+      maxRetriesPerClass: optionsRef.current.maxRetriesPerClass ?? 2,
+      maxStallPolls: optionsRef.current.maxStallPolls ?? 30,
+      onGiveUp: reason => giveUp(session, new Error(reason), segment),
+      onAutoplayRefused: () => {
+        if (!isCurrent(session)) return;
+        const snapshot = pause();
+        if (snapshot) optionsRef.current.onAutoplayRefused?.(snapshot, segment);
       },
-      fetchFn: optionsRef.current.fetchFn,
-      timing: optionsRef.current.timing,
+      onMarkAi: () => markAi(session, segment.playableKey),
+      onHandOff: next => handOff(session, segment, next),
+      onAttach: recovery => {
+        segment.recovery = recovery;
+      },
+      onSource: (source, offset) => {
+        session.current = { segment, source, startOffset: offset };
+      },
+      onPlayed: () => schedulePrefetch(session, index),
     });
     session.clipCleanups.push(
-      detachSupervision,
-      // §6.2: advance on `ended` ONLY — streaming-era clips report NaN/∞
-      // duration, so a countdown would be wrong by construction.
+      supervision.detach,
       onClipEvent(element, 'ended', () => {
         void advance(session, index + 1);
       }),
       onClipEvent(element, 'playing', () => {
         if (!isCurrent(session)) return;
         setStatus('playing');
-        setItemState(item.verseRef, 'playing');
+        setItemState(segment.verseRef, 'playing');
       })
     );
-
-    try {
-      await element.play();
-    } catch (error) {
-      if (isAbortError(error) || !isCurrent(session)) return;
-      // ⚠ A rejected `play()` is TWO different situations, and treating them
-      // alike silently disabled the ENTIRE recovery ladder (found in a browser,
-      // phase 09; every unit test passed).
-      //
-      // For a load failure the element does two things at once: it rejects
-      // this promise AND fires `error`, which `superviseClipPlayback` — already
-      // attached above — catches and begins healing (HEAD probe, then 404 ⇒
-      // regenerate, 503 ⇒ wait out Retry-After, …). Failing the session here
-      // called `goIdle`, which aborts `session.controller` — the very signal
-      // that probe runs under. An immediate rejection always beat a network
-      // round trip, so recovery was killed before it could finish and every
-      // clip-START failure surfaced as a toast. Only mid-stream failures, where
-      // `play()` had already resolved, could ever reach the ladder.
-      //
-      // So: fail only on autoplay refusal, and otherwise stay silent and let
-      // the ladder own it. Failures still surface — the supervisor calls
-      // `onFailure` (i.e. `failSession`) when its retry budget runs out.
-      if (isAutoplayRefusal(error)) {
-        failSession(session, error instanceof Error ? error : new Error(String(error)), item);
-      }
-      return;
-    }
-
-    // §5.3 step 4: request the following clip(s) while this one plays.
-    schedulePrefetch(session, index);
+    for (const action of entry.actions) action(supervision.requests);
+    supervision.start(startOffset);
   };
 
-  const startSession = (items: TtsQueueItem[], startIndex: number): void => {
-    stop(); // one active session at a time; Stop semantics cover replacement
+  const startSession = (items: Segment[], startIndex: number, startOffset?: number): void => {
+    stop();
     const session: PlaybackSession = {
       controller: new AbortController(),
-      items,
+      items: items.map(item => ({ ...item })),
       index: startIndex,
+      budgets: new Map(),
+      aiMarked: new Set(),
+      resolutionState: { forceTts: false },
       prefetches: new Map(),
       clipCleanups: [],
     };
     sessionRef.current = session;
+    setAiMarkedKeys(new Set());
     setStatus('loading');
-    void advance(session, startIndex);
-  };
-
-  const playOne = (item: TtsQueueItem): void => {
-    // T1: single-verse play — stops at clip end.
-    startSession([item], 0);
-  };
-
-  const playFrom = (items: TtsQueueItem[], startIndex: number): void => {
-    startSession(items, startIndex);
+    void advance(session, startIndex, startOffset);
   };
 
   const setPlaybackRate = (rate: number): void => {
     rateRef.current = rate;
     setPlaybackRateState(rate);
     const active = sessionRef.current?.activeElement;
-    if (active) {
-      active.playbackRate = rate; // §6.2: never a synthesis parameter
-    }
+    if (active) active.playbackRate = rate;
   };
 
-  // Unmount: abort timers/fetches and silence the element without setState.
   useEffect(
     () => () => {
-      const session = sessionRef.current;
-      if (session) {
-        for (const cleanup of session.clipCleanups) cleanup();
-        session.activeElement?.pause();
-        session.controller.abort();
-        sessionRef.current = null;
-      }
+      if (sessionRef.current) disposeSession(sessionRef.current);
+      sessionRef.current = null;
     },
     []
   );
@@ -417,10 +400,11 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     status,
     activeVerseRef,
     itemStates,
-    itemServing,
+    aiMarkedKeys,
     playbackRate,
-    playOne,
-    playFrom,
+    playOne: (segment, startOffset) => startSession([segment], 0, startOffset),
+    playFrom: startSession,
+    pause,
     stop,
     setPlaybackRate,
   };

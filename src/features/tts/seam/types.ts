@@ -13,9 +13,24 @@ export interface Source {
   durationIsMeasured: boolean;
 }
 
+/** Run-owned storage: only the resolver interprets the sticky downgrade instruction. */
+export interface PlaybackRunState {
+  forceTts: boolean;
+}
+
+/** Context for lazy L2 resolution; no media element or retry counters cross this boundary. */
+export interface SourceResolutionContext {
+  signal: AbortSignal;
+  run: Readonly<PlaybackRunState>;
+  requests: Pick<RecoveryRequests, 'attach' | 'markAi'>;
+}
+
+/** The player invokes this lazily; source choice and policy attachment belong to L2. */
+export type SourceThunk = (context: SourceResolutionContext) => Promise<Source>;
+
 /** One logical playback step, resolved eagerly or lazily by its resource resolver. */
 export interface Segment {
-  source: Source | (() => Promise<Source>);
+  source: Source | SourceThunk;
   recovery: RecoveryStrategy;
   playableKey: PlayableKey;
   /** Host row identity for highlighting and scrolling; opaque to the player. */
@@ -73,11 +88,11 @@ export interface RecoveryRequests {
   markAi: () => void;
 }
 
-/** Observed failure: the source rides along because the player returns what it was given, not a diagnosis. */
+/** Observed failure: return the resolved source that actually failed, never re-resolve it to diagnose it. */
 export type PlaybackFailure =
-  | { on: 'error'; source: Segment['source']; positionMs: number; startedPlaying: boolean }
-  | { on: 'stall'; source: Segment['source']; positionMs: number }
-  | { on: 'endedEarly'; source: Segment['source']; positionMs: number };
+  | { on: 'error'; source: Source; positionMs: number; startedPlaying: boolean }
+  | { on: 'stall'; source: Source; positionMs: number }
+  | { on: 'endedEarly'; source: Source; positionMs: number };
 
 /** Policy read when attaching supervision; all watchdog timers belong to the player. */
 export interface SupervisionPolicy {

@@ -7,6 +7,7 @@ import type {
   RecoveryStrategy,
   Segment,
   SupervisionPolicy,
+  Source,
 } from '../seam/types';
 
 /** Media errors carry no status; this provider classifies them on its control plane. */
@@ -27,7 +28,7 @@ const parseRetryAfterMs = (res: Response, fallbackMs: number): number => {
 
 /** Provider configuration contains no player, timer or retry counter. */
 export interface TtsRecoveryStrategyOptions {
-  regenerate: () => Promise<Segment['source']>;
+  regenerate: () => Promise<Source>;
   streamingEra?: boolean;
   fetchFn?: FetchLike;
   timing?: Partial<TtsRecoveryTiming>;
@@ -79,8 +80,7 @@ export class TtsRecoveryStrategy implements RecoveryStrategy {
     requests.play(
       async () => {
         try {
-          const source = await this.options.regenerate();
-          return typeof source === 'function' ? await source() : source;
+          return await this.options.regenerate();
         } catch (error) {
           if (!signal.aborted) requests.giveUp(failureReason);
           throw error;
@@ -101,7 +101,7 @@ export class TtsRecoveryStrategy implements RecoveryStrategy {
     // Read afresh after asynchronous work; readonly does not mean immutable here.
     const isAborted = (): boolean => signal.aborted;
     if (isAborted()) return;
-    const source = typeof failure.source === 'function' ? await failure.source() : failure.source;
+    const source = failure.source;
     if (isAborted()) return;
     if (failure.on === 'stall') {
       this.recoverStall(source.url, source, requests);
