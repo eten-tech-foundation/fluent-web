@@ -3,8 +3,7 @@
  *
  * Feature-agnostic: items carry their own text/langCode/refs, so the hook is
  * reusable on any source-scripture surface (T3). It never navigates — at the
- * end of the supplied list it emits `boundaryReached` and the HOST decides
- * (T16: the chapter-boundary prompt is entirely frontend-host-owned).
+ * end of the supplied list it simply goes idle.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -39,8 +38,6 @@ export type TtsQueueItemState = 'synthesizing' | 'buffered' | 'playing';
 
 export interface UseTtsPlaybackQueueOptions {
   engine: TtsEngine;
-  /** End of the supplied list reached — host prompts/navigates, hook never does (T16). */
-  onBoundaryReached?: () => void;
   /** Toast-worthy failure of the PLAYING clip (§5.2); fired once per failure. */
   onError?: (error: Error, item: TtsQueueItem) => void;
   /** §5.3 step 2 — host scrolls the active row into view when needed. */
@@ -65,16 +62,8 @@ export interface TtsPlaybackQueueApi {
   playbackRate: number;
   /** T1: play one verse; stops at clip end, never advances. */
   playOne: (item: TtsQueueItem) => void;
-  /**
-   * T1: play from here; advances through the list on `ended` (§6.2).
-   *
-   * `emitBoundary` (default true) controls whether reaching the end of THIS
-   * list raises T16's end-of-page signal. A caller playing a bounded slice of
-   * the page — pericope mode reads one group and stops (G3a) — passes false
-   * unless the slice ends where the page ends, because "Continue on the next
-   * page?" is a lie when there is more of this page left.
-   */
-  playFrom: (items: TtsQueueItem[], startIndex: number, emitBoundary?: boolean) => void;
+  /** T1: play from here; advances through the list on `ended` (§6.2). */
+  playFrom: (items: TtsQueueItem[], startIndex: number) => void;
   /** §5.1: cancel queue, pause element, clear prefetch intent + highlight. */
   stop: () => void;
   /** §6.2 (T11): element passthrough only — NEVER triggers synthesis. */
@@ -98,8 +87,6 @@ interface PlaybackSession {
   controller: AbortController;
   items: TtsQueueItem[];
   index: number;
-  /** playFrom emits boundaryReached at list end; playOne just goes idle (T1/T16). */
-  emitBoundary: boolean;
   /** Prefetched clips keyed by ABSOLUTE item index — pruning keeps it ≤ depth. */
   prefetches: Map<number, PrefetchEntry>;
   activeElement?: ClipAudioElement;
@@ -264,15 +251,11 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
 
     const item = session.items[index] as TtsQueueItem | undefined;
     if (!item) {
-      // End of the supplied list: emit boundaryReached (playFrom) and go
-      // idle — navigation belongs to the host (T16), never to this hook.
-      const emit = session.emitBoundary;
       goIdle(session);
-      if (emit) optionsRef.current.onBoundaryReached?.();
       return;
     }
     if (item.text.trim() === '') {
-      // §5.3 step 5: no playable text ⇒ stop cleanly (no boundary signal).
+      // §5.3 step 5: no playable text ⇒ stop cleanly.
       goIdle(session);
       return;
     }
@@ -384,13 +367,12 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     schedulePrefetch(session, index);
   };
 
-  const startSession = (items: TtsQueueItem[], startIndex: number, emitBoundary: boolean): void => {
+  const startSession = (items: TtsQueueItem[], startIndex: number): void => {
     stop(); // one active session at a time; Stop semantics cover replacement
     const session: PlaybackSession = {
       controller: new AbortController(),
       items,
       index: startIndex,
-      emitBoundary,
       prefetches: new Map(),
       clipCleanups: [],
     };
@@ -400,12 +382,12 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   };
 
   const playOne = (item: TtsQueueItem): void => {
-    // T1: single-verse play — stops at clip end, no boundary signal.
-    startSession([item], 0, false);
+    // T1: single-verse play — stops at clip end.
+    startSession([item], 0);
   };
 
-  const playFrom = (items: TtsQueueItem[], startIndex: number, emitBoundary = true): void => {
-    startSession(items, startIndex, emitBoundary);
+  const playFrom = (items: TtsQueueItem[], startIndex: number): void => {
+    startSession(items, startIndex);
   };
 
   const setPlaybackRate = (rate: number): void => {

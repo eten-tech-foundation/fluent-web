@@ -2,8 +2,8 @@
  * Source-TTS drafting integration (§12.1 "Controls" / "Queue" / "Flags" rows).
  *
  * Scope: the wiring DraftingUI itself owns — panel-aware text and language
- * (T17/T18), document-order rows, the playback highlight, the gate (§6.3), and
- * the T16 prompt's mounting conditions. Playback sequencing lives in
+ * (T17/T18), document-order rows, the playback highlight, and the gate (§6.3).
+ * Playback sequencing lives in
  * `useTtsPlaybackQueue.test.ts` and the host composition in
  * `useSourceTtsPlayback.test.ts`, so both are stubbed here: this file drives
  * playback state directly and inspects what drafting handed over.
@@ -173,20 +173,6 @@ vi.mock('@/features/flags', () => ({
   }),
 }));
 
-// ── The next-page lookup (T16): controllable, and its options captured ──────
-let mockNextPage: TtsFeature.TtsNextPage | null = null;
-let nextChapterOptions: { enabled: boolean; flushPendingWork: () => Promise<void> } | undefined;
-
-vi.mock('@/features/bible/hooks/useNextAssignedChapter', () => ({
-  useNextAssignedChapter: (options: {
-    enabled: boolean;
-    flushPendingWork: () => Promise<void>;
-  }) => {
-    nextChapterOptions = options;
-    return mockNextPage;
-  },
-}));
-
 // ── Playback: stubbed, so this file can drive state and read the rows ───────
 let ttsRows: readonly TtsFeature.TtsRowDraft[] = [];
 let ttsServed: Record<string, TtsFeature.TtsServedFormat> = {};
@@ -198,9 +184,6 @@ const playFromVerse = vi.fn();
 const playGroup = vi.fn();
 const playFromGroup = vi.fn();
 const stopPlayback = vi.fn();
-const boundaryOnContinue = vi.fn();
-const boundaryOnDismiss = vi.fn();
-let boundaryOpen = false;
 
 vi.mock('@/features/tts', async importOriginal => {
   const actual = await importOriginal<typeof TtsFeature>();
@@ -236,13 +219,6 @@ vi.mock('@/features/tts', async importOriginal => {
         isGroupSpeaking: (verseRefs: readonly string[]) =>
           activeVerseRef !== null && verseRefs.includes(activeVerseRef),
         stop: stopPlayback,
-        boundaryPrompt: {
-          open: boundaryOpen,
-          nextPageLabel: mockNextPage?.label ?? '',
-          isContinuing: false,
-          onContinue: boundaryOnContinue,
-          onDismiss: boundaryOnDismiss,
-        },
       };
     },
   };
@@ -321,8 +297,6 @@ const renderDrafting = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   mockFeatureFlag.mockReturnValue(true);
-  mockNextPage = null;
-  nextChapterOptions = undefined;
   ttsRows = [];
   ttsServed = {};
   mockOverrides = {};
@@ -330,7 +304,6 @@ beforeEach(() => {
   mockActiveVerseId = 1;
   activeVerseRef = null;
   isBusy = false;
-  boundaryOpen = false;
   mockVerseRefs.current = {};
   mockTargetScrollRef.current = null;
   mockIsPericopeMode = false;
@@ -354,15 +327,12 @@ const selectReferenceBible = async () => {
 // ── Flags (§6.3, T12) ───────────────────────────────────────────────────────
 
 describe('DraftingUI — source-TTS gate', () => {
-  it('renders no controls and no prompt when the feature is off', () => {
+  it('renders no controls when the feature is off', () => {
     mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
-    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
-    boundaryOpen = true;
 
     renderDrafting();
 
     expect(screen.queryAllByTestId('tts-verse-controls')).toHaveLength(0);
-    expect(screen.queryByTestId('tts-boundary-prompt')).not.toBeInTheDocument();
   });
 
   it('asks the flag service for sourceAudio by name', () => {
@@ -547,73 +517,12 @@ describe('DraftingUI — keyboard shortcuts', () => {
   });
 });
 
-// ── Boundary prompt mounting (T16) ──────────────────────────────────────────
-
-describe('DraftingUI — end-of-chapter prompt', () => {
-  it('is not mounted at all when no next chapter is assigned to this user', () => {
-    boundaryOpen = true;
-
-    renderDrafting();
-
-    expect(screen.queryByTestId('tts-boundary-prompt')).not.toBeInTheDocument();
-  });
-
-  it('names the next chapter when one is assigned', () => {
-    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
-    boundaryOpen = true;
-
-    renderDrafting();
-
-    expect(screen.getByTestId('tts-boundary-prompt')).toBeInTheDocument();
-    expect(screen.getByText(/Continue with Genesis 2\?/)).toBeInTheDocument();
-  });
-
-  it('flushes the verse under the caret before any TTS-driven page change', async () => {
-    renderDrafting();
-
-    expect(nextChapterOptions?.enabled).toBe(true);
-    await nextChapterOptions?.flushPendingWork();
-
-    // The debounced save is committed for the ACTIVE verse, not the whole page.
-    // `saveImmediately` takes a SavePayload since the RTE landed; the verse's own
-    // markers ride along, which for this textarea-authored fixture is `undefined`
-    // — the value that tells the save path to keep its trim.
-    expect(mockSaveImmediately).toHaveBeenCalledWith(1, {
-      content: 'En el principio creó Dios los cielos y la tierra.',
-      markers: undefined,
-    });
-  });
-
-  it('does not look for a next chapter while the feature is off', () => {
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
-
-    renderDrafting();
-
-    // Flag-off must not add a request for the assignment list.
-    expect(nextChapterOptions?.enabled).toBe(false);
-  });
-
-  it('stays unmounted with the feature off even when a next chapter is known', () => {
-    // The lookup being disabled is not the only thing keeping this hidden —
-    // the render gate is tested here on its own, with every OTHER condition
-    // for showing the prompt deliberately satisfied.
-    mockNextPage = { label: 'Genesis 2', pageKey: 'chapter-2', navigate: vi.fn() };
-    boundaryOpen = true;
-    mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
-
-    renderDrafting();
-
-    expect(screen.queryByTestId('tts-boundary-prompt')).not.toBeInTheDocument();
-  });
-});
-
 /**
  * The flag reaches PLAYBACK, not just the controls.
  *
  * React forbids a conditional hook call, so `useSourceTtsPlayback` runs whether
  * the feature is on or off and has to be told which. Before this was wired, a
- * page with the feature off could still start audio (a continuation claimed on
- * mount) and could keep audio running when the flag went off mid-listen — with
+ * page could keep audio running when the flag went off mid-listen — with
  * no controls and no Alt+S to stop it. Verified in a browser 2026-08-20.
  *
  * The hook's own behaviour under `enabled` is proven in
@@ -628,7 +537,7 @@ describe('DraftingUI — the playback gate is wired, not just the controls', () 
     expect(ttsPlaybackEnabled).toBe(true);
   });
 
-  it('tells playback the feature is off, so it claims nothing and stops', () => {
+  it('tells playback the feature is off, so it stops', () => {
     mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
 
     renderDrafting();
