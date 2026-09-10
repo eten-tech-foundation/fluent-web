@@ -204,7 +204,8 @@ describe('resolvePlayables', () => {
     });
     expect(synthesize).not.toHaveBeenCalled();
     const replacement = resolution();
-    await second.options.ttsSource(replacement);
+    expect(second.options.ttsSource).not.toBeNull();
+    await second.options.ttsSource!(replacement);
     expect(replacement.requests.attach).toHaveBeenCalledWith(expect.any(TtsRecoveryStrategy));
     expect(replacement.requests.markAi).toHaveBeenCalledOnce();
   });

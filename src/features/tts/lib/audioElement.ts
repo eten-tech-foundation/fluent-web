@@ -23,7 +23,13 @@ export type ClipAudioEventName =
   | 'progress'
   | 'canplay'
   | 'playing'
-  | 'timeupdate';
+  | 'timeupdate'
+  | 'seeking'
+  | 'seeked'
+  | 'ratechange'
+  | 'pause'
+  | 'waiting'
+  | 'stalled';
 
 /**
  * The element surface the engine and queue depend on. Structural (rather than
@@ -35,11 +41,11 @@ export interface ClipAudioElement {
   preload: string;
   currentTime: number;
   playbackRate: number;
-  load(): void;
-  play(): Promise<void>;
-  pause(): void;
-  addEventListener(type: string, listener: () => void): void;
-  removeEventListener(type: string, listener: () => void): void;
+  load: () => void;
+  play: () => Promise<void>;
+  pause: () => void;
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
 }
 
 /** Creates the element factory used for real playback. */

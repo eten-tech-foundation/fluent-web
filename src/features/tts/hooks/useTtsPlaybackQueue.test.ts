@@ -74,6 +74,7 @@ describe('segment queue — source and run lifecycle', () => {
     expect(h.elements[0].playCalls).toEqual([source('opaque').url]);
     act(() => h.elements[0].emit('playing'));
     expect(h.result.current.status).toBe('playing');
+    h.elements[0].currentTime = 18;
     act(() => h.elements[0].emit('ended'));
     expect(h.result.current.status).toBe('idle');
     expect(h.onRunComplete).toHaveBeenCalledOnce();

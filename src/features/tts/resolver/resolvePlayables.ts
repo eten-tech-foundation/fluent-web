@@ -18,7 +18,8 @@ export interface RecordedRecoveryOptions {
   chapter: ChapterSourceAudioRequest;
   cache: ChapterAudioCache;
   verseNumber: number;
-  ttsSource: SourceThunk;
+  /** Null when synthesis is barred; the licence fence supplies that decision. */
+  ttsSource: SourceThunk | null;
 }
 
 export interface SourceResolverContext
