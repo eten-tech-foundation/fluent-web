@@ -29,7 +29,8 @@ const setup = (served: Array<TtsServedFormat | undefined>) => {
   return renderHook(() =>
     useSourceTtsPlayback({
       engine,
-      rows: [{ verseRef: 'v1', text: 'Source text' }],
+      rows: [{ verseRef: 'v1', verseNumber: 1, text: 'Source text' }],
+      sourceChapter: null,
       getRowElement: () => null,
       getViewport: () => null,
     })

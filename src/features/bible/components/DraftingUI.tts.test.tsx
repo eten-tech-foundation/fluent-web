@@ -174,7 +174,8 @@ vi.mock('@/features/flags', () => ({
 }));
 
 // ── Playback: stubbed, so this file can drive state and read the rows ───────
-let ttsRows: readonly TtsFeature.TtsRowDraft[] = [];
+let ttsRows: readonly TtsFeature.SourceAudioRow[] = [];
+let sourceChapter: TtsFeature.ChapterSourceAudioRequest | null;
 let ttsServed: Record<string, TtsFeature.TtsServedFormat> = {};
 let ttsPlaybackEnabled: boolean | undefined;
 let activeVerseRef: string | null = null;
@@ -192,11 +193,11 @@ vi.mock('@/features/tts', async importOriginal => {
     ServerTtsEngine: class {
       synthesize = vi.fn();
     },
-    useSourceTtsPlayback: (options: {
-      rows: readonly TtsFeature.TtsRowDraft[];
-      enabled?: boolean;
-    }): TtsFeature.SourceTtsPlaybackApi => {
+    useSourceTtsPlayback: (
+      options: TtsFeature.UseSourceTtsPlaybackOptions
+    ): TtsFeature.SourceTtsPlaybackApi => {
       ttsRows = options.rows;
+      sourceChapter = options.sourceChapter;
       ttsPlaybackEnabled = options.enabled;
       const playable = new Set(
         options.rows
@@ -354,21 +355,31 @@ describe('DraftingUI — panel-aware TTS rows', () => {
   it('panel 1 reads the project source text in the project source language', () => {
     renderDrafting();
 
+    expect(sourceChapter).toEqual({
+      projectId: mockProjectItem.projectId,
+      bibleId: mockProjectItem.bibleId,
+      bookCode: mockProjectItem.bookCode,
+      chapter: mockProjectItem.chapterNumber,
+      languageCode: mockProjectItem.sourceLangCode,
+    });
     expect(ttsRows).toEqual([
       {
         verseRef: '1',
+        verseNumber: 1,
         text: 'In the beginning God created the heaven and the earth.',
         langCode: 'eng',
         audioSource: 'projectSource',
       },
       {
         verseRef: '2',
+        verseNumber: 2,
         text: 'And the earth was without form, and void.',
         langCode: 'eng',
         audioSource: 'projectSource',
       },
       {
         verseRef: '3',
+        verseNumber: 3,
         text: 'And God said, Let there be light.',
         langCode: 'eng',
         audioSource: 'projectSource',
@@ -383,9 +394,22 @@ describe('DraftingUI — panel-aware TTS rows', () => {
 
     // Not the project source text, and not the project source langCode —
     // reading Hindi text as English is the bug this guards.
+    expect(sourceChapter).toBeNull();
     expect(ttsRows.slice(0, 2)).toEqual([
-      { verseRef: '1', text: 'Hindi verse 1', langCode: 'hin', audioSource: 'referenceBible' },
-      { verseRef: '2', text: 'Hindi verse 2', langCode: 'hin', audioSource: 'referenceBible' },
+      {
+        verseRef: '1',
+        verseNumber: 1,
+        text: 'Hindi verse 1',
+        langCode: 'hin',
+        audioSource: 'referenceBible',
+      },
+      {
+        verseRef: '2',
+        verseNumber: 2,
+        text: 'Hindi verse 2',
+        langCode: 'hin',
+        audioSource: 'referenceBible',
+      },
     ]);
   });
 

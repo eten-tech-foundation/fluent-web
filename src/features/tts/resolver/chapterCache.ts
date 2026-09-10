@@ -70,7 +70,7 @@ export class ChapterAudioCache {
     return this.fetch(chapter, signal);
   }
 
-  /** Phase 05 binds this to page lifetime. A late completion cannot repopulate the cache. */
+  /** The host binds this to page lifetime. A late completion cannot repopulate the cache. */
   clear(): void {
     this.held.clear();
     const pending = [...this.pending.values()];

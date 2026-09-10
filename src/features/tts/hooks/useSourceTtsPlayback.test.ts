@@ -10,6 +10,8 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTtsSegment } from '../lib/createTtsSegment';
+import { type Segment } from '../seam/types';
+import { sourceChapterRequest } from '../testing/sourceAudioFixtures';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
 import { useSourceTtsPlayback, type UseSourceTtsPlaybackOptions } from './useSourceTtsPlayback';
@@ -54,10 +56,10 @@ beforeEach(() => {
 
 /** Row 2 is a reference-panel hole, so the queue is v1, v3, v4 (§5.1). */
 const rows = [
-  { verseRef: 'GEN 1:1', text: 'one', langCode: 'eng' },
-  { verseRef: 'GEN 1:2', text: null },
-  { verseRef: 'GEN 1:3', text: 'three', langCode: 'eng' },
-  { verseRef: 'GEN 1:4', text: 'four', langCode: 'eng' },
+  { verseRef: 'GEN 1:1', verseNumber: 1, text: 'one', langCode: 'eng' },
+  { verseRef: 'GEN 1:2', verseNumber: 2, text: null },
+  { verseRef: 'GEN 1:3', verseNumber: 3, text: 'three', langCode: 'eng' },
+  { verseRef: 'GEN 1:4', verseNumber: 4, text: 'four', langCode: 'eng' },
 ];
 
 const rect = (top: number, bottom: number) => ({ getBoundingClientRect: () => ({ top, bottom }) });
@@ -68,6 +70,7 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
   const options: UseSourceTtsPlaybackOptions = {
     engine,
     rows,
+    sourceChapter: null,
     // Every row sits far below the viewport unless a test says otherwise.
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView, focus }),
     getViewport: () => rect(0, 500),
@@ -134,6 +137,18 @@ describe('useSourceTtsPlayback — play actions', () => {
 // ---------------------------------------------------------------------------
 
 describe('useSourceTtsPlayback — playGroup (G3a)', () => {
+  it('uses one resolver key for a pericope, distinct verse keys for a play-from-here run', () => {
+    const { result } = setup({ sourceChapter: sourceChapterRequest, pageKey: 'chapter-1' });
+    act(() => result.current.playGroup(['GEN 1:4', 'GEN 1:3']));
+    const [group] = playFrom.mock.calls.at(-1) as [Segment[], number];
+    expect(group).toHaveLength(2);
+    expect(group[0].playableKey).toBe(group[1].playableKey);
+    act(() => result.current.playFromVerse('GEN 1:3'));
+    const [run] = playFrom.mock.calls.at(-1) as [Segment[], number];
+    expect(new Set(run.map(segment => segment.playableKey)).size).toBe(run.length);
+    expect(run[1].playableKey).not.toBe(group[0].playableKey);
+  });
+
   it('plays ONLY the group, in document order', () => {
     const { result } = setup();
 
@@ -234,6 +249,7 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
   ): UseSourceTtsPlaybackOptions => ({
     engine,
     rows,
+    sourceChapter: null,
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
     getViewport: () => rect(0, 500),
     pageKey,
@@ -271,7 +287,9 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
 
     act(() =>
       rerender(
-        pageProps('chapter-2', { rows: [{ verseRef: 'GEN 1:1', text: 'otra', langCode: 'spa' }] })
+        pageProps('chapter-2', {
+          rows: [{ verseRef: 'GEN 1:1', verseNumber: 1, text: 'otra', langCode: 'spa' }],
+        })
       )
     );
 
@@ -313,6 +331,7 @@ describe('useSourceTtsPlayback — the enabled gate', () => {
         useSourceTtsPlayback({
           engine,
           rows,
+          sourceChapter: null,
           getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
           getViewport: () => rect(0, 500),
           enabled: isEnabled,

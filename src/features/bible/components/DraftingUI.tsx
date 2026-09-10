@@ -36,7 +36,7 @@ import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
   ServerTtsEngine,
-  type TtsRowDraft,
+  type SourceAudioRow,
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
@@ -899,10 +899,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // read, say, Hindi text as Greek. A panel-2 row with no verse simply has no
   // text, which is what makes its controls disabled (§5.1) — the row is not
   // silently skipped-over-and-clickable.
-  const ttsRows = useMemo<TtsRowDraft[]>(
+  const ttsRows = useMemo<SourceAudioRow[]>(
     () =>
       sourceVerses.map(verse => ({
         verseRef: String(verse.verseNumber),
+        verseNumber: verse.verseNumber,
         text: selectedPanel === 1 ? verse.text : bibleVerseMap.get(verse.verseNumber),
         // T18: sent when known. `currentLanguage` is the reference Bible's
         // code and already falls back to the source code when unknown.
@@ -929,6 +930,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const tts = useSourceTtsPlayback({
     engine: ttsEngine,
     rows: ttsRows,
+    // The reference panel has provider-specific ids, not this Fluent Bible id.
+    // Keep its own-text TTS path until reference recording identity is wired.
+    sourceChapter:
+      selectedPanel === 1
+        ? {
+            projectId: projectItem.projectId,
+            bibleId: projectItem.bibleId,
+            bookCode: projectItem.bookCode,
+            chapter: projectItem.chapterNumber,
+            languageCode: projectItem.sourceLangCode,
+          }
+        : null,
     getRowElement: getTtsRowElement,
     getViewport: getTtsViewport,
     // Page-lifetime playback state is dropped on this key: the drafting route
