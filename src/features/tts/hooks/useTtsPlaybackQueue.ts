@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { type ClipAudioElement, createClipAudioElement, onClipEvent } from '../lib/audioElement';
 import { supervisePlayback } from '../lib/playbackRecovery';
+import { areAdjacentSources, watchPlaybackWindow } from '../lib/windowPlayback';
 
 import type {
   BudgetKey,
@@ -87,10 +88,17 @@ interface PlaybackSession {
   prefetches: Map<number, SourceEntry>;
   activeElement?: ClipAudioElement;
   clipCleanups: Array<() => void>;
+  segmentCleanups: Array<() => void>;
   startOffset?: number;
 }
 
+const teardownSegment = (session: PlaybackSession): void => {
+  for (const cleanup of session.segmentCleanups) cleanup();
+  session.segmentCleanups = [];
+};
+
 const teardownActiveClip = (session: PlaybackSession): void => {
+  teardownSegment(session);
   for (const cleanup of session.clipCleanups) cleanup();
   session.clipCleanups = [];
   session.activeElement?.pause();
@@ -248,16 +256,129 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     }
   };
 
-  const handOff = (session: PlaybackSession, segment: Segment, next: Segment['source']): void => {
-    session.resolutionState.forceTts = true;
-    segment.source = next;
-    // The downgrade covers the remaining RUN, even across playable boundaries.
-    // Cancel all speculative choices; the same L2 thunks resolve them afresh.
+  const clearPrefetches = (session: PlaybackSession): void => {
     for (const [index, entry] of session.prefetches) {
       entry.dispose();
       setItemState(session.items[index].verseRef, undefined);
     }
     session.prefetches.clear();
+  };
+
+  const handOff = (session: PlaybackSession, segment: Segment, next: Segment['source']): void => {
+    session.resolutionState.forceTts = true;
+    segment.source = next;
+    // The downgrade covers the remaining RUN, even across playable boundaries.
+    // Cancel all speculative choices; the same L2 thunks resolve them afresh.
+    clearPrefetches(session);
+  };
+
+  const activate = (
+    session: PlaybackSession,
+    index: number,
+    entry: SourceEntry & { source: Source },
+    element: ClipAudioElement,
+    startOffset?: number,
+    continuing = false
+  ): void => {
+    const segment = session.items[index];
+    session.index = index;
+    session.budgets.clear();
+    session.startOffset = startOffset ?? entry.source.window?.[0] ?? 0;
+    session.activeElement = element;
+    let loaded = false;
+    const finish = (canContinue = true): void => {
+      if (!isCurrent(session) || session.index !== index) return;
+      const next = session.prefetches.get(index + 1);
+      const current = session.current?.source;
+      // Re-read the live items and resolved sources at every boundary. Never
+      // capture a stretch's count or endpoint across recovery/source replacement.
+      if (
+        canContinue &&
+        session.items[index + 1] &&
+        current &&
+        next?.source &&
+        !next.failed &&
+        areAdjacentSources(current, next.source)
+      ) {
+        session.prefetches.delete(index + 1);
+        next.detachWatch();
+        next.element?.pause(); // Only the unused speculative element, not the sounding one.
+        teardownSegment(session);
+        setItemState(segment.verseRef, undefined);
+        activate(session, index + 1, { ...next, source: next.source }, element, undefined, true);
+        // The adopted policy may retain its resolution signal for later recovery.
+        // Keep that signal alive until this logical segment is detached.
+        session.segmentCleanups.push(next.dispose);
+      } else {
+        // Halt now, before any asynchronous resolution of the next segment.
+        element.pause();
+        void advance(session, index + 1);
+      }
+    };
+    const window = watchPlaybackWindow(element, finish);
+    const supervision = supervisePlayback({
+      element,
+      source: entry.source,
+      recovery: segment.recovery,
+      initialLoadFailed: entry.failed,
+      signal: session.controller.signal,
+      run: session.resolutionState,
+      budgets: session.budgets,
+      maxRetriesPerClass: optionsRef.current.maxRetriesPerClass ?? 2,
+      maxStallPolls: optionsRef.current.maxStallPolls ?? 30,
+      onGiveUp: reason => giveUp(session, new Error(reason), segment),
+      onAutoplayRefused: () => {
+        if (!isCurrent(session)) return;
+        const snapshot = pause();
+        if (snapshot) optionsRef.current.onAutoplayRefused?.(snapshot, segment);
+      },
+      onMarkAi: () => markAi(session, segment.playableKey),
+      onHandOff: next => handOff(session, segment, next),
+      onAttach: recovery => {
+        segment.recovery = recovery;
+      },
+      onSource: (source, offset) => {
+        // A healed chapter can change every window, even under the same URL.
+        // Drop speculative descriptors; their lazy resolvers consult the healed cache.
+        if (
+          loaded &&
+          (session.current?.source.window ||
+            source.window ||
+            session.current?.source.url !== source.url)
+        )
+          clearPrefetches(session);
+        session.current = { segment, source, startOffset: offset };
+        window.setSource(source, continuing && !loaded);
+        loaded = true;
+      },
+      onPlayed: () => schedulePrefetch(session, index),
+      onRecovering: () => {
+        window.suspend();
+        element.pause();
+        setStatus('loading');
+      },
+      // End-of-file is a physical stop even if the next descriptor looks adjacent.
+      onEnded: () => finish(false),
+    });
+    session.segmentCleanups.push(
+      window.detach,
+      supervision.detach,
+      onClipEvent(element, 'playing', () => {
+        if (!isCurrent(session)) return;
+        setStatus('playing');
+        setItemState(segment.verseRef, 'playing');
+      })
+    );
+    for (const action of entry.actions) action(supervision.requests);
+    if (continuing) {
+      setActiveVerseRef(segment.verseRef);
+      optionsRef.current.onScrollRequest?.(segment.verseRef);
+      setItemState(segment.verseRef, 'playing');
+      supervision.continue();
+    } else {
+      element.playbackRate = rateRef.current;
+      supervision.start(startOffset);
+    }
   };
 
   const advance = async (
@@ -318,49 +439,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       return;
     }
     entry.detachWatch();
-    session.startOffset = startOffset ?? entry.source.window?.[0] ?? 0;
-    const element = entry.element;
-    session.activeElement = element;
-    element.playbackRate = rateRef.current;
-    const supervision = supervisePlayback({
-      element,
-      source: entry.source,
-      recovery: segment.recovery,
-      initialLoadFailed: entry.failed,
-      signal: entry.controller.signal,
-      run: session.resolutionState,
-      budgets: session.budgets,
-      maxRetriesPerClass: optionsRef.current.maxRetriesPerClass ?? 2,
-      maxStallPolls: optionsRef.current.maxStallPolls ?? 30,
-      onGiveUp: reason => giveUp(session, new Error(reason), segment),
-      onAutoplayRefused: () => {
-        if (!isCurrent(session)) return;
-        const snapshot = pause();
-        if (snapshot) optionsRef.current.onAutoplayRefused?.(snapshot, segment);
-      },
-      onMarkAi: () => markAi(session, segment.playableKey),
-      onHandOff: next => handOff(session, segment, next),
-      onAttach: recovery => {
-        segment.recovery = recovery;
-      },
-      onSource: (source, offset) => {
-        session.current = { segment, source, startOffset: offset };
-      },
-      onPlayed: () => schedulePrefetch(session, index),
-    });
-    session.clipCleanups.push(
-      supervision.detach,
-      onClipEvent(element, 'ended', () => {
-        void advance(session, index + 1);
-      }),
-      onClipEvent(element, 'playing', () => {
-        if (!isCurrent(session)) return;
-        setStatus('playing');
-        setItemState(segment.verseRef, 'playing');
-      })
-    );
-    for (const action of entry.actions) action(supervision.requests);
-    supervision.start(startOffset);
+    activate(session, index, { ...entry, source: entry.source }, entry.element, startOffset);
   };
 
   const startSession = (items: Segment[], startIndex: number, startOffset?: number): void => {
@@ -374,6 +453,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       resolutionState: { forceTts: false },
       prefetches: new Map(),
       clipCleanups: [],
+      segmentCleanups: [],
     };
     sessionRef.current = session;
     setAiMarkedKeys(new Set());

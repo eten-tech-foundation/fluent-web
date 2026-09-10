@@ -30,6 +30,8 @@ export interface PlaybackRecoveryOptions {
   onAttach?: (recovery: RecoveryStrategy) => void;
   onSource?: (source: Source, startOffset: number) => void;
   onPlayed?: () => void;
+  onRecovering?: () => void;
+  onEnded?: () => void;
   /** An early element error observed before this controller could subscribe. */
   initialLoadFailed?: boolean;
 }
@@ -39,6 +41,8 @@ export interface PlaybackRecovery {
   requests: RecoveryRequests;
   /** Initial playback uses the same scheduled path and load identity as retries. */
   start: (startOffset?: number) => void;
+  /** Adopt a sounding adjacent slice without seeking, reloading or calling play again. */
+  continue: () => void;
 }
 
 /** Player-owned arbitration: policy receives neither the media element nor budget results. */
@@ -54,6 +58,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   let recovering = false;
   let epoch = 0;
   let loadEpoch = 0;
+  let replacementEpoch = 0;
   let lastCharge: BudgetKey | undefined;
   const retries = options.budgets;
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -121,11 +126,20 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
 
   const reload = async (next: Segment['source'], opts: PlaybackOptions = {}): Promise<void> => {
     const token = epoch;
-    const resolved =
-      typeof next === 'function'
-        ? await next({ signal, run: options.run, requests: makeRequests(token, () => {}) })
-        : next;
-    if (isDetached() || token !== epoch) return;
+    const replacement = replacementEpoch;
+    let resolved: Source;
+    try {
+      resolved =
+        typeof next === 'function'
+          ? await next({ signal, run: options.run, requests: makeRequests(token, () => {}) })
+          : next;
+    } catch (error) {
+      // A resolving policy can request a hand-off or give-up instead. Neither a
+      // late result nor its rejection may override that already scheduled action.
+      if (isDetached() || token !== epoch || replacement !== replacementEpoch) return;
+      throw error;
+    }
+    if (isDetached() || token !== epoch || replacement !== replacementEpoch) return;
     // Resolution may have requested attach/markAi. Queue playback behind those
     // requests so the policy and badge are installed before the first sample.
     schedule(() => beginLoad(resolved, opts.startOffset, true), 0, token);
@@ -139,6 +153,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
     source = next;
     recovering = false;
     const loadToken = ++loadEpoch;
+    playbackStarted = false;
     if (reset) resetClipElement(element, source.url);
     element.currentTime = startOffset ?? source.window?.[0] ?? 0;
     options.onSource?.(source, element.currentTime);
@@ -219,6 +234,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
       },
       handOff: next => {
         if (!current()) return;
+        replacementEpoch += 1;
         onWorkRequested();
         schedule(
           async () => {
@@ -234,6 +250,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
       },
       giveUp: reason => {
         if (!current()) return;
+        replacementEpoch += 1;
         onWorkRequested();
         schedule(() => giveUp(reason), 0, token);
       },
@@ -246,6 +263,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   const observe = (failure: PlaybackFailure): void => {
     if (signal.aborted || recovering) return;
     recovering = true;
+    options.onRecovering?.();
     disarmWatchdog();
     epoch += 1;
     const token = epoch;
@@ -271,6 +289,14 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   const playback: PlaybackRecovery = {
     detach,
     requests: makeRequests(epoch, () => {}),
+    continue: () => {
+      schedule(() => {
+        playbackStarted = true;
+        disarmWatchdog();
+        options.onSource?.(source, element.currentTime);
+        options.onPlayed?.();
+      });
+    },
     start: startOffset => {
       schedule(() => beginLoad(source, startOffset, false));
       if (options.initialLoadFailed)
@@ -298,6 +324,19 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
         startedPlaying: playbackStarted,
       });
     }),
+    onClipEvent(element, 'ended', () => {
+      const end = source.window?.[1];
+      if (end !== undefined && element.currentTime < end - 0.05) {
+        observe({ on: 'endedEarly', source, positionMs: element.currentTime * 1000 });
+      } else if (!recovering) {
+        options.onEnded?.();
+      }
+    }),
+    onClipEvent(element, 'waiting', () => {
+      playbackStarted = false;
+      armWatchdog();
+    }),
+
     onClipEvent(element, 'progress', disarmWatchdog),
     onClipEvent(element, 'canplay', disarmWatchdog),
     onClipEvent(element, 'playing', () => {
