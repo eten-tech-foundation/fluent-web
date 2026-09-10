@@ -4,6 +4,18 @@
  * Consumers depend on `TtsEngine`, never on fetch or a vendor (§6.1, T3/T5).
  */
 
+export type {
+  BudgetKey,
+  Playable,
+  PlayableKey,
+  PlaybackFailure,
+  RecoveryRequests,
+  RecoveryStrategy,
+  Segment,
+  Source,
+  SupervisionPolicy,
+} from './seam/types';
+
 export {
   type TtsClip,
   type TtsServedFormat,
