@@ -11,6 +11,8 @@ vi.mock('@/store/store', () => ({
   }),
 }));
 
+const mockRemoveMutateAsync = vi.fn().mockResolvedValue({});
+
 vi.mock('@/features/projects/hooks/useProjectUsers', () => ({
   useProjectUsers: () => ({
     data: [
@@ -28,7 +30,7 @@ vi.mock('@/features/projects/hooks/useProjectUsers', () => ({
     refetch: vi.fn(),
   }),
   useAddProjectUsers: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRemoveProjectUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveProjectUser: () => ({ mutateAsync: mockRemoveMutateAsync, isPending: false }),
   useUpdateProjectUserRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -93,7 +95,7 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     ).toBeInTheDocument();
   });
 
-  it('closes banner without changes on Cancel click', async () => {
+  it('closes banner without calling remove mutation on Cancel click', async () => {
     renderWithProviders(
       <AssignProjectUsers
         chapterAssignments={mockAssignmentsWithWork}
@@ -110,5 +112,26 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     fireEvent.click(cancelButton);
 
     expect(screen.queryByText(/Remove Alice Drafter from this project/i)).not.toBeInTheDocument();
+    expect(mockRemoveMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('invokes remove mutation with userId on Remove confirmation click', async () => {
+    renderWithProviders(
+      <AssignProjectUsers
+        chapterAssignments={mockAssignmentsWithWork}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
+    );
+
+    const trashButtons = await screen.findAllByRole('button', { name: /Remove user/i });
+    fireEvent.click(trashButtons[0]);
+
+    const removeButton = screen.getByRole('button', { name: 'Remove' });
+    fireEvent.click(removeButton);
+
+    expect(mockRemoveMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mockRemoveMutateAsync).toHaveBeenCalledWith({ userId: 10 });
   });
 });
