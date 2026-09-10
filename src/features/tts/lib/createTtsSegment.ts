@@ -2,7 +2,7 @@
 import { TtsRecoveryStrategy } from '../strategies/ttsRecoveryStrategy';
 
 import type { FetchLike } from '../engines/serverTtsEngine';
-import type { Segment, Source } from '../seam/types';
+import type { Segment, Source, SourceThunk } from '../seam/types';
 import type { TtsRecoveryTiming } from '../strategies/ttsRecoveryTiming';
 import type { TtsEngine, TtsQueueItem, TtsServedFormat } from '../tts.types';
 
@@ -14,7 +14,10 @@ export interface CreateTtsSegmentOptions {
   timing?: Partial<TtsRecoveryTiming>;
 }
 
-export const createTtsSegment = (item: TtsQueueItem, options: CreateTtsSegmentOptions): Segment => {
+export const createTtsSegment = (
+  item: TtsQueueItem,
+  options: CreateTtsSegmentOptions
+): Segment & { source: SourceThunk } => {
   const generate = async (signal?: AbortSignal): Promise<Source> => {
     const clip = await options.engine.synthesize(
       { text: item.text, langCode: item.langCode },

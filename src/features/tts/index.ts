@@ -96,6 +96,19 @@ export {
 } from './engines/serverTtsEngine';
 
 export {
+  fetchChapterSourceAudio,
+  type ChapterSourceAudio,
+  type ChapterSourceAudioRequest,
+} from './resolver/sourceAudioClient';
+export { ChapterAudioCache } from './resolver/chapterCache';
+export {
+  resolvePlayables,
+  type RecordedRecoveryOptions,
+  type SourceAudioRow,
+  type SourceResolverContext,
+} from './resolver/resolvePlayables';
+
+export {
   type ClipAudioElement,
   type ClipAudioEventName,
   createClipAudioElement,
