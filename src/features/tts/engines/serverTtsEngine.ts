@@ -1,24 +1,14 @@
 /**
- * Server-backed text synthesis. Recovery policy lives in TtsRecoveryStrategy;
- * the temporary supervision export keeps callers working during the queue migration.
+ * Server-backed text synthesis. Recovery policy lives in TtsRecoveryStrategy.
  */
 
 import { config } from '@/lib/config';
 
-import { type ClipAudioElement } from '../lib/audioElement';
-import { supervisePlayback } from '../lib/playbackRecovery';
-import { TtsRecoveryStrategy } from '../strategies/ttsRecoveryStrategy';
-import {
-  DEFAULT_TTS_RECOVERY_TIMING,
-  type TtsRecoveryTiming,
-} from '../strategies/ttsRecoveryTiming';
 import {
   type TtsClip,
   type TtsServedFormat,
   type TtsEngine,
-  type TtsFailureClass,
   type TtsFormat,
-  TtsPlaybackError,
   type TtsRequest,
 } from '../tts.types';
 
@@ -132,7 +122,7 @@ export class ServerTtsEngine implements TtsEngine {
 }
 
 // ---------------------------------------------------------------------------
-// Clip playback supervision — the §6.1 failure ladder
+// Served-format diagnostic
 // ---------------------------------------------------------------------------
 
 /**
@@ -155,60 +145,4 @@ export const servedFormatOf = (audioUrl: string): TtsServedFormat | undefined =>
   }
   const match = /\.(wav|ogg|mp3)$/i.exec(pathname);
   return match ? (match[1].toLowerCase() as TtsServedFormat) : undefined;
-};
-
-export interface ClipPlaybackSupervisionOptions {
-  element: ClipAudioElement;
-  /** Absolute clip URL (already resolved by `synthesize`). */
-  audioUrl: string;
-  /**
-   * The clip's AbortSignal. Stop/navigation/queue-advance abort it, which
-   * cancels every pending retry and watchdog timer immediately (CB1). This is
-   * LOCAL-SAFE: aborting never issues any "cancel" call to the server — no
-   * such endpoint exists; generation is detached (T21).
-   */
-  signal: AbortSignal;
-  /** Re-runs `generate` for this clip (404 rung); resolves to a fresh absolute URL. */
-  regenerate: () => Promise<string>;
-  /** Fired once, on retry exhaustion. The engine renders nothing (§5.2). */
-  onFailure: (error: TtsPlaybackError) => void;
-  /**
-   * Whether the clip may still be in the streaming era. When false (known
-   * compressed), the stall watchdog never arms (§6.1 platform risk).
-   */
-  streamingEra?: boolean;
-  fetchFn?: FetchLike;
-  timing?: Partial<TtsRecoveryTiming>;
-}
-
-/** Temporary compatibility adapter while the queue migrates to source segments. */
-export const superviseClipPlayback = (options: ClipPlaybackSupervisionOptions): (() => void) => {
-  const timing = { ...DEFAULT_TTS_RECOVERY_TIMING, ...options.timing };
-  return supervisePlayback({
-    element: options.element,
-    source: { url: options.audioUrl, durationIsMeasured: false },
-    recovery: new TtsRecoveryStrategy({
-      regenerate: async () => ({ url: await options.regenerate(), durationIsMeasured: false }),
-      streamingEra: options.streamingEra,
-      fetchFn: options.fetchFn,
-      timing,
-    }),
-    signal: options.signal,
-    maxRetriesPerClass: timing.maxRetriesPerClass,
-    maxStallPolls: timing.maxStallPolls,
-    onGiveUp: (reason, charge) => {
-      // Preserve the legacy typed callback: unexpected generate failures were
-      // midStream errors, even when the last retry charged the notFound bucket.
-      const unexpected =
-        reason === 'TTS recovery failed unexpectedly' ||
-        reason === 'TTS stall recovery failed unexpectedly';
-      const failureClass = unexpected ? 'midStream' : ((charge ?? 'midStream') as TtsFailureClass);
-      options.onFailure(new TtsPlaybackError(failureClass, reason));
-    },
-    onAutoplayRefused: () => {
-      options.onFailure(
-        new TtsPlaybackError('midStream', 'TTS playback was refused by the browser after recovery')
-      );
-    },
-  });
 };

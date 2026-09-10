@@ -87,11 +87,7 @@ export interface TtsEngine {
   synthesize: (request: TtsRequest, signal?: AbortSignal) => Promise<TtsClip>;
 }
 
-/**
- * One continuous-mode queue entry (§5.3). Feature-agnostic on purpose (T3):
- * the host supplies text/langCode/refs, so the queue works on any future
- * source-scripture surface — it never reads drafting state itself.
- */
+/** Source text supplied by a host to the TTS resolver, not a player queue entry. */
 export interface TtsQueueItem {
   /** Host-meaningful row identity (highlight/scroll target); opaque here. */
   verseRef: string;
@@ -112,18 +108,3 @@ export type TtsFailureClass =
   | 'midStream' // HEAD saw 200/302 — artifact fine, element hit a mid-stream abort; reset src
   | 'notFound' // HEAD saw 404 — the clip URL no longer resolves (why is a backend detail); re-run generate, then reload
   | 'stall'; // streaming-era clip made no progress — wait-for-compressed recovery (N4)
-
-/**
- * Typed failure surfaced when a failure class exhausts its retry budget.
- * The engine renders nothing — the caller decides (toast for a playing clip,
- * silence for a prefetch — §5.2/§6.1).
- */
-export class TtsPlaybackError extends Error {
-  readonly failureClass: TtsFailureClass;
-
-  constructor(failureClass: TtsFailureClass, message: string) {
-    super(message);
-    this.name = 'TtsPlaybackError';
-    this.failureClass = failureClass;
-  }
-}

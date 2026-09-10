@@ -91,7 +91,7 @@ describe('playback seam', () => {
   });
 
   it('admits all three observed failure entry points without a provider diagnosis', async () => {
-    const source = async (): Promise<Source> => ({ url: 'clip', durationIsMeasured: false });
+    const source: Source = { url: 'clip', durationIsMeasured: false };
     const failures: PlaybackFailure[] = [
       { on: 'error', source, positionMs: 0, startedPlaying: false },
       { on: 'stall', source, positionMs: 0 },

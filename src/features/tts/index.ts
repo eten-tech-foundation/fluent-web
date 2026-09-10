@@ -17,6 +17,9 @@ export type {
   RecoveryStrategy,
   Segment,
   Source,
+  SourceThunk,
+  SourceResolutionContext,
+  PlaybackRunState,
   SupervisionPolicy,
 } from './seam/types';
 
@@ -26,7 +29,6 @@ export {
   type TtsEngine,
   type TtsFailureClass,
   type TtsFormat,
-  TtsPlaybackError,
   type TtsQueueItem,
   type TtsRequest,
 } from './tts.types';
@@ -35,6 +37,7 @@ export {
   TTS_MAX_PREFETCH_DEPTH,
   TTS_PREFETCH_DEPTH,
   type TtsPlaybackQueueApi,
+  type PauseSnapshot,
   type TtsPlaybackStatus,
   type TtsQueueItemState,
   useTtsPlaybackQueue,
@@ -85,12 +88,10 @@ export {
 
 export {
   canBrowserPlayOpus,
-  type ClipPlaybackSupervisionOptions,
   DEFAULT_TTS_RECOVERY_TIMING,
   type FetchLike,
   ServerTtsEngine,
   type ServerTtsEngineOptions,
-  superviseClipPlayback,
   type TtsRecoveryTiming,
 } from './engines/serverTtsEngine';
 
