@@ -503,15 +503,20 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-md bg-red-50 p-3 dark:bg-red-950/30'>
-            <span className='text-sm text-red-700 dark:text-red-400'>
-              {getActiveAssignmentCount(removeTarget.userId) > 0
-                ? `Remove ${removeTarget.displayName} from this project? Their chapter assignments will be removed.`
-                : `Remove ${removeTarget.displayName} from this project?`}
-            </span>
-            <div className='flex min-w-[80px] shrink-0 flex-col gap-1.5'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
+            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+              {getActiveAssignmentCount(removeTarget.userId) > 0 ? (
+                <>
+                  <span>Remove {removeTarget.displayName} from this project?</span>
+                  <span>Their chapter assignments will be removed.</span>
+                </>
+              ) : (
+                <span>Remove {removeTarget.displayName} from this project?</span>
+              )}
+            </div>
+            <div className='flex shrink-0 flex-col gap-1.5'>
               <Button
-                className='h-8 rounded-md bg-red-500 px-3 text-xs font-medium text-white hover:bg-red-600'
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
                 disabled={removingUserIds.has(removeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRemove}
@@ -523,7 +528,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 )}
               </Button>
               <Button
-                className='h-8 rounded-md border-slate-300 px-3 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
                 size='sm'
                 variant='outline'
                 onClick={() => setRemoveTarget(null)}
