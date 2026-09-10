@@ -115,7 +115,12 @@ const reportBlock = (blockMarker: string | undefined): void => {
   });
 };
 
-const CHAPTER_PROPS = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a' };
+const CHAPTER_PROPS = {
+  bookCode: BOOK,
+  chapterNumber: CHAPTER,
+  contentKey: 'a',
+  targetLanguage: 'Spanish',
+};
 
 const EMPTY_PAIR: PericopeVerseText[] = [
   { verseNumber: 1, text: '', markers: null },
@@ -290,7 +295,7 @@ describe('ChapterEditor', () => {
   });
 
   it('reloads from the parent when the chapter identity changes', () => {
-    const props = { bookCode: BOOK, chapterNumber: CHAPTER, onVersesChange: vi.fn() };
+    const props = { ...CHAPTER_PROPS, onVersesChange: vi.fn() };
     const nextChapter = [{ verseNumber: 1, text: 'A new chapter.', markers: null }];
 
     const { rerender } = render(<ChapterEditor {...props} contentKey='a' verses={A_PAIR} />);
@@ -300,6 +305,45 @@ describe('ChapterEditor', () => {
   });
 
   describe('format bar', () => {
+    it('labels the target pane in editable and read-only chapters', () => {
+      const targetLanguage = 'Northern East Cree (Eastern dialect)';
+      const props = { ...CHAPTER_PROPS, targetLanguage, verses: A_PAIR, onVersesChange: vi.fn() };
+      const { rerender } = render(<ChapterEditor {...props} />);
+
+      expect(screen.getByRole('heading', { name: targetLanguage })).toBeVisible();
+      expect(screen.getByRole('heading', { name: targetLanguage })).toHaveAttribute(
+        'title',
+        targetLanguage
+      );
+      rerender(<ChapterEditor {...props} readOnly />);
+      expect(screen.getByRole('heading', { name: targetLanguage })).toBeVisible();
+      expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+    });
+
+    it('keeps names and tooltips on icon controls', () => {
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+
+      for (const name of ['Paragraph', 'Poetry Line']) {
+        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+      }
+      expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
+        'title',
+        'Section headings are not available yet'
+      );
+
+      reportBlock('q2');
+      for (const name of ['Decrease indent', 'Increase indent']) {
+        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+      }
+      expect(screen.getByRole('button', { name: 'Increase indent' })).toBeDisabled();
+
+      reportBlock('s2');
+      for (const level of [1, 2, 3, 4]) {
+        const label = `Level ${level}`;
+        expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', label);
+      }
+    });
+
     it('applies the block the translator picks to the editor', async () => {
       const user = userEvent.setup();
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
@@ -346,7 +390,10 @@ describe('ChapterEditor', () => {
 
       reportBlock('s2');
       expect(screen.getByTestId('heading-levels')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Level 2' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
 
       reportBlock('q1');
       expect(screen.queryByTestId('heading-levels')).not.toBeInTheDocument();
@@ -443,6 +490,7 @@ describe('history shortcuts (#427)', () => {
       <ChapterEditor
         chapterNumber={CHAPTER}
         contentKey='history-shortcuts'
+        targetLanguage='Spanish'
         verses={verses}
         onVersesChange={vi.fn()}
       />
@@ -492,7 +540,7 @@ describe('scoped block formatting (#427)', () => {
       });
     });
 
-    await userEvent.click(screen.getByText('Poetry Line'));
+    await userEvent.click(screen.getByRole('button', { name: 'Poetry Line' }));
 
     expect(editor.formatPara).not.toHaveBeenCalled();
     expect(editor.setUsj).toHaveBeenCalledTimes(1);
@@ -515,7 +563,7 @@ describe('scoped block formatting (#427)', () => {
     });
     editor.askedForVerses = [];
 
-    await userEvent.click(screen.getByText('Poetry Line'));
+    await userEvent.click(screen.getByRole('button', { name: 'Poetry Line' }));
 
     // Reloading the document leaves no selection, and the plugin only acts on a verse it has not
     // just been given — so the verse has to be let go of before it can be asked for again. Both
@@ -540,7 +588,7 @@ describe('scoped block formatting (#427)', () => {
       });
     });
 
-    await userEvent.click(screen.getByText('Poetry Line'));
+    await userEvent.click(screen.getByRole('button', { name: 'Poetry Line' }));
 
     expect(editor.formatPara).toHaveBeenCalledWith('q1');
     expect(editor.setUsj).not.toHaveBeenCalled();
