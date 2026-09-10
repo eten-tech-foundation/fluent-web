@@ -6,6 +6,10 @@
 
 export type {
   BudgetKey,
+  ExhaustionAction,
+  PlaybackOptions,
+  PollRequests,
+  RecoveryProbe,
   Playable,
   PlayableKey,
   PlaybackFailure,
@@ -73,6 +77,11 @@ export {
   scrollRowIntoViewIfNeeded,
   type ScrollViewport,
 } from './lib/scrollRowIntoView';
+
+export {
+  TtsRecoveryStrategy,
+  type TtsRecoveryStrategyOptions,
+} from './strategies/ttsRecoveryStrategy';
 
 export {
   canBrowserPlayOpus,

@@ -1,16 +1,17 @@
 /**
- * `ServerTtsEngine` — the server-backed `TtsEngine` (§6.1, T5), plus the
- * fetch-control-plane recovery ladder that supervises a clip's playback
- * (HEAD re-probe classification, bounded retries, stall watchdog).
- *
- * Retries live HERE, not in elements: media-element errors are opaque (no
- * HTTP status), so the engine classifies failures with a `fetch` HEAD
- * re-probe of the clip URL (§6.1). All of this stays invisible to controls.
+ * Server-backed text synthesis. Recovery policy lives in TtsRecoveryStrategy;
+ * the temporary supervision export keeps callers working during the queue migration.
  */
 
 import { config } from '@/lib/config';
 
-import { type ClipAudioElement, onClipEvent, resetClipElement } from '../lib/audioElement';
+import { type ClipAudioElement } from '../lib/audioElement';
+import { supervisePlayback } from '../lib/playbackRecovery';
+import { TtsRecoveryStrategy } from '../strategies/ttsRecoveryStrategy';
+import {
+  DEFAULT_TTS_RECOVERY_TIMING,
+  type TtsRecoveryTiming,
+} from '../strategies/ttsRecoveryTiming';
 import {
   type TtsClip,
   type TtsServedFormat,
@@ -49,33 +50,10 @@ export interface TtsGenerateWireResponse {
   audio_url: string;
 }
 
-/**
- * Proposed-default numbers (§6.1, flagged for review in the proposal). Named
- * in ONE place so retuning is a one-line change.
- */
-export interface TtsRecoveryTiming {
-  /** Max quiet retries per failure class per clip (CB1). */
-  maxRetriesPerClass: number;
-  /** Fixed backoff for mid-stream aborts (Retry-After governs 503s). */
-  midStreamBackoffMs: number;
-  /** Fallback delay when a 503 carries no usable Retry-After. */
-  defaultRetryAfterMs: number;
-  /** Stall watchdog: no progress/canplay within this window ⇒ stalled (N4). */
-  stallWatchdogMs: number;
-  /** Interval for the wait-for-compressed HEAD poll (N4). */
-  stallPollIntervalMs: number;
-  /** Defensive bound on wait-for-compressed polling (not in the proposal). */
-  maxStallPolls: number;
-}
-
-export const DEFAULT_TTS_RECOVERY_TIMING: TtsRecoveryTiming = {
-  maxRetriesPerClass: 2,
-  midStreamBackoffMs: 1000,
-  defaultRetryAfterMs: 2000,
-  stallWatchdogMs: 4000,
-  stallPollIntervalMs: 1000,
-  maxStallPolls: 30,
-};
+export {
+  DEFAULT_TTS_RECOVERY_TIMING,
+  type TtsRecoveryTiming,
+} from '../strategies/ttsRecoveryTiming';
 
 /**
  * Opus support probe (§6.1): synchronous local call, one tiny helper so tests
@@ -179,70 +157,6 @@ export const servedFormatOf = (audioUrl: string): TtsServedFormat | undefined =>
   return match ? (match[1].toLowerCase() as TtsServedFormat) : undefined;
 };
 
-/** What a HEAD re-probe of the clip URL told us (§6.1). */
-type ProbeOutcome =
-  | { kind: 'admission'; retryAfterMs: number } // 503 — server busy, wait Retry-After
-  | { kind: 'streaming' } // 200 — artifact fine, still in the streaming era
-  | { kind: 'compressed' } // 302/opaqueredirect — immutable object exists
-  | { kind: 'notFound' }; // 404 — URL no longer resolves; re-run generate, then reload
-
-const parseRetryAfterMs = (res: Response, fallbackMs: number): number => {
-  const header = res.headers.get('Retry-After');
-  if (header !== null) {
-    const seconds = Number(header);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-      return seconds * 1000;
-    }
-  }
-  return fallbackMs;
-};
-
-const probeClipUrl = async (
-  fetchFn: FetchLike,
-  url: string,
-  signal: AbortSignal,
-  timing: TtsRecoveryTiming
-): Promise<ProbeOutcome> => {
-  // `redirect: 'manual'` keeps the 302 observable: followed redirects would
-  // make "compressed exists" indistinguishable from a streaming-era 200.
-  const res = await fetchFn(url, {
-    method: 'HEAD',
-    credentials: 'include',
-    redirect: 'manual',
-    signal,
-  });
-  if (res.status === 503) {
-    return { kind: 'admission', retryAfterMs: parseRetryAfterMs(res, timing.defaultRetryAfterMs) };
-  }
-  if (res.status === 404) {
-    return { kind: 'notFound' };
-  }
-  // Browsers surface a manual-mode redirect as an opaqueredirect (status 0);
-  // test fakes and server runtimes surface the raw 3xx.
-  if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
-    return { kind: 'compressed' };
-  }
-  return { kind: 'streaming' };
-};
-
-/** setTimeout under an AbortSignal — abort clears the timer and rejects. */
-const delayUnderSignal = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-
 export interface ClipPlaybackSupervisionOptions {
   element: ClipAudioElement;
   /** Absolute clip URL (already resolved by `synthesize`). */
@@ -267,226 +181,34 @@ export interface ClipPlaybackSupervisionOptions {
   timing?: Partial<TtsRecoveryTiming>;
 }
 
-/**
- * Attach the §6.1 recovery ladder to a clip's element. Returns a detach
- * function (idempotent). Media errors are classified via HEAD re-probe; a
- * silent Safari-style stall is caught by the watchdog (N4) and recovered by
- * waiting for the compressed object.
- *
- * HEAD/element era skew is BENIGN — eras only advance (streaming →
- * compressed) and every probe outcome maps to a safe action (N5): 503 waits
- * and retries, 200/302 resets `src` and picks up whichever era now exists,
- * 404 regenerates. No outcome produces a wrong action, so no lock is needed —
- * do not add one.
- */
+/** Temporary compatibility adapter while the queue migrates to source segments. */
 export const superviseClipPlayback = (options: ClipPlaybackSupervisionOptions): (() => void) => {
-  const { element, signal, regenerate, onFailure } = options;
-  const fetchFn = options.fetchFn ?? ((input: string, init?: RequestInit) => fetch(input, init));
-  const timing: TtsRecoveryTiming = { ...DEFAULT_TTS_RECOVERY_TIMING, ...options.timing };
-
-  let currentUrl = options.audioUrl;
-  let compressedEra = options.streamingEra === false;
-  let playbackStarted = false;
-  let recovering = false;
-  let detached = false;
-  let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
-  const retries: Record<TtsFailureClass, number> = {
-    admission: 0,
-    midStream: 0,
-    notFound: 0,
-    stall: 0,
-  };
-  const unsubscribers: Array<() => void> = [];
-
-  const detach = (): void => {
-    if (detached) return;
-    detached = true;
-    disarmWatchdog();
-    for (const unsubscribe of unsubscribers) unsubscribe();
-    signal.removeEventListener('abort', detach);
-  };
-
-  const fail = (failureClass: TtsFailureClass, message: string): void => {
-    detach();
-    onFailure(new TtsPlaybackError(failureClass, message));
-  };
-
-  /** Bounded retries: at most `maxRetriesPerClass` PER failure class (CB1). */
-  const budgetExhausted = (failureClass: TtsFailureClass): boolean => {
-    retries[failureClass] += 1;
-    return retries[failureClass] > timing.maxRetriesPerClass;
-  };
-
-  const disarmWatchdog = (): void => {
-    if (watchdogTimer !== undefined) {
-      clearTimeout(watchdogTimer);
-      watchdogTimer = undefined;
-    }
-  };
-
-  /** N4: only streaming-era clips that have not started playing are watched. */
-  const armWatchdog = (): void => {
-    disarmWatchdog();
-    if (compressedEra || playbackStarted || detached || signal.aborted) return;
-    watchdogTimer = setTimeout(() => {
-      void handleStall();
-    }, timing.stallWatchdogMs);
-  };
-
-  const reload = (): void => {
-    if (detached || signal.aborted) return;
-    resetClipElement(element, currentUrl);
-    // `load()` leaves the element PAUSED — "play() is the only audible
-    // trigger" (audioElement.ts). So recovery has to restart playback itself.
-    // Without this the ladder repaired the source perfectly and left the
-    // listener in silence: it classified the failure, re-authorized the clip,
-    // pointed the element at the fresh URL — and never made a sound. That was
-    // true of EVERY recovery class, not just the 404 rung (phase 09, found in
-    // a browser once the clip-start teardown stopped masking it).
-    void element.play().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (error instanceof DOMException && error.name === 'NotAllowedError') {
-        // The browser refused to resume without a fresh gesture. Nothing about
-        // the clip is wrong, so no retry can help — surface it.
-        fail('midStream', 'TTS playback was refused by the browser after recovery');
-        return;
-      }
-      // Any other rejection means the new source failed too; the element fires
-      // `error` for that and re-enters this ladder under its own retry budget.
-    });
-    armWatchdog();
-  };
-
-  const handleNotFound = async (): Promise<void> => {
-    if (budgetExhausted('notFound')) {
-      fail('notFound', 'TTS clip regenerate retries exhausted (HEAD 404)');
-      return;
-    }
-    // §6.1/§7.2 rung 4: the clip URL stopped resolving — WHY is a backend
-    // detail the frontend stays blind to. Self-heal by re-running `generate`
-    // (which re-authorizes the clip) and reloading the element.
-    currentUrl = await regenerate();
-    reload();
-  };
-
-  const handleError = async (): Promise<void> => {
-    if (detached || signal.aborted || recovering) return;
-    recovering = true;
-    disarmWatchdog();
-    try {
-      let outcome: ProbeOutcome;
-      try {
-        outcome = await probeClipUrl(fetchFn, currentUrl, signal, timing);
-      } catch {
-        if (signal.aborted) return;
-        // The probe itself failed (network) — treat as a mid-stream abort.
-        outcome = { kind: 'streaming' };
-      }
-      switch (outcome.kind) {
-        case 'admission':
-          if (budgetExhausted('admission')) {
-            fail('admission', 'TTS admission retries exhausted (HEAD 503)');
-            return;
-          }
-          await delayUnderSignal(outcome.retryAfterMs, signal);
-          reload();
-          return;
-        case 'compressed':
-          // The immutable object exists now — resetting src picks it up.
-          compressedEra = true;
-          if (budgetExhausted('midStream')) {
-            fail('midStream', 'TTS mid-stream retries exhausted');
-            return;
-          }
-          reload();
-          return;
-        case 'streaming':
-          if (budgetExhausted('midStream')) {
-            fail('midStream', 'TTS mid-stream retries exhausted');
-            return;
-          }
-          await delayUnderSignal(timing.midStreamBackoffMs, signal);
-          reload();
-          return;
-        case 'notFound':
-          await handleNotFound();
-          return;
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (signal.aborted || detached) return;
-      fail('midStream', 'TTS recovery failed unexpectedly');
-    } finally {
-      recovering = false;
-    }
-  };
-
-  /**
-   * N4 wait-for-compressed: HEAD-poll the clip URL until it answers the 302
-   * to the immutable object (which arrives naturally seconds later), then
-   * reset `src` and reload. The compressed object has Content-Length/ETag/
-   * Range — the strict-media-stack (Safari/iOS) happy path.
-   */
-  const handleStall = async (): Promise<void> => {
-    if (detached || signal.aborted || recovering) return;
-    recovering = true;
-    try {
-      if (budgetExhausted('stall')) {
-        fail('stall', 'TTS stall recoveries exhausted');
-        return;
-      }
-      for (let polls = 0; polls < timing.maxStallPolls; polls += 1) {
-        let outcome: ProbeOutcome;
-        try {
-          outcome = await probeClipUrl(fetchFn, currentUrl, signal, timing);
-        } catch {
-          if (signal.aborted) return;
-          await delayUnderSignal(timing.stallPollIntervalMs, signal);
-          continue;
-        }
-        if (outcome.kind === 'compressed') {
-          compressedEra = true;
-          reload();
-          return;
-        }
-        if (outcome.kind === 'notFound') {
-          await handleNotFound();
-          return;
-        }
-        const waitMs =
-          outcome.kind === 'admission' ? outcome.retryAfterMs : timing.stallPollIntervalMs;
-        await delayUnderSignal(waitMs, signal);
-      }
-      fail('stall', 'TTS wait-for-compressed poll budget exhausted');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (signal.aborted || detached) return;
-      fail('stall', 'TTS stall recovery failed unexpectedly');
-    } finally {
-      recovering = false;
-    }
-  };
-
-  if (signal.aborted) {
-    detached = true;
-    return detach;
-  }
-
-  signal.addEventListener('abort', detach, { once: true });
-  unsubscribers.push(
-    onClipEvent(element, 'error', () => {
-      void handleError();
+  const timing = { ...DEFAULT_TTS_RECOVERY_TIMING, ...options.timing };
+  return supervisePlayback({
+    element: options.element,
+    source: { url: options.audioUrl, durationIsMeasured: false },
+    recovery: new TtsRecoveryStrategy({
+      regenerate: async () => ({ url: await options.regenerate(), durationIsMeasured: false }),
+      streamingEra: options.streamingEra,
+      fetchFn: options.fetchFn,
+      timing,
     }),
-    // Progress/canplay prove the stream is alive; playing permanently ends
-    // watchdog eligibility (§6.1: no watchdog once a clip is playing).
-    onClipEvent(element, 'progress', disarmWatchdog),
-    onClipEvent(element, 'canplay', disarmWatchdog),
-    onClipEvent(element, 'playing', () => {
-      playbackStarted = true;
-      disarmWatchdog();
-    })
-  );
-  armWatchdog();
-
-  return detach;
+    signal: options.signal,
+    maxRetriesPerClass: timing.maxRetriesPerClass,
+    maxStallPolls: timing.maxStallPolls,
+    onGiveUp: (reason, charge) => {
+      // Preserve the legacy typed callback: unexpected generate failures were
+      // midStream errors, even when the last retry charged the notFound bucket.
+      const unexpected =
+        reason === 'TTS recovery failed unexpectedly' ||
+        reason === 'TTS stall recovery failed unexpectedly';
+      const failureClass = unexpected ? 'midStream' : ((charge ?? 'midStream') as TtsFailureClass);
+      options.onFailure(new TtsPlaybackError(failureClass, reason));
+    },
+    onAutoplayRefused: () => {
+      options.onFailure(
+        new TtsPlaybackError('midStream', 'TTS playback was refused by the browser after recovery')
+      );
+    },
+  });
 };
