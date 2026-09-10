@@ -12,6 +12,9 @@ export class FakeClipElement implements ClipAudioElement {
   preload = '';
   currentTime = 0;
   playbackRate = 1;
+  duration = Number.NaN;
+  paused = true;
+  pauseCalls = 0;
   /** `src` value at each `load()` call — the reload assertions read this. */
   loadCalls: string[] = [];
   /**
@@ -36,11 +39,16 @@ export class FakeClipElement implements ClipAudioElement {
   }
   play(): Promise<void> {
     this.playCalls.push(this.src);
+    this.paused = false;
     return this.playRejection === undefined
       ? Promise.resolve()
       : Promise.reject(this.playRejection);
   }
-  pause(): void {}
+  pause(): void {
+    this.paused = true;
+    this.pauseCalls++;
+    this.emit('pause');
+  }
   addEventListener(type: string, listener: () => void): void {
     const set = this.listeners.get(type) ?? new Set();
     set.add(listener);
@@ -50,7 +58,8 @@ export class FakeClipElement implements ClipAudioElement {
     this.listeners.get(type)?.delete(listener);
   }
   emit(type: string): void {
-    for (const listener of this.listeners.get(type) ?? []) listener();
+    // Like DOM dispatch, listeners added during this event wait for the next one.
+    for (const listener of [...(this.listeners.get(type) ?? [])]) listener();
   }
 }
 

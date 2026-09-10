@@ -82,6 +82,11 @@ export {
 } from './lib/scrollRowIntoView';
 
 export {
+  RecordedRecoveryStrategy,
+  type RecordedRecoveryStrategyOptions,
+} from './strategies/recordedRecoveryStrategy';
+
+export {
   TtsRecoveryStrategy,
   type TtsRecoveryStrategyOptions,
 } from './strategies/ttsRecoveryStrategy';
