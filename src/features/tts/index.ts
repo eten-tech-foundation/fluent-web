@@ -113,6 +113,13 @@ export {
   type SourceResolverContext,
 } from './resolver/resolvePlayables';
 
+export { PlaybackRegistryProvider } from './registry/PlaybackRegistryProvider';
+export { type PlaybackRegistry } from './registry/PlaybackRegistryStore';
+export { type PlayableState } from './registry/playbackRegistryState';
+export { type PauseRecord } from './registry/pauseRecord';
+export { usePlaybackRegistry } from './registry/usePlaybackRegistry';
+export { usePlayableState } from './registry/usePlayableState';
+
 export {
   type ClipAudioElement,
   type ClipAudioEventName,
