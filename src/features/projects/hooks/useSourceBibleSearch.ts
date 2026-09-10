@@ -10,6 +10,7 @@ export interface SourceSearchBible {
   languageId?: number;
   languageName?: string;
   languageCode?: string | null;
+  hasAudio?: boolean;
 }
 
 export interface SourceSearchLanguage {

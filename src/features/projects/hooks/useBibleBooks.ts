@@ -5,6 +5,7 @@ import { config } from '@/lib/config';
 export interface BibleBook {
   bibleId: number;
   bookId: number;
+  hasAudio?: boolean;
   createdAt: string;
   updatedAt: string;
   book: {
@@ -23,6 +24,7 @@ export interface Bible {
   languageId: number;
   name: string;
   abbreviation: string;
+  hasAudio?: boolean;
   createdAt: string;
   updatedAt: string;
 }
