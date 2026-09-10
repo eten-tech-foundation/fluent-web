@@ -1,0 +1,215 @@
+{
+  "capturedAt": "2026-09-10T15:38:00.038Z",
+  "endpoint": "GET /projects/1/source-audio/JHN/3?languageCode=eng&bibleId=2",
+  "providerEndpoint": "GET https://api.aquifer.bible/bibles/1/texts?BookCode=JHN&StartChapter=3&EndChapter=3&shouldReturnAudioData=true",
+  "response": {
+    "provider": "aquifer",
+    "verseAddressable": true,
+    "ttsLicenseStatus": "allowed",
+    "licenseNotice": "Berean Standard Bible (BSB). Public domain.",
+    "bible": {
+      "aquiferBibleId": 1,
+      "name": "Berean Standard Bible",
+      "abbreviation": "BSB",
+      "fluentBibleId": 2
+    },
+    "bookCode": "JHN",
+    "chapter": 3,
+    "items": [
+      {
+        "format": "mp3",
+        "url": "https://cdn.aquifer.bible/aquifer-content/scripture/ENG/BSB/audio/mp3/ENG_BSB_44_003.mp3",
+        "sizeBytes": 1251337,
+        "scope": "chapter"
+      },
+      {
+        "format": "webm",
+        "url": "https://cdn.aquifer.bible/aquifer-content/scripture/ENG/BSB/audio/webm/ENG_BSB_44_003.webm",
+        "sizeBytes": 718088,
+        "scope": "chapter"
+      }
+    ],
+    "verseTimestamps": [
+      {
+        "verse": 1,
+        "startSeconds": 4.52,
+        "endSeconds": 10.32
+      },
+      {
+        "verse": 2,
+        "startSeconds": 10.32,
+        "endSeconds": 23.36
+      },
+      {
+        "verse": 3,
+        "startSeconds": 23.36,
+        "endSeconds": 32.12
+      },
+      {
+        "verse": 4,
+        "startSeconds": 32.12,
+        "endSeconds": 41.36
+      },
+      {
+        "verse": 5,
+        "startSeconds": 41.36,
+        "endSeconds": 50.92
+      },
+      {
+        "verse": 6,
+        "startSeconds": 50.92,
+        "endSeconds": 55.96
+      },
+      {
+        "verse": 7,
+        "startSeconds": 55.96,
+        "endSeconds": 60.36
+      },
+      {
+        "verse": 8,
+        "startSeconds": 60.36,
+        "endSeconds": 72.92
+      },
+      {
+        "verse": 9,
+        "startSeconds": 72.92,
+        "endSeconds": 76.68
+      },
+      {
+        "verse": 10,
+        "startSeconds": 76.68,
+        "endSeconds": 82.12
+      },
+      {
+        "verse": 11,
+        "startSeconds": 82.12,
+        "endSeconds": 95.04
+      },
+      {
+        "verse": 12,
+        "startSeconds": 95.04,
+        "endSeconds": 104.08
+      },
+      {
+        "verse": 13,
+        "startSeconds": 104.08,
+        "endSeconds": 111.32
+      },
+      {
+        "verse": 14,
+        "startSeconds": 111.32,
+        "endSeconds": 117.8
+      },
+      {
+        "verse": 15,
+        "startSeconds": 117.8,
+        "endSeconds": 123.04
+      },
+      {
+        "verse": 16,
+        "startSeconds": 123.04,
+        "endSeconds": 134.32
+      },
+      {
+        "verse": 17,
+        "startSeconds": 134.32,
+        "endSeconds": 142.12
+      },
+      {
+        "verse": 18,
+        "startSeconds": 142.12,
+        "endSeconds": 155.36
+      },
+      {
+        "verse": 19,
+        "startSeconds": 155.36,
+        "endSeconds": 166.16
+      },
+      {
+        "verse": 20,
+        "startSeconds": 166.16,
+        "endSeconds": 174.72
+      },
+      {
+        "verse": 21,
+        "startSeconds": 174.72,
+        "endSeconds": 185.52
+      },
+      {
+        "verse": 22,
+        "startSeconds": 185.52,
+        "endSeconds": 194.68
+      },
+      {
+        "verse": 23,
+        "startSeconds": 194.68,
+        "endSeconds": 204.32
+      },
+      {
+        "verse": 24,
+        "startSeconds": 204.32,
+        "endSeconds": 208.24
+      },
+      {
+        "verse": 25,
+        "startSeconds": 208.24,
+        "endSeconds": 216.08
+      },
+      {
+        "verse": 26,
+        "startSeconds": 216.08,
+        "endSeconds": 229.72
+      },
+      {
+        "verse": 27,
+        "startSeconds": 229.72,
+        "endSeconds": 235.16
+      },
+      {
+        "verse": 28,
+        "startSeconds": 235.16,
+        "endSeconds": 242.28
+      },
+      {
+        "verse": 29,
+        "startSeconds": 242.28,
+        "endSeconds": 256.6
+      },
+      {
+        "verse": 30,
+        "startSeconds": 256.6,
+        "endSeconds": 261
+      },
+      {
+        "verse": 31,
+        "startSeconds": 261,
+        "endSeconds": 274.8
+      },
+      {
+        "verse": 32,
+        "startSeconds": 274.8,
+        "endSeconds": 281.52
+      },
+      {
+        "verse": 33,
+        "startSeconds": 281.52,
+        "endSeconds": 287.12
+      },
+      {
+        "verse": 34,
+        "startSeconds": 287.12,
+        "endSeconds": 294.8
+      },
+      {
+        "verse": 35,
+        "startSeconds": 294.8,
+        "endSeconds": 300.52
+      },
+      {
+        "verse": 36,
+        "startSeconds": 300.52,
+        "endSeconds": 312.73
+      }
+    ]
+  }
+}
