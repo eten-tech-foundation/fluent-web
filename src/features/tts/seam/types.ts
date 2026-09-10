@@ -30,16 +30,39 @@ export interface Playable {
   segments: Segment[];
 }
 
+/** Position and delay are player instructions, not provider diagnostics. */
+export interface PlaybackOptions {
+  afterMs?: number;
+  startOffset?: number;
+}
+
+/** An exhaustion continuation issues requests; it receives no budget facts. */
+export type ExhaustionAction = () => void;
+
+/** A granted polling episode can poll again or reload without a second retry charge. */
+export interface PollRequests {
+  play: (source: Segment['source'], opts?: PlaybackOptions) => void;
+  poll: (afterMs: number) => void;
+}
+
+/** One provider probe, invoked by the player under its polling ceiling and signal. */
+export type RecoveryProbe = (requests: PollRequests, signal: AbortSignal) => Promise<void>;
+
 /** Requests arbitrated and scheduled by the player, never executed inline by policy. */
 export interface RecoveryRequests {
   /** Reload a whole source, charging the named bucket before resolving it. */
   play: (
     source: Segment['source'],
     charge: BudgetKey,
-    opts?: { afterMs?: number; startOffset?: number }
+    opts?: PlaybackOptions & { onExhausted?: ExhaustionAction }
   ) => void;
-  /** Ask the strategy again later, under the player's poll ceiling. */
-  poll: (charge: BudgetKey, afterMs: number) => void;
+  /** Charge one retry, then schedule probes under a separate per-episode poll ceiling. */
+  poll: (
+    charge: BudgetKey,
+    afterMs: number,
+    probe: RecoveryProbe,
+    opts?: { onExhausted?: ExhaustionAction; onPollExhausted?: ExhaustionAction }
+  ) => void;
   /** Install the policy for the next source independently of replacing that source. */
   attach: (recovery: RecoveryStrategy) => void;
   /** Replace the source within this run and reset its retry counters. */
