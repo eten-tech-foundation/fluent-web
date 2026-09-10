@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
+import { type ChapterAssignmentProgress } from '@/lib/types';
 
 export interface ProjectUser {
   projectId: number;
@@ -8,7 +9,8 @@ export interface ProjectUser {
   displayName: string;
   roleID: number;
   roleName: string;
-  addedAt: string | null;
+  createdAt?: string | Date | null;
+  addedAt?: string | null;
 }
 
 interface ApiErrorResponse {
@@ -109,6 +111,33 @@ export const useRemoveProjectUser = (projectId: number) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.filter(u => u.userId !== userId) : []
       );
+      const updateAssignments = (old: ChapterAssignmentProgress[] | undefined) => {
+        if (!old) return old;
+        return old.map(assignment => {
+          const isDrafter = assignment.assignedUser?.id === userId;
+          const isChecker = assignment.peerChecker?.id === userId;
+          const status = assignment.status;
+
+          const clearDrafter = isDrafter && (status === 'not_started' || status === 'draft');
+          const clearChecker =
+            isChecker &&
+            (status === 'not_started' || status === 'draft' || status === 'peer_check');
+
+          if (!clearDrafter && !clearChecker) return assignment;
+
+          return {
+            ...assignment,
+            assignedUser: clearDrafter ? null : assignment.assignedUser,
+            peerChecker: clearChecker ? null : assignment.peerChecker,
+          };
+        });
+      };
+
+      queryClient.setQueryData(['chapterAssignments', projectId], updateAssignments);
+      queryClient.setQueryData(['chapterAssignments', projectId.toString()], updateAssignments);
+
+      void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
+      void queryClient.invalidateQueries({ queryKey: ['userChapterAssignments', userId] });
     },
   });
 };

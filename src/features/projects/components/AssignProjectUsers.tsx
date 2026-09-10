@@ -289,9 +289,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const getActiveAssignmentCount = useCallback(
     (userId: number) => {
       if (!chapterAssignments) return 0;
-      return chapterAssignments.filter(
-        a => a.assignedUser?.id === userId || a.peerChecker?.id === userId
-      ).length;
+      return chapterAssignments.filter(a => {
+        const isRemovableDrafter =
+          a.assignedUser?.id === userId && (a.status === 'not_started' || a.status === 'draft');
+        const isRemovablePeerChecker =
+          a.peerChecker?.id === userId &&
+          (a.status === 'not_started' || a.status === 'draft' || a.status === 'peer_check');
+        return isRemovableDrafter || isRemovablePeerChecker;
+      }).length;
     },
     [chapterAssignments]
   );
@@ -312,16 +317,10 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         return;
       }
 
-      if (getActiveAssignmentCount(pu.userId) > 0) {
-        setRemoveTarget(null);
-        setRemoveBlockedReason(`${pu.displayName} still has assigned work.`);
-        return;
-      }
-
       setRemoveBlockedReason(null);
       setRemoveTarget(pu);
     },
-    [projectManagerCount, chapterAssignments, getActiveAssignmentCount]
+    [projectManagerCount, chapterAssignments]
   );
 
   const handleConfirmRemove = useCallback(async () => {
@@ -427,6 +426,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      aria-label='Remove user from project'
                       className='h-7 w-7 p-0 hover:text-red-500'
                       disabled={removingUserIds.has(pu.userId)}
                       size='sm'
@@ -503,21 +503,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-md bg-red-50 p-3 dark:bg-red-950/30'>
             <span className='text-sm text-red-700 dark:text-red-400'>
-              Remove {removeTarget.displayName} from this project?
+              {getActiveAssignmentCount(removeTarget.userId) > 0
+                ? `Remove ${removeTarget.displayName} from this project? Their chapter assignments will be removed.`
+                : `Remove ${removeTarget.displayName} from this project?`}
             </span>
-            <div className='flex shrink-0 gap-2'>
+            <div className='flex min-w-[80px] shrink-0 flex-col gap-1.5'>
               <Button
-                className='h-7 px-2.5 text-xs'
-                size='sm'
-                variant='outline'
-                onClick={() => setRemoveTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className='h-7 bg-red-500 px-2.5 text-xs text-white hover:bg-red-600'
+                className='h-8 rounded-md bg-red-500 px-3 text-xs font-medium text-white hover:bg-red-600'
                 disabled={removingUserIds.has(removeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRemove}
@@ -527,6 +521,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 ) : (
                   'Remove'
                 )}
+              </Button>
+              <Button
+                className='h-8 rounded-md border-slate-300 px-3 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800'
+                size='sm'
+                variant='outline'
+                onClick={() => setRemoveTarget(null)}
+              >
+                Cancel
               </Button>
             </div>
           </div>
