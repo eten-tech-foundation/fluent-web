@@ -88,11 +88,8 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     const trashButtons = await screen.findAllByRole('button', { name: /Remove user/i });
     fireEvent.click(trashButtons[0]);
 
-    expect(
-      screen.getByText(
-        'Remove Alice Drafter from this project? Their chapter assignments will be removed.'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText('Remove Alice Drafter from this project?')).toBeInTheDocument();
+    expect(screen.getByText('Their chapter assignments will be removed.')).toBeInTheDocument();
   });
 
   it('closes banner without calling remove mutation on Cancel click', async () => {
