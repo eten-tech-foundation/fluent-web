@@ -33,7 +33,6 @@ export {
 
 export {
   type SourceTtsPlaybackApi,
-  type TtsNextPage,
   useSourceTtsPlayback,
   type UseSourceTtsPlaybackOptions,
 } from './hooks/useSourceTtsPlayback';
@@ -41,8 +40,6 @@ export {
 export { TtsVerseControls, type TtsVerseControlsProps } from './components/TtsVerseControls';
 
 export { TtsGroupControls, type TtsGroupControlsProps } from './components/TtsGroupControls';
-
-export { TtsBoundaryPrompt, type TtsBoundaryPromptProps } from './components/TtsBoundaryPrompt';
 
 export {
   buildTtsQueueItems,
@@ -57,12 +54,6 @@ export {
   TTS_CONTROL_STRIP_CLASS,
 } from './lib/controlLayout';
 export { ttsServingWashClass } from './lib/servingWash';
-export {
-  armTtsContinuation,
-  claimTtsContinuation,
-  disarmTtsContinuation,
-  TTS_CONTINUATION_TTL_MS,
-} from './lib/playbackContinuation';
 
 export {
   isRowFullyVisible,

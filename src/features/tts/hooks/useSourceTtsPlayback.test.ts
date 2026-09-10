@@ -2,21 +2,16 @@
  * Host-composition tests for `useSourceTtsPlayback` (§12.1 "Queue" row).
  *
  * The queue itself is exhaustively covered by `useTtsPlaybackQueue.test.ts`,
- * so it is mocked here and this file asserts only the four responsibilities
- * this hook adds: document-order start index, conditional scroll, the T16
- * boundary decision, and the failure toast.
+ * so it is mocked here and this file asserts the host responsibilities:
+ * document-order start index, conditional scroll, page/flag lifetime guards,
+ * and the failure toast.
  */
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { armTtsContinuation, disarmTtsContinuation } from '../lib/playbackContinuation';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
-import {
-  useSourceTtsPlayback,
-  type TtsNextPage,
-  type UseSourceTtsPlaybackOptions,
-} from './useSourceTtsPlayback';
+import { useSourceTtsPlayback, type UseSourceTtsPlaybackOptions } from './useSourceTtsPlayback';
 import { type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
 
 const toastError = vi.fn();
@@ -54,9 +49,6 @@ beforeEach(() => {
   itemStates = {};
   status = 'idle';
   activeVerseRef = null;
-  // The continuation token is module state: an arm left behind by one test
-  // would make the next test's page start playing on mount.
-  disarmTtsContinuation();
 });
 
 /** Row 2 is a reference-panel hole, so the queue is v1, v3, v4 (§5.1). */
@@ -83,12 +75,6 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
   const { result, rerender } = renderHook(() => useSourceTtsPlayback(options));
   return { result, rerender, scrollIntoView, focus };
 };
-
-const nextPage = (navigate: Mock = vi.fn()): TtsNextPage => ({
-  label: 'Genesis 2',
-  pageKey: 'chapter-2',
-  navigate,
-});
 
 describe('useSourceTtsPlayback — play actions', () => {
   it('plays one verse without arming the queue (T1)', () => {
@@ -147,34 +133,27 @@ describe('useSourceTtsPlayback — play actions', () => {
 // ---------------------------------------------------------------------------
 
 describe('useSourceTtsPlayback — playGroup (G3a)', () => {
-  it('plays ONLY the group, in document order, and raises no boundary mid-page', () => {
+  it('plays ONLY the group, in document order', () => {
     const { result } = setup();
 
     // Given out of order and including the unplayable row, exactly as a
     // pericope card would hand over its verses.
     act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:2', 'GEN 1:1']));
 
-    const [items, index, emitBoundary] = playFrom.mock.calls.at(-1) as [
-      TtsQueueItem[],
-      number,
-      boolean,
-    ];
+    const [items, index] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number];
     // Order comes from the page's list, not the caller's array; the hole is gone.
     expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3']);
     expect(index).toBe(0);
-    // GEN 1:4 is still to come on this page, so "Continue on the next page?"
-    // would be a lie.
-    expect(emitBoundary).toBe(false);
   });
 
-  it('DOES raise the boundary when the group ends where the page ends (T16)', () => {
+  it('plays a bounded group even when it ends at the last row of the page', () => {
     const { result } = setup();
 
     act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
 
-    const [items, , emitBoundary] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number, boolean];
+    const [items, index] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number];
     expect(items.map(item => item.verseRef)).toEqual(['GEN 1:3', 'GEN 1:4']);
-    expect(emitBoundary).toBe(true);
+    expect(index).toBe(0);
   });
 
   it('ignores a group with nothing playable in it (§5.1)', () => {
@@ -193,16 +172,10 @@ describe('useSourceTtsPlayback — playGroup (G3a)', () => {
     // PLAYABLE row" are different answers.
     act(() => result.current.playFromGroup(['GEN 1:2', 'GEN 1:3']));
 
-    const [items, index, emitBoundary] = playFrom.mock.calls.at(-1) as [
-      TtsQueueItem[],
-      number,
-      boolean | undefined,
-    ];
+    const [items, index] = playFrom.mock.calls.at(-1) as [TtsQueueItem[], number];
     // The whole page, not the group — this action is the continuous one.
     expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
     expect(index).toBe(1);
-    // It really does end at the page end, so T16's prompt is honest here.
-    expect(emitBoundary ?? true).toBe(true);
   });
 
   it('playFromGroup ignores a group with nothing playable in it (§5.1)', () => {
@@ -248,161 +221,6 @@ describe('useSourceTtsPlayback — auto-scroll (§5.3 step 2)', () => {
   });
 });
 
-describe('useSourceTtsPlayback — boundary prompt (T16)', () => {
-  it('stays silent at the end of the page when nothing follows', () => {
-    const { result } = setup();
-
-    act(() => queueOptions.onBoundaryReached?.());
-
-    expect(result.current.boundaryPrompt.open).toBe(false);
-  });
-
-  it('asks when the host proved a next page exists', () => {
-    const { result } = setup({ nextPage: nextPage() });
-
-    act(() => queueOptions.onBoundaryReached?.());
-
-    expect(result.current.boundaryPrompt.open).toBe(true);
-    expect(result.current.boundaryPrompt.nextPageLabel).toBe('Genesis 2');
-  });
-
-  it('declining never navigates', () => {
-    const navigate = vi.fn();
-    const { result } = setup({ nextPage: nextPage(navigate) });
-
-    act(() => queueOptions.onBoundaryReached?.());
-    act(() => result.current.boundaryPrompt.onDismiss());
-
-    expect(result.current.boundaryPrompt.open).toBe(false);
-    expect(navigate).not.toHaveBeenCalled();
-  });
-
-  it('awaits the host navigation (which flushes saves) before closing', async () => {
-    let release = () => {};
-    const navigate = vi.fn(() => new Promise<void>(resolve => (release = resolve)));
-    const { result } = setup({ nextPage: nextPage(navigate) });
-
-    act(() => queueOptions.onBoundaryReached?.());
-    act(() => result.current.boundaryPrompt.onContinue());
-
-    expect(navigate).toHaveBeenCalledTimes(1);
-    // Still open and locked while the flush is in flight.
-    expect(result.current.boundaryPrompt.isContinuing).toBe(true);
-    expect(result.current.boundaryPrompt.open).toBe(true);
-
-    await act(async () => {
-      release();
-    });
-
-    expect(result.current.boundaryPrompt.isContinuing).toBe(false);
-    expect(result.current.boundaryPrompt.open).toBe(false);
-  });
-
-  it('stays put and unlocks when the navigation rejects', async () => {
-    const navigate = vi.fn(() => Promise.reject(new Error('nope')));
-    const { result } = setup({ nextPage: nextPage(navigate) });
-
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    expect(result.current.boundaryPrompt.isContinuing).toBe(false);
-    expect(result.current.boundaryPrompt.open).toBe(false);
-  });
-});
-
-describe('useSourceTtsPlayback — continuing across the boundary (T16)', () => {
-  it('resumes on the promised page, from its first playable verse', async () => {
-    // Page 1 confirms the prompt...
-    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    // ...and the next page mounts as its own host, as the route change makes it.
-    setup({ pageKey: 'chapter-2' });
-
-    expect(playFrom).toHaveBeenCalledTimes(1);
-    expect(playFrom).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({ verseRef: 'GEN 1:1' }),
-        expect.objectContaining({ verseRef: 'GEN 1:3' }),
-        expect.objectContaining({ verseRef: 'GEN 1:4' }),
-      ],
-      0
-    );
-  });
-
-  it('does not play on a page that was merely visited', () => {
-    setup({ pageKey: 'chapter-2' });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-
-  it('does not play on a page other than the one confirmed', async () => {
-    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    setup({ pageKey: 'chapter-9' });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-
-  it('does not re-play when the promised page re-renders', async () => {
-    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    const arrived = setup({ pageKey: 'chapter-2' });
-    act(() => arrived.rerender());
-
-    expect(playFrom).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not arm anything when the prompt is declined', () => {
-    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    act(() => result.current.boundaryPrompt.onDismiss());
-
-    setup({ pageKey: 'chapter-2' });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-
-  it('withdraws the promise when the navigation rejects', async () => {
-    const navigate = vi.fn(() => Promise.reject(new Error('nope')));
-    const { result } = setup({ nextPage: nextPage(navigate), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    // Nothing moved, so the destination — reached later by hand — is silent.
-    setup({ pageKey: 'chapter-2' });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-
-  it('stays silent when the arriving page has no playable rows', async () => {
-    const { result } = setup({ nextPage: nextPage(), pageKey: 'chapter-1' });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-
-    setup({ pageKey: 'chapter-2', rows: [{ verseRef: 'GEN 2:1', text: null }] });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-});
-
 describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () => {
   /**
    * The drafting route swaps chapters WITHOUT unmounting (no `remountDeps`),
@@ -435,6 +253,8 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
     act(() => rerender(pageProps('chapter-1')));
 
     expect(stop).toHaveBeenCalledTimes(1);
+    // Changing pages never starts the new page's audio.
+    expect(playFrom).toHaveBeenCalledTimes(1);
   });
 
   it('keeps playing across a re-render of the same page', () => {
@@ -455,33 +275,6 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
     );
 
     expect(stop).not.toHaveBeenCalled();
-  });
-
-  it('closes a boundary prompt the listener has navigated away from', () => {
-    const { rerender, result } = renderPage('chapter-2', { nextPage: nextPage() });
-    act(() => queueOptions.onBoundaryReached?.());
-    expect(result.current.boundaryPrompt.open).toBe(true);
-
-    act(() => rerender(pageProps('chapter-1', { nextPage: nextPage() })));
-
-    expect(result.current.boundaryPrompt.open).toBe(false);
-  });
-
-  it('stops the old session before starting the continued one', async () => {
-    const calls: string[] = [];
-    stop.mockImplementation(() => calls.push('stop'));
-    playFrom.mockImplementation(() => calls.push('playFrom'));
-
-    const { rerender, result } = renderPage('chapter-1', { nextPage: nextPage() });
-    act(() => queueOptions.onBoundaryReached?.());
-    await act(async () => {
-      result.current.boundaryPrompt.onContinue();
-    });
-    calls.length = 0; // playFromVerse was never called; ignore the arming render
-
-    act(() => rerender(pageProps('chapter-2')));
-
-    expect(calls).toEqual(['stop', 'playFrom']);
   });
 });
 
@@ -531,31 +324,5 @@ describe('useSourceTtsPlayback — the enabled gate', () => {
     rerender({ isEnabled: false });
 
     expect(stop).toHaveBeenCalled();
-  });
-
-  it('does not claim a continuation armed while the feature was on', () => {
-    // Armed on the previous page, where the flag was on; this page has it off.
-    armTtsContinuation('chapter-2');
-
-    setupGated(false, { pageKey: 'chapter-2' });
-
-    expect(playFrom).not.toHaveBeenCalled();
-  });
-
-  it('defers a claim rather than dropping it when the flag has not arrived yet', () => {
-    // The flag fails closed, so `enabled` is false for the first moment of a
-    // COLD document. A token cannot exist there — `armed` is module state that
-    // dies with the document — so this ordering is unreachable in the app. It
-    // is pinned anyway, because the safe behaviour is what makes that argument
-    // unnecessary: a skipped claim does not CONSUME the token, so the intent
-    // survives until the flag resolves (inside the 30 s TTL).
-    armTtsContinuation('chapter-2');
-
-    const { rerender } = setupGated(false, { pageKey: 'chapter-2' });
-    expect(playFrom).not.toHaveBeenCalled();
-
-    rerender({ isEnabled: true });
-
-    expect(playFrom).toHaveBeenCalledTimes(1);
   });
 });
