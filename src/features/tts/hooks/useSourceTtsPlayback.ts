@@ -1,6 +1,6 @@
 /**
  * `useSourceTtsPlayback` — everything a source-scripture surface needs to host
- * TTS, so the surface itself only supplies data and refs (T3, §5.1/§5.3).
+ * recorded audio with TTS fallback, supplying only source identity, data and refs.
  *
  * It owns three host responsibilities the queue deliberately refuses:
  *   1. Document-order queue construction for "play from here" (§5.1).
@@ -18,21 +18,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { buildTtsQueueItems, findTtsQueueIndex, type TtsRowDraft } from '../lib/buildTtsQueueItems';
+import { isPlayableRow } from '../lib/buildTtsQueueItems';
 import { createTtsSegment } from '../lib/createTtsSegment';
 import {
   type ScrollableRow,
   scrollRowIntoViewIfNeeded,
   type ScrollViewport,
 } from '../lib/scrollRowIntoView';
-import { type TtsEngine, type TtsQueueItem, type TtsServedFormat } from '../tts.types';
+import { ChapterAudioCache } from '../resolver/chapterCache';
+import { resolvePlayables, type SourceAudioRow } from '../resolver/resolvePlayables';
+import { type ChapterSourceAudioRequest } from '../resolver/sourceAudioClient';
+import { type Playable, type Segment } from '../seam/types';
+import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy';
+import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 
 import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
 
 export interface UseSourceTtsPlaybackOptions {
   engine: TtsEngine;
   /** Rows in the order they are read on screen; unplayable ones may be included. */
-  rows: readonly TtsRowDraft[];
+  rows: readonly SourceAudioRow[];
+  /** Null for reference-panel text: its provider identity is not a Fluent Bible id. */
+  sourceChapter: ChapterSourceAudioRequest | null;
   /** Resolve a row's DOM node for scroll geometry. */
   getRowElement: (verseRef: string) => ScrollableRow | null | undefined;
   /** The scrolling container; null disables auto-scroll rather than guessing. */
@@ -95,27 +102,75 @@ export interface SourceTtsPlaybackApi {
 export const useSourceTtsPlayback = (
   options: UseSourceTtsPlaybackOptions
 ): SourceTtsPlaybackApi => {
-  const { engine, rows, getRowElement, getViewport, pageKey, enabled = true } = options;
+  const {
+    engine,
+    rows,
+    sourceChapter,
+    getRowElement,
+    getViewport,
+    pageKey,
+    enabled = true,
+  } = options;
   const { t } = useTranslation();
 
   // Callbacks handed to the queue must not go stale between clips, and must
   // not re-create the queue session, so the volatile inputs live in refs.
-  const latest = useRef({ getRowElement, getViewport, engine, pageKey });
-  latest.current = { getRowElement, getViewport, engine, pageKey };
+  const latest = useRef({ getRowElement, getViewport, engine, pageKey, sourceChapter });
+  latest.current = { getRowElement, getViewport, engine, pageKey, sourceChapter };
+  const [cache] = useState(() => new ChapterAudioCache());
   const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
-  const segmentFor = useCallback(
-    (item: TtsQueueItem) =>
-      createTtsSegment(item, {
-        engine: latest.current.engine,
-        playableKey: JSON.stringify([latest.current.pageKey, item.audioSource, item.verseRef]),
-        onServing: (verseRef, servedAs) =>
+  const playablesFor = useCallback(
+    (sourceRows: readonly SourceAudioRow[], pericopeId?: string): Playable[] => {
+      const {
+        engine: currentEngine,
+        pageKey: currentPage,
+        sourceChapter: chapter,
+      } = latest.current;
+      const construction = {
+        engine: currentEngine,
+        pageKey: currentPage ?? '',
+        onServing: (verseRef: string, servedAs: TtsServedFormat) =>
           setItemServing(previous => ({ ...previous, [verseRef]: servedAs })),
-      }),
-    []
+      };
+      if (chapter) {
+        return resolvePlayables(sourceRows, {
+          ...construction,
+          ...chapter,
+          cache,
+          recordedRecovery: RecordedRecoveryStrategy,
+          pericopeId,
+        });
+      }
+      // Reference Bibles still use their own text/language. Never resolve their
+      // recording using the project's Bible id; provider identity wiring is separate.
+      const groups = pericopeId === undefined ? sourceRows.map(row => [row]) : [sourceRows];
+      return groups
+        .filter(group => group.length > 0)
+        .map(group => {
+          const key = JSON.stringify([
+            construction.pageKey,
+            'referenceBible',
+            pericopeId ?? group[0].verseRef,
+            group.map(row => [row.verseNumber, row.langCode, row.text]),
+          ]);
+          return {
+            key,
+            segments: group.map(row =>
+              createTtsSegment(
+                { ...row, text: (row.text ?? '').trim(), langCode: row.langCode || undefined },
+                { ...construction, playableKey: key }
+              )
+            ),
+          };
+        });
+    },
+    [cache]
   );
 
-  const items = useMemo(() => buildTtsQueueItems(rows), [rows]);
-  const itemsRef = useRef<TtsQueueItem[]>(items);
+  // Text holes remain disabled in this text-drafting host. The resolver itself
+  // accepts text-free rows for future audio-only surfaces.
+  const items = useMemo(() => rows.filter(isPlayableRow), [rows]);
+  const itemsRef = useRef<readonly SourceAudioRow[]>(items);
   itemsRef.current = items;
 
   const handleScrollRequest = useCallback((verseRef: string) => {
@@ -126,7 +181,7 @@ export const useSourceTtsPlayback = (
   }, []);
 
   const handleError = useCallback(
-    (_error: Error, item: TtsQueueItem) => {
+    (_error: Error, item: Segment) => {
       // §5.2: a failure the listener can see, in their language, naming the
       // verse — not a silent stop and not a raw engine message. The engine's
       // own message is deliberately unused: it is diagnostic, not user-facing.
@@ -151,24 +206,28 @@ export const useSourceTtsPlayback = (
 
   const playVerse = useCallback(
     (verseRef: string) => {
-      const index = findTtsQueueIndex(itemsRef.current, verseRef);
+      const index = itemsRef.current.findIndex(item => item.verseRef === verseRef);
       if (index < 0) return; // unplayable row: controls are disabled anyway (§5.1)
       // T1: one verse, no advance.
       setItemServing({});
-      queueRef.current.playOne(segmentFor(itemsRef.current[index]));
+      const [playable] = playablesFor([itemsRef.current[index]]);
+      queueRef.current.playOne(playable.segments[0]);
     },
-    [segmentFor]
+    [playablesFor]
   );
 
   const playFromVerse = useCallback(
     (verseRef: string) => {
-      const index = findTtsQueueIndex(itemsRef.current, verseRef);
+      const index = itemsRef.current.findIndex(item => item.verseRef === verseRef);
       if (index < 0) return;
       // T1: continuous from here through the end of this page's list.
       setItemServing({});
-      queueRef.current.playFrom(itemsRef.current.map(segmentFor), index);
+      queueRef.current.playFrom(
+        playablesFor(itemsRef.current).flatMap(playable => playable.segments),
+        index
+      );
     },
-    [segmentFor]
+    [playablesFor]
   );
 
   /**
@@ -186,17 +245,13 @@ export const useSourceTtsPlayback = (
       if (groupItems.length === 0) return; // nothing playable in this group (§5.1)
 
       setItemServing({});
-      const key = JSON.stringify([
-        latest.current.pageKey,
-        groupItems[0].audioSource,
-        groupItems.map(item => item.verseRef),
-      ]);
-      queueRef.current.playFrom(
-        groupItems.map(item => ({ ...segmentFor(item), playableKey: key })),
-        0
+      const [playable] = playablesFor(
+        groupItems,
+        JSON.stringify(groupItems.map(item => item.verseRef))
       );
+      queueRef.current.playFrom(playable.segments, 0);
     },
-    [segmentFor]
+    [playablesFor]
   );
 
   const playFromGroup = useCallback(
@@ -210,9 +265,12 @@ export const useSourceTtsPlayback = (
 
       // Exactly like playFromVerse: this runs to the end of the page and stops.
       setItemServing({});
-      queueRef.current.playFrom(pageItems.map(segmentFor), index);
+      queueRef.current.playFrom(
+        playablesFor(pageItems).flatMap(playable => playable.segments),
+        index
+      );
     },
-    [segmentFor]
+    [playablesFor]
   );
 
   const stop = useCallback(() => {
@@ -233,6 +291,9 @@ export const useSourceTtsPlayback = (
       queueRef.current.stop();
     }
   }, [pageKey]);
+
+  // A captured chapter response (including its media URLs) never outlives the page.
+  useEffect(() => () => cache.clear(), [cache, pageKey]);
 
   // Turning the feature off takes live playback with it. Stopping an idle
   // queue is a no-op, which is the common case (every mount with the flag off).
