@@ -12,7 +12,6 @@ import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
-import { useNextAssignedChapter } from '@/features/bible/hooks/useNextAssignedChapter';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
 import {
@@ -37,7 +36,6 @@ import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
   ServerTtsEngine,
-  TtsBoundaryPrompt,
   type TtsRowDraft,
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
@@ -928,48 +926,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   );
   const getTtsViewport = useCallback(() => targetScrollRef.current, [targetScrollRef]);
 
-  // Drafting saves on a debounce and this route drops its cache when it
-  // navigates, so the verse under the caret is flushed BEFORE any
-  // TTS-initiated page change (there is no unmount flush to fall back on).
-  const flushActiveVerse = useCallback(async () => {
-    if (readOnly) return;
-    const active = verses.find(verse => verse.verseNumber === activeVerseId);
-    // `saveImmediately` takes a SavePayload since the RTE landed. Pass the verse's own
-    // markers, as every other flush site does (DraftingUI handleSubmit,
-    // useDrafting handleActiveVerseChange/advanceToVerse): undefined on a textarea-
-    // authored verse, so the trim still happens, and concrete on an RTE-authored one,
-    // so its paragraph offsets are not nulled on the way out (fluent-api#264).
-    if (active)
-      await saveImmediately(activeVerseId, {
-        content: active.content,
-        markers: active.markers,
-      });
-  }, [readOnly, verses, activeVerseId, saveImmediately]);
-
-  // T16: the prompt is only offered when a real next assignment exists. In
-  // read-only review there is nothing to continue INTO from here — that route
-  // is entered per chapter from the dashboard — so the offer stays off rather
-  // than pushing a reviewer into the drafting surface.
-  const ttsNextPage = useNextAssignedChapter({
-    enabled: ttsEnabled && !readOnly,
-    userId: userdetail.id,
-    currentItem: projectItem,
-    flushPendingWork: flushActiveVerse,
-  });
-
   const tts = useSourceTtsPlayback({
     engine: ttsEngine,
     rows: ttsRows,
     getRowElement: getTtsRowElement,
     getViewport: getTtsViewport,
-    nextPage: ttsNextPage,
-    // T16: names THIS page so a "Continue" confirmed on the previous chapter
-    // resumes here, and only here. Read-only `/view` gets a key too and is
-    // harmless — nothing ever arms one, since it offers no next page.
+    // Page-lifetime playback state is dropped on this key: the drafting route
+    // swaps chapters without unmounting. Read-only `/view` uses the same guard.
     pageKey: String(projectItem.chapterAssignmentId),
     // The hook cannot be skipped when the flag is off (React forbids a
     // conditional hook call), so the gate is passed in. This is the MERGED
-    // flag, so a local force-on keeps its continuation and its playback (O3/O4).
+    // flag, so a local force-on keeps playback enabled (O3/O4).
     enabled: ttsEnabled,
   });
 
@@ -1384,21 +1351,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           )}
         </div>
       </div>
-
-      {/*
-       * T16: end-of-page prompt. Rendered only when the flag is on AND a real
-       * next assignment exists, so playback simply stops at the end when there
-       * is nowhere legitimate to go. Confirming is the only path that moves.
-       */}
-      {ttsEnabled && ttsNextPage !== null && (
-        <TtsBoundaryPrompt
-          isContinuing={tts.boundaryPrompt.isContinuing}
-          nextPageLabel={tts.boundaryPrompt.nextPageLabel}
-          open={tts.boundaryPrompt.open}
-          onContinue={tts.boundaryPrompt.onContinue}
-          onDismiss={tts.boundaryPrompt.onDismiss}
-        />
-      )}
     </div>
   );
 };

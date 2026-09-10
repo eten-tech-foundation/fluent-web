@@ -38,7 +38,6 @@ const clipUrlFor = (text: string): string => `https://clips.test/${encodeURIComp
 interface Harness {
   synthesize: Mock<(request: TtsRequest, signal?: AbortSignal) => Promise<TtsClip>>;
   elements: FakeClipElement[];
-  onBoundaryReached: Mock<() => void>;
   onError: Mock<(error: Error, item: TtsQueueItem) => void>;
   onScrollRequest: Mock<(verseRef: string) => void>;
   result: { current: ReturnType<typeof useTtsPlaybackQueue> };
@@ -59,12 +58,10 @@ const createHarness = (overrides: Partial<UseTtsPlaybackQueueOptions> = {}): Har
     elements.push(element);
     return element;
   };
-  const onBoundaryReached = vi.fn<() => void>();
   const onError = vi.fn<(error: Error, item: TtsQueueItem) => void>();
   const onScrollRequest = vi.fn<(verseRef: string) => void>();
   const options: UseTtsPlaybackQueueOptions = {
     engine,
-    onBoundaryReached,
     onError,
     onScrollRequest,
     createElement,
@@ -72,7 +69,7 @@ const createHarness = (overrides: Partial<UseTtsPlaybackQueueOptions> = {}): Har
     ...overrides,
   };
   const { result, unmount } = renderHook(() => useTtsPlaybackQueue(options));
-  return { synthesize, elements, onBoundaryReached, onError, onScrollRequest, result, unmount };
+  return { synthesize, elements, onError, onScrollRequest, result, unmount };
 };
 
 /** The clip element whose src is the given item's synthesized URL. */
@@ -174,7 +171,7 @@ describe('useTtsPlaybackQueue — play actions', () => {
     expect(harness.result.current.activeVerseRef).toBeNull();
   });
 
-  it('walks loading → playing → idle, and playOne ends WITHOUT a boundary signal (T1, §5.2)', async () => {
+  it('playOne walks loading → playing → idle (T1, §5.2)', async () => {
     const harness = createHarness();
     const item = verse(1);
 
@@ -194,7 +191,7 @@ describe('useTtsPlaybackQueue — play actions', () => {
     });
     expect(harness.result.current.status).toBe('idle');
     expect(harness.result.current.activeVerseRef).toBeNull();
-    expect(harness.onBoundaryReached).not.toHaveBeenCalled();
+    expect(harness.result.current.itemStates).toEqual({});
   });
 
   it('playFrom advances on `ended` only: highlight moves, scroll is requested, buffered clip is reused (§5.3, §6.2)', async () => {
@@ -222,7 +219,7 @@ describe('useTtsPlaybackQueue — play actions', () => {
     expect(harness.onScrollRequest.mock.calls.map(call => call[0])).toEqual(['GEN 1:1', 'GEN 1:2']);
   });
 
-  it('end of the supplied list emits boundaryReached and goes idle — the hook never navigates (T16)', async () => {
+  it('end of the supplied list goes idle — the hook never navigates', async () => {
     const harness = createHarness();
     const items = [verse(1), verse(2)];
 
@@ -233,21 +230,19 @@ describe('useTtsPlaybackQueue — play actions', () => {
       elementFor(harness, items[1]).emit('ended');
     });
 
-    expect(harness.onBoundaryReached).toHaveBeenCalledTimes(1);
+    expect(harness.result.current.itemServing).toEqual({});
     expect(harness.result.current.status).toBe('idle');
     expect(harness.result.current.activeVerseRef).toBeNull();
     expect(harness.result.current.itemStates).toEqual({});
   });
 
-  it('playFrom with emitBoundary false still advances and still goes idle, but raises NO boundary (G3a)', async () => {
-    // Pericope mode reads a bounded slice of the page. Reaching the end of THAT
-    // slice must not raise "Continue on the next page?" — there is more of this
-    // page left — but everything else about the run is unchanged.
+  it('playFrom advances through a bounded group and goes idle at its end (G3a)', async () => {
+    // Pericope mode reads a bounded slice of the page and stops there.
     const harness = createHarness();
     const items = [verse(1), verse(2)];
 
     await act(async () => {
-      harness.result.current.playFrom(items, 0, false);
+      harness.result.current.playFrom(items, 0);
     });
     await act(async () => {
       elementFor(harness, items[0]).emit('ended');
@@ -260,12 +255,12 @@ describe('useTtsPlaybackQueue — play actions', () => {
       elementFor(harness, items[1]).emit('ended');
     });
 
-    expect(harness.onBoundaryReached).not.toHaveBeenCalled();
+    expect(harness.result.current.itemStates).toEqual({});
     expect(harness.result.current.status).toBe('idle');
     expect(harness.result.current.activeVerseRef).toBeNull();
   });
 
-  it('playFrom defaults to emitting the boundary, so verse mode is unchanged (G3a)', async () => {
+  it('playFrom goes idle after a single-item list (G3a)', async () => {
     const harness = createHarness();
     const items = [verse(1)];
 
@@ -276,7 +271,9 @@ describe('useTtsPlaybackQueue — play actions', () => {
       elementFor(harness, items[0]).emit('ended');
     });
 
-    expect(harness.onBoundaryReached).toHaveBeenCalledTimes(1);
+    expect(harness.result.current.status).toBe('idle');
+    expect(harness.result.current.activeVerseRef).toBeNull();
+    expect(harness.result.current.itemServing).toEqual({});
   });
 });
 
