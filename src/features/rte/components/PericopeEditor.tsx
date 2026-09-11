@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
-import { useHistoryShortcuts } from '../lib/history-shortcuts';
+import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
+import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import {
   changedVerses,
   pericopeVersesToUsj,
@@ -129,13 +130,15 @@ export function PericopeEditor({
     [onActiveVerseChange]
   );
 
-  const handleHistoryKeys = useHistoryShortcuts(editorRef);
+  const handleEditorKeys = useEditorShortcuts(editorRef);
 
   return (
     <div
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
-      onKeyDownCapture={handleHistoryKeys}
+      onContextMenuCapture={handleEditorContextMenu}
+      onKeyDownCapture={handleEditorKeys}
+      onPasteCapture={handleEditorPaste}
     >
       <Editorial
         ref={editorRef}
