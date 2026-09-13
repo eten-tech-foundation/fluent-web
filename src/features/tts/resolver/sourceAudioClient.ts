@@ -61,6 +61,28 @@ export interface SourceAudioClientOptions {
   fetchFn?: FetchLike;
 }
 
+/** Only transport and transient HTTP failures qualify for bounded initial-lookup retries. */
+export class SourceAudioLookupError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'SourceAudioLookupError';
+  }
+}
+
+const transientStatuses = new Set([500, 502, 503, 504]);
+
+const transportFailure = (error: unknown, signal: AbortSignal): never => {
+  signal.throwIfAborted();
+  if (error instanceof TypeError) {
+    throw new SourceAudioLookupError('Could not reach source audio', true, error);
+  }
+  throw error; // AbortError, invalid JSON and other failures are not transport retries.
+};
+
 export const fetchChapterSourceAudio = async (
   chapter: ChapterSourceAudioRequest,
   signal: AbortSignal,
@@ -72,12 +94,30 @@ export const fetchChapterSourceAudio = async (
     bibleId: String(chapter.bibleId),
     languageCode: chapter.languageCode,
   });
-  const response = await (options.fetchFn ?? fetch)(
-    `${base}/projects/${chapter.projectId}/source-audio/${encodeURIComponent(chapter.bookCode)}/${chapter.chapter}?${query}`,
-    { method: 'GET', credentials: 'include', signal }
-  );
-  if (!response.ok) throw new Error(`Failed to resolve source audio (HTTP ${response.status})`);
-  const parsed = sourceAudioResponseSchema.parse(await response.json());
+  let response: Response;
+  try {
+    response = await (options.fetchFn ?? fetch)(
+      `${base}/projects/${chapter.projectId}/source-audio/${encodeURIComponent(chapter.bookCode)}/${chapter.chapter}?${query}`,
+      { method: 'GET', credentials: 'include', signal }
+    );
+  } catch (error) {
+    return transportFailure(error, signal);
+  }
+  if (!response.ok) {
+    // No error payload is needed; release its stream before another attempt.
+    void response.body?.cancel().catch(() => {});
+    throw new SourceAudioLookupError(
+      `Failed to resolve source audio (HTTP ${response.status})`,
+      transientStatuses.has(response.status)
+    );
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error) {
+    return transportFailure(error, signal);
+  }
+  const parsed = sourceAudioResponseSchema.parse(body);
   signal.throwIfAborted();
   return parsed;
 };
