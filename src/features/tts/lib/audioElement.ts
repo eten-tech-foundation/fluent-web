@@ -19,6 +19,8 @@
 /** The subset of media/element events the TTS feature listens to. */
 export type ClipAudioEventName =
   | 'ended'
+  | 'loadedmetadata'
+  | 'durationchange'
   | 'error'
   | 'progress'
   | 'canplay'
@@ -40,6 +42,8 @@ export interface ClipAudioElement {
   src: string;
   preload: string;
   currentTime: number;
+  /** Streaming sources may expose NaN or Infinity until completion. */
+  readonly duration?: number;
   playbackRate: number;
   load: () => void;
   play: () => Promise<void>;

@@ -63,7 +63,7 @@ export {
 } from './components/TtsVerseControls';
 export { SourceVerseControl } from './components/SourceVerseControl';
 
-export { TtsGroupControls, type TtsGroupControlsProps } from './components/TtsGroupControls';
+export { PericopePlayer, type PericopePlayerProps } from './components/TtsGroupControls';
 
 export {
   buildTtsQueueItems,
@@ -72,12 +72,7 @@ export {
   type TtsRowDraft,
 } from './lib/buildTtsQueueItems';
 
-export {
-  TTS_CONTROL_BUTTON_CLASS,
-  TTS_CONTROL_ROW_CLASS,
-  TTS_CONTROL_STRIP_CLASS,
-  VERSE_CONTROL_REVEAL_CLASS,
-} from './lib/controlLayout';
+export { VERSE_CONTROL_REVEAL_CLASS } from './lib/controlLayout';
 export { ttsServingWashClass } from './lib/servingWash';
 
 export {

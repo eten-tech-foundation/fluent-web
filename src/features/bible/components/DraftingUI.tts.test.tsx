@@ -10,7 +10,7 @@
  */
 import { useLayoutEffect } from 'react';
 
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -264,6 +264,23 @@ vi.mock('@/features/tts', async importOriginal => {
         restartGroup: vi.fn(),
         verseKey: (ref: string) => (playable.has(ref) ? `verse-${ref}` : null),
         groupKey: () => null,
+        seekGroup: vi.fn(),
+        groupView: refs => ({
+          key: refs.some(ref => playable.has(ref)) ? `group-${refs.join(',')}` : null,
+          isLive: isBusy && activeVerseRef !== null && refs.includes(activeVerseRef),
+          staticAi: false,
+          dynamicAi: false,
+          segments: options.rows
+            .filter(row => refs.includes(row.verseRef) && playable.has(row.verseRef))
+            .map(row => ({
+              verseRef: row.verseRef,
+              text: row.text ?? '',
+              durationSeconds: null,
+              epoch: null,
+            })),
+          currentIndex: Math.max(0, refs.indexOf(activeVerseRef ?? '')),
+          currentTime: 0,
+        }),
       };
     },
   };
@@ -643,7 +660,7 @@ describe('DraftingUI — playback actions and highlight', () => {
       'top-1/2',
       '-translate-y-1/2',
       'group-hover/audio:opacity-100',
-      'group-focus-within/audio:opacity-100',
+      'has-[:focus-visible]:opacity-100',
       '[@media(hover:none)]:opacity-100'
     );
     expect(reveal.parentElement).toHaveClass('group/audio', 'relative');
@@ -791,6 +808,54 @@ const enterPericopeMode = () => {
 };
 
 describe('DraftingUI — pericope mode TTS (G3a)', () => {
+  it('lights each pericope in turn during a real verse-key run and pauses the sounding verse', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    renderDrafting();
+    expect(elements).toHaveLength(0);
+    await act(async () => playback.playFromVerse('2'));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('playing'));
+    expect(screen.getByRole('button', { name: 'Pause pericope 1:1-2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play pericope 1:3' })).toBeInTheDocument();
+    await act(async () => {
+      elements[0].currentTime = 6;
+      elements[0].emit('ended');
+    });
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[1].currentTime = 2;
+      elements[1].emit('playing');
+      elements[1].emit('timeupdate');
+    });
+    expect(screen.getByRole('button', { name: 'Play pericope 1:1-2' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Pause pericope 1:3' }));
+    expect(playback.status).toBe('idle');
+    expect(registry.getRecord(playback.verseKey('3')!)?.currentTime).toBe(2);
+    expect(registry.getRecord(playback.groupKey(['3'])!)).toBeNull();
+  });
+
+  it('retains a bounded pericope position and resumes without confusing seconds and fractions', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    renderDrafting();
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[0].currentTime = 0.5;
+      elements[0].emit('playing');
+      elements[0].emit('timeupdate');
+    });
+    expect(playback.groupView(['1', '2']).currentTime).toBe(0.5);
+    await userEvent.click(screen.getByRole('button', { name: 'Pause pericope 1:1-2' }));
+    expect(registry.getRecord(playback.groupKey(['1', '2'])!)?.currentTime).toBe(0.5);
+    expect(playback.groupView(['1', '2']).currentTime).toBe(0.5);
+    const priorCount = elements.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+    await waitFor(() => expect(elements[priorCount]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[priorCount].currentTime).toBe(0.5);
+  });
+
   it('renders one group control per pericope, and no per-verse controls', () => {
     enterPericopeMode();
 
@@ -818,27 +883,29 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     expect(playVerse).not.toHaveBeenCalled();
   });
 
-  it('offers continuous reading too — the second button runs on past this blob', async () => {
-    // Without this button pericope mode has no DISCOVERABLE way to read on:
-    // Alt+Shift+P still works but is advertised only on controls that do not
-    // render here.
+  it('mounts the player beside the source reference, outside the clickable card and never in the target', () => {
     enterPericopeMode();
-
     renderDrafting();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Play from pericope 1:1-2' }));
-
-    expect(playFromGroup).toHaveBeenCalledWith(['1', '2']);
-    expect(playGroup).not.toHaveBeenCalled();
+    for (const source of screen.getAllByTestId('pericope-source-column')) {
+      const player = within(source).getByTestId('tts-group-controls');
+      expect(within(player).getByRole('slider')).toBeInTheDocument();
+      expect(player.parentElement?.querySelector('h4')).toBeInTheDocument();
+      expect(player.closest('[role="button"]')).toBeNull();
+      expect(
+        within(source.nextElementSibling as HTMLElement).queryByRole('slider')
+      ).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: /^Play from pericope/ })).not.toBeInTheDocument();
   });
 
-  it('gives every pericope both play actions', () => {
+  it('gives every pericope primary and Restart controls plus its own bar', () => {
     enterPericopeMode();
 
     renderDrafting();
 
     expect(screen.getAllByRole('button', { name: /^Play pericope/ })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /^Play from pericope/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Restart pericope/ })).toHaveLength(2);
+    expect(screen.getAllByRole('slider')).toHaveLength(2);
   });
 
   it('marks the group that contains the playing verse, and only that group', () => {
@@ -917,14 +984,16 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     expect(silent?.className).toContain('border-l-transparent');
   });
 
-  it('offers Stop on every group while the queue is busy (§5.1 is queue-wide)', () => {
+  it('offers Pause only on the live group, without a visible Stop or play-from-here button', () => {
     enterPericopeMode();
     isBusy = true;
     activeVerseRef = '1';
 
     renderDrafting();
 
-    expect(screen.getAllByRole('button', { name: /Stop playback/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Pause pericope/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Play pericope/ })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /Stop playback/ })).not.toBeInTheDocument();
   });
 
   it('renders no TTS at all in pericope mode when the flag is off', () => {

@@ -4,11 +4,36 @@ import {
   buildSpans,
   dotPosition,
   elapsedSeconds,
+  elapsedReadout,
   Estimator,
   SECONDS_PER_CHAR,
 } from './barGeometry';
 
 const segments = (...lengths: number[]) => lengths.map(length => ({ text: 'a'.repeat(length) }));
+
+describe('elapsedReadout', () => {
+  it('fills only missing prior durations with the cold or calibrated estimate', () => {
+    const spans = buildSpans(segments(100, 50, 20));
+    const estimator = new Estimator();
+    expect(elapsedReadout(spans, 2, 2, [null, 4, null], estimator)).toEqual({
+      seconds: 12,
+      estimated: true,
+    });
+    estimator.measure(1, 50, 4);
+    expect(elapsedReadout(spans, 2, 2, [null, 4, null], estimator)).toEqual({
+      seconds: 14,
+      estimated: true,
+    });
+    expect(elapsedReadout(spans, 2, 2, [9, 4, null], estimator)).toEqual({
+      seconds: 15,
+      estimated: false,
+    });
+    expect(elapsedReadout(spans, 0, 2, [null, null, null], estimator)).toEqual({
+      seconds: 2,
+      estimated: false,
+    });
+  });
+});
 
 describe('buildSpans', () => {
   it('allocates the entire bar in proportion to text, before any audio exists', () => {

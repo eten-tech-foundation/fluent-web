@@ -62,6 +62,124 @@ const flush = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe('segment queue — source and run lifecycle', () => {
+  it('publishes a new run before lazy resolution, holding a seek until its actual landing is ready', async () => {
+    const onTiming = vi.fn<NonNullable<UseTtsPlaybackQueueOptions['onTiming']>>();
+    const h = setup({ prefetchDepth: 0, onTiming });
+    await act(async () => h.result.current.playOne(segment(1)));
+    act(() => {
+      h.elements[0].currentTime = 9;
+      h.elements[0].emit('timeupdate');
+    });
+    let resolve!: (value: Source) => void;
+    const deferred = new Promise<Source>(done => {
+      resolve = done;
+    });
+    act(() =>
+      h.result.current.playFrom([{ ...segment(2), source: () => deferred }], 0, { fraction: 0.5 })
+    );
+    const initial = onTiming.mock.calls.at(-1)![0];
+    expect(initial.items[0].verseRef).toBe('row-2');
+    expect(initial.currentTime).toBe(0);
+    expect(initial.pendingFraction).toBe(0.5);
+    const newRunReports = onTiming.mock.calls.length - 1;
+    await act(async () => resolve(source('new')));
+    expect(onTiming.mock.calls.at(-1)![0].pendingFraction).toBe(0.5);
+    act(() => {
+      h.elements[1].duration = 10;
+      h.elements[1].emit('loadedmetadata');
+    });
+    const landed = onTiming.mock.calls.at(-1)![0];
+    expect(landed.pendingFraction).toBeUndefined();
+    expect(landed.currentTime).toBe(5);
+    expect(
+      onTiming.mock.calls
+        .slice(newRunReports)
+        .every(([report]) => report.pendingFraction === 0.5 || report.currentTime === 5)
+    ).toBe(true);
+    act(() =>
+      h.result.current.playFrom([{ ...segment(3), source: () => new Promise(() => {}) }], 0)
+    );
+    expect(onTiming.mock.calls.at(-1)![0]).toMatchObject({ currentTime: 0, index: 0 });
+    expect(onTiming.mock.calls.at(-1)![0].items[0].verseRef).toBe('row-3');
+  });
+
+  it('resolves fractional seeks after the lazy source, while numeric resume stays seconds', async () => {
+    const h = setup({ prefetchDepth: 0 });
+    const item: Segment = {
+      ...segment(1),
+      source: async () => ({
+        url: 'opaque',
+        window: [40, 50],
+        durationIsMeasured: true,
+        durationMs: 10000,
+      }),
+    };
+    await act(async () => h.result.current.playFrom([item], 0, { fraction: 0.5 }));
+    expect(h.elements[0].currentTime).toBe(45);
+    act(() => {
+      h.elements[0].currentTime = 45.5;
+      h.elements[0].emit('timeupdate');
+    });
+    expect(h.elements[0].currentTime).toBe(45.5);
+    await act(async () => h.result.current.playFrom([segment(2)], 0, 0.5));
+    expect(h.elements.at(-1)?.currentTime).toBe(0.5);
+  });
+
+  it('applies a fractional target when initial metadata arrives, never again on later correction', async () => {
+    const h = setup({ prefetchDepth: 0 });
+    await act(async () => h.result.current.playFrom([segment(1)], 0, { fraction: 0.5 }));
+    const audio = h.elements[0];
+    expect(audio.currentTime).toBe(0);
+    act(() => {
+      audio.duration = 10;
+      audio.emit('loadedmetadata');
+    });
+    expect(audio.currentTime).toBe(5);
+    act(() => {
+      audio.currentTime = 6;
+      audio.duration = 12;
+      audio.emit('durationchange');
+    });
+    expect(audio.currentTime).toBe(6);
+  });
+
+  it('accepts an unknown-duration landing and reports the real streaming duration at completion', async () => {
+    const onTiming = vi.fn<NonNullable<UseTtsPlaybackQueueOptions['onTiming']>>();
+    const h = setup({ prefetchDepth: 0, onTiming });
+    await act(async () => h.result.current.playFrom([segment(1)], 0, { fraction: 0.5 }));
+    const audio = h.elements[0];
+    act(() => {
+      audio.emit('loadedmetadata');
+      audio.emit('playing');
+    });
+    expect(audio.currentTime).toBe(0);
+    act(() => {
+      audio.currentTime = 8;
+      audio.emit('ended');
+    });
+    expect(onTiming.mock.calls.at(-1)?.[0].measurements[0]?.durationSeconds).toBe(8);
+    const count = onTiming.mock.calls.length;
+    act(() => {
+      audio.duration = 100;
+      audio.emit('durationchange');
+      audio.emit('timeupdate');
+    });
+    expect(onTiming).toHaveBeenCalledTimes(count);
+  });
+
+  it('reports prefetched metadata without marking it as the playing segment', async () => {
+    const onTiming = vi.fn<NonNullable<UseTtsPlaybackQueueOptions['onTiming']>>();
+    const h = setup({ onTiming });
+    await act(async () => h.result.current.playFrom([segment(1), segment(2)], 0));
+    expect(h.elements).toHaveLength(2);
+    act(() => {
+      h.elements[1].duration = 7;
+      h.elements[1].emit('loadedmetadata');
+    });
+    expect(onTiming.mock.calls.at(-1)?.[0].index).toBe(0);
+    expect(onTiming.mock.calls.at(-1)?.[0].measurements[1]?.durationSeconds).toBe(7);
+  });
+
   it('copies inherited run state for L2 without choosing a source in the queue', async () => {
     const h = setup();
     const inherited = { forceTts: true };

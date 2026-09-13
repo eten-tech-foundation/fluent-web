@@ -1000,9 +1000,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     () =>
       ttsEnabled
         ? {
-            isBusy: tts.isBusy,
-            isRowPlayable: tts.isRowPlayable,
-            isRowLoading: tts.isRowLoading,
+            status: tts.status,
+            groupView: tts.groupView,
+            restartGroup: tts.restartGroup,
+            seekGroup: tts.seekGroup,
             activeVerseRef: tts.activeVerseRef,
             isGroupSpeaking: tts.isGroupSpeaking,
             playGroup: tts.playGroup,
@@ -1015,9 +1016,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         : undefined,
     [
       ttsEnabled,
-      tts.isBusy,
-      tts.isRowPlayable,
-      tts.isRowLoading,
+      tts.status,
+      tts.groupView,
+      tts.restartGroup,
+      tts.seekGroup,
       tts.activeVerseRef,
       tts.isGroupSpeaking,
       ttsShowServing,

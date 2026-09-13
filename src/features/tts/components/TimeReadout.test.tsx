@@ -17,13 +17,18 @@ describe('TimeReadout', () => {
     expect(timer).toHaveAttribute('aria-live', 'off');
   });
 
-  it('shows unknown elapsed after a forward seek and recovers when it becomes measurable', () => {
-    const { rerender } = render(
-      <TimeReadout elapsed={elapsedSeconds(2, 5, [10, undefined, undefined])} />
-    );
-    expect(screen.getByRole('timer')).toHaveTextContent('--:-- / --:--');
-    rerender(<TimeReadout elapsed={elapsedSeconds(2, 5, [10, 20, undefined])} />);
-    expect(screen.getByRole('timer')).toHaveTextContent('0:35 / --:--');
+  it('distinguishes estimated elapsed quietly, then restores normal text when measured', () => {
+    const { rerender } = render(<TimeReadout estimated elapsed={32} />);
+    const timer = screen.getByRole('timer');
+    expect(timer).toHaveTextContent('0:32 / --:--');
+    expect(timer).not.toHaveTextContent('≈');
+    expect(timer).toHaveClass('text-muted-foreground');
+    expect(timer).toHaveAccessibleName('Estimated elapsed audio time');
+    expect(timer).toHaveAttribute('aria-live', 'off');
+    rerender(<TimeReadout elapsed={35} />);
+    expect(timer).toHaveTextContent('0:35 / --:--');
+    expect(timer).toHaveClass('text-foreground');
+    expect(timer).not.toHaveAttribute('data-estimated');
   });
 
   it('renders the beginning honestly', () => {

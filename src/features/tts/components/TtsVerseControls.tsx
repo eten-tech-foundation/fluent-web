@@ -26,6 +26,8 @@ export interface PlayableControlProps {
   state: PlayableControlState;
   canRestart: boolean;
   badge: boolean;
+  /** Pericope mockup: 24px paint inside the same non-overlapping 40px target. */
+  compact?: boolean;
   /** Host has no playable (e.g. a missing reference verse); not a licence latch. */
   disabled?: boolean;
   impossibleReason?: string;
@@ -40,6 +42,7 @@ export function PlayableControl({
   state,
   canRestart,
   badge,
+  compact = false,
   disabled = false,
   impossibleReason,
   onPrimary,
@@ -72,7 +75,10 @@ export function PlayableControl({
 
   return (
     <TooltipProvider>
-      <div className='flex items-center gap-1' data-playable-key={playableKey}>
+      <div
+        className={cn('flex items-center', compact ? 'gap-0' : 'gap-1')}
+        data-playable-key={playableKey}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             {/* The wrapper receives hover even when the native button is disabled. */}
@@ -85,7 +91,9 @@ export function PlayableControl({
                 aria-label={`${action} ${label}`}
                 className={cn(
                   PLAYABLE_CONTROL_BUTTON_CLASS,
-                  'rounded-full border border-current',
+                  compact
+                    ? 'relative rounded-full before:absolute before:inset-y-2 before:right-1 before:left-3 before:rounded-full before:border before:border-current hover:bg-transparent [&_svg]:size-3.5 [&_svg]:translate-x-1'
+                    : 'rounded-full border border-current',
                   (offline || impossible || disabled) && 'text-muted-foreground',
                   disabledReason && 'opacity-50'
                 )}
@@ -103,7 +111,10 @@ export function PlayableControl({
               {badge && (
                 <Sparkles
                   aria-label={t('ttsAiGeneratedAudio', 'AI-generated audio')}
-                  className='text-primary bg-background pointer-events-none absolute -top-1 -right-1 size-3.5 rounded-full'
+                  className={cn(
+                    'text-primary bg-background pointer-events-none absolute rounded-full',
+                    compact ? 'top-1 right-0 size-2.5' : '-top-1 -right-1 size-3.5'
+                  )}
                   role='img'
                 />
               )}
@@ -117,7 +128,11 @@ export function PlayableControl({
               <Button
                 aria-keyshortcuts={TTS_KEYBOARD_SHORTCUTS.restart}
                 aria-label={`${restart} ${label}`}
-                className={PLAYABLE_CONTROL_BUTTON_CLASS}
+                className={cn(
+                  PLAYABLE_CONTROL_BUTTON_CLASS,
+                  compact &&
+                    'before:border-muted-foreground/60 relative rounded-full before:absolute before:inset-y-2 before:right-3 before:left-1 before:rounded-full before:border hover:bg-transparent [&_svg]:size-3.5 [&_svg]:-translate-x-1'
+                )}
                 disabled={offline || impossible || disabled || !canRestart}
                 size='icon'
                 type='button'
