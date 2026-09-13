@@ -1,12 +1,30 @@
 import { canBrowserPlayOpus } from '../engines/serverTtsEngine';
 
 import { selectTrack } from './selectTrack';
-import { fetchChapterSourceAudio } from './sourceAudioClient';
+import { fetchChapterSourceAudio, SourceAudioLookupError } from './sourceAudioClient';
 
 import type { ChapterSourceAudio, ChapterSourceAudioRequest } from './sourceAudioClient';
 
 // Backstop only, below DBL's measured one-hour URL lifetime. No strategy reads a clock.
 export const CHAPTER_AUDIO_BACKSTOP_MS = 45 * 60 * 1000;
+
+/** Initial lookup only: three attempts total, never multiplied into media-recovery budgets. */
+export const SOURCE_AUDIO_LOOKUP_RETRY_DELAYS_MS = [500, 1000] as const;
+
+const waitForRetry = (delay: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve();
+    }, delay);
+    const cancel = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+  });
 
 export const chapterAudioKey = (chapter: ChapterSourceAudioRequest): string =>
   JSON.stringify([
@@ -57,7 +75,7 @@ export class ChapterAudioCache {
     const held = this.held.get(key);
     if (held && Date.now() - held.fetchedAt < CHAPTER_AUDIO_BACKSTOP_MS)
       return Promise.resolve(held.response);
-    return this.fetch(chapter, signal);
+    return this.fetch(chapter, signal, true);
   }
 
   heal(
@@ -83,9 +101,34 @@ export class ChapterAudioCache {
     for (const entry of pending) entry.controller.abort();
   }
 
+  private async loadChapter(
+    chapter: ChapterSourceAudioRequest,
+    signal: AbortSignal,
+    retryInitialLookup: boolean
+  ): Promise<ChapterSourceAudio> {
+    for (let attempt = 0; ; attempt++) {
+      signal.throwIfAborted();
+      try {
+        return await this.load(chapter, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        const delay = SOURCE_AUDIO_LOOKUP_RETRY_DELAYS_MS.at(attempt);
+        if (
+          !retryInitialLookup ||
+          !(error instanceof SourceAudioLookupError) ||
+          !error.retryable ||
+          delay === undefined
+        )
+          throw error;
+        await waitForRetry(delay, signal);
+      }
+    }
+  }
+
   private fetch(
     chapter: ChapterSourceAudioRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    retryInitialLookup = false
   ): Promise<ChapterSourceAudio> {
     const key = chapterAudioKey(chapter);
     this.held.delete(key);
@@ -97,7 +140,7 @@ export class ChapterAudioCache {
       promise: Promise.resolve()
         .then(async () => {
           controller.signal.throwIfAborted();
-          const response = await this.load(chapter, controller.signal);
+          const response = await this.loadChapter(chapter, controller.signal, retryInitialLookup);
           controller.signal.throwIfAborted();
           if (this.pending.get(key) === entry)
             this.held.set(key, { response, fetchedAt: Date.now() });
