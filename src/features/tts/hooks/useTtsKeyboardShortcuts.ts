@@ -24,6 +24,8 @@ export const TTS_KEYBOARD_SHORTCUTS = {
   playVerse: 'Alt+P',
   playFromHere: 'Alt+Shift+P',
   stop: 'Alt+S',
+  // Advertised by PlayableControl; binding follows with keyboard parity.
+  restart: 'Alt+R',
 } as const;
 
 export interface UseTtsKeyboardShortcutsOptions {
