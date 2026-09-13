@@ -20,6 +20,22 @@ const isDuration = (value: MeasuredDuration): value is number =>
 /** Bootstrap guess only; tune from listening smoke tests, not a language/voice table. */
 export const SECONDS_PER_CHAR = 0.06;
 
+const meanRatio = (ratios: readonly number[]): number =>
+  ratios.length ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : SECONDS_PER_CHAR;
+
+/** Immutable snapshot for render-time geometry: no effects, shared mutation or stale frame. */
+export const calibratedEstimator = (
+  samples: ReadonlyArray<{ characterCount: number; durationSeconds: MeasuredDuration }>
+): Pick<Estimator, 'estimate'> => {
+  const ratios = samples.flatMap(({ characterCount, durationSeconds }) =>
+    Number.isFinite(characterCount) && characterCount > 0 && isDuration(durationSeconds)
+      ? [durationSeconds / characterCount]
+      : []
+  );
+  const ratio = meanRatio(ratios);
+  return { estimate: characterCount => Math.max(1, characterCount) * ratio };
+};
+
 export const buildSpans = (segments: readonly BarSegment[]): BarSpan[] => {
   const counts = segments.map(
     segment => Array.from(segment.text.normalize('NFC').replace(/\s+/gu, ' ').trim()).length
@@ -37,6 +53,18 @@ export const buildSpans = (segments: readonly BarSegment[]): BarSpan[] => {
     };
   });
 };
+
+/** Map a text coordinate to an explicitly segment-local fraction. */
+export function segmentAt(spans: readonly BarSpan[], position: number) {
+  const point = Math.max(0, Math.min(1, position));
+  const found = spans.findIndex(span => span.end > point);
+  const index = found < 0 ? Math.max(0, spans.length - 1) : found;
+  const span = spans.at(index);
+  return {
+    index,
+    fraction: span && span.end > span.start ? (point - span.start) / (span.end - span.start) : 0,
+  };
+}
 
 /**
  * One instance per chunk. The host feeds measured durations, including metadata
@@ -57,12 +85,8 @@ export class Estimator {
   }
 
   get secondsPerCharacter(): number {
-    if (this.ratios.size === 0) return SECONDS_PER_CHAR;
-    // Arithmetic running mean of the per-segment ratios: each measured segment
-    // contributes once, even if its duration is reported more than once.
-    let sum = 0;
-    for (const ratio of this.ratios.values()) sum += ratio;
-    return sum / this.ratios.size;
+    // Each measured segment contributes once, even across repeated events.
+    return meanRatio([...this.ratios.values()]);
   }
 
   estimate(characterCount: number): number {
@@ -85,7 +109,7 @@ export const dotPosition = (
   index: number,
   currentTime: number,
   durations: readonly MeasuredDuration[],
-  estimator: Estimator
+  estimator: Pick<Estimator, 'estimate'>
 ): number => {
   if (!Number.isInteger(index) || index < 0) return 0;
   const span = spans.at(index);
@@ -123,4 +147,30 @@ export const elapsedSeconds = (
     elapsed += duration;
   }
   return elapsed;
+};
+
+/** Elapsed-only estimate when a seek skipped unmeasured segments; never a total forecast. */
+export const elapsedReadout = (
+  spans: readonly BarSpan[],
+  index: number,
+  currentTime: number,
+  durations: readonly MeasuredDuration[],
+  estimator: Pick<Estimator, 'estimate'>
+): { seconds: number | null; estimated: boolean } => {
+  const exact = elapsedSeconds(index, currentTime, durations);
+  if (exact !== null) return { seconds: exact, estimated: false };
+  if (
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= spans.length ||
+    !Number.isFinite(currentTime) ||
+    currentTime < 0
+  )
+    return { seconds: null, estimated: false };
+  let seconds = currentTime;
+  for (let prior = 0; prior < index; prior++) {
+    const duration = durations[prior];
+    seconds += isDuration(duration) ? duration : estimator.estimate(spans[prior].characterCount);
+  }
+  return { seconds, estimated: true };
 };

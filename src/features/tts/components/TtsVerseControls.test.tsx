@@ -28,6 +28,22 @@ const primary = () => screen.getByRole('button', { name: /^(Play|Pause) verse/ }
 const restart = () => screen.getByRole('button', { name: 'Restart verse GEN 1:3' });
 
 describe('PlayableControl', () => {
+  it('uses smaller pericope paint without shrinking its click target or changing the verse variant', () => {
+    const h = render(<PlayableControl {...base} badge compact />);
+    expect(primary()).toHaveClass('h-10', 'w-10', 'before:inset-y-2', 'before:border');
+    expect(primary()).not.toHaveClass('border');
+    expect(restart()).toHaveClass(
+      'h-10',
+      'w-10',
+      'before:border',
+      'before:border-muted-foreground/60'
+    );
+    expect(screen.getByRole('img')).toHaveClass('size-2.5');
+    h.rerender(<PlayableControl {...base} badge />);
+    expect(primary()).toHaveClass('h-10', 'w-10', 'border');
+    expect(primary()).not.toHaveClass('before:inset-y-2');
+    expect(screen.getByRole('img')).toHaveClass('size-3.5');
+  });
   it.each([
     ['active', 'play'],
     ['paused', 'play'],

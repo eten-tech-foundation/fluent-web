@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import { type ClipAudioElement, createClipAudioElement, onClipEvent } from '../lib/audioElement';
 import { supervisePlayback } from '../lib/playbackRecovery';
+import {
+  PlaybackTiming,
+  type PlaybackStart,
+  type PlaybackTimingReport,
+  resolvePlaybackStart,
+} from '../lib/playbackTiming';
 import { areAdjacentSources, watchPlaybackWindow } from '../lib/windowPlayback';
 
 import type {
@@ -43,6 +49,7 @@ export interface UseTtsPlaybackQueueOptions {
   /** Final latch values, synchronously reported before the host handles termination. */
   onRunEnd?: (aiMarkedKeys: ReadonlySet<PlayableKey>) => void;
   onScrollRequest?: (verseRef: string) => void;
+  onTiming?: (report: PlaybackTimingReport) => void;
   prefetchDepth?: number;
   createElement?: (src: string) => ClipAudioElement;
   maxRetriesPerClass?: number;
@@ -60,7 +67,7 @@ export interface TtsPlaybackQueueApi {
   playFrom: (
     segments: Segment[],
     startIndex: number,
-    startOffset?: number,
+    startOffset?: PlaybackStart,
     inheritedRunState?: PlaybackRunState
   ) => void;
   /** No snapshot while idle or before any source position is known; always cancels the run. */
@@ -80,12 +87,14 @@ interface SourceEntry {
   /** Requests are queued until adoption; a prefetch never changes the sounding segment. */
   actions: ResolutionAction[];
   detachWatch: () => void;
+  detachTiming: () => void;
   dispose: () => void;
 }
 
 interface PlaybackSession {
   controller: AbortController;
   items: Segment[];
+  timing: PlaybackTiming;
   index: number;
   budgets: Map<BudgetKey, number>;
   aiMarked: Set<PlayableKey>;
@@ -97,6 +106,7 @@ interface PlaybackSession {
   clipCleanups: Array<() => void>;
   segmentCleanups: Array<() => void>;
   startOffset?: number;
+  pendingFraction?: number;
 }
 
 const teardownSegment = (session: PlaybackSession): void => {
@@ -143,7 +153,19 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     });
   };
 
+  const reportTiming = (session: PlaybackSession): void => {
+    if (!isCurrent(session)) return;
+    optionsRef.current.onTiming?.({
+      ...session.timing.report(
+        session.index,
+        session.activeElement?.currentTime ?? session.startOffset ?? 0
+      ),
+      pendingFraction: session.pendingFraction,
+    });
+  };
+
   const goIdle = (session: PlaybackSession): void => {
+    reportTiming(session);
     disposeSession(session);
     if (sessionRef.current === session) sessionRef.current = null;
     setStatus('idle');
@@ -209,9 +231,11 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       actions: [],
       promise: Promise.resolve(),
       detachWatch: () => {},
+      detachTiming: () => {},
       dispose: () => {
         controller.abort();
         entry.detachWatch();
+        entry.detachTiming();
         entry.element?.pause();
         session.controller.signal.removeEventListener('abort', abort);
       },
@@ -237,6 +261,19 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
         entry.source = source;
         const element = (optionsRef.current.createElement ?? createClipAudioElement)(source.url);
         entry.element = element;
+        session.timing.source(index, source);
+        const measure = () => {
+          if (!isCurrent(session) || controller.signal.aborted) return;
+          session.timing.measure(index, element.duration);
+          reportTiming(session);
+        };
+        const detachMetadata = onClipEvent(element, 'loadedmetadata', measure);
+        const detachDuration = onClipEvent(element, 'durationchange', measure);
+        entry.detachTiming = () => {
+          detachMetadata();
+          detachDuration();
+        };
+        measure();
         // A failed early load cannot be adopted as buffered media.
         entry.detachWatch = onClipEvent(element, 'error', () => {
           entry.failed = true;
@@ -287,17 +324,47 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     index: number,
     entry: SourceEntry & { source: Source },
     element: ClipAudioElement,
-    startOffset?: number,
+    startOffset?: PlaybackStart,
     continuing = false
   ): void => {
     const segment = session.items[index];
     session.index = index;
     session.budgets.clear();
-    session.startOffset = startOffset ?? entry.source.window?.[0] ?? 0;
+    const initialOffset = resolvePlaybackStart(
+      startOffset,
+      entry.source,
+      session.timing.duration(index)
+    );
+    session.startOffset = initialOffset ?? entry.source.window?.[0] ?? 0;
     session.activeElement = element;
     let loaded = false;
+    session.pendingFraction =
+      typeof startOffset === 'object' && session.timing.duration(index) === null
+        ? Math.max(0, Math.min(1, startOffset.fraction))
+        : undefined;
+    const sample = () => {
+      if (!isCurrent(session) || session.index !== index) return;
+      session.timing.measure(index, element.duration);
+      reportTiming(session);
+    };
+    const metadata = () => {
+      if (!isCurrent(session) || session.index !== index) return;
+      session.timing.measure(index, element.duration);
+      if (session.pendingFraction !== undefined && session.current) {
+        element.currentTime =
+          resolvePlaybackStart(
+            { fraction: session.pendingFraction },
+            session.current.source,
+            session.timing.duration(index)
+          ) ?? 0;
+        session.pendingFraction = undefined;
+      }
+      reportTiming(session);
+    };
     const finish = (canContinue = true): void => {
       if (!isCurrent(session) || session.index !== index) return;
+      session.timing.measure(index, element.duration, element.currentTime);
+      reportTiming(session);
       const next = session.prefetches.get(index + 1);
       const current = session.current?.source;
       // Re-read the live items and resolved sources at every boundary. Never
@@ -312,6 +379,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       ) {
         session.prefetches.delete(index + 1);
         next.detachWatch();
+        next.detachTiming();
         next.element?.pause(); // Only the unused speculative element, not the sounding one.
         teardownSegment(session);
         setItemState(segment.verseRef, undefined);
@@ -357,7 +425,10 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
             session.current?.source.url !== source.url)
         )
           clearPrefetches(session);
+        if (loaded) session.pendingFraction = undefined;
+        session.timing.source(index, source);
         session.current = { segment, source, startOffset: offset };
+        reportTiming(session);
         window.setSource(source, continuing && !loaded);
         loaded = true;
       },
@@ -373,8 +444,15 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     session.segmentCleanups.push(
       window.detach,
       supervision.detach,
+      onClipEvent(element, 'loadedmetadata', metadata),
+      onClipEvent(element, 'durationchange', sample),
+      onClipEvent(element, 'timeupdate', sample),
+      onClipEvent(element, 'seeked', sample),
       onClipEvent(element, 'playing', () => {
         if (!isCurrent(session)) return;
+        // Accept the initial landing; a later duration correction must not seek again.
+        session.pendingFraction = undefined;
+        reportTiming(session);
         setStatus('playing');
         setItemState(segment.verseRef, 'playing');
       })
@@ -387,19 +465,21 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       supervision.continue();
     } else {
       element.playbackRate = rateRef.current;
-      supervision.start(startOffset);
+      supervision.start(initialOffset);
     }
   };
 
   const advance = async (
     session: PlaybackSession,
     index: number,
-    startOffset?: number
+    startOffset?: PlaybackStart
   ): Promise<void> => {
     if (!isCurrent(session)) return;
     teardownActiveClip(session);
     session.index = index;
-    session.startOffset = startOffset;
+    session.startOffset = typeof startOffset === 'number' ? startOffset : undefined;
+    session.pendingFraction =
+      typeof startOffset === 'object' ? Math.max(0, Math.min(1, startOffset.fraction)) : undefined;
     session.budgets.clear();
     const segment = session.items[index] as Segment | undefined;
     if (!segment) {
@@ -413,6 +493,9 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     setActiveVerseRef(segment.verseRef);
     optionsRef.current.onScrollRequest?.(segment.verseRef);
     setStatus('loading');
+    // Publish the new segment/seek before awaiting source resolution. A stopped
+    // run's last report must never animate another pericope or flash under a drag.
+    reportTiming(session);
     let entry = session.prefetches.get(index);
     session.prefetches.delete(index);
     for (const [key, old] of session.prefetches) {
@@ -449,19 +532,22 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       return;
     }
     entry.detachWatch();
+    entry.detachTiming();
     activate(session, index, { ...entry, source: entry.source }, entry.element, startOffset);
   };
 
   const startSession = (
     items: Segment[],
     startIndex: number,
-    startOffset?: number,
+    startOffset?: PlaybackStart,
     inheritedRunState: PlaybackRunState = { forceTts: false }
   ): void => {
     stop();
+    const copiedItems = items.map(item => ({ ...item }));
     const session: PlaybackSession = {
       controller: new AbortController(),
-      items: items.map(item => ({ ...item })),
+      items: copiedItems,
+      timing: new PlaybackTiming(copiedItems),
       index: startIndex,
       budgets: new Map(),
       aiMarked: new Set(),
