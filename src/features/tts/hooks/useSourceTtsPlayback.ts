@@ -42,6 +42,8 @@ export interface UseSourceTtsPlaybackOptions {
   rows: readonly SourceAudioRow[];
   /** Null for reference-panel text: its provider identity is not a Fluent Bible id. */
   sourceChapter: ChapterSourceAudioRequest | null;
+  /** Domain-qualified reference selection identity; never used to select an audio provider. */
+  referenceBibleId: string | null;
   /** Resolve a row's DOM node for scroll geometry. */
   getRowElement: (verseRef: string) => ScrollableRow | null | undefined;
   /** The scrolling container; null disables auto-scroll rather than guessing. */
@@ -121,6 +123,7 @@ export const useSourceTtsPlayback = (
     engine,
     rows,
     sourceChapter,
+    referenceBibleId,
     getRowElement,
     getViewport,
     pageKey,
@@ -133,8 +136,15 @@ export const useSourceTtsPlayback = (
 
   // Callbacks handed to the queue must not go stale between clips, and must
   // not re-create the queue session, so the volatile inputs live in refs.
-  const latest = useRef({ getRowElement, getViewport, engine, pageKey, sourceChapter });
-  latest.current = { getRowElement, getViewport, engine, pageKey, sourceChapter };
+  const latest = useRef({
+    getRowElement,
+    getViewport,
+    engine,
+    pageKey,
+    sourceChapter,
+    referenceBibleId,
+  });
+  latest.current = { getRowElement, getViewport, engine, pageKey, sourceChapter, referenceBibleId };
   const [cache] = useState(() => new ChapterAudioCache());
   const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
   const playablesFor = useCallback(
@@ -143,6 +153,7 @@ export const useSourceTtsPlayback = (
         engine: currentEngine,
         pageKey: currentPage,
         sourceChapter: chapter,
+        referenceBibleId: referenceId,
       } = latest.current;
       const construction = {
         engine: currentEngine,
@@ -161,6 +172,7 @@ export const useSourceTtsPlayback = (
       }
       // Reference Bibles still use their own text/language. Never resolve their
       // recording using the project's Bible id; provider identity wiring is separate.
+      if (referenceId === null) return [];
       const groups = pericopeId === undefined ? sourceRows.map(row => [row]) : [sourceRows];
       return groups
         .filter(group => group.length > 0)
@@ -168,6 +180,7 @@ export const useSourceTtsPlayback = (
           const key = JSON.stringify([
             construction.pageKey,
             'referenceBible',
+            referenceId,
             pericopeId ?? group[0].verseRef,
             group.map(row => [row.verseNumber, row.langCode, row.text]),
           ]);
@@ -429,7 +442,7 @@ export const useSourceTtsPlayback = (
   useEffect(() => {
     const knownTts = !sourceChapter || cache.peek(sourceChapter)?.verseAddressable === false;
     for (const playable of playablesFor(items)) registry.setStaticAi(playable.key, knownTts);
-  }, [cache, items, pageKey, playablesFor, registry, sourceChapter]);
+  }, [cache, items, pageKey, playablesFor, referenceBibleId, registry, sourceChapter]);
 
   useEffect(() => {
     if (queue.status === 'idle') finishRun();

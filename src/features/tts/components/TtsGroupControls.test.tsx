@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TtsGroupControls, type TtsGroupControlsProps } from './TtsGroupControls';
 
@@ -19,7 +19,24 @@ const props = (): TtsGroupControlsProps => ({
   onStop: vi.fn(),
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('TtsGroupControls — temporary functional Pause control', () => {
+  it('keeps controls visible offline, then re-enables only playable controls on reconnect', () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const { rerender } = render(<TtsGroupControls {...props()} showStop />);
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(4);
+    for (const button of buttons) {
+      expect(button).toBeVisible();
+      expect(button).toBeDisabled();
+    }
+    online.mockReturnValue(true);
+    fireEvent(window, new Event('online'));
+    for (const button of buttons) expect(button).toBeEnabled();
+    rerender(<TtsGroupControls {...props()} hasPlayableText={false} />);
+    for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
+  });
   it('keeps Pause and Stop separate and hides both while idle', () => {
     const callbacks = props();
     const { rerender } = render(<TtsGroupControls {...callbacks} />);

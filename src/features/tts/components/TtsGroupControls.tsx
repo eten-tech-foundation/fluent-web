@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
 import { TTS_CONTROL_BUTTON_CLASS, TTS_CONTROL_STRIP_CLASS } from '../lib/controlLayout';
+import { useOffline } from '../lib/useOffline';
 
 export interface TtsGroupControlsProps {
   /** Human-readable group identity for the accessible name, e.g. "1:1-5". */
@@ -71,6 +72,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
   onStop,
 }) => {
   const { t } = useTranslation();
+  const offline = useOffline();
 
   const playLabel = t('ttsPlayPericope', 'Play pericope {{groupLabel}}', { groupLabel });
   const playFromLabel = t('ttsPlayFromPericope', 'Play from pericope {{groupLabel}}', {
@@ -84,7 +86,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
         aria-busy={isLoading}
         aria-label={playLabel}
         className={TTS_CONTROL_BUTTON_CLASS}
-        disabled={!hasPlayableText}
+        disabled={offline || !hasPlayableText}
         size='icon'
         // Alt+P acts on the caret's verse (T2), which reads that verse ALONE —
         // deliberately not this button's whole-group semantics — so the
@@ -103,7 +105,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
       <Button
         aria-label={playFromLabel}
         className={TTS_CONTROL_BUTTON_CLASS}
-        disabled={!hasPlayableText}
+        disabled={offline || !hasPlayableText}
         size='icon'
         // Unlike ▶, this one IS Alt+Shift+P: both read from here to the end of
         // the page. (Alt+Shift+P starts at the caret's verse rather than this
@@ -120,6 +122,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
         <Button
           aria-label={t('ttsPausePlayback', 'Pause playback')}
           className={TTS_CONTROL_BUTTON_CLASS}
+          disabled={offline}
           size='icon'
           type='button'
           variant='ghost'
@@ -133,6 +136,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
           aria-label={stopLabel}
           className={TTS_CONTROL_BUTTON_CLASS}
           data-active-group={isPlaying || undefined}
+          disabled={offline}
           size='icon'
           title={`${stopLabel} (${TTS_KEYBOARD_SHORTCUTS.stop})`}
           type='button'

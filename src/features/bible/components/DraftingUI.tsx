@@ -37,6 +37,7 @@ import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
   ServerTtsEngine,
   type SourceAudioRow,
+  usePlaybackRegistry,
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
@@ -120,6 +121,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
   const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
   const bibleContentError = activeResourceBibleTab?.isError ?? false;
+  const referenceBibleId = activeResourceBibleTab?.id ?? null;
 
   // Which left-panel tab is showing (Resources | Checks). Persisted in the
   // editor-state blob as `activeLeftTab` (W11, §6.6).
@@ -930,6 +932,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const tts = useSourceTtsPlayback({
     engine: ttsEngine,
     rows: ttsRows,
+    referenceBibleId: selectedPanel === 2 ? referenceBibleId : null,
     // The reference panel has provider-specific ids, not this Fluent Bible id.
     // Keep its own-text TTS path until reference recording identity is wired.
     sourceChapter:
@@ -952,6 +955,22 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     // flag, so a local force-on keeps playback enabled (O3/O4).
     enabled: ttsEnabled,
   });
+
+  const playbackRegistry = usePlaybackRegistry();
+  // Selection identity only: it does not choose the recording provider. Keep
+  // pageKey independent so switching back resumes and chapter continuation survives.
+  const sourceSelectionKey = JSON.stringify(
+    selectedPanel === 1
+      ? ['projectSource', projectItem.bibleId]
+      : ['referenceBible', referenceBibleId]
+  );
+  const previousSourceSelection = useRef(sourceSelectionKey);
+  useEffect(() => {
+    if (previousSourceSelection.current === sourceSelectionKey) return;
+    previousSourceSelection.current = sourceSelectionKey;
+    // The active run owns its captured OLD key, even though the new rows rendered.
+    playbackRegistry.silenceAll();
+  }, [playbackRegistry, sourceSelectionKey]);
 
   // Row identity for the queue is the verse number as a string; the grid asks
   // for it rather than assuming a format (T3).

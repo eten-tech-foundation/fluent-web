@@ -66,6 +66,7 @@ const props = (extra: Partial<UseSourceTtsPlaybackOptions> = {}): UseSourceTtsPl
   engine,
   rows,
   sourceChapter: sourceChapterRequest,
+  referenceBibleId: 'aq-test',
   pageKey: 'assignment-1',
   getRowElement: () => null,
   getViewport: () => null,
@@ -116,6 +117,16 @@ afterEach(() => {
 });
 
 describe('useSourceTtsPlayback — pause records and Restart', () => {
+  it('does not construct reference playback without a selection identity', async () => {
+    const { result } = setup({ sourceChapter: null, referenceBibleId: null });
+    expect(result.current.verseKey('row-1')).toBeNull();
+    expect(result.current.groupKey(['row-1', 'row-2'])).toBeNull();
+    await start(() => result.current.playVerse('row-1'));
+    expect(elements).toHaveLength(0);
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it('primary pauses and resumes a verse at its file-absolute offset on a new element', async () => {
     const { result } = setup();
     const key = result.current.verseKey('row-2')!;

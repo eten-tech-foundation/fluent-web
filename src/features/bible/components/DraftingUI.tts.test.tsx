@@ -8,12 +8,19 @@
  * `useSourceTtsPlayback.test.ts`, so both are stubbed here: this file drives
  * playback state directly and inspects what drafting handed over.
  */
-import { render, screen } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
+
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type * as TtsFeature from '@/features/tts';
+import { PlaybackRegistryProvider, usePlaybackRegistry } from '@/features/tts';
+import type * as AudioModule from '@/features/tts/lib/audioElement';
+import type * as SourceClient from '@/features/tts/resolver/sourceAudioClient';
+import { FakeClipElement } from '@/features/tts/testing/fakeClipElement';
+import { windowlessChapter } from '@/features/tts/testing/sourceAudioFixtures';
 import {
   ChapterAssignmentStatus,
   type ProjectItem,
@@ -175,6 +182,28 @@ vi.mock('@/features/flags', () => ({
 
 // ── Playback: stubbed, so this file can drive state and read the rows ───────
 let ttsRows: readonly TtsFeature.SourceAudioRow[] = [];
+let realPlayback = false;
+let playback: TtsFeature.SourceTtsPlaybackApi;
+let registry: TtsFeature.PlaybackRegistry;
+let referenceBibleId: string | null;
+let capturedPageKey: string | undefined;
+const elements: FakeClipElement[] = [];
+const initialClaimPause = vi.fn();
+const synthesize = vi.fn<TtsFeature.TtsEngine['synthesize']>();
+
+vi.mock('@/features/tts/resolver/sourceAudioClient', async importOriginal => ({
+  ...(await importOriginal<typeof SourceClient>()),
+  fetchChapterSourceAudio: vi.fn(async () => windowlessChapter()),
+}));
+vi.mock('@/features/tts/lib/audioElement', async importOriginal => ({
+  ...(await importOriginal<typeof AudioModule>()),
+  createClipAudioElement: (src: string) => {
+    const element = new FakeClipElement();
+    element.src = src;
+    elements.push(element);
+    return element;
+  },
+}));
 let sourceChapter: TtsFeature.ChapterSourceAudioRequest | null;
 let ttsServed: Record<string, TtsFeature.TtsServedFormat> = {};
 let ttsPlaybackEnabled: boolean | undefined;
@@ -192,14 +221,21 @@ vi.mock('@/features/tts', async importOriginal => {
   return {
     ...actual,
     ServerTtsEngine: class {
-      synthesize = vi.fn();
+      synthesize = synthesize;
     },
     useSourceTtsPlayback: (
       options: TtsFeature.UseSourceTtsPlaybackOptions
     ): TtsFeature.SourceTtsPlaybackApi => {
       ttsRows = options.rows;
+      referenceBibleId = options.referenceBibleId;
+      capturedPageKey = options.pageKey;
       sourceChapter = options.sourceChapter;
       ttsPlaybackEnabled = options.enabled;
+      // Fixed for the entire mount; only the source-switch suite uses the real host/queue.
+      if (realPlayback) {
+        playback = actual.useSourceTtsPlayback(options);
+        return playback;
+      }
       const playable = new Set(
         options.rows
           .filter(row => typeof row.text === 'string' && row.text.trim() !== '')
@@ -235,12 +271,14 @@ vi.mock('@/features/tts', async importOriginal => {
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
     onBibleVersesChange,
+    onBibleIdentityChange,
     selectPanel,
     bibleResourceName,
     openResourceBiblePanel,
     onLanguageChange,
   }: {
     onBibleVersesChange: (verses: Array<{ verseNumber: number; text: string }>) => void;
+    onBibleIdentityChange: (id: string) => void;
     selectPanel: (panel: number) => void;
     bibleResourceName: (name: string) => void;
     openResourceBiblePanel: (open: boolean) => void;
@@ -249,6 +287,7 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
     <div data-testid='mock-resource-panel'>
       <button
         onClick={() => {
+          onBibleIdentityChange('aq-123');
           bibleResourceName('Hindi Bible');
           openResourceBiblePanel(true);
           selectPanel(2);
@@ -261,6 +300,10 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
       >
         Select Alternative Bible
       </button>
+      <button onClick={() => onBibleIdentityChange('yv-123')}>
+        Select Same Text From Other Domain
+      </button>
+      <button onClick={() => bibleResourceName('Renamed Bible')}>Rename Selected Bible</button>
     </div>
   ),
 }));
@@ -291,6 +334,13 @@ const mockSourceVerses: Source[] = [
   { id: 103, verseNumber: 3, text: 'And God said, Let there be light.' },
 ];
 
+const RegistryProbe = () => {
+  const currentRegistry = usePlaybackRegistry();
+  registry = currentRegistry;
+  useLayoutEffect(() => currentRegistry.claim(initialClaimPause), [currentRegistry]);
+  return null;
+};
+
 const renderDrafting = () =>
   render(
     <DraftingUI
@@ -298,13 +348,24 @@ const renderDrafting = () =>
       sourceVerses={mockSourceVerses}
       targetVerses={mockTargetVerses}
       userdetail={{ id: 1 } as unknown as User}
-    />
+    />,
+    {
+      wrapper: ({ children }) => (
+        <PlaybackRegistryProvider>
+          <RegistryProbe />
+          {children}
+        </PlaybackRegistryProvider>
+      ),
+    }
   );
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockFeatureFlag.mockReturnValue(true);
   ttsRows = [];
+  realPlayback = false;
+  elements.length = 0;
+  synthesize.mockResolvedValue({ audioUrl: 'https://tts.test/verse.ogg' });
   ttsServed = {};
   mockOverrides = {};
   ttsPlaybackEnabled = undefined;
@@ -401,6 +462,7 @@ describe('DraftingUI — panel-aware TTS rows', () => {
     // Not the project source text, and not the project source langCode —
     // reading Hindi text as English is the bug this guards.
     expect(sourceChapter).toBeNull();
+    expect(referenceBibleId).toBe('aq-123');
     expect(ttsRows.slice(0, 2)).toEqual([
       {
         verseRef: '1',
@@ -436,6 +498,80 @@ describe('DraftingUI — panel-aware TTS rows', () => {
     expect(screen.getByRole('button', { name: 'Play verse 1' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Play verse 3' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Play from verse 3' })).toBeDisabled();
+  });
+});
+
+describe('DraftingUI — source switch with the real host, queue and registry', () => {
+  const play = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await waitFor(() => expect(elements.at(-1)?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements.at(-1)!.emit('playing'));
+  };
+
+  it('skips mount and unrelated renders, then pauses on the old key and resumes after switching back', async () => {
+    realPlayback = true;
+    renderDrafting();
+    expect(initialClaimPause).not.toHaveBeenCalled();
+    await openResourceArea();
+    expect(initialClaimPause).not.toHaveBeenCalled();
+    await play();
+    expect(initialClaimPause).toHaveBeenCalledOnce();
+    const key = playback.verseKey('1')!;
+    elements[0].currentTime = 3.5;
+    await userEvent.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+    expect(playback.status).toBe('idle');
+    expect(elements[0].paused).toBe(true);
+    expect(registry.getRecord(key)).toMatchObject({ currentTime: 3.5, forceTts: true });
+    expect(registry.getRecord(playback.verseKey('1')!)).toBeNull();
+    expect(capturedPageKey).toBe('1');
+    await userEvent.click(screen.getByRole('button', { name: 'WEB' }));
+    expect(playback.verseKey('1')).toBe(key);
+    await play();
+    expect(elements.at(-1)?.currentTime).toBe(3.5);
+    expect(capturedPageKey).toBe('1');
+  });
+
+  it('separates equal raw IDs in different domains even with identical text and labels', async () => {
+    realPlayback = true;
+    renderDrafting();
+    await selectReferenceBible();
+    await play();
+    const aquiferKey = playback.verseKey('1')!;
+    const aquiferGroupKey = playback.groupKey(['1', '2'])!;
+    elements[0].currentTime = 2;
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Select Same Text From Other Domain' })
+    );
+    expect(referenceBibleId).toBe('yv-123');
+    expect(playback.status).toBe('idle');
+    expect(registry.getRecord(aquiferKey)?.currentTime).toBe(2);
+    const youVersionKey = playback.verseKey('1')!;
+    expect(youVersionKey).not.toBe(aquiferKey);
+    expect(playback.groupKey(['1', '2'])).not.toBe(aquiferGroupKey);
+    expect(registry.getRecord(youVersionKey)).toBeNull();
+    await play();
+    expect(elements.at(-1)?.currentTime).toBe(0);
+    const liveElement = elements.at(-1)!;
+    liveElement.currentTime = 4;
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Selected Bible' }));
+    expect(playback.status).toBe('playing');
+    expect(liveElement.paused).toBe(false);
+    expect(playback.verseKey('1')).toBe(youVersionKey);
+    await userEvent.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+    expect(registry.getRecord(youVersionKey)?.currentTime).toBe(4);
+    await play();
+    expect(elements.at(-1)?.currentTime).toBe(2);
+  });
+
+  it('a request failure reports failure but does not disable visible online controls', async () => {
+    realPlayback = true;
+    synthesize.mockRejectedValue(new Error('transient failure'));
+    renderDrafting();
+    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await waitFor(() => expect(playback.status).toBe('idle'));
+    expect(synthesize).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Play verse 1' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Play from verse 1' })).toBeEnabled();
   });
 });
 

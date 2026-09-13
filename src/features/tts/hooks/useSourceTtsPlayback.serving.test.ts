@@ -33,6 +33,7 @@ const setup = (served: Array<TtsServedFormat | undefined>) => {
         engine,
         rows: [{ verseRef: 'v1', verseNumber: 1, text: 'Source text' }],
         sourceChapter: null,
+        referenceBibleId: 'aq-test',
         getRowElement: () => null,
         getViewport: () => null,
       }),
