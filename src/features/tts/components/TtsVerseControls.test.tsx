@@ -28,6 +28,7 @@ const baseProps: TtsVerseControlsProps = {
   showStop: false,
   onPlayVerse: vi.fn(),
   onPlayFromHere: vi.fn(),
+  onPause: vi.fn(),
   onStop: vi.fn(),
 };
 
@@ -89,6 +90,22 @@ describe('TtsVerseControls', () => {
     const stop = screen.getByRole('button', { name: 'Stop playback' });
     fireEvent.click(stop);
     expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a distinct temporary Pause action without repurposing Stop', () => {
+    const onPause = vi.fn();
+    const onStop = vi.fn();
+    const { rerender } = render(
+      <TtsVerseControls {...baseProps} onPause={onPause} onStop={onStop} />
+    );
+    expect(screen.queryByRole('button', { name: 'Pause playback' })).not.toBeInTheDocument();
+    rerender(<TtsVerseControls {...baseProps} showStop onPause={onPause} onStop={onStop} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause playback' }));
+    expect(onPause).toHaveBeenCalledOnce();
+    expect(onStop).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop playback' }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onPause).toHaveBeenCalledOnce();
   });
 
   it('reserves the mirrored record slot, empty by default, filled when provided (T4/§5.4)', () => {

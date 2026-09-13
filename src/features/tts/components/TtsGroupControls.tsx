@@ -22,7 +22,7 @@
 
 import React from 'react';
 
-import { FastForward, Loader2, Play, Square } from 'lucide-react';
+import { FastForward, Loader2, Pause, Play, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,7 @@ export interface TtsGroupControlsProps {
    * Alt+Shift+P is advertised on controls that do not render here.
    */
   onPlayFromGroup: () => void;
+  onPause: () => void;
   onStop: () => void;
 }
 
@@ -66,6 +67,7 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
   showStop,
   onPlayGroup,
   onPlayFromGroup,
+  onPause,
   onStop,
 }) => {
   const { t } = useTranslation();
@@ -113,6 +115,19 @@ export const TtsGroupControls: React.FC<TtsGroupControlsProps> = ({
       >
         <FastForward aria-hidden='true' />
       </Button>
+      {/* Temporary functional control; the unified player replaces this strip later. */}
+      {showStop && (
+        <Button
+          aria-label={t('ttsPausePlayback', 'Pause playback')}
+          className={TTS_CONTROL_BUTTON_CLASS}
+          size='icon'
+          type='button'
+          variant='ghost'
+          onClick={onPause}
+        >
+          <Pause aria-hidden='true' />
+        </Button>
+      )}
       {showStop && (
         <Button
           aria-label={stopLabel}

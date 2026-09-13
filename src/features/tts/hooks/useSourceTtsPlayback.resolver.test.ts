@@ -2,6 +2,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
+import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
 import { fetchChapterSourceAudio } from '../resolver/sourceAudioClient';
 import { FakeClipElement } from '../testing/fakeClipElement';
 import {
@@ -19,6 +21,8 @@ import type * as queueModule from './useTtsPlaybackQueue';
 
 const elements: FakeClipElement[] = [];
 let queue: queueModule.TtsPlaybackQueueApi;
+let registry: ReturnType<typeof usePlaybackRegistry>;
+let playRejection: unknown;
 const toastError = vi.fn<(...args: unknown[]) => void>();
 vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => toastError(...args) } }));
 vi.mock('react-i18next', () => ({
@@ -33,6 +37,7 @@ vi.mock('../lib/audioElement', async importOriginal => ({
   createClipAudioElement: (src: string) => {
     const element = new FakeClipElement();
     element.src = src;
+    element.playRejection = playRejection;
     elements.push(element);
     return element;
   },
@@ -67,9 +72,16 @@ const props = (extra: Partial<UseSourceTtsPlaybackOptions> = {}): UseSourceTtsPl
   ...extra,
 });
 const setup = (extra: Partial<UseSourceTtsPlaybackOptions> = {}) =>
-  renderHook((options: UseSourceTtsPlaybackOptions) => useSourceTtsPlayback(options), {
-    initialProps: props(extra),
-  });
+  renderHook(
+    (options: UseSourceTtsPlaybackOptions) => {
+      registry = usePlaybackRegistry();
+      return useSourceTtsPlayback(options);
+    },
+    {
+      initialProps: props(extra),
+      wrapper: PlaybackRegistryProvider,
+    }
+  );
 const settle = async () => {
   await act(async () => {
     for (let i = 0; i < 30; i++) await Promise.resolve();
@@ -92,6 +104,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   elements.length = 0;
+  playRejection = undefined;
   load.mockResolvedValue(bsbChapter());
   synthesize.mockImplementation(async request => ({
     audioUrl: `https://tts.test/${request.text}`,
@@ -100,6 +113,306 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('useSourceTtsPlayback — pause records and Restart', () => {
+  it('primary pauses and resumes a verse at its file-absolute offset on a new element', async () => {
+    const { result } = setup();
+    const key = result.current.verseKey('row-2')!;
+    await start(() => result.current.playVerse('row-2'));
+    const first = elements[0];
+    first.currentTime = 13;
+    act(() => result.current.playVerse('row-2'));
+    expect(result.current.status).toBe('idle');
+    expect(first.paused).toBe(true);
+    expect(registry.getRecord(key)).toMatchObject({
+      itemIndex: 0,
+      currentTime: 13,
+      forceTts: false,
+    });
+    expect(registry.isLive(key)).toBe(false);
+    expect(registry.canRestart(key)).toBe(true);
+    await start(() => result.current.playVerse('row-2'));
+    expect(elements[1]).not.toBe(first);
+    expect(elements[1].currentTime).toBe(13);
+    expect(registry.isLive(key)).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauses a pericope on a later segment and resumes that segment, not the first', async () => {
+    const { result } = setup();
+    const refs = ['row-1', 'row-2'];
+    const key = result.current.groupKey(refs)!;
+    await start(() => result.current.playGroup(refs));
+    act(() => elements[0].emit('playing'));
+    await boundary(elements[0], bsbChapter().verseTimestamps![0].endSeconds!);
+    elements[0].currentTime = 13;
+    act(() => result.current.pause());
+    expect(registry.getRecord(key)).toMatchObject({
+      itemIndex: 1,
+      verseRef: 'row-2',
+      currentTime: 13,
+    });
+    await start(() => result.current.playGroup(refs));
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(elements.at(-1)?.currentTime).toBe(13);
+    act(() => elements.at(-1)!.emit('playing'));
+    await boundary(elements.at(-1)!, bsbChapter().verseTimestamps![1].endSeconds!);
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.canRestart(key)).toBe(false);
+  });
+
+  it('records a range on the sounding verse and does not retain range continuation', async () => {
+    const { result } = setup();
+    await start(() => result.current.playFromVerse('row-1'));
+    act(() => elements[0].emit('playing'));
+    await boundary(elements[0], bsbChapter().verseTimestamps![0].endSeconds!);
+    const key = result.current.verseKey('row-2')!;
+    expect(registry.isLive(key)).toBe(true);
+    elements[0].currentTime = 13;
+    act(() => result.current.pause());
+    expect(registry.getRecord(key)).toMatchObject({ itemIndex: 0, currentTime: 13 });
+    expect(registry.getRecord(result.current.verseKey('row-1')!)).toBeNull();
+    await start(() => result.current.playVerse('row-2'));
+    const resumed = elements.at(-1)!;
+    act(() => resumed.emit('playing'));
+    await boundary(resumed, bsbChapter().verseTimestamps![1].endSeconds!);
+    expect(result.current.status).toBe('idle');
+    expect(registry.getRecord(key)).toBeNull();
+  });
+
+  it('a fake second claimant pauses the host and release does not retain an idle host', async () => {
+    const { result } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    elements[0].currentTime = 7;
+    const otherPause = vi.fn();
+    act(() => {
+      registry.claim(otherPause);
+    });
+    expect(result.current.status).toBe('idle');
+    expect(registry.getRecord(key)?.currentTime).toBe(7);
+    await start(() => result.current.playVerse('row-1'));
+    expect(otherPause).toHaveBeenCalledTimes(1);
+    act(() => result.current.pause());
+    const pauses = elements.at(-1)!.pauseCalls;
+    act(() => registry.silenceAll());
+    expect(elements.at(-1)!.pauseCalls).toBe(pauses);
+    expect(registry.getRecord(key)?.currentTime).toBe(7);
+  });
+
+  it('two real hosts displace each other and share pause/Restart for the same playable', async () => {
+    const { result } = renderHook(
+      () => {
+        registry = usePlaybackRegistry();
+        return { a: useSourceTtsPlayback(props()), b: useSourceTtsPlayback(props()) };
+      },
+      { wrapper: PlaybackRegistryProvider }
+    );
+    await start(() => result.current.a.playVerse('row-1'));
+    elements[0].currentTime = 8;
+    await start(() => result.current.b.playVerse('row-2'));
+    expect(result.current.a.status).toBe('idle');
+    expect(elements[0].paused).toBe(true);
+    expect(registry.getRecord(result.current.a.verseKey('row-1')!)?.currentTime).toBe(8);
+    // The other rendering of row 2 pauses its actual owner, not an idle local queue.
+    act(() => result.current.a.playVerse('row-2'));
+    expect(result.current.b.status).toBe('idle');
+    await start(() => result.current.b.playVerse('row-2'));
+    await start(() => result.current.a.restartVerse('row-2'));
+    expect(result.current.b.status).toBe('idle');
+    expect(result.current.a.activeVerseRef).toBe('row-2');
+    expect(registry.getRecord(result.current.a.verseKey('row-2')!)).toBeNull();
+    expect(elements.at(-1)?.currentTime).toBe(bsbChapter().verseTimestamps![1].startSeconds);
+  });
+
+  it('resumes a downgraded run directly on TTS and Restart gives recordings a fresh chance', async () => {
+    const { result } = setup();
+    const refs = ['row-1', 'row-2'];
+    const key = result.current.groupKey(refs)!;
+    await start(() => result.current.playGroup(refs));
+    load.mockRejectedValueOnce(new Error('recording unavailable'));
+    act(() => elements[0].emit('error'));
+    await settle();
+    elements[0].currentTime = 2.5;
+    act(() => result.current.pause());
+    expect(registry.getRecord(key)?.forceTts).toBe(true);
+    expect(registry.getLastDynamicAi(key)).toBe(true);
+    const before = elements.length;
+    await start(() => result.current.playGroup(refs));
+    expect(elements[before].src).toContain('tts.test');
+    expect(elements[before].currentTime).toBe(2.5);
+    expect(load).toHaveBeenCalledTimes(2);
+    await start(() => result.current.restartGroup(refs));
+    expect(registry.getRecord(key)).toBeNull();
+    const recorded = [...elements]
+      .reverse()
+      .find(element => !element.paused && !element.src.includes('tts.test'))!;
+    expect(recorded.currentTime).toBe(bsbChapter().verseTimestamps![0].startSeconds);
+    expect(registry.getLastDynamicAi(key)).toBe(false);
+    expect(queue.aiMarkedKeys.size).toBe(0);
+    expect(registry.isLive(key)).toBe(true);
+  });
+
+  it('Restart while paused clears position/forceTts without starting or clearing the last badge', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    elements[0].currentTime = 2;
+    act(() => result.current.pause());
+    const count = elements.length;
+    act(() => result.current.restartVerse('row-1'));
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.canRestart(key)).toBe(false);
+    expect(registry.getLastDynamicAi(key)).toBe(true);
+    expect(result.current.status).toBe('idle');
+    expect(elements).toHaveLength(count);
+  });
+
+  it('Stop remains a separate reset action, not a pause alias', async () => {
+    const { result } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    elements[0].currentTime = 8;
+    act(() => result.current.pause());
+    await start(() => result.current.playVerse('row-1'));
+    act(() => result.current.stop());
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.canRestart(key)).toBe(false);
+    await start(() => result.current.playVerse('row-1'));
+    expect(elements.at(-1)?.currentTime).toBe(bsbChapter().verseTimestamps![0].startSeconds);
+  });
+
+  it('autoplay refusal saves the position, releases its claim, and resumes on the next click', async () => {
+    const { result } = setup();
+    const key = result.current.verseKey('row-2')!;
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playVerse('row-2'));
+    const offset = bsbChapter().verseTimestamps![1].startSeconds;
+    expect(result.current.status).toBe('idle');
+    expect(registry.getRecord(key)?.currentTime).toBe(offset);
+    expect(registry.isLive(key)).toBe(false);
+    expect(toastError).toHaveBeenCalledTimes(1);
+    expect(synthesize).not.toHaveBeenCalled();
+    playRejection = undefined;
+    await start(() => result.current.playVerse('row-2'));
+    expect(elements.at(-1)?.currentTime).toBe(offset);
+    expect(registry.isLive(key)).toBe(true);
+  });
+
+  it('persists the AI badge when a TTS resume is refused before React renders its mark', async () => {
+    const { result } = setup();
+    const key = result.current.verseKey('row-1')!;
+    act(() =>
+      registry.setRecord(key, {
+        itemIndex: 0,
+        verseRef: 'row-1',
+        currentTime: 2,
+        forceTts: true,
+      })
+    );
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playVerse('row-1'));
+    expect(registry.getRecord(key)?.forceTts).toBe(true);
+    expect(registry.getLastDynamicAi(key)).toBe(true);
+  });
+
+  it('natural TTS completion clears the record but preserves the dynamic badge', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    elements[0].currentTime = 2;
+    act(() => result.current.pause());
+    await start(() => result.current.playVerse('row-1'));
+    act(() => elements.at(-1)!.emit('ended'));
+    await settle();
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.getLastDynamicAi(key)).toBe(true);
+    expect(registry.isLive(key)).toBe(false);
+  });
+
+  it('uses only cheap static knowledge on rebuild, never an eager availability request', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result, rerender } = setup();
+    const key = result.current.verseKey('row-2')!;
+    expect(registry.getStaticAi(key)).toBe(false);
+    expect(load).not.toHaveBeenCalled();
+    await start(() => result.current.playVerse('row-1'));
+    act(() => result.current.pause());
+    rerender(props({ rows: [...rows] }));
+    expect(registry.getStaticAi(key)).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1);
+    rerender(props({ sourceChapter: null }));
+    expect(registry.getStaticAi(result.current.verseKey('row-2')!)).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists dynamic marks for every heard verse in a range and clears a completed verse record', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result } = setup();
+    const firstKey = result.current.verseKey('row-1')!;
+    act(() =>
+      registry.setRecord(firstKey, {
+        itemIndex: 0,
+        verseRef: 'row-1',
+        currentTime: 3,
+        forceTts: true,
+      })
+    );
+    await start(() => result.current.playFromVerse('row-1'));
+    act(() => elements[0].emit('ended'));
+    await settle();
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(registry.getRecord(firstKey)).toBeNull();
+    const sounding = elements.find(element => !element.paused && element.playCalls.length > 0)!;
+    sounding.currentTime = 2;
+    act(() => result.current.pause());
+    expect(registry.getLastDynamicAi(firstKey)).toBe(true);
+    expect(registry.getLastDynamicAi(result.current.verseKey('row-2')!)).toBe(true);
+    expect(registry.getLastDynamicAi(result.current.verseKey('row-3')!)).toBe(false);
+  });
+
+  it('unknown pending position creates no record; page change drops all old data before late results', async () => {
+    let resolve!: (chapter: clientModule.ChapterSourceAudio) => void;
+    load.mockImplementation(
+      () =>
+        new Promise(done => {
+          resolve = done;
+        })
+    );
+    const { result, rerender } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    act(() => result.current.pause());
+    expect(registry.getRecord(key)).toBeNull();
+    act(() => registry.setLastDynamicAi(key, true));
+    rerender(props({ pageKey: 'next-page' }));
+    resolve(bsbChapter());
+    await settle();
+    expect(registry.getLastDynamicAi(key)).toBe(false);
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.isLive(key)).toBe(false);
+    expect(elements).toHaveLength(0);
+  });
+
+  it('unmount stops without a record and cannot clear a later claimant', async () => {
+    const { result, unmount } = setup();
+    const key = result.current.verseKey('row-1')!;
+    await start(() => result.current.playVerse('row-1'));
+    elements[0].currentTime = 8;
+    unmount();
+    expect(elements[0].paused).toBe(true);
+    expect(registry.getRecord(key)).toBeNull();
+    const otherPause = vi.fn();
+    registry.claim(otherPause);
+    registry.setLive('other');
+    registry.silenceAll();
+    expect(otherPause).toHaveBeenCalledTimes(1);
+    expect(registry.isLive('other')).toBe(true);
+    expect(registry.getRecord(key)).toBeNull();
+  });
 });
 
 describe('useSourceTtsPlayback — recorded drafting integration', () => {
