@@ -5,10 +5,10 @@ import { useTranslation } from 'react-i18next';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import {
   type SourceTtsPlaybackApi,
-  TTS_CONTROL_ROW_CLASS,
+  SourceVerseControl,
   type TtsServedFormat,
   ttsServingWashClass,
-  TtsVerseControls,
+  VERSE_CONTROL_REVEAL_CLASS,
 } from '@/features/tts';
 import { type Source, type TargetVerse } from '@/lib/types';
 
@@ -22,14 +22,7 @@ import { type Source, type TargetVerse } from '@/lib/types';
  */
 export interface DraftingGridVerseTts extends Pick<
   SourceTtsPlaybackApi,
-  | 'activeVerseRef'
-  | 'isBusy'
-  | 'isRowPlayable'
-  | 'isRowLoading'
-  | 'playVerse'
-  | 'playFromVerse'
-  | 'pause'
-  | 'stop'
+  'activeVerseRef' | 'status' | 'aiMarkedKeys' | 'verseKey' | 'playVerse' | 'restartVerse'
 > {
   verseRefFor: (verseNumber: number) => string;
   /**
@@ -219,7 +212,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             <div className='flex w-8 items-start px-4'>
               <span className='text-lg font-medium'>{verse.verseNumber}</span>
             </div>
-            <div className='flex flex-col px-6'>
+            <div className='group/audio relative flex flex-col px-6'>
               {selectedPanel === 1 ? (
                 <div className={getPericopeStyle(verse.verseNumber, isActive, 'bg-card')}>
                   <p className='min-h-12 leading-relaxed'>{verse.text}</p>
@@ -238,21 +231,9 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                 </div>
               )}
               {tts !== undefined && ttsVerseRef !== undefined && (
-                // Tucked under THIS verse's source box and overlapping the
-                // row's own bottom padding — see `TTS_CONTROL_ROW_CLASS` for
-                // why the strip costs ~18px here rather than 48px.
-                <div className={TTS_CONTROL_ROW_CLASS}>
-                  <TtsVerseControls
-                    hasPlayableText={tts.isRowPlayable(ttsVerseRef)}
-                    isLoading={tts.isRowLoading(ttsVerseRef)}
-                    isPlaying={isSpeaking}
-                    showStop={tts.isBusy}
-                    verseRef={ttsVerseRef}
-                    onPause={tts.pause}
-                    onPlayFromHere={() => tts.playFromVerse(ttsVerseRef)}
-                    onPlayVerse={() => tts.playVerse(ttsVerseRef)}
-                    onStop={tts.stop}
-                  />
+                // Never conditionally mount on hover: tab focus must reveal it too.
+                <div className={VERSE_CONTROL_REVEAL_CLASS}>
+                  <SourceVerseControl playback={tts} verseRef={ttsVerseRef} />
                 </div>
               )}
             </div>

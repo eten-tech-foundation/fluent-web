@@ -215,6 +215,7 @@ const playGroup = vi.fn();
 const playFromGroup = vi.fn();
 const stopPlayback = vi.fn();
 const pausePlayback = vi.fn();
+const restartVerse = vi.fn();
 
 vi.mock('@/features/tts', async importOriginal => {
   const actual = await importOriginal<typeof TtsFeature>();
@@ -243,6 +244,7 @@ vi.mock('@/features/tts', async importOriginal => {
       );
       return {
         status: isBusy ? 'playing' : 'idle',
+        aiMarkedKeys: new Set<string>(),
         activeVerseRef,
         isBusy,
         isRowPlayable: (verseRef: string) => playable.has(verseRef),
@@ -258,9 +260,9 @@ vi.mock('@/features/tts', async importOriginal => {
           activeVerseRef !== null && verseRefs.includes(activeVerseRef),
         pause: pausePlayback,
         stop: stopPlayback,
-        restartVerse: vi.fn(),
+        restartVerse,
         restartGroup: vi.fn(),
-        verseKey: () => null,
+        verseKey: (ref: string) => (playable.has(ref) ? `verse-${ref}` : null),
         groupKey: () => null,
       };
     },
@@ -496,8 +498,11 @@ describe('DraftingUI — panel-aware TTS rows', () => {
 
     // Panel 2 supplied verses 1 and 2 only, so verse 3 has no text to read.
     expect(screen.getByRole('button', { name: 'Play verse 1' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Play verse 3' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Play from verse 3' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Play verse 3' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Restart verse 3' })).toBeDisabled();
   });
 });
 
@@ -571,21 +576,26 @@ describe('DraftingUI — source switch with the real host, queue and registry', 
     await waitFor(() => expect(playback.status).toBe('idle'));
     expect(synthesize).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Play verse 1' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Play from verse 1' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Play verse 1' })).not.toHaveAttribute(
+      'aria-disabled'
+    );
   });
 });
 
 // ── Queue actions and highlight (§5.3) ──────────────────────────────────────
 
 describe('DraftingUI — playback actions and highlight', () => {
-  it('routes the two play actions to the verse that was clicked', async () => {
+  it('routes Play and Restart to the clicked verse, with no play-from-here button', async () => {
     renderDrafting();
 
     await userEvent.click(screen.getByRole('button', { name: 'Play verse 2' }));
     expect(playVerse).toHaveBeenCalledWith('2');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Play from verse 3' }));
-    expect(playFromVerse).toHaveBeenCalledWith('3');
+    act(() => registry.setLive('verse-3'));
+    await userEvent.click(screen.getByRole('button', { name: 'Restart verse 3' }));
+    expect(restartVerse).toHaveBeenCalledWith('3');
+    expect(screen.queryByRole('button', { name: /^Play from verse/ })).not.toBeInTheDocument();
+    expect(playFromVerse).not.toHaveBeenCalled();
   });
 
   it('marks only the playing row, and marks it by verse', () => {
@@ -610,28 +620,45 @@ describe('DraftingUI — playback actions and highlight', () => {
     expect(screen.queryAllByRole('button', { name: 'Stop playback' })).toHaveLength(0);
   });
 
-  it('offers a distinct queue-wide Pause while playback is live', async () => {
+  it('shows Pause on the live primary only, routing through the host toggle without resetting', async () => {
     isBusy = true;
     activeVerseRef = '1';
     renderDrafting();
-    const pauses = screen.getAllByRole('button', { name: 'Pause playback' });
-    expect(pauses).toHaveLength(3);
-    await userEvent.click(pauses[2]);
-    expect(pausePlayback).toHaveBeenCalledOnce();
+    act(() => registry.setLive('verse-1'));
+    const pauses = screen.getAllByRole('button', { name: /^Pause verse/ });
+    expect(pauses).toHaveLength(1);
+    await userEvent.click(pauses[0]);
+    expect(playVerse).toHaveBeenCalledWith('1');
     expect(stopPlayback).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Stop playback' })).not.toBeInTheDocument();
   });
 
-  it('offers a queue-wide Stop while playback is live', async () => {
-    isBusy = true;
-    activeVerseRef = '1';
-
+  it('keeps hover controls mounted and focus-revealable, with no slider in verse mode', () => {
     renderDrafting();
+    const button = screen.getByRole('button', { name: 'Play verse 2' });
+    const reveal = screen.getAllByTestId('tts-verse-controls')[1].parentElement!;
+    expect(reveal).toHaveClass(
+      'opacity-0',
+      'left-8',
+      'top-1/2',
+      '-translate-y-1/2',
+      'group-hover/audio:opacity-100',
+      'group-focus-within/audio:opacity-100',
+      '[@media(hover:none)]:opacity-100'
+    );
+    expect(reveal.parentElement).toHaveClass('group/audio', 'relative');
+    button.focus();
+    expect(button).toHaveFocus();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+  });
 
-    // Queue-wide (§5.1): Stop is reachable from any row, not just the playing one.
-    const stops = screen.getAllByRole('button', { name: 'Stop playback' });
-    expect(stops).toHaveLength(3);
-    await userEvent.click(stops[2]);
-    expect(stopPlayback).toHaveBeenCalledTimes(1);
+  it('never starts the real queue on mount or playable data arrival', async () => {
+    realPlayback = true;
+    renderDrafting();
+    await selectReferenceBible();
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(elements).toHaveLength(0);
+    expect(playback.status).toBe('idle');
   });
 });
 

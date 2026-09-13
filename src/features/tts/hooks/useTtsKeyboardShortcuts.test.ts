@@ -41,6 +41,7 @@ describe('useTtsKeyboardShortcuts', () => {
       playVerse: 'Alt+P',
       playFromHere: 'Alt+Shift+P',
       stop: 'Alt+S',
+      restart: 'Alt+R',
     });
   });
 

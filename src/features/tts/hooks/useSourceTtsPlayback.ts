@@ -70,6 +70,8 @@ export interface UseSourceTtsPlaybackOptions {
 
 export interface SourceTtsPlaybackApi {
   status: TtsPlaybackStatus;
+  /** Live-run badge channel; idle controls read the registry instead. */
+  aiMarkedKeys: ReadonlySet<string>;
   activeVerseRef: string | null;
   /** Queue-wide: Stop is visible whenever anything is loading or playing (§5.1). */
   isBusy: boolean;
@@ -491,6 +493,7 @@ export const useSourceTtsPlayback = (
 
   return {
     status: queue.status,
+    aiMarkedKeys: queue.aiMarkedKeys,
     activeVerseRef: queue.activeVerseRef,
     isBusy: queue.status !== 'idle',
     isRowPlayable,
