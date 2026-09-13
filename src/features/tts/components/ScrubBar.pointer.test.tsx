@@ -21,6 +21,32 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('ScrubBar — Radix release contract', () => {
+  it('drops an in-flight pointer preview when disabled, ignores release, and wakes on reconnect', () => {
+    const onSeek = vi.fn();
+    const props = {
+      position: 0.1,
+      spans: buildSpans([{ text: 'one' }, { text: 'two' }]),
+      verseRefs: ['1', '2'],
+      onSeek,
+    };
+    const h = render(<ScrubBar {...props} />);
+    act(() => slider.onValueChange?.([0.75]));
+    expect(slider.value).toEqual([0.75]);
+    h.rerender(<ScrubBar {...props} disabled />);
+    expect(slider.value).toEqual([0.1]);
+    expect(slider.disabled).toBe(true);
+    act(() => slider.onValueChange?.([0.9]));
+    act(() => slider.onValueCommit?.([0.9]));
+    expect(onSeek).not.toHaveBeenCalled();
+    expect(slider.value).toEqual([0.1]);
+    h.rerender(<ScrubBar {...props} />);
+    expect(slider.disabled).toBe(false);
+    expect(onSeek).not.toHaveBeenCalled();
+    act(() => slider.onValueChange?.([0.75]));
+    act(() => slider.onValueCommit?.([0.75]));
+    expect(onSeek).toHaveBeenCalledExactlyOnceWith(1, 0.5);
+  });
+
   it('previews every move but starts audio only once when Radix reports the release', () => {
     const onSeek = vi.fn();
     render(
