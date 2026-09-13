@@ -44,6 +44,11 @@ export class ChapterAudioCache {
     this.supportsOpus = options.supportsOpus ?? canBrowserPlayOpus();
   }
 
+  /** Cheap knowledge only: never fetch just to decorate an idle control. */
+  peek(chapter: ChapterSourceAudioRequest): ChapterSourceAudio | undefined {
+    return this.held.get(chapterAudioKey(chapter))?.response;
+  }
+
   get(chapter: ChapterSourceAudioRequest, signal: AbortSignal): Promise<ChapterSourceAudio> {
     signal.throwIfAborted();
     const key = chapterAudioKey(chapter);

@@ -62,6 +62,74 @@ const flush = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe('segment queue — source and run lifecycle', () => {
+  it('copies inherited run state for L2 without choosing a source in the queue', async () => {
+    const h = setup();
+    const inherited = { forceTts: true };
+    const resolve = vi.fn(async (context: SourceResolutionContext) => {
+      expect(context.run).not.toBe(inherited);
+      expect(context.run.forceTts).toBe(true);
+      return source('chosen-by-resolver');
+    });
+    await act(async () =>
+      h.result.current.playOne({ ...segment(1), source: resolve }, 2, inherited)
+    );
+    expect(inherited.forceTts).toBe(true);
+    expect(h.elements[0].src).toBe(source('chosen-by-resolver').url);
+    expect(h.elements[0].currentTime).toBe(2);
+    const next = vi.fn(async (context: SourceResolutionContext) => {
+      expect(context.run.forceTts).toBe(false);
+      return source('fresh-run');
+    });
+    await act(async () => h.result.current.playOne({ ...segment(2), source: next }));
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('reports the final AI marks synchronously before refusal and never aliases another run', async () => {
+    const onRunEnd = vi.fn<NonNullable<UseTtsPlaybackQueueOptions['onRunEnd']>>();
+    const refused = new FakeClipElement();
+    refused.playRejection = new DOMException('gesture required', 'NotAllowedError');
+    const h = setup({ createElement: () => refused, onRunEnd });
+    const item: Segment = {
+      ...segment(1),
+      source: async context => {
+        context.requests.markAi();
+        return source('ai');
+      },
+    };
+    await act(async () => h.result.current.playOne(item, 3));
+    const marked = onRunEnd.mock.calls[0][0];
+    expect([...marked]).toEqual(['key-1']);
+    expect(onRunEnd.mock.invocationCallOrder[0]).toBeLessThan(
+      h.onAutoplayRefused.mock.invocationCallOrder[0]
+    );
+    refused.playRejection = undefined;
+    await act(async () => h.result.current.playOne(segment(2)));
+    act(() => h.result.current.stop());
+    expect([...onRunEnd.mock.calls[1][0]]).toEqual([]);
+    expect([...marked]).toEqual(['key-1']);
+    act(() => h.result.current.stop());
+    expect(onRunEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports final AI marks on natural completion before the completion callback', async () => {
+    const onRunEnd = vi.fn<NonNullable<UseTtsPlaybackQueueOptions['onRunEnd']>>();
+    const h = setup({ onRunEnd });
+    await act(async () =>
+      h.result.current.playOne({
+        ...segment(1),
+        source: async context => {
+          context.requests.markAi();
+          return source('ai');
+        },
+      })
+    );
+    act(() => h.elements[0].emit('ended'));
+    expect([...onRunEnd.mock.calls[0][0]]).toEqual(['key-1']);
+    expect(onRunEnd.mock.invocationCallOrder[0]).toBeLessThan(
+      h.onRunComplete.mock.invocationCallOrder[0]
+    );
+  });
+
   it('plays an opaque source without requiring text, a format, or a provider', async () => {
     const h = setup();
     const item = {

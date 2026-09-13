@@ -55,7 +55,7 @@ const PericopeRteGroup = lazy(() =>
  */
 export interface DraftingGridPericopeTts extends Pick<
   SourceTtsPlaybackApi,
-  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'stop'
+  'isBusy' | 'isRowPlayable' | 'isRowLoading' | 'pause' | 'stop'
 > {
   activeVerseRef: SourceTtsPlaybackApi['activeVerseRef'];
   playGroup: SourceTtsPlaybackApi['playGroup'];

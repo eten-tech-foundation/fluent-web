@@ -13,7 +13,7 @@
  * `enabled` is THIS hook's job.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -25,6 +25,8 @@ import {
   scrollRowIntoViewIfNeeded,
   type ScrollViewport,
 } from '../lib/scrollRowIntoView';
+import { writeRecord } from '../registry/pauseRecord';
+import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
 import { ChapterAudioCache } from '../resolver/chapterCache';
 import { resolvePlayables, type SourceAudioRow } from '../resolver/resolvePlayables';
 import { type ChapterSourceAudioRequest } from '../resolver/sourceAudioClient';
@@ -96,7 +98,20 @@ export interface SourceTtsPlaybackApi {
   playFromGroup: (verseRefs: readonly string[]) => void;
   /** G3a: true while the playing row is one of these — the group-level highlight. */
   isGroupSpeaking: (verseRefs: readonly string[]) => boolean;
+  /** Pause drops all media and keeps only a page-lifetime position. */
+  pause: () => void;
+  /** Explicit reset retained for surfaces that need Stop rather than Pause. */
   stop: () => void;
+  restartVerse: (verseRef: string) => void;
+  restartGroup: (verseRefs: readonly string[]) => void;
+  verseKey: (verseRef: string) => string | null;
+  groupKey: (verseRefs: readonly string[]) => string | null;
+}
+
+interface HostRun {
+  items: Segment[];
+  keys: Set<string>;
+  liveKey: string;
 }
 
 export const useSourceTtsPlayback = (
@@ -112,6 +127,9 @@ export const useSourceTtsPlayback = (
     enabled = true,
   } = options;
   const { t } = useTranslation();
+  const registry = usePlaybackRegistry();
+  const runRef = useRef<HostRun | null>(null);
+  const releaseRef = useRef<(() => void) | null>(null);
 
   // Callbacks handed to the queue must not go stale between clips, and must
   // not re-create the queue session, so the volatile inputs live in refs.
@@ -173,12 +191,22 @@ export const useSourceTtsPlayback = (
   const itemsRef = useRef<readonly SourceAudioRow[]>(items);
   itemsRef.current = items;
 
-  const handleScrollRequest = useCallback((verseRef: string) => {
-    const { getRowElement: resolveRow, getViewport: resolveViewport } = latest.current;
-    // Scrolls only when the row is off-screen, and never calls focus() —
-    // the translator keeps their caret while playback moves (§5.2/§5.3).
-    scrollRowIntoViewIfNeeded(resolveRow(verseRef), resolveViewport());
-  }, []);
+  const handleScrollRequest = useCallback(
+    (verseRef: string) => {
+      const run = runRef.current;
+      const key = run?.items.find(item => item.verseRef === verseRef)?.playableKey;
+      if (run && key) {
+        // The old playable has naturally completed, even if this run continues.
+        if (run.liveKey !== key) registry.clearRecord(run.liveKey);
+        run.liveKey = key;
+        registry.setLive(key);
+      }
+      const { getRowElement: resolveRow, getViewport: resolveViewport } = latest.current;
+      // Scrolls only when the row is off-screen, and never calls focus().
+      scrollRowIntoViewIfNeeded(resolveRow(verseRef), resolveViewport());
+    },
+    [registry]
+  );
 
   const handleError = useCallback(
     (_error: Error, item: Segment) => {
@@ -195,39 +223,126 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
-    onError: handleError,
-    onAutoplayRefused: (_snapshot, segment) =>
-      handleError(new Error('Playback requires a user gesture'), segment),
+    onError: (error, segment) => {
+      finishRun();
+      handleError(error, segment);
+    },
+    onAutoplayRefused: (snapshot, segment) => {
+      writeRecord(registry, snapshot);
+      finishRun();
+      handleError(new Error('Playback requires a user gesture'), segment);
+    },
+    onRunEnd: aiMarkedKeys => {
+      for (const key of runRef.current?.keys ?? []) {
+        registry.setLastDynamicAi(key, aiMarkedKeys.has(key));
+      }
+    },
+    onRunComplete: () => finishRun(true),
     onScrollRequest: handleScrollRequest,
   });
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
-  const playVerse = useCallback(
-    (verseRef: string) => {
-      const index = itemsRef.current.findIndex(item => item.verseRef === verseRef);
-      if (index < 0) return; // unplayable row: controls are disabled anyway (§5.1)
-      // T1: one verse, no advance.
+  const finishRun = useCallback(
+    (completed = false) => {
+      const run = runRef.current;
+      if (!run) return;
+      for (const key of run.keys) {
+        if (completed) registry.clearRecord(key);
+      }
+      // An idle/unmounting host must not clear a different host's live key.
+      if (registry.isLive(run.liveKey)) registry.setLive(null);
+      releaseRef.current?.();
+      releaseRef.current = null;
+      runRef.current = null;
+    },
+    [registry]
+  );
+
+  const pause = useCallback(() => {
+    const snapshot = queueRef.current.pause();
+    if (snapshot) writeRecord(registry, snapshot);
+    finishRun();
+  }, [finishRun, registry]);
+
+  const stopWithoutRecord = useCallback(() => {
+    queueRef.current.stop();
+    finishRun();
+  }, [finishRun]);
+
+  const startRun = useCallback(
+    (playables: Playable[], index = 0, bounded = false) => {
+      if (!enabled) return;
+      const segments = playables.flatMap(playable => playable.segments);
+      const first = segments.at(index);
+      if (!first) return;
+      // The claim pauses AND records synchronously, before reading resume data.
+      releaseRef.current = registry.claim(pause);
+      const record = bounded ? registry.getRecord(first.playableKey) : null;
+      const startIndex = record?.itemIndex ?? index;
+      const keys = new Set(segments.slice(startIndex).map(segment => segment.playableKey));
+      runRef.current = { items: segments, keys, liveKey: first.playableKey };
+      for (const key of keys) {
+        registry.setLastDynamicAi(key, false);
+        const chapter = latest.current.sourceChapter;
+        registry.setStaticAi(key, !chapter || cache.peek(chapter)?.verseAddressable === false);
+      }
+      registry.setLive(first.playableKey);
       setItemServing({});
-      const [playable] = playablesFor([itemsRef.current[index]]);
-      queueRef.current.playOne(playable.segments[0]);
+      const seed = record ? { forceTts: record.forceTts } : undefined;
+      if (bounded && segments.length === 1) {
+        if (record) queueRef.current.playOne(first, record.currentTime, seed);
+        else queueRef.current.playOne(first);
+      } else if (record) {
+        queueRef.current.playFrom(segments, startIndex, record.currentTime, seed);
+      } else queueRef.current.playFrom(segments, startIndex);
+    },
+    [cache, enabled, pause, registry]
+  );
+
+  const versePlayable = useCallback(
+    (verseRef: string) => {
+      const row = itemsRef.current.find(item => item.verseRef === verseRef);
+      return row ? playablesFor([row]).at(0) : undefined;
     },
     [playablesFor]
+  );
+
+  const groupPlayable = useCallback(
+    (verseRefs: readonly string[]) => {
+      const wanted = new Set(verseRefs);
+      const group = itemsRef.current.filter(item => wanted.has(item.verseRef));
+      return playablesFor(group, JSON.stringify(group.map(item => item.verseRef))).at(0);
+    },
+    [playablesFor]
+  );
+
+  const playBounded = useCallback(
+    (playable: Playable | undefined) => {
+      if (!playable) return;
+      // Deliberate reading of the source-audio card: primary pauses, not resets.
+      if (registry.isLive(playable.key)) registry.silenceAll();
+      else startRun([playable], 0, true);
+    },
+    [registry, startRun]
+  );
+
+  const playVerse = useCallback(
+    (verseRef: string) => {
+      playBounded(versePlayable(verseRef));
+    },
+    [playBounded, versePlayable]
   );
 
   const playFromVerse = useCallback(
     (verseRef: string) => {
       const index = itemsRef.current.findIndex(item => item.verseRef === verseRef);
       if (index < 0) return;
-      // T1: continuous from here through the end of this page's list.
-      setItemServing({});
-      queueRef.current.playFrom(
-        playablesFor(itemsRef.current).flatMap(playable => playable.segments),
-        index
-      );
+      // A range has no persistent identity; recreate it from the caret.
+      startRun(playablesFor(itemsRef.current), index);
     },
-    [playablesFor]
+    [playablesFor, startRun]
   );
 
   /**
@@ -239,19 +354,9 @@ export const useSourceTtsPlayback = (
    */
   const playGroup = useCallback(
     (verseRefs: readonly string[]) => {
-      const wanted = new Set(verseRefs);
-      const pageItems = itemsRef.current;
-      const groupItems = pageItems.filter(item => wanted.has(item.verseRef));
-      if (groupItems.length === 0) return; // nothing playable in this group (§5.1)
-
-      setItemServing({});
-      const [playable] = playablesFor(
-        groupItems,
-        JSON.stringify(groupItems.map(item => item.verseRef))
-      );
-      queueRef.current.playFrom(playable.segments, 0);
+      playBounded(groupPlayable(verseRefs));
     },
-    [playablesFor]
+    [groupPlayable, playBounded]
   );
 
   const playFromGroup = useCallback(
@@ -263,19 +368,44 @@ export const useSourceTtsPlayback = (
       const index = pageItems.findIndex(item => wanted.has(item.verseRef));
       if (index < 0) return; // nothing playable in this group (§5.1)
 
-      // Exactly like playFromVerse: this runs to the end of the page and stops.
-      setItemServing({});
-      queueRef.current.playFrom(
-        playablesFor(pageItems).flatMap(playable => playable.segments),
-        index
-      );
+      startRun(playablesFor(pageItems), index);
     },
-    [playablesFor]
+    [playablesFor, startRun]
+  );
+
+  const restart = useCallback(
+    (playable: Playable | undefined) => {
+      if (!playable) return;
+      const live = registry.isLive(playable.key);
+      if (live) registry.silenceAll();
+      registry.clearRecord(playable.key);
+      if (live) startRun([playable], 0, true);
+    },
+    [registry, startRun]
   );
 
   const stop = useCallback(() => {
-    queueRef.current.stop();
-  }, []);
+    const key = runRef.current?.liveKey;
+    stopWithoutRecord();
+    if (key) registry.clearRecord(key);
+  }, [registry, stopWithoutRecord]);
+
+  const restartVerse = useCallback(
+    (verseRef: string) => restart(versePlayable(verseRef)),
+    [restart, versePlayable]
+  );
+  const restartGroup = useCallback(
+    (verseRefs: readonly string[]) => restart(groupPlayable(verseRefs)),
+    [groupPlayable, restart]
+  );
+  const verseKey = useCallback(
+    (verseRef: string) => versePlayable(verseRef)?.key ?? null,
+    [versePlayable]
+  );
+  const groupKey = useCallback(
+    (verseRefs: readonly string[]) => groupPlayable(verseRefs)?.key ?? null,
+    [groupPlayable]
+  );
 
   // The page this host is showing, as of the last commit. Compared rather
   // than depended on, because the queue must be told about a page change
@@ -287,10 +417,23 @@ export const useSourceTtsPlayback = (
     const shown = shownPageKeyRef.current;
     shownPageKeyRef.current = pageKey;
 
-    if (shown !== pageKey) {
-      queueRef.current.stop();
-    }
-  }, [pageKey]);
+    if (shown !== pageKey) stopWithoutRecord();
+    registry.setPageKey(pageKey ?? '');
+  }, [pageKey, registry, stopWithoutRecord]);
+
+  // Release before the Provider's passive unmount silence loop: unmount stops
+  // without writing a record, even when the whole app tree is removed together.
+  useLayoutEffect(() => () => stopWithoutRecord(), [stopWithoutRecord]);
+
+  // Rebuild static knowledge without fetching availability just for a badge.
+  useEffect(() => {
+    const knownTts = !sourceChapter || cache.peek(sourceChapter)?.verseAddressable === false;
+    for (const playable of playablesFor(items)) registry.setStaticAi(playable.key, knownTts);
+  }, [cache, items, pageKey, playablesFor, registry, sourceChapter]);
+
+  useEffect(() => {
+    if (queue.status === 'idle') finishRun();
+  }, [finishRun, queue.status]);
 
   // A captured chapter response (including its media URLs) never outlives the page.
   useEffect(() => () => cache.clear(), [cache, pageKey]);
@@ -299,8 +442,8 @@ export const useSourceTtsPlayback = (
   // queue is a no-op, which is the common case (every mount with the flag off).
   useEffect(() => {
     if (enabled) return;
-    queueRef.current.stop();
-  }, [enabled]);
+    stopWithoutRecord();
+  }, [enabled, stopWithoutRecord]);
 
   const playableRefs = useMemo(() => new Set(items.map(item => item.verseRef)), [items]);
 
@@ -345,6 +488,11 @@ export const useSourceTtsPlayback = (
     playGroup,
     playFromGroup,
     isGroupSpeaking,
+    pause,
     stop,
+    restartVerse,
+    restartGroup,
+    verseKey,
+    groupKey,
   };
 };

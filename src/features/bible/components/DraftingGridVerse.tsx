@@ -28,6 +28,7 @@ export interface DraftingGridVerseTts extends Pick<
   | 'isRowLoading'
   | 'playVerse'
   | 'playFromVerse'
+  | 'pause'
   | 'stop'
 > {
   verseRefFor: (verseNumber: number) => string;
@@ -247,6 +248,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                     isPlaying={isSpeaking}
                     showStop={tts.isBusy}
                     verseRef={ttsVerseRef}
+                    onPause={tts.pause}
                     onPlayFromHere={() => tts.playFromVerse(ttsVerseRef)}
                     onPlayVerse={() => tts.playVerse(ttsVerseRef)}
                     onStop={tts.stop}

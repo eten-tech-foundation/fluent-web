@@ -2,6 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
 import { FakeClipElement } from '../testing/fakeClipElement';
 
 import { useSourceTtsPlayback } from './useSourceTtsPlayback';
@@ -26,14 +27,16 @@ const setup = (served: Array<TtsServedFormat | undefined>) => {
   const engine: TtsEngine = {
     synthesize: async () => ({ audioUrl: 'https://media.test/audio', servedAs: served[call++] }),
   };
-  return renderHook(() =>
-    useSourceTtsPlayback({
-      engine,
-      rows: [{ verseRef: 'v1', verseNumber: 1, text: 'Source text' }],
-      sourceChapter: null,
-      getRowElement: () => null,
-      getViewport: () => null,
-    })
+  return renderHook(
+    () =>
+      useSourceTtsPlayback({
+        engine,
+        rows: [{ verseRef: 'v1', verseNumber: 1, text: 'Source text' }],
+        sourceChapter: null,
+        getRowElement: () => null,
+        getViewport: () => null,
+      }),
+    { wrapper: PlaybackRegistryProvider }
   );
 };
 
@@ -48,6 +51,7 @@ describe('useSourceTtsPlayback — which container served each clip', () => {
     const { result } = setup(['wav', 'ogg']);
     await act(async () => result.current.playVerse('v1'));
     expect(result.current.servingFor('v1')).toBe('wav');
+    act(() => result.current.pause());
     await act(async () => result.current.playVerse('v1'));
     expect(result.current.servingFor('v1')).toBe('ogg');
   });

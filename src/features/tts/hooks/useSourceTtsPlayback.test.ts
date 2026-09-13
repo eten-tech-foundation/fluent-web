@@ -10,6 +10,7 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTtsSegment } from '../lib/createTtsSegment';
+import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
 import { type Segment } from '../seam/types';
 import { sourceChapterRequest } from '../testing/sourceAudioFixtures';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
@@ -32,6 +33,7 @@ let queueOptions: UseTtsPlaybackQueueOptions;
 const playOne = vi.fn();
 const playFrom = vi.fn();
 const stop = vi.fn();
+const pause = vi.fn(() => null);
 let itemStates: Record<string, string> = {};
 let status = 'idle';
 let activeVerseRef: string | null = null;
@@ -39,7 +41,16 @@ let activeVerseRef: string | null = null;
 vi.mock('./useTtsPlaybackQueue', () => ({
   useTtsPlaybackQueue: (options: UseTtsPlaybackQueueOptions) => {
     queueOptions = options;
-    return { status, activeVerseRef, itemStates, playOne, playFrom, stop };
+    return {
+      status,
+      activeVerseRef,
+      itemStates,
+      playOne,
+      playFrom,
+      stop,
+      pause,
+      aiMarkedKeys: new Set(),
+    };
   },
 }));
 
@@ -76,7 +87,9 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
     getViewport: () => rect(0, 500),
     ...overrides,
   };
-  const { result, rerender } = renderHook(() => useSourceTtsPlayback(options));
+  const { result, rerender } = renderHook(() => useSourceTtsPlayback(options), {
+    wrapper: PlaybackRegistryProvider,
+  });
   return { result, rerender, scrollIntoView, focus };
 };
 
@@ -259,6 +272,7 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
   const renderPage = (pageKey: string, overrides: Partial<UseSourceTtsPlaybackOptions> = {}) =>
     renderHook((options: UseSourceTtsPlaybackOptions) => useSourceTtsPlayback(options), {
       initialProps: pageProps(pageKey, overrides),
+      wrapper: PlaybackRegistryProvider,
     });
 
   it('stops the queue when the page changes underneath it', () => {
@@ -337,7 +351,7 @@ describe('useSourceTtsPlayback — the enabled gate', () => {
           enabled: isEnabled,
           ...extra,
         }),
-      { initialProps: { isEnabled: enabled } }
+      { initialProps: { isEnabled: enabled }, wrapper: PlaybackRegistryProvider }
     );
 
   it('stops playback when the feature is turned off mid-listen', () => {
