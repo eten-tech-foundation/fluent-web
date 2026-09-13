@@ -16,7 +16,7 @@ import { sourceChapterRequest } from '../testing/sourceAudioFixtures';
 import { type TtsEngine, type TtsQueueItem } from '../tts.types';
 
 import { useSourceTtsPlayback, type UseSourceTtsPlaybackOptions } from './useSourceTtsPlayback';
-import { type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
+import { type PauseSnapshot, type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
 
 const toastError = vi.fn();
 vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => toastError(...args) } }));
@@ -33,7 +33,7 @@ let queueOptions: UseTtsPlaybackQueueOptions;
 const playOne = vi.fn();
 const playFrom = vi.fn();
 const stop = vi.fn();
-const pause = vi.fn(() => null);
+const pause = vi.fn<() => PauseSnapshot | null>(() => null);
 let itemStates: Record<string, string> = {};
 let status = 'idle';
 let activeVerseRef: string | null = null;
@@ -60,6 +60,7 @@ const engine: TtsEngine = { synthesize: vi.fn() };
 // be reset per test or one test's play call leaks into the next assertion.
 beforeEach(() => {
   vi.clearAllMocks();
+  pause.mockReturnValue(null);
   itemStates = {};
   status = 'idle';
   activeVerseRef = null;
@@ -151,6 +152,41 @@ describe('useSourceTtsPlayback — play actions', () => {
 // ---------------------------------------------------------------------------
 
 describe('useSourceTtsPlayback — playGroup (G3a)', () => {
+  it('inherits fallback for a same-group seek, never from a different pericope it displaces', () => {
+    const { result } = setup();
+    act(() => result.current.playGroup(['GEN 1:1']));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:1'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:1',
+      currentTime: 2,
+      forceTts: true,
+    });
+    act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:3', 0.5));
+    expect(playFrom.mock.calls.at(-1)?.[3]).toBeUndefined();
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:3', 'GEN 1:4'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 2,
+      forceTts: true,
+    });
+    act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:4', 0.5));
+    expect(playFrom.mock.calls.at(-1)?.[3]).toEqual({ forceTts: true });
+  });
+
+  it('seeks exactly once with a tagged fraction and a playable-local filtered index', () => {
+    const { result } = setup();
+    act(() => result.current.seekGroup(['GEN 1:4', 'GEN 1:2', 'GEN 1:3'], 'GEN 1:4', 0.5));
+    expect(playFrom).toHaveBeenCalledOnce();
+    const [segments, index, start] = playFrom.mock.calls[0] as [Segment[], number, unknown];
+    expect(segments.map(segment => segment.verseRef)).toEqual(['GEN 1:3', 'GEN 1:4']);
+    expect(index).toBe(1);
+    expect(start).toEqual({ fraction: 0.5 });
+    act(() => result.current.seekGroup(['GEN 1:3'], 'GEN 1:4', 0.5));
+    expect(playFrom).toHaveBeenCalledOnce();
+  });
+
   it('uses one resolver key for a pericope, distinct verse keys for a play-from-here run', () => {
     const { result } = setup({ sourceChapter: sourceChapterRequest, pageKey: 'chapter-1' });
     act(() => result.current.playGroup(['GEN 1:4', 'GEN 1:3']));

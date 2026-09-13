@@ -34,6 +34,7 @@ import { type Playable, type Segment } from '../seam/types';
 import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy';
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 
+import { usePlaybackTiming } from './usePlaybackTiming';
 import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
 
 export interface UseSourceTtsPlaybackOptions {
@@ -66,6 +67,23 @@ export interface UseSourceTtsPlaybackOptions {
    * a surface with no flag of its own needs no argument.
    */
   enabled?: boolean;
+}
+
+export interface PericopePlaybackView {
+  key: string | null;
+  isLive: boolean;
+  staticAi: boolean;
+  dynamicAi: boolean;
+  segments: Array<{
+    verseRef: string;
+    text: string;
+    durationSeconds: number | null;
+    epoch: number | null;
+  }>;
+  currentIndex: number;
+  /** Segment-local seconds: components never inspect a media window. */
+  currentTime: number;
+  pendingFraction?: number;
 }
 
 export interface SourceTtsPlaybackApi {
@@ -110,6 +128,8 @@ export interface SourceTtsPlaybackApi {
   restartGroup: (verseRefs: readonly string[]) => void;
   verseKey: (verseRef: string) => string | null;
   groupKey: (verseRefs: readonly string[]) => string | null;
+  groupView: (verseRefs: readonly string[]) => PericopePlaybackView;
+  seekGroup: (verseRefs: readonly string[], targetVerseRef: string, fraction: number) => void;
 }
 
 interface HostRun {
@@ -135,6 +155,7 @@ export const useSourceTtsPlayback = (
   const registry = usePlaybackRegistry();
   const runRef = useRef<HostRun | null>(null);
   const releaseRef = useRef<(() => void) | null>(null);
+  const timing = usePlaybackTiming(pageKey);
 
   // Callbacks handed to the queue must not go stale between clips, and must
   // not re-create the queue session, so the volatile inputs live in refs.
@@ -238,6 +259,7 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
+    onTiming: timing.onTiming,
     onError: (error, segment) => {
       finishRun();
       handleError(error, segment);
@@ -287,15 +309,30 @@ export const useSourceTtsPlayback = (
   }, [finishRun]);
 
   const startRun = useCallback(
-    (playables: Playable[], index = 0, bounded = false) => {
+    (
+      playables: Playable[],
+      index = 0,
+      bounded = false,
+      seek?: { index: number; fraction: number }
+    ) => {
       if (!enabled) return;
       const segments = playables.flatMap(playable => playable.segments);
-      const first = segments.at(index);
+      const first = segments.at(seek?.index ?? index);
       if (!first) return;
       // The claim pauses AND records synchronously, before reading resume data.
+      const previousKey = runRef.current?.liveKey;
+      const previousIsInTarget = runRef.current?.items.some(
+        item =>
+          item.playableKey === previousKey &&
+          segments.some(target => target.verseRef === item.verseRef)
+      );
       releaseRef.current = registry.claim(pause);
       const record = bounded ? registry.getRecord(first.playableKey) : null;
-      const startIndex = record?.itemIndex ?? index;
+      // A seek within this playable keeps its fallback instruction, but seeking
+      // a different pericope must not inherit another playable's fallback voice.
+      const seekRecord =
+        record ?? (previousKey && previousIsInTarget ? registry.getRecord(previousKey) : null);
+      const startIndex = seek?.index ?? record?.itemIndex ?? index;
       const keys = new Set(segments.slice(startIndex).map(segment => segment.playableKey));
       runRef.current = { items: segments, keys, liveKey: first.playableKey };
       for (const key of keys) {
@@ -306,7 +343,15 @@ export const useSourceTtsPlayback = (
       registry.setLive(first.playableKey);
       setItemServing({});
       const seed = record ? { forceTts: record.forceTts } : undefined;
-      if (bounded && segments.length === 1) {
+      if (seek) {
+        registry.clearRecord(first.playableKey);
+        queueRef.current.playFrom(
+          segments,
+          startIndex,
+          { fraction: seek.fraction },
+          seekRecord ? { forceTts: seekRecord.forceTts } : undefined
+        );
+      } else if (bounded && segments.length === 1) {
         if (record) queueRef.current.playOne(first, record.currentTime, seed);
         else queueRef.current.playOne(first);
       } else if (record) {
@@ -367,11 +412,25 @@ export const useSourceTtsPlayback = (
    * whatever array it is handed, so a bounded blob is simply a SHORTER array
    * built from the page's own document-ordered, playability-filtered items.
    */
+  const liveGroupKey = useCallback(
+    (verseRefs: readonly string[]) => {
+      const group = groupPlayable(verseRefs);
+      if (group && registry.isLive(group.key)) return group.key;
+      for (const ref of verseRefs) {
+        const verse = versePlayable(ref);
+        if (verse && registry.isLive(verse.key)) return verse.key;
+      }
+      return null;
+    },
+    [groupPlayable, registry, versePlayable]
+  );
+
   const playGroup = useCallback(
     (verseRefs: readonly string[]) => {
-      playBounded(groupPlayable(verseRefs));
+      if (liveGroupKey(verseRefs)) registry.silenceAll();
+      else playBounded(groupPlayable(verseRefs));
     },
-    [groupPlayable, playBounded]
+    [groupPlayable, liveGroupKey, playBounded, registry]
   );
 
   const playFromGroup = useCallback(
@@ -410,8 +469,28 @@ export const useSourceTtsPlayback = (
     [restart, versePlayable]
   );
   const restartGroup = useCallback(
-    (verseRefs: readonly string[]) => restart(groupPlayable(verseRefs)),
-    [groupPlayable, restart]
+    (verseRefs: readonly string[]) => {
+      const playable = groupPlayable(verseRefs);
+      if (!playable) return;
+      if (liveGroupKey(verseRefs)) {
+        registry.silenceAll();
+        registry.clearRecord(playable.key);
+        startRun([playable], 0, true);
+      } else restart(playable);
+    },
+    [groupPlayable, liveGroupKey, registry, restart, startRun]
+  );
+  const seekGroup = useCallback(
+    (verseRefs: readonly string[], targetVerseRef: string, fraction: number) => {
+      const playable = groupPlayable(verseRefs);
+      if (!playable) return;
+      // The displayed run and a rebuilt bounded group need not have matching
+      // indices. Carry the selected verse identity across that boundary.
+      const index = playable.segments.findIndex(segment => segment.verseRef === targetVerseRef);
+      if (index < 0) return;
+      startRun([playable], 0, true, { index, fraction });
+    },
+    [groupPlayable, startRun]
   );
   const verseKey = useCallback(
     (verseRef: string) => versePlayable(verseRef)?.key ?? null,
@@ -420,6 +499,55 @@ export const useSourceTtsPlayback = (
   const groupKey = useCallback(
     (verseRefs: readonly string[]) => groupPlayable(verseRefs)?.key ?? null,
     [groupPlayable]
+  );
+
+  const groupView = useCallback(
+    (verseRefs: readonly string[]): PericopePlaybackView => {
+      const group = groupPlayable(verseRefs);
+      const liveKey = liveGroupKey(verseRefs);
+      const isLive = liveKey !== null && queue.status !== 'idle';
+      const verseItems = verseRefs.flatMap(ref => versePlayable(ref)?.segments ?? []);
+      const verseKeys = new Set(verseItems.map(item => item.playableKey));
+      const report = timing.report;
+      // A verse run lights this range, while a bounded group has its own identity.
+      const liveItems = isLive
+        ? report?.items.filter(
+            item => item.playableKey === group?.key || verseKeys.has(item.playableKey)
+          )
+        : undefined;
+      const descriptors = liveItems?.length ? liveItems : (group?.segments ?? []);
+      const record = group ? registry.getRecord(group.key) : null;
+      const active = isLive ? report?.items[report.index] : undefined;
+      const currentIndex = Math.max(
+        0,
+        active
+          ? descriptors.findIndex(item => item.verseRef === active.verseRef)
+          : (record?.itemIndex ?? 0)
+      );
+      const measurements = descriptors.map(item => timing.timingFor(item));
+      const fileTime = isLive ? (report?.currentTime ?? 0) : (record?.currentTime ?? 0);
+      const currentTime =
+        isLive || record
+          ? Math.max(0, fileTime - (measurements[currentIndex]?.startSeconds ?? 0))
+          : 0;
+      return {
+        key: group?.key ?? null,
+        isLive,
+        staticAi: verseItems.some(item => registry.getSnapshot(item.playableKey).staticAi),
+        dynamicAi:
+          isLive && [group?.key ?? '', ...verseKeys].some(key => queue.aiMarkedKeys.has(key)),
+        segments: descriptors.map((item, index) => ({
+          verseRef: item.verseRef,
+          text: item.text,
+          durationSeconds: measurements[index]?.durationSeconds ?? null,
+          epoch: measurements[index]?.epoch ?? null,
+        })),
+        currentIndex,
+        currentTime,
+        pendingFraction: isLive ? report?.pendingFraction : undefined,
+      };
+    },
+    [groupPlayable, liveGroupKey, queue.aiMarkedKeys, queue.status, registry, timing, versePlayable]
   );
 
   // The page this host is showing, as of the last commit. Compared rather
@@ -510,5 +638,7 @@ export const useSourceTtsPlayback = (
     restartGroup,
     verseKey,
     groupKey,
+    groupView,
+    seekGroup,
   };
 };
