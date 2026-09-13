@@ -82,6 +82,7 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
     engine,
     rows,
     sourceChapter: null,
+    referenceBibleId: 'aq-test',
     // Every row sits far below the viewport unless a test says otherwise.
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView, focus }),
     getViewport: () => rect(0, 500),
@@ -263,6 +264,7 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
     engine,
     rows,
     sourceChapter: null,
+    referenceBibleId: 'aq-test',
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
     getViewport: () => rect(0, 500),
     pageKey,
@@ -346,6 +348,7 @@ describe('useSourceTtsPlayback — the enabled gate', () => {
           engine,
           rows,
           sourceChapter: null,
+          referenceBibleId: 'aq-test',
           getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
           getViewport: () => rect(0, 500),
           enabled: isEnabled,

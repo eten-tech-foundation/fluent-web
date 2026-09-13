@@ -119,6 +119,7 @@ export { type PlayableState } from './registry/playbackRegistryState';
 export { type PauseRecord } from './registry/pauseRecord';
 export { usePlaybackRegistry } from './registry/usePlaybackRegistry';
 export { usePlayableState } from './registry/usePlayableState';
+export { useOffline } from './lib/useOffline';
 
 export {
   type ClipAudioElement,
