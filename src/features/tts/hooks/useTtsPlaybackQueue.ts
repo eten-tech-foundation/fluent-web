@@ -40,6 +40,8 @@ export interface UseTtsPlaybackQueueOptions {
   onError?: (error: Error, segment: Segment) => void;
   onAutoplayRefused?: (snapshot: PauseSnapshot, segment: Segment) => void;
   onRunComplete?: () => void;
+  /** Final latch values, synchronously reported before the host handles termination. */
+  onRunEnd?: (aiMarkedKeys: ReadonlySet<PlayableKey>) => void;
   onScrollRequest?: (verseRef: string) => void;
   prefetchDepth?: number;
   createElement?: (src: string) => ClipAudioElement;
@@ -54,8 +56,13 @@ export interface TtsPlaybackQueueApi {
   /** This run's latch; the host owns persistence of its last value. */
   aiMarkedKeys: ReadonlySet<PlayableKey>;
   playbackRate: number;
-  playOne: (segment: Segment, startOffset?: number) => void;
-  playFrom: (segments: Segment[], startIndex: number, startOffset?: number) => void;
+  playOne: (segment: Segment, startOffset?: number, inheritedRunState?: PlaybackRunState) => void;
+  playFrom: (
+    segments: Segment[],
+    startIndex: number,
+    startOffset?: number,
+    inheritedRunState?: PlaybackRunState
+  ) => void;
   /** No snapshot while idle or before any source position is known; always cancels the run. */
   pause: () => PauseSnapshot | null;
   stop: () => void;
@@ -142,6 +149,9 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     setStatus('idle');
     setActiveVerseRef(null);
     setItemStates({});
+    // React may not have rendered the last mark before a refusal or pause.
+    // Report data from the ending run, never the host's previous render.
+    optionsRef.current.onRunEnd?.(new Set(session.aiMarked));
   };
 
   const stop = (): void => {
@@ -442,7 +452,12 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     activate(session, index, { ...entry, source: entry.source }, entry.element, startOffset);
   };
 
-  const startSession = (items: Segment[], startIndex: number, startOffset?: number): void => {
+  const startSession = (
+    items: Segment[],
+    startIndex: number,
+    startOffset?: number,
+    inheritedRunState: PlaybackRunState = { forceTts: false }
+  ): void => {
     stop();
     const session: PlaybackSession = {
       controller: new AbortController(),
@@ -450,7 +465,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       index: startIndex,
       budgets: new Map(),
       aiMarked: new Set(),
-      resolutionState: { forceTts: false },
+      resolutionState: { ...inheritedRunState },
       prefetches: new Map(),
       clipCleanups: [],
       segmentCleanups: [],
@@ -482,7 +497,8 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     itemStates,
     aiMarkedKeys,
     playbackRate,
-    playOne: (segment, startOffset) => startSession([segment], 0, startOffset),
+    playOne: (segment, startOffset, inheritedRunState) =>
+      startSession([segment], 0, startOffset, inheritedRunState),
     playFrom: startSession,
     pause,
     stop,

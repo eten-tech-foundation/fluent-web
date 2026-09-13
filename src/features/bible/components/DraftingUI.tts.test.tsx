@@ -185,6 +185,7 @@ const playFromVerse = vi.fn();
 const playGroup = vi.fn();
 const playFromGroup = vi.fn();
 const stopPlayback = vi.fn();
+const pausePlayback = vi.fn();
 
 vi.mock('@/features/tts', async importOriginal => {
   const actual = await importOriginal<typeof TtsFeature>();
@@ -219,7 +220,12 @@ vi.mock('@/features/tts', async importOriginal => {
         // does too — a group is speaking iff it contains the playing row.
         isGroupSpeaking: (verseRefs: readonly string[]) =>
           activeVerseRef !== null && verseRefs.includes(activeVerseRef),
+        pause: pausePlayback,
         stop: stopPlayback,
+        restartVerse: vi.fn(),
+        restartGroup: vi.fn(),
+        verseKey: () => null,
+        groupKey: () => null,
       };
     },
   };
@@ -466,6 +472,17 @@ describe('DraftingUI — playback actions and highlight', () => {
     renderDrafting();
 
     expect(screen.queryAllByRole('button', { name: 'Stop playback' })).toHaveLength(0);
+  });
+
+  it('offers a distinct queue-wide Pause while playback is live', async () => {
+    isBusy = true;
+    activeVerseRef = '1';
+    renderDrafting();
+    const pauses = screen.getAllByRole('button', { name: 'Pause playback' });
+    expect(pauses).toHaveLength(3);
+    await userEvent.click(pauses[2]);
+    expect(pausePlayback).toHaveBeenCalledOnce();
+    expect(stopPlayback).not.toHaveBeenCalled();
   });
 
   it('offers a queue-wide Stop while playback is live', async () => {

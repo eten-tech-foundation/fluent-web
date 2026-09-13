@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/sonner';
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import { clearFlagOverrides, refreshFlagOverrides, setFlagOverride } from '@/features/flags';
+import { PlaybackRegistryProvider } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -191,7 +192,7 @@ const publishFlags = (features: Record<string, boolean>, status = 200) => {
 
 const renderDrafting = () =>
   renderWithProviders(
-    <>
+    <PlaybackRegistryProvider>
       <DraftingUI
         projectItem={mockProjectItem}
         sourceVerses={mockSourceVerses}
@@ -199,7 +200,7 @@ const renderDrafting = () =>
         userdetail={{ id: 1 } as unknown as User}
       />
       <Toaster />
-    </>
+    </PlaybackRegistryProvider>
   );
 
 const ttsControls = () => screen.queryAllByTestId('tts-verse-controls');
