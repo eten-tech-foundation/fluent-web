@@ -5,7 +5,7 @@
  * boot the app's i18next instance.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TtsVerseControls, type TtsVerseControlsProps } from './TtsVerseControls';
 
@@ -32,7 +32,26 @@ const baseProps: TtsVerseControlsProps = {
   onStop: vi.fn(),
 };
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('TtsVerseControls', () => {
+  it('keeps every visible control disabled offline and wakes on online without a remount', () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    const { rerender } = render(<TtsVerseControls {...baseProps} showStop />);
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(4);
+    online.mockReturnValue(false);
+    fireEvent(window, new Event('offline'));
+    for (const button of buttons) {
+      expect(button).toBeVisible();
+      expect(button).toBeDisabled();
+    }
+    online.mockReturnValue(true);
+    fireEvent(window, new Event('online'));
+    for (const button of buttons) expect(button).toBeEnabled();
+    rerender(<TtsVerseControls {...baseProps} hasPlayableText={false} />);
+    for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
+  });
   it('renders play and play-from-here with descriptive accessible names (§5.1)', () => {
     const onPlayVerse = vi.fn();
     const onPlayFromHere = vi.fn();
