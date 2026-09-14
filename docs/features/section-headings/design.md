@@ -30,11 +30,11 @@ formatting; it does not add a separate undo history for structural reloads.
 
 ## API dependency
 
-This web change requires [API #319](https://github.com/eten-tech-foundation/fluent-api/pull/319),
-which completes heading preservation in import, chapter content and export. That PR is based on
-[API #305](https://github.com/eten-tech-foundation/fluent-api/pull/305) and is not deployed yet.
-Merge and deploy the API support before enabling this web change. No new endpoint or migration is
-needed. API and editor package changes are outside this PR.
+This web change requires [API #320](https://github.com/eten-tech-foundation/fluent-api/pull/320),
+which completes heading preservation in import, chapter content and export. API #320 depends on
+[API #305](https://github.com/eten-tech-foundation/fluent-api/pull/305). Both PRs are still open and
+not deployed. Merge API #305, then API #320, and deploy the API support before enabling this web
+change. No new endpoint or migration is needed. API and editor package changes are outside this PR.
 
 ## Validation
 
