@@ -104,7 +104,7 @@ export interface AquiferBibleTextResponse {
 
 // Fetch Functions
 
-const fetchAllLanguages = async (): Promise<Language[]> => {
+export const fetchAllLanguages = async (): Promise<Language[]> => {
   const response = await fetch(`${API_BASE_URL}/languages`, {
     method: 'GET',
     credentials: 'include',

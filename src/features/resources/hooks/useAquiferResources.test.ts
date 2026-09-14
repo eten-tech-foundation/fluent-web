@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { config } from '@/lib/config';
 
+import { fetchAllLanguages } from './useAquiferResources';
+
 describe('useAquiferResources', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -19,13 +21,8 @@ describe('useAquiferResources', () => {
       })
     );
 
-    // Call fetch indirectly by invoking query function or testing logic
-    const res = await fetch(`${config.api.url}/aquifer/languages`, {
-      method: 'GET',
-      credentials: 'include',
-    });
+    await fetchAllLanguages();
 
-    expect(res.ok).toBe(true);
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, init] = fetchSpy.mock.calls[0]!;
     expect(String(url)).toBe(`${config.api.url}/aquifer/languages`);
