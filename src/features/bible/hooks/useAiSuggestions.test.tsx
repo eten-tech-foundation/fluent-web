@@ -18,28 +18,46 @@ const pericope = {
 };
 const api = 'https://api.test.local/ai-suggestions';
 
-function setup(enabled = true, canSuggest = true) {
+interface HookProps {
+  activeVerse: number;
+  enabled: boolean;
+  scope?: typeof pericope;
+  unit: number;
+  touchedTitleVerseNumbers?: number[];
+}
+
+function setup(enabled = true, canSuggest = true, initialScope: typeof pericope | null = pericope) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return renderHook(
-    ({ activeVerse = 4, enabled: aiEnabled = enabled, scope = pericope, unit = 1 }) =>
+    ({ activeVerse, enabled: aiEnabled, scope, unit, touchedTitleVerseNumbers = [] }: HookProps) =>
       useAiSuggestions(unit, 2, 'GEN', 1, mapping, activeVerse, aiEnabled, {
         pericope: scope,
         canSuggest,
         draftedVerseNumbers: [1, 2, 3],
+        touchedTitleVerseNumbers,
       }),
-    { wrapper, initialProps: { activeVerse: 4, enabled, scope: pericope, unit: 1 } }
+    {
+      wrapper,
+      initialProps: {
+        activeVerse: 4,
+        enabled,
+        scope: initialScope ?? undefined,
+        unit: 1,
+      } as HookProps,
+    }
   );
 }
 
-describe('pericope AI requests', () => {
+describe('AI requests', () => {
   let queued: string[][];
   let gets: number;
   let readyVerses: number[];
   let headingReady: boolean;
   let headingGets: number;
+  let queuedVerses: number[];
 
   beforeEach(() => {
     queued = [];
@@ -47,6 +65,7 @@ describe('pericope AI requests', () => {
     readyVerses = [4, 5, 6, 7, 8, 9, 10];
     headingReady = false;
     headingGets = 0;
+    queuedVerses = [];
     useAppStore.setState({ isAiThresholdMet: false });
     server.use(
       http.get(`${api}/pericopes`, () => {
@@ -59,6 +78,10 @@ describe('pericope AI requests', () => {
       }),
       http.post(`${api}/queue-pericopes`, async ({ request }) => {
         queued.push(((await request.json()) as { pericopeNumbers: string[] }).pericopeNumbers);
+        return HttpResponse.json({ queued: true, thresholdMet: true });
+      }),
+      http.post(`${api}/queue-next`, async ({ request }) => {
+        queuedVerses.push(((await request.json()) as { currentVerse: number }).currentVerse);
         return HttpResponse.json({ queued: true, thresholdMet: true });
       }),
       http.get(api, () => {
@@ -161,9 +184,52 @@ describe('pericope AI requests', () => {
     expect(result.current.suggestionStatus).toBe('generating');
     headingReady = true;
     await waitFor(
-      () => expect(result.current.headingSuggestions['2']?.suggestedText).toBe('A section title'),
+      () => expect(result.current.headingSuggestions['2'].suggestedText).toBe('A section title'),
       { timeout: 7000 }
     );
     await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
   }, 10000);
+
+  it('does not restart title generation after the translator clears the title', async () => {
+    headingReady = true;
+    const titleScope = { ...pericope, titleVerseNumbers: { '2': 4 } };
+    const { result, rerender } = setup(true, true, titleScope);
+    await waitFor(() =>
+      expect(result.current.headingSuggestions['2'].suggestedText).toBe('A section title')
+    );
+    await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
+    await waitFor(() => expect(queued).toHaveLength(1));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    const previousHeadingGets = headingGets;
+    const previousQueues = queued.length;
+
+    rerender({
+      activeVerse: 4,
+      enabled: true,
+      scope: titleScope,
+      unit: 1,
+      touchedTitleVerseNumbers: [4],
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(result.current.suggestionStatus).toBe('idle');
+    expect(headingGets).toBe(previousHeadingGets);
+    expect(queued).toHaveLength(previousQueues);
+  });
+
+  it('does not queue again when verse navigation moves backward', async () => {
+    const { rerender } = setup(true, true, null);
+    await waitFor(() => expect(queuedVerses).toEqual([4]));
+
+    rerender({ activeVerse: 5, enabled: true, scope: undefined, unit: 1 });
+    await waitFor(() => expect(queuedVerses).toEqual([4, 5]));
+
+    rerender({ activeVerse: 2, enabled: true, scope: undefined, unit: 1 });
+    await act(async () => {});
+    expect(queuedVerses).toEqual([4, 5]);
+  });
 });

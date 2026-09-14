@@ -25,6 +25,7 @@ interface SuggestionOptions {
   canSuggest?: boolean;
   draftedVerseNumbers?: number[];
   titledVerseNumbers?: number[];
+  touchedTitleVerseNumbers?: number[];
 }
 
 const RETRY_DELAY_MS = 5000;
@@ -47,6 +48,7 @@ export function useAiSuggestions(
     canSuggest = true,
     draftedVerseNumbers = [],
     titledVerseNumbers = [],
+    touchedTitleVerseNumbers = [],
   }: SuggestionOptions = {}
 ) {
   const isAiThresholdMet = useAppStore(state => state.isAiThresholdMet);
@@ -55,6 +57,9 @@ export function useAiSuggestions(
   const checkedThresholdsRef = useRef(new Set<string>());
   const enabled = isAiEnabled && canSuggest;
   const contextKey = `${projectUnitId}/${bibleId}/${bookCode}/${chapterNumber}`;
+  const lastQueuedVerseRef = useRef(-1);
+  const queueContextRef = useRef(contextKey);
+  const wasQueueEnabledRef = useRef(enabled);
   const idsStr = Object.keys(verseMapping).join(',');
   // Strings keep effect identities stable when callers rebuild arrays during typing.
   const activeNumbersKey = (pericope?.verseNumbers ?? [activeVerseNumber]).join(',');
@@ -90,13 +95,12 @@ export function useAiSuggestions(
   });
 
   const pericopeNumbersKey = pericope?.pericopeNumbers.join(',') ?? '';
-  const titledNumbers = new Set(titledVerseNumbers);
+  const settledTitleNumbers = new Set([...titledVerseNumbers, ...touchedTitleVerseNumbers]);
   const requiredTitlesKey = Object.entries(pericope?.titleVerseNumbers ?? {})
-    .filter(([, verse]) => !titledNumbers.has(verse))
+    .filter(([, verse]) => !settledTitleNumbers.has(verse))
     .map(([number]) => number)
     .join(',');
-  const fetchHeadings =
-    enabled && !!pericopeNumbersKey && Object.keys(pericope?.titleVerseNumbers ?? {}).length > 0;
+  const fetchHeadings = enabled && !!pericopeNumbersKey && !!requiredTitlesKey;
   const { data: fetchedHeadings, refetch: refetchHeadings } = useQuery({
     queryKey: ['ai-pericope-headings', contextKey, pericopeNumbersKey],
     queryFn: async ({ signal }) => {
@@ -213,9 +217,23 @@ export function useAiSuggestions(
   const queueVerseNumber = isPericope
     ? Number(activeNumbersKey.split(',')[0]) || 1
     : activeVerseNumber;
+  const fetchHeadingsRef = useRef(fetchHeadings);
+  fetchHeadingsRef.current = fetchHeadings;
   useEffect(() => {
+    const contextChanged = queueContextRef.current !== contextKey;
+    if (contextChanged) {
+      queueContextRef.current = contextKey;
+      lastQueuedVerseRef.current = -1;
+      wasQueueEnabledRef.current = enabled;
+    }
+    const justEnabled = enabled && !wasQueueEnabledRef.current;
+    wasQueueEnabledRef.current = enabled;
     if (!canSuggest || !idsStr || (isPericope && !pericopeNumbersKey)) return;
     if (!enabled && checkedThresholdsRef.current.has(contextKey)) return;
+    if (!isPericope && queueVerseNumber <= lastQueuedVerseRef.current && !justEnabled) return;
+    if (!isPericope) {
+      lastQueuedVerseRef.current = Math.max(lastQueuedVerseRef.current, queueVerseNumber);
+    }
     const controller = new AbortController();
     const queue = async () => {
       const pericopeRequest = isPericope && enabled;
@@ -246,7 +264,7 @@ export function useAiSuggestions(
       if (enabled)
         await Promise.all([
           refetch({ cancelRefetch: false }),
-          fetchHeadings ? refetchHeadings({ cancelRefetch: false }) : undefined,
+          fetchHeadingsRef.current ? refetchHeadings({ cancelRefetch: false }) : undefined,
         ]);
     };
     void queue().catch((error: unknown) => {
@@ -268,7 +286,6 @@ export function useAiSuggestions(
     canSuggest,
     enabled,
     refetch,
-    fetchHeadings,
     refetchHeadings,
     setIsAiThresholdMet,
   ]);

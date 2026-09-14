@@ -66,7 +66,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
   useDrafting: (props: unknown) => mockUseDrafting(props) as unknown,
 }));
 
-const mockUseAiSuggestions = vi.fn(() => ({
+const mockUseAiSuggestions = vi.fn((..._args: unknown[]) => ({
   suggestions: {} as Record<number, string>,
   headingSuggestions: {} as Record<string, AiHeadingSuggestion>,
   isAiThresholdMet: false,
@@ -75,7 +75,7 @@ const mockUseAiSuggestions = vi.fn(() => ({
 const mockTrackAiUsage = vi.fn();
 
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
-  useAiSuggestions: () => mockUseAiSuggestions(),
+  useAiSuggestions: (...args: unknown[]) => mockUseAiSuggestions(...args),
   useTrackAiUsage: () => ({ mutate: mockTrackAiUsage, isPending: false }),
 }));
 
@@ -742,6 +742,45 @@ describe('DraftingUI', () => {
       );
       expect(handleTextChange).not.toHaveBeenCalled();
       expect(screen.getByLabelText('Section title')).toHaveValue('My title');
+    });
+
+    it('keeps a manually cleared title settled for suggestion requests', async () => {
+      const titledVerses: TargetVerse[] = [
+        {
+          verseNumber: 1,
+          content: '',
+          markers: { headings: [{ marker: 's1', text: 'My title' }] },
+        },
+        EMPTY_PERICOPE[1],
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: titledVerses, handleTextChange })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: {},
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      const view = renderWithAi();
+
+      await userEvent.setup().clear(screen.getByLabelText('Section title'));
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: EMPTY_PERICOPE, handleTextChange })
+      );
+      view.rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={EMPTY_PERICOPE}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+
+      const options = mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+        touchedTitleVerseNumbers?: number[];
+      };
+      expect(options.touchedTitleVerseNumbers).toContain(1);
     });
 
     it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {

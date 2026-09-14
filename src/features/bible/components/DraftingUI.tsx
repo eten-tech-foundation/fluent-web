@@ -262,6 +262,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [isPericopeMode, pericopes, activeVerseId, sourceVerses]
   );
 
+  // Remember translator-owned inputs even when they are intentionally cleared, so AI does not
+  // immediately request and refill them while the translator is still working.
+  const userTouchedVersesRef = useRef<Set<number>>(new Set());
+  const touchedTitlesRef = useRef(new Set<number>());
+  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
+  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+
   const {
     suggestions: aiSuggestions,
     headingSuggestions = {},
@@ -281,6 +288,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       titledVerseNumbers: verses
         .filter(verse => verse.markers?.headings?.length)
         .map(verse => verse.verseNumber),
+      touchedTitleVerseNumbers: isAiJustEnabled ? [] : [...touchedTitlesRef.current],
       draftedVerseNumbers: verses
         .filter(verse => verse.content.trim())
         .map(verse => verse.verseNumber),
@@ -556,12 +564,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     clearCurrentProjectItem,
     router,
   ]);
-
-  // Keep track of verses that the user has manually typed in or that have been
-  // auto-populated, so we never auto-populate a verse the user is working on.
-  const userTouchedVersesRef = useRef<Set<number>>(new Set());
-  const touchedTitlesRef = useRef(new Set<number>());
-  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
 
   const handleTextChangeWithTracking = useCallback(
     (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
