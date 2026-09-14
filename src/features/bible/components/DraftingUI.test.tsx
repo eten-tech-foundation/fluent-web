@@ -7,6 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import type * as ResourcePanelModule from '@/features/resources/components/ResourcePanel';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -152,8 +153,7 @@ const resourcePanelMode = vi.hoisted(() => ({ real: false }));
 // Most drafting tests isolate resources. Regression tests below use the real
 // panel and hooks with only the remote API responses intercepted.
 vi.mock('@/features/resources/components/ResourcePanel', async importOriginal => {
-  const actual =
-    await importOriginal<typeof import('@/features/resources/components/ResourcePanel')>();
+  const actual = await importOriginal<typeof ResourcePanelModule>();
   return {
     ResourcePanel: (props: ComponentProps<typeof actual.ResourcePanel>) => {
       if (resourcePanelMode.real) return <actual.ResourcePanel {...props} />;
