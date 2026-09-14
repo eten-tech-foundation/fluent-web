@@ -1,8 +1,8 @@
 # Production Hotfix During QA
 
-If a bug is found in a tag that is currently mid-QA (the **Cut release** run is still waiting on the production approval), do not wait for the next month and do not push from `main`. Cut a hotfix from the existing tag.
+If a bug is found in a tag that is currently mid-QA (cut via **Cut release** but not yet promoted), do not wait for the next month and do not push from `main`. Cut a hotfix from the existing tag.
 
-1. **Reject the pending production deployment** on the in-flight **Cut release** run, or simply leave it unapproved — the bad tag must not reach production.
+1. **Do not run Promote to Production for the bad tag.** `deploy-prod` is never automatic, so as long as nobody promotes it, the bad tag stays confined to QA.
 2. The fix lands on `main` via a normal PR.
 3. Identify the latest tag for the current month:
    ```bash

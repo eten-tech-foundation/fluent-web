@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,6 +52,7 @@ interface ProjectDetailPageProps {
   isAddUserOpen?: boolean;
   onBack?: () => void;
   onExport?: () => void;
+  onEditMetadata?: () => void;
   onAddUser?: () => void;
   onCloseAddUser?: () => void;
 }
@@ -130,9 +132,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   isAddUserOpen = false,
   onBack,
   onExport,
+  onEditMetadata,
   onAddUser,
   onCloseAddUser,
 }) => {
+  const { t } = useTranslation();
   const { userdetail } = useAppStore();
   const navigate = useNavigate();
 
@@ -384,15 +388,28 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
-          <Button
-            className='border-primary text-primary hover flex items-center gap-2 border-2'
-            disabled={isDisabled}
-            size='sm'
-            variant={'outline'}
-            onClick={onExport}
-          >
-            Export Project
-          </Button>
+          <>
+            {isManager && (
+              <Button
+                className='border-primary text-primary hover flex items-center gap-2 border-2'
+                disabled={isDisabled}
+                size='sm'
+                variant={'outline'}
+                onClick={onEditMetadata}
+              >
+                {t('editProjectMetadata')}
+              </Button>
+            )}
+            <Button
+              className='border-primary text-primary hover flex items-center gap-2 border-2'
+              disabled={isDisabled}
+              size='sm'
+              variant={'outline'}
+              onClick={onExport}
+            >
+              Export Project
+            </Button>
+          </>
         }
         title={headerTitle}
         onBack={onBack}
