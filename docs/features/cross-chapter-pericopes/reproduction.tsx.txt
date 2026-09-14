@@ -1,0 +1,177 @@
+/**
+ * Manual diagnostic for fluent-web#486: these assertions describe the CURRENT BUG,
+ * not the required behavior. A fix should make them fail; replace them with desired
+ * behavior tests in src/ when implementing the cross-chapter design.
+ *
+ * The .txt suffix keeps this characterization out of normal test discovery and
+ * typed linting (docs/ is outside tsconfig.json). From the repository root:
+ *
+ *   fixture=$(mktemp src/test/cross-chapter-pericopes.XXXXXX.test.tsx)
+ *   trap 'rm -f "$fixture"' EXIT
+ *   cp docs/features/cross-chapter-pericopes/reproduction.tsx.txt "$fixture"
+ *   pnpm exec vitest run "$fixture" --reporter=verbose
+ *
+ * Uses the actual DraftingGridPericope and its actual textarea target component.
+ * No component mocks, Bible text downloads, API credentials, or network responses.
+ * This is component evidence, not an authenticated end-to-end reproduction.
+ */
+import { render, screen } from '@testing-library/react';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DraftingGridPericope } from '@/features/bible/components/DraftingGridPericope';
+import { config } from '@/lib/config';
+import { type PericopeGroup, type ProjectItem, type Source } from '@/lib/types';
+
+// Verified against fluent-api main at 0ebc0969cc0fc0b8e19055fd7caa664b4889d497:
+// FCBH section29/pericope2 is Mark 8:31–9:1 (API group 29_2).
+// FIA independently defines the same range as 29b. Synthetic labels below are
+// deliberately not Scripture; chapter 8 verse 1 is an unrelated control row.
+const FULL_GROUP: PericopeGroup = {
+  pericopeNumber: '29_2',
+  pericopeTitle: null,
+  verses: [
+    ...Array.from({ length: 8 }, (_, offset) => ({
+      chapterNumber: 8,
+      verseNumber: 31 + offset,
+    })),
+    { chapterNumber: 9, verseNumber: 1 },
+  ],
+};
+
+const sourceLabel = (chapterNumber: number, verseNumber: number) =>
+  `Synthetic source MRK ${chapterNumber}:${verseNumber}`;
+
+const sourceChapter = (chapterNumber: number, verseCount: number): Source[] =>
+  Array.from({ length: verseCount }, (_, index) => ({
+    id: chapterNumber * 1000 + index + 1,
+    verseNumber: index + 1,
+    text: sourceLabel(chapterNumber, index + 1),
+  }));
+
+const CHAPTER_8 = sourceChapter(8, 38);
+const CHAPTER_9 = sourceChapter(9, 50);
+const testI18n = createInstance();
+const originalRtePericope = config.features.rtePericope;
+
+// The current chapter endpoint projects the canonical group to one chapter.
+// This input is assembled explicitly here; the API itself is not invoked.
+const chapterResponseGroup = (chapterNumber: number): PericopeGroup => ({
+  ...FULL_GROUP,
+  verses: FULL_GROUP.verses.filter(verse => verse.chapterNumber === chapterNumber),
+});
+
+const renderChapter = (chapterNumber: 8 | 9, group: PericopeGroup) => {
+  const sourceVerses = chapterNumber === 8 ? CHAPTER_8 : CHAPTER_9;
+  const projectItem: ProjectItem = {
+    chapterAssignmentId: 800 + chapterNumber,
+    projectId: 486,
+    projectName: 'Cross-chapter diagnostic',
+    projectUnitId: 41,
+    bibleId: 1,
+    bibleName: 'Synthetic source',
+    targetLanguage: 'English',
+    targetLangCode: 'eng',
+    sourceLangCode: 'eng',
+    bookId: 41,
+    book: 'Mark',
+    bookCode: 'MRK',
+    chapterStatus: 'drafting',
+    chapterNumber,
+    totalVerses: sourceVerses.length,
+    completedVerses: 0,
+    submittedTime: null,
+  };
+
+  return render(
+    <I18nextProvider i18n={testI18n}>
+      <DraftingGridPericope
+        activeVerseId={chapterNumber === 8 ? 31 : 1}
+        aiSuggestions={{}}
+        bibleVerseMap={new Map()}
+        globalNextUntouchedVerse={null}
+        handleActiveVerseChange={vi.fn()}
+        handleKeyDown={vi.fn()}
+        handleNextClick={vi.fn(() => Promise.resolve())}
+        handleNextPericopeClick={vi.fn(() => Promise.resolve())}
+        handleTextChange={vi.fn()}
+        isAiActive={false}
+        isAiThresholdMet={false}
+        isTranslationComplete={false}
+        pericopes={[group]}
+        projectItem={projectItem}
+        readOnly={false}
+        selectedPanel={1}
+        sourceVerses={sourceVerses}
+        suggestionStatus='idle'
+        textareaRefs={{ current: {} }}
+        verseRefs={{ current: {} }}
+        verses={sourceVerses.map(verse => ({ verseNumber: verse.verseNumber, content: '' }))}
+      />
+    </I18nextProvider>
+  );
+};
+
+const renderedSourceLabels = () =>
+  screen.getAllByText(/^Synthetic source MRK /).map(el => el.textContent);
+
+describe('ISSUE #486 — current broken cross-chapter behavior (manual diagnostic)', () => {
+  beforeAll(async () => {
+    await testI18n.init({ lng: 'en', fallbackLng: 'en', resources: { en: { translation: {} } } });
+  });
+
+  beforeEach(() => {
+    // The default textarea path exercises both real source and target rendering.
+    // The RTE, resource panel, navigation, and persistence are outside this diagnostic.
+    config.features.rtePericope = false;
+  });
+
+  afterEach(() => {
+    config.features.rtePericope = originalRtePericope;
+  });
+
+  it('chapter 8 renders only 8:31–38; the same pericope continuation at 9:1 is absent', () => {
+    renderChapter(8, chapterResponseGroup(8));
+
+    expect(FULL_GROUP.verses).toHaveLength(9);
+    expect(screen.getAllByRole('heading', { name: '8:31-38' })).toHaveLength(2);
+    expect(renderedSourceLabels()).toEqual(
+      Array.from({ length: 8 }, (_, index) => sourceLabel(8, 31 + index))
+    );
+    expect(screen.queryByText(sourceLabel(9, 1))).not.toBeInTheDocument();
+    expect(screen.queryByText(sourceLabel(8, 1))).not.toBeInTheDocument();
+    expect(screen.getAllByRole('textbox')).toHaveLength(8);
+    expect(screen.queryByLabelText('Translation for verse 1')).not.toBeInTheDocument();
+  });
+
+  it('chapter 9 renders only 9:1; the same pericope beginning at 8:31–38 is absent', () => {
+    renderChapter(9, chapterResponseGroup(9));
+
+    expect(chapterResponseGroup(8).pericopeNumber).toBe(chapterResponseGroup(9).pericopeNumber);
+    expect(screen.getAllByRole('heading', { name: '9:1' })).toHaveLength(2);
+    expect(renderedSourceLabels()).toEqual([sourceLabel(9, 1)]);
+    for (let verseNumber = 31; verseNumber <= 38; verseNumber++) {
+      expect(screen.queryByText(sourceLabel(8, verseNumber))).not.toBeInTheDocument();
+    }
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(screen.getByLabelText('Translation for verse 1')).toBeInTheDocument();
+  });
+
+  it('passing full refs to chapter 8 wrongly pulls 8:1 into the group because 9:1 shares verseNumber 1', () => {
+    renderChapter(8, FULL_GROUP);
+
+    // The actual component matches only verseNumber, ignoring chapterNumber.
+    // Therefore widening the API response alone silently attaches the wrong source.
+    expect(FULL_GROUP.verses).not.toContainEqual({ chapterNumber: 8, verseNumber: 1 });
+    expect(screen.getAllByRole('heading', { name: '8:1-38' })).toHaveLength(2);
+    expect(renderedSourceLabels()).toEqual([
+      sourceLabel(8, 1),
+      ...Array.from({ length: 8 }, (_, index) => sourceLabel(8, 31 + index)),
+    ]);
+    expect(screen.getByText(sourceLabel(8, 1))).toBeInTheDocument();
+    expect(screen.queryByText(sourceLabel(9, 1))).not.toBeInTheDocument();
+    expect(screen.getAllByRole('textbox')).toHaveLength(9);
+    expect(screen.getByLabelText('Translation for verse 1')).toBeInTheDocument();
+  });
+});
