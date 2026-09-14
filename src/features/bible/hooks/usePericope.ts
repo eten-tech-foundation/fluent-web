@@ -34,10 +34,29 @@ export const usePericope = ({
   handleActiveVerseChange,
   revealNextVerse,
 }: UsePericopeProps) => {
-  const { data: pericopes, isLoading: isPericopeLoading } = useChapterPericopes(
+  const {
+    data: fullPericopes,
+    isLoading: isPericopeLoading,
+    isError: isPericopeError,
+    refetch: refetchPericopes,
+  } = useChapterPericopes(
     projectItem.projectId,
     projectItem.bookCode,
-    projectItem.chapterNumber
+    projectItem.chapterNumber,
+    displayMode === 'pericope'
+  );
+
+  // Full references belong to display. Drafting, saving and progress still belong to the
+  // selected assignment; a neighboring chapter's verse 1 must never alias this chapter's 1.
+  const pericopes = useMemo(
+    () =>
+      fullPericopes
+        ?.map(group => ({
+          ...group,
+          verses: group.verses.filter(v => v.chapterNumber === projectItem.chapterNumber),
+        }))
+        .filter(group => group.verses.length > 0),
+    [fullPericopes, projectItem.chapterNumber]
   );
 
   const pericopeMap = useMemo(() => {
@@ -229,9 +248,12 @@ export const usePericope = ({
 
   return {
     pericopes,
+    fullPericopes,
     pericopeMap,
     isPericopeMode,
     isPericopeLoading,
+    isPericopeError,
+    refetchPericopes,
     getPericopeStyle,
     currentPericopeGroup,
     globalNextUntouchedVerse,

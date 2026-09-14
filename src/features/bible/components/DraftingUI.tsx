@@ -13,12 +13,14 @@ import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
+import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
 import {
   type LeftTab,
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { chapterGroupSources, pericopeHeading } from '@/features/bible/lib/pericope-display';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -267,8 +269,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const {
     pericopes,
+    fullPericopes,
     isPericopeMode,
     isPericopeLoading,
+    isPericopeError,
+    refetchPericopes,
     getPericopeStyle,
     currentPericopeGroup,
     globalNextUntouchedVerse,
@@ -289,6 +294,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     saveImmediately,
     handleActiveVerseChange,
     revealNextVerse,
+  });
+
+  const hasCrossChapterPericopes =
+    isPericopeMode &&
+    fullPericopes?.some(
+      group =>
+        group.verses.some(verse => verse.chapterNumber === projectItem.chapterNumber) &&
+        group.verses.some(verse => verse.chapterNumber !== projectItem.chapterNumber)
+    );
+  // A missing current resource chapter must not hide available neighboring references.
+  const showResourceBiblePlaceholder =
+    selectedPanel === 2 &&
+    !hasCrossChapterPericopes &&
+    (bibleContentLoading || bibleVerses.length === 0);
+  const pericopeContext = usePericopeContext({
+    projectItem,
+    pericopes: fullPericopes,
+    enabled: isPericopeMode,
   });
 
   // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
@@ -691,17 +714,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             </div>
             <div className='flex flex-col space-y-4 px-6'>
               {pericopes.map((group, groupIndex) => {
-                const groupVerses = sourceVerses.filter(sv =>
-                  group.verses.some(gv => gv.verseNumber === sv.verseNumber)
+                const fullGroup =
+                  fullPericopes?.find(g => g.pericopeNumber === group.pericopeNumber) ?? group;
+                const groupVerses = chapterGroupSources(
+                  group,
+                  sourceVerses,
+                  projectItem.chapterNumber
                 );
                 if (groupVerses.length === 0) return null;
-                const verseNumbers = groupVerses.map(gv => gv.verseNumber);
-                const minVerse = Math.min(...verseNumbers);
-                const maxVerse = Math.max(...verseNumbers);
-                const heading =
-                  minVerse === maxVerse
-                    ? `${projectItem.chapterNumber}:${minVerse}`
-                    : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
+                const heading = pericopeHeading(fullGroup);
 
                 const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
@@ -728,6 +749,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                       <PericopeTargetGroup
                         activeVerseId={activeVerseId}
                         aiSuggestions={aiSuggestions}
+                        contextChapters={pericopeContext.chapters}
+                        contextLoading={pericopeContext.isLoading}
+                        fullGroup={fullGroup}
                         globalNextUntouchedVerse={globalNextUntouchedVerse}
                         groupIndex={groupIndex}
                         groupVerses={groupVerses}
@@ -802,6 +826,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [
       isPericopeMode,
       pericopes,
+      fullPericopes,
+      pericopeContext.chapters,
+      pericopeContext.isLoading,
       sourceVerses,
       projectItem,
       activeVerseId,
@@ -941,14 +968,36 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   style={{ scrollbarGutter: 'stable' }}
                   onScroll={() => !readOnly && updateButtonPosition()}
                 >
-                  {selectedPanel === 2 &&
+                  {displayMode === 'pericope' && (isPericopeError || pericopeContext.isError) && (
+                    <div className='flex items-center gap-3 px-6 py-3 text-sm' role='alert'>
+                      <span>
+                        {t('pericopeContextLoadError', 'Could not load the complete pericope.')}
+                      </span>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => {
+                          if (isPericopeError) void refetchPericopes();
+                          else void pericopeContext.refetch();
+                        }}
+                      >
+                        {t('retry', 'Retry')}
+                      </Button>
+                    </div>
+                  )}
+                  {isPericopeMode && pericopeContext.isLoading && (
+                    <p className='text-muted-foreground px-6 py-2 text-sm' role='status'>
+                      {t('pericopeContextLoading', 'Loading the rest of the pericope...')}
+                    </p>
+                  )}
+                  {showResourceBiblePlaceholder &&
                     bibleContentLoading &&
                     renderPanelTwoPlaceholder(
                       <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
                       true
                     )}
 
-                  {selectedPanel === 2 &&
+                  {showResourceBiblePlaceholder &&
                     !bibleContentLoading &&
                     bibleVerses.length === 0 &&
                     renderPanelTwoPlaceholder(
@@ -958,7 +1007,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                       false
                     )}
 
-                  {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                  {!showResourceBiblePlaceholder && (
                     <>
                       {displayMode === 'pericope' && isPericopeLoading ? (
                         <div className='flex h-full items-center justify-center py-12'>
@@ -969,6 +1018,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
                           bibleVerseMap={bibleVerseMap}
+                          contextChapters={pericopeContext.chapters}
+                          contextLoading={pericopeContext.isLoading}
+                          fullPericopes={fullPericopes}
                           globalNextUntouchedVerse={globalNextUntouchedVerse}
                           handleActiveVerseChange={handleActiveVerseChange}
                           handleKeyDown={handleKeyDown}
@@ -981,6 +1033,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           pericopes={pericopes}
                           projectItem={projectItem}
                           readOnly={readOnly}
+                          resourceBibleId={activeResourceBibleTab?.id}
+                          resourceBibleLoading={bibleContentLoading}
                           selectedPanel={selectedPanel}
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}

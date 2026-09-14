@@ -3,7 +3,15 @@ import React, { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
+import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
+import {
+  chapterGroupSources,
+  orderedPericopeRefs,
+  pericopeHeading,
+} from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import { config } from '@/lib/config';
 import {
@@ -23,6 +31,11 @@ const PericopeRteGroup = lazy(() =>
 );
 
 interface DraftingGridPericopeProps {
+  fullPericopes?: PericopeGroup[];
+  contextChapters?: Map<number, PericopeContextChapter>;
+  contextLoading?: boolean;
+  resourceBibleId?: string;
+  resourceBibleLoading?: boolean;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -47,6 +60,8 @@ interface DraftingGridPericopeProps {
 }
 
 interface TargetVersesGroupProps {
+  beforeContent?: React.ReactNode;
+  afterContent?: React.ReactNode;
   groupVerses: Source[];
   verses: TargetVerse[];
   activeVerseId: number;
@@ -66,6 +81,8 @@ interface TargetVersesGroupProps {
 }
 
 export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
+  beforeContent,
+  afterContent,
   groupVerses,
   verses,
   activeVerseId,
@@ -109,6 +126,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
   return (
     <>
+      {beforeContent}
       {groupVerses.map(v => {
         const currentTargetVerse = verses.find(tv => tv.verseNumber === v.verseNumber);
         const isButtonRow = !readOnly && buttonVerseNumber === v.verseNumber;
@@ -211,6 +229,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
           </div>
         );
       })}
+      {afterContent}
       {showOutOfBoxButton && (
         <div className='flex justify-end pt-2'>
           <Button
@@ -227,6 +246,9 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 };
 
 interface PericopeTargetGroupProps {
+  fullGroup?: PericopeGroup;
+  contextChapters?: Map<number, PericopeContextChapter>;
+  contextLoading?: boolean;
   pericopes: PericopeGroup[];
   groupIndex: number;
   sourceVerses: Source[];
@@ -277,6 +299,9 @@ const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }
  * stands in for it while the resource panel loads render the same editor (#400 review).
  */
 export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
+  fullGroup,
+  contextChapters,
+  contextLoading,
   pericopes,
   groupIndex,
   sourceVerses,
@@ -298,12 +323,53 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   isAiActive,
   suggestionStatus,
 }) => {
+  const { t } = useTranslation();
+  const hasContext = fullGroup?.verses.some(v => v.chapterNumber !== projectItem.chapterNumber);
+  const beforeContent =
+    hasContext && fullGroup ? (
+      <>
+        <PericopeContextText
+          chapters={contextChapters}
+          currentChapter={projectItem.chapterNumber}
+          group={fullGroup}
+          isLoading={contextLoading}
+          side='before'
+        />
+        <p className='text-muted-foreground text-sm font-medium'>
+          {t('pericopeCurrentChapter', {
+            defaultValue: 'Chapter {{chapter}}',
+            chapter: projectItem.chapterNumber,
+          })}
+        </p>
+      </>
+    ) : undefined;
+  const afterContent =
+    hasContext && fullGroup ? (
+      <PericopeContextText
+        chapters={contextChapters}
+        currentChapter={projectItem.chapterNumber}
+        group={fullGroup}
+        isLoading={contextLoading}
+        side='after'
+      />
+    ) : undefined;
+
   if (config.features.rtePericope) {
     return (
-      <Suspense fallback={<PericopeEditorSkeleton verseCount={groupVerses.length} />}>
+      <Suspense
+        fallback={
+          <>
+            {beforeContent}
+            <PericopeEditorSkeleton verseCount={groupVerses.length} />
+            {afterContent}
+          </>
+        }
+      >
         <PericopeRteGroup
           activeVerseId={activeVerseId}
+          afterContent={afterContent}
           aiSuggestions={aiSuggestions}
+          beforeContent={beforeContent}
           bookCode={projectItem.bookCode}
           chapterAssignmentId={projectItem.chapterAssignmentId}
           chapterNumber={projectItem.chapterNumber}
@@ -328,7 +394,9 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   return (
     <TargetVersesGroup
       activeVerseId={activeVerseId}
+      afterContent={afterContent}
       aiSuggestions={aiSuggestions}
+      beforeContent={beforeContent}
       globalNextUntouchedVerse={globalNextUntouchedVerse}
       groupVerses={groupVerses}
       handleActiveVerseChange={handleActiveVerseChange}
@@ -348,6 +416,11 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 };
 
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
+  fullPericopes,
+  contextChapters,
+  contextLoading,
+  resourceBibleId,
+  resourceBibleLoading = false,
   pericopes,
   sourceVerses,
   verses,
@@ -375,17 +448,13 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   return (
     <>
       {pericopes.map((group, groupIndex) => {
-        const groupVerses = sourceVerses.filter(sv =>
-          group.verses.some(gv => gv.verseNumber === sv.verseNumber)
-        );
+        const fullGroup =
+          fullPericopes?.find(g => g.pericopeNumber === group.pericopeNumber) ?? group;
+        const groupVerses = chapterGroupSources(group, sourceVerses, projectItem.chapterNumber);
         if (groupVerses.length === 0) return null;
-        const verseNumbers = groupVerses.map(gv => gv.verseNumber);
-        const minVerse = Math.min(...verseNumbers);
-        const maxVerse = Math.max(...verseNumbers);
-        const heading =
-          minVerse === maxVerse
-            ? `${projectItem.chapterNumber}:${minVerse}`
-            : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
+        const refs = orderedPericopeRefs(fullGroup);
+        const chapters = [...new Set(refs.map(ref => ref.chapterNumber))];
+        const heading = pericopeHeading(fullGroup);
 
         const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
@@ -431,23 +500,52 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 }}
               >
                 <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
-                  {groupVerses.map(v => {
-                    const textToRender =
-                      selectedPanel === 1
-                        ? v.text
-                        : (bibleVerseMap.get(v.verseNumber) ?? t('noContentAvailable'));
-                    return (
-                      <React.Fragment key={v.verseNumber}>
-                        <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
-                          {v.verseNumber}
-                        </span>
-                        <span
-                          className={`mr-3 ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
-                        >
-                          {textToRender}
-                        </span>
-                      </React.Fragment>
-                    );
+                  {chapters.map(chapter => {
+                    const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
+                    if (
+                      selectedPanel === 2 &&
+                      chapter !== projectItem.chapterNumber &&
+                      resourceBibleId
+                    ) {
+                      return (
+                        <PericopeReferenceVerses
+                          key={chapter}
+                          bibleId={resourceBibleId}
+                          bookCode={projectItem.bookCode}
+                          chapterNumber={chapter}
+                          showChapter={true}
+                          verses={chapterRefs}
+                        />
+                      );
+                    }
+                    const sources =
+                      chapter === projectItem.chapterNumber
+                        ? sourceVerses
+                        : contextChapters?.get(chapter)?.sourceVerses;
+                    return chapterRefs.map(ref => {
+                      const textToRender =
+                        selectedPanel === 1
+                          ? (sources?.find(v => v.verseNumber === ref.verseNumber)?.text ??
+                            (contextLoading
+                              ? t('loading', 'Loading...')
+                              : t('noContentAvailable', 'No content available')))
+                          : chapter === projectItem.chapterNumber
+                            ? resourceBibleLoading
+                              ? t('loading', 'Loading...')
+                              : (bibleVerseMap.get(ref.verseNumber) ??
+                                t('noContentAvailable', 'No content available'))
+                            : t('noContentAvailable', 'No content available');
+                      return (
+                        <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
+                          <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                            {chapters.length > 1
+                              ? `${chapter}:${ref.verseNumber}`
+                              : ref.verseNumber}
+                          </span>
+                          <span className='mr-3'>{textToRender}</span>
+                        </React.Fragment>
+                      );
+                    });
                   })}
                 </p>
               </div>
@@ -474,6 +572,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 <PericopeTargetGroup
                   activeVerseId={activeVerseId}
                   aiSuggestions={aiSuggestions}
+                  contextChapters={contextChapters}
+                  contextLoading={contextLoading}
+                  fullGroup={fullGroup}
                   globalNextUntouchedVerse={globalNextUntouchedVerse}
                   groupIndex={groupIndex}
                   groupVerses={groupVerses}

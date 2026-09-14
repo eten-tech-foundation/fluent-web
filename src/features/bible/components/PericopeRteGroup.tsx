@@ -9,6 +9,8 @@ import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
+  beforeContent?: React.ReactNode;
+  afterContent?: React.ReactNode;
   groupVerses: Source[];
   verses: TargetVerse[];
   /** Identifies the chapter being drafted, so the editor reloads when the assignment changes. */
@@ -39,6 +41,8 @@ interface PericopeRteGroupProps {
  * (chadw-eten on #400). Enter is left to the editor as a paragraph break and advances nothing.
  */
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
+  beforeContent,
+  afterContent,
   groupVerses,
   verses,
   chapterAssignmentId,
@@ -112,6 +116,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   return (
     <div className='flex w-full flex-col gap-2'>
+      {beforeContent}
       <PericopeEditor
         bookCode={bookCode}
         chapterNumber={chapterNumber}
@@ -121,6 +126,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         onActiveVerseChange={handleActiveVerseChange}
         onVersesChange={handleVersesChange}
       />
+      {afterContent}
 
       {/*
         The textarea path says this in the empty verse's placeholder. The editor holds a document
