@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { config, getApiHeaders } from '@/lib/config';
+import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import type { GuideContent, ItemWithUrl } from '@/lib/types';
 
-const API_BASE_URL = config.api.aquifer_url;
+const API_BASE_URL = `${config.api.url}/aquifer`;
 
 // Types
 export interface Language {
@@ -107,8 +107,7 @@ export interface AquiferBibleTextResponse {
 const fetchAllLanguages = async (): Promise<Language[]> => {
   const response = await fetch(`${API_BASE_URL}/languages`, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch languages');
@@ -118,8 +117,7 @@ const fetchAllLanguages = async (): Promise<Language[]> => {
 const fetchResourceCollection = async (resourceId: string): Promise<ResourceCollectionResponse> => {
   const response = await fetch(`${API_BASE_URL}/resources/collections/${resourceId}`, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch resource collection');
@@ -134,11 +132,10 @@ const fetchAvailableResources = async (
   endVerse: number = 200
 ): Promise<LanguageResourceCount[]> => {
   const response = await fetch(
-    `${API_BASE_URL}/languages/available-resources?bookcode=${bookCode}&StartChapter=${startChapter}&StartVerse=${startVerse}&EndVerse=${endVerse}&EndChapter=${endChapter}`,
+    `${API_BASE_URL}/languages/available-resources?bookCode=${bookCode}&startChapter=${startChapter}&startVerse=${startVerse}&endVerse=${endVerse}&endChapter=${endChapter}`,
     {
       method: 'GET',
-      mode: 'cors',
-      headers: getApiHeaders(),
+      credentials: 'include',
     }
   );
 
@@ -169,20 +166,19 @@ const fetchResourcesByVerse = async (params: {
     limit = 100,
   } = params;
 
-  let url = `${API_BASE_URL}/resources/search?BookCode=${bookCode}&StartChapter=${startChapter}&EndChapter=${endChapter}&LanguageCode=${languageCode}&StartVerse=${startVerse}&EndVerse=${endVerse}&Limit=${limit}`;
+  let url = `${API_BASE_URL}/resources/search?bookCode=${bookCode}&startChapter=${startChapter}&endChapter=${endChapter}&languageCode=${languageCode}&startVerse=${startVerse}&endVerse=${endVerse}&limit=${limit}`;
 
   if (resourceType) {
-    url += `&ResourceType=${resourceType}`;
+    url += `&resourceType=${resourceType}`;
   }
 
   if (resourceCollectionCode) {
-    url += `&ResourceCollectionCode=${resourceCollectionCode}`;
+    url += `&resourceCollectionCode=${resourceCollectionCode}`;
   }
 
   const response = await fetch(url, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch resources');
@@ -192,8 +188,7 @@ const fetchResourcesByVerse = async (params: {
 const fetchResourceDetails = async (resourceId: number): Promise<ResourceDetailsResponse> => {
   const response = await fetch(`${API_BASE_URL}/resources/${resourceId}`, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch resource details');
@@ -203,8 +198,7 @@ const fetchResourceDetails = async (resourceId: number): Promise<ResourceDetails
 const fetchGuideContent = async (resourceId: number): Promise<GuideContent> => {
   const response = await fetch(`${API_BASE_URL}/resources/${resourceId}`, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch guide content');
@@ -216,8 +210,7 @@ const fetchResourceAssociations = async (
 ): Promise<AssociationResponse> => {
   const response = await fetch(`${API_BASE_URL}/resources/${parentResourceId}/associations`, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) throw new Error('Failed to fetch resource associations');
@@ -231,8 +224,7 @@ const fetchImageUrls = async (items: unknown[]): Promise<ItemWithUrl[]> => {
       try {
         const response = await fetch(`${API_BASE_URL}/resources/${resourceItem.id}`, {
           method: 'GET',
-          mode: 'cors',
-          headers: getApiHeaders(),
+          credentials: 'include',
         });
 
         if (!response.ok) throw new Error('Failed to fetch content URL');
@@ -273,10 +265,13 @@ const fetchResourceWithAssociation = async (
 // Aquifer Bible Fetch Functions
 
 const fetchAquiferBibles = async (languageCode: string): Promise<AquiferBible[]> => {
-  const response = await fetch(`${API_BASE_URL}/bibles?languageCode=${languageCode}`, {
+  const url = languageCode
+    ? `${API_BASE_URL}/bibles?languageCode=${languageCode}`
+    : `${API_BASE_URL}/bibles`;
+
+  const response = await fetch(url, {
     method: 'GET',
-    mode: 'cors',
-    headers: getApiHeaders(),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -304,11 +299,10 @@ const fetchAquiferBibleText = async (
   };
 
   const response = await fetch(
-    `${API_BASE_URL}/bibles/${bibleId}/texts?BookCode=${bookCode}&StartChapter=${chapter}&EndChapter=${chapter}`,
+    `${API_BASE_URL}/bibles/${bibleId}/texts?bookCode=${bookCode}&startChapter=${chapter}&endChapter=${chapter}`,
     {
       method: 'GET',
-      mode: 'cors',
-      headers: getApiHeaders(),
+      credentials: 'include',
     }
   );
 
