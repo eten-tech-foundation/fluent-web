@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
-import { useBiblesByLanguage } from '@/features/projects/hooks/useBibleBooks';
+import { SourceBiblePicker } from '@/features/projects/components/SourceBiblePicker';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import {
   CONNECTIVITY_PROFILE_NONE,
@@ -47,9 +47,7 @@ interface ProjectFormFieldsProps {
 export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
-  const { data: sourceBibles, isLoading: sourceBiblesLoading } = useBiblesByLanguage(
-    formData.sourceLanguage
-  );
+
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =
@@ -73,45 +71,16 @@ export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFields
         />
       </div>
 
-      <div className='space-y-2'>
-        <Label className='gap-1'>
-          <span className='text-destructive'>*</span>
-          {t('sourceLanguage')}
-        </Label>
-        <SearchableSelect
-          disabled={languagesLoading}
-          options={languageOptions}
-          placeholder={languagesLoading ? 'Loading languages...' : 'Select Source Language'}
-          value={formData.sourceLanguage?.toString() ?? ''}
-          onChange={value => onFieldChange('sourceLanguage', parseInt(value, 10))}
-        />
-      </div>
-
-      <div className='space-y-2'>
-        <Label className='gap-1'>
-          <span className='text-destructive'>*</span>
-          {t('sourceBible')}
-        </Label>
-        <SearchableSelect
-          disabled={!formData.sourceLanguage || sourceBiblesLoading}
-          emptyText='No bibles for this language'
-          options={
-            sourceBibles?.map(bible => ({
-              value: bible.id.toString(),
-              label: `${bible.name} (${bible.abbreviation})`,
-            })) ?? []
-          }
-          placeholder={
-            !formData.sourceLanguage
-              ? 'Select Source Language First'
-              : sourceBiblesLoading
-                ? 'Loading bibles...'
-                : 'Select Source Bible'
-          }
-          value={formData.sourceBible?.toString() ?? ''}
-          onChange={value => onFieldChange('sourceBible', parseInt(value, 10))}
-        />
-      </div>
+      <SourceBiblePicker
+        value={{
+          sourceBible: formData.sourceBible,
+          sourceLanguage: formData.sourceLanguage,
+        }}
+        onChange={selection => {
+          onFieldChange('sourceBible', selection?.sourceBible ?? null);
+          onFieldChange('sourceLanguage', selection?.sourceLanguage ?? null);
+        }}
+      />
 
       <div className='space-y-2'>
         <Label className='gap-1'>

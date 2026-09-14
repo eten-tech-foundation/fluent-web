@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, useEffect } fr
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,7 @@ interface MilestoneDetailPageProps {
   isAddUserOpen?: boolean;
   onBack?: () => void;
   onExport?: () => void;
+  onEditMetadata?: () => void;
   onAddUser?: () => void;
   onCloseAddUser?: () => void;
 }
@@ -74,9 +76,11 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   isAddUserOpen = false,
   onBack,
   onExport,
+  onEditMetadata,
   onAddUser,
   onCloseAddUser,
 }) => {
+  const { t } = useTranslation();
   const { userdetail } = useAppStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -342,14 +346,25 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
         rightContent={
           <div className='flex items-center gap-2'>
             {isManager && (
-              <Button
-                className='border-primary text-primary hover flex items-center gap-2 border-2'
-                size='sm'
-                variant='outline'
-                onClick={() => setIsManageBooksOpen(true)}
-              >
-                Manage Books
-              </Button>
+              <>
+                <Button
+                  className='border-primary text-primary hover flex items-center gap-2 border-2'
+                  disabled={isDisabled}
+                  size='sm'
+                  variant={'outline'}
+                  onClick={onEditMetadata}
+                >
+                  {t('editProjectMetadata')}
+                </Button>
+                <Button
+                  className='border-primary text-primary hover flex items-center gap-2 border-2'
+                  size='sm'
+                  variant='outline'
+                  onClick={() => setIsManageBooksOpen(true)}
+                >
+                  Manage Books
+                </Button>
+              </>
             )}
             <Button
               className='border-primary text-primary hover flex items-center gap-2 border-2'

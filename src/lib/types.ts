@@ -75,7 +75,7 @@ export interface PericopeGroup {
 export interface CreateProject {
   id: number;
   name: string;
-  bibleId: number;
+  sourceBibleId: number;
   bookId: number[];
   organization: number;
   createdBy: number;

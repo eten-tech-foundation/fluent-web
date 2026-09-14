@@ -7,9 +7,11 @@ import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
+import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { ProjectHubPage } from './ProjectHubPage';
 
@@ -35,6 +37,13 @@ export const ProjectDetailWrapper: React.FC = () => {
   const location = useLocation();
   const { userdetail } = useAppStore();
 
+  // Same check the page uses to show the button, repeated here so `?modal=metadata`
+  // typed straight into the URL cannot open the editor for a non-manager.
+  const isManager = isProjectManager(
+    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
+    project?.id
+  );
+
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
     if (from) {
@@ -49,7 +58,34 @@ export const ProjectDetailWrapper: React.FC = () => {
     }
   };
 
+  const handleOpenExport = () => {
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: { modal: 'export' as const },
+      state: location.state,
+    });
+  };
+
   const handleCloseExport = () => {
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: {},
+      state: location.state,
+    });
+  };
+
+  const handleOpenMetadata = () => {
+    void navigate({
+      to: '/projects/$projectId',
+      params: { projectId },
+      search: { modal: 'metadata' as const },
+      state: location.state,
+    });
+  };
+
+  const handleCloseMetadata = () => {
     void navigate({
       to: '/projects/$projectId',
       params: { projectId },
@@ -135,6 +171,8 @@ export const ProjectDetailWrapper: React.FC = () => {
         onAddUser={handleOpenAddUser}
         onBack={handleBack}
         onCloseAddUser={handleCloseAddUser}
+        onEditMetadata={handleOpenMetadata}
+        onExport={handleOpenExport}
       />
 
       <ExportProjectDialog
@@ -144,6 +182,12 @@ export const ProjectDetailWrapper: React.FC = () => {
         projectName={project.name}
         projectUnitId={projectUnitId}
         onClose={handleCloseExport}
+      />
+
+      <EditProjectMetadataDialog
+        isOpen={isManager && modal === 'metadata'}
+        projectUnitId={projectUnitId}
+        onClose={handleCloseMetadata}
       />
     </>
   );
