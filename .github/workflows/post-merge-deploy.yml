@@ -1,8 +1,8 @@
 # Deploys to the development Static Web App after every merge to main.
 #
-# Tags are deliberately NOT a trigger here. Release deploys (QA, then prod)
-# are chained inside `cut-release.yml` so prod provably ships the tag QA
-# tested; a tag trigger on this file would deploy QA a second time.
+# Tags are deliberately NOT a trigger here. `cut-release.yml` already
+# deploys the tag to QA when it's pushed; a tag trigger on this file would
+# deploy QA a second time.
 name: Post-merge Deploy
 
 on:
