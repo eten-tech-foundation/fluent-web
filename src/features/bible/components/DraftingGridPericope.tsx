@@ -14,6 +14,8 @@ import {
   type VerseMarkers,
 } from '@/lib/types';
 
+import { PericopeTitleInput } from './PericopeTitleInput';
+
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
 const PericopeRteGroup = lazy(() =>
@@ -23,6 +25,7 @@ const PericopeRteGroup = lazy(() =>
 );
 
 interface DraftingGridPericopeProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -227,6 +230,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 };
 
 interface PericopeTargetGroupProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
   pericopes: PericopeGroup[];
   groupIndex: number;
   sourceVerses: Source[];
@@ -277,6 +281,7 @@ const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }
  * stands in for it while the resource panel loads render the same editor (#400 review).
  */
 export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
+  handleTitleChange,
   pericopes,
   groupIndex,
   sourceVerses,
@@ -298,56 +303,74 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   isAiActive,
   suggestionStatus,
 }) => {
-  if (config.features.rtePericope) {
-    return (
-      <Suspense fallback={<PericopeEditorSkeleton verseCount={groupVerses.length} />}>
-        <PericopeRteGroup
+  const hasTitle = !!pericopes[groupIndex]?.pericopeTitle?.trim();
+  const firstVerse = groupVerses[0];
+  const firstTarget = verses.find(verse => verse.verseNumber === firstVerse?.verseNumber);
+  const title = firstTarget?.markers?.headings?.[0]?.text ?? '';
+  return (
+    <>
+      {hasTitle && firstVerse && handleTitleChange && (
+        <PericopeTitleInput
+          readOnly={readOnly}
+          value={title}
+          verseNumber={firstVerse.verseNumber}
+          onChange={handleTitleChange}
+          onFocus={() => {
+            if (!groupVerses.some(verse => verse.verseNumber === activeVerseId))
+              handleActiveVerseChange(firstVerse.verseNumber);
+          }}
+        />
+      )}
+      {config.features.rtePericope ? (
+        <Suspense fallback={<PericopeEditorSkeleton verseCount={groupVerses.length} />}>
+          <PericopeRteGroup
+            activeVerseId={activeVerseId}
+            aiSuggestions={aiSuggestions}
+            bookCode={projectItem.bookCode}
+            chapterAssignmentId={projectItem.chapterAssignmentId}
+            chapterNumber={projectItem.chapterNumber}
+            groupVerses={groupVerses}
+            handleActiveVerseChange={handleActiveVerseChange}
+            handleNextPericopeClick={handleNextPericopeClick}
+            handleTextChange={handleTextChange}
+            hasNextPericope={pericopes
+              .slice(groupIndex + 1)
+              .some(later => hasSourceBackedVerse(later, sourceVerses))}
+            hasTitle={hasTitle && !!handleTitleChange}
+            isAiActive={isAiActive}
+            isAiThresholdMet={isAiThresholdMet}
+            isTranslationComplete={isTranslationComplete}
+            readOnly={readOnly}
+            suggestionStatus={suggestionStatus}
+            verses={verses}
+          />
+        </Suspense>
+      ) : (
+        <TargetVersesGroup
           activeVerseId={activeVerseId}
           aiSuggestions={aiSuggestions}
-          bookCode={projectItem.bookCode}
-          chapterAssignmentId={projectItem.chapterAssignmentId}
-          chapterNumber={projectItem.chapterNumber}
+          globalNextUntouchedVerse={globalNextUntouchedVerse}
           groupVerses={groupVerses}
           handleActiveVerseChange={handleActiveVerseChange}
-          handleNextPericopeClick={handleNextPericopeClick}
+          handleKeyDown={handleKeyDown}
+          handleNextClick={handleNextClick}
           handleTextChange={handleTextChange}
-          hasNextPericope={pericopes
-            .slice(groupIndex + 1)
-            .some(later => hasSourceBackedVerse(later, sourceVerses))}
           isAiActive={isAiActive}
           isAiThresholdMet={isAiThresholdMet}
           isTranslationComplete={isTranslationComplete}
+          lastSourceVerseNumber={sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0}
           readOnly={readOnly}
           suggestionStatus={suggestionStatus}
+          textareaRefs={textareaRefs}
           verses={verses}
         />
-      </Suspense>
-    );
-  }
-
-  return (
-    <TargetVersesGroup
-      activeVerseId={activeVerseId}
-      aiSuggestions={aiSuggestions}
-      globalNextUntouchedVerse={globalNextUntouchedVerse}
-      groupVerses={groupVerses}
-      handleActiveVerseChange={handleActiveVerseChange}
-      handleKeyDown={handleKeyDown}
-      handleNextClick={handleNextClick}
-      handleTextChange={handleTextChange}
-      isAiActive={isAiActive}
-      isAiThresholdMet={isAiThresholdMet}
-      isTranslationComplete={isTranslationComplete}
-      lastSourceVerseNumber={sourceVerses[sourceVerses.length - 1]?.verseNumber ?? 0}
-      readOnly={readOnly}
-      suggestionStatus={suggestionStatus}
-      textareaRefs={textareaRefs}
-      verses={verses}
-    />
+      )}
+    </>
   );
 };
 
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
+  handleTitleChange,
   pericopes,
   sourceVerses,
   verses,
@@ -482,6 +505,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   handleNextClick={handleNextClick}
                   handleNextPericopeClick={handleNextPericopeClick}
                   handleTextChange={handleTextChange}
+                  handleTitleChange={handleTitleChange}
                   isAiActive={isAiActive}
                   isAiThresholdMet={isAiThresholdMet}
                   isTranslationComplete={isTranslationComplete}

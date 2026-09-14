@@ -9,6 +9,7 @@ import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
+  hasTitle?: boolean;
   groupVerses: Source[];
   verses: TargetVerse[];
   /** Identifies the chapter being drafted, so the editor reloads when the assignment changes. */
@@ -39,6 +40,7 @@ interface PericopeRteGroupProps {
  * (chadw-eten on #400). Enter is left to the editor as a paragraph break and advances nothing.
  */
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
+  hasTitle = false,
   groupVerses,
   verses,
   chapterAssignmentId,
@@ -65,10 +67,15 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         return {
           verseNumber: source.verseNumber,
           text: target?.content ?? '',
-          markers: target?.markers ?? null,
+          markers:
+            hasTitle &&
+            source.verseNumber === groupVerses[0]?.verseNumber &&
+            target?.markers?.headings?.length
+              ? { ...target.markers, headings: target.markers.headings.slice(1) }
+              : (target?.markers ?? null),
         };
       }),
-    [groupVerses, verses]
+    [groupVerses, verses, hasTitle]
   );
 
   // Reload only when the pericope's identity changes, not on every keystroke: the editor owns the
@@ -82,14 +89,36 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   const handleVersesChange = useCallback(
     (changed: PericopeVerseText[]) => {
-      changed.forEach(verse => handleTextChange(verse.verseNumber, verse.text, verse.markers));
+      changed.forEach(verse => {
+        const title =
+          hasTitle && verse.verseNumber === groupVerses[0]?.verseNumber
+            ? verses.find(target => target.verseNumber === verse.verseNumber)?.markers
+                ?.headings?.[0]
+            : undefined;
+        handleTextChange(
+          verse.verseNumber,
+          verse.text,
+          title
+            ? { ...verse.markers, headings: [title, ...(verse.markers?.headings ?? [])] }
+            : verse.markers
+        );
+      });
     },
-    [handleTextChange]
+    [handleTextChange, hasTitle, groupVerses, verses]
   );
 
-  const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
-  const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+  const hasPendingTitle =
+    hasTitle &&
+    !verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers?.headings
+      ?.length;
+  const hasPendingSuggestion =
+    hasPendingTitle ||
+    groupVerses.some(
+      verse =>
+        !aiSuggestions[verse.verseNumber] &&
+        !verses.find(target => target.verseNumber === verse.verseNumber)?.content.trim()
+    );
 
   // The pericope-level reading of the verse button's "don't advance from an empty verse" rule:
   // the whole pericope is on screen, so all of it has to be drafted before moving past it.
@@ -101,12 +130,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     !readOnly && isGroupActive && !isTranslationComplete && hasNextPericope;
 
   const aiNotice =
-    !readOnly &&
-    isGroupActive &&
-    isAiActive &&
-    isAiThresholdMet &&
-    !aiSuggestions[activeVerseId] &&
-    isActiveVerseEmpty
+    !readOnly && isGroupActive && isAiActive && isAiThresholdMet && hasPendingSuggestion
       ? suggestionStatus
       : undefined;
 
