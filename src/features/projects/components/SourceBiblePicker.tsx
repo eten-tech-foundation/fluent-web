@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import { Loader2, X } from 'lucide-react';
+import { Headphones, Loader2, VolumeX, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ export interface SelectedSourceBible {
   languageName: string;
   languageCode: string | null;
   provider: string;
+  hasAudio: boolean;
 }
 
 interface SourceBiblePickerProps {
@@ -68,6 +69,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
           languageName: found.languageName ?? '',
           languageCode: found.languageCode ?? null,
           provider: found.provider,
+          hasAudio: found.hasAudio ?? false,
         });
       }
     }
@@ -83,6 +85,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
       languageName: bible.languageName ?? '',
       languageCode: bible.languageCode ?? null,
       provider: bible.provider,
+      hasAudio: bible.hasAudio ?? false,
     };
     setSelectedMeta(meta);
     onChange({
@@ -104,6 +107,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
         languageName: lang.langName,
         languageCode: lang.langCodeIso6393,
         provider: singleBible.provider,
+        hasAudio: singleBible.hasAudio ?? false,
       };
       setSelectedMeta(meta);
       onChange({
@@ -147,6 +151,17 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
               {selectedMeta.bibleName} ({selectedMeta.bibleAbbreviation}) ·{' '}
               {selectedMeta.provider.toUpperCase()}
             </p>
+            {selectedMeta.hasAudio ? (
+              <p className='text-success flex items-center gap-1.5 pt-1 text-xs font-medium'>
+                <Headphones className='h-3.5 w-3.5' />
+                Audio available — included as offline source
+              </p>
+            ) : (
+              <p className='text-muted-foreground flex items-center gap-1.5 pt-1 text-xs font-medium'>
+                <VolumeX className='h-3.5 w-3.5' />
+                No audio version available for this Bible
+              </p>
+            )}
           </div>
           <button
             aria-label='Clear source bible selection'
@@ -277,9 +292,20 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                                   </span>
                                 )}
                               </div>
-                              <Badge className='bg-primary/10 text-primary hover:bg-primary/15 shrink-0 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase'>
-                                {bible.provider.toUpperCase()}
-                              </Badge>
+                              <div className='flex items-center gap-2'>
+                                {bible.hasAudio && (
+                                  <Badge
+                                    className='bg-success/15 text-success hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
+                                    variant='outline'
+                                  >
+                                    <Headphones className='h-3 w-3' />
+                                    AUDIO
+                                  </Badge>
+                                )}
+                                <Badge className='bg-primary/10 text-primary hover:bg-primary/15 shrink-0 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase'>
+                                  {bible.provider.toUpperCase()}
+                                </Badge>
+                              </div>
                             </button>
                           ))}
                         </div>
