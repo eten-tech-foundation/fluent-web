@@ -321,7 +321,8 @@ describe('cross-chapter drafting integration', () => {
       />
     );
 
-    const next = await screen.findByRole('button', { name: 'Next Pericope' });
+    // The first rich-text group loads its editor chunk asynchronously.
+    const next = await screen.findByRole('button', { name: 'Next Pericope' }, { timeout: 3000 });
     expect(await screen.findByText('Source Mark 8:31')).toBeInTheDocument();
     expect(next).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Send to Peer Checking' })).toBeDisabled();

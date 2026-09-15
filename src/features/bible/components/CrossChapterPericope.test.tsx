@@ -28,6 +28,8 @@ const contextChapters = new Map([
     {
       isLoading: false,
       isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
       sourceVerses: chapter8,
       targetVerses: [{ verseNumber: 31, content: 'Saved Mark 8:31' }],
     },
@@ -37,6 +39,8 @@ const contextChapters = new Map([
     {
       isLoading: false,
       isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
       sourceVerses: chapter9,
       targetVerses: [{ verseNumber: 1, content: 'Saved Mark 9:1' }],
     },
@@ -151,14 +155,53 @@ describe('cross-chapter pericope display', () => {
     expect(within(referenceGroup).queryByText('No content available')).not.toBeInTheDocument();
   });
 
+  it('keeps loaded local reference verses visible while other verses are pending', () => {
+    const localGroup = {
+      ...fullGroup,
+      verses: [
+        { chapterNumber: 8, verseNumber: 31 },
+        { chapterNumber: 8, verseNumber: 32 },
+      ],
+    };
+    renderChapter(8, {
+      selectedPanel: 2,
+      pericopes: [localGroup],
+      fullPericopes: [localGroup],
+      bibleVerseMap: new Map([[31, 'Loaded reference verse']]),
+      resourceBibleLoading: true,
+    });
+    expect(screen.getByText('Loaded reference verse')).not.toHaveClass('text-muted-foreground');
+    expect(screen.getByText('Loading...')).toHaveClass('text-muted-foreground', 'text-sm');
+  });
+
   it('keeps each neighboring chapter loading state independent', () => {
     const group = {
       ...fullGroup,
       verses: [{ chapterNumber: 7, verseNumber: 1 }, ...fullGroup.verses],
     };
     const chapters = new Map([
-      [7, { sourceVerses: [], targetVerses: [], isLoading: false, isError: true }],
-      [9, { sourceVerses: [], targetVerses: [], isLoading: true, isError: false }],
+      [
+        7,
+        {
+          sourceVerses: [],
+          targetVerses: [],
+          isLoading: false,
+          isError: true,
+          sourceIsLoading: false,
+          sourceIsError: true,
+        },
+      ],
+      [
+        9,
+        {
+          sourceVerses: [],
+          targetVerses: [],
+          isLoading: true,
+          isError: false,
+          sourceIsLoading: true,
+          sourceIsError: false,
+        },
+      ],
     ]);
     render(
       <>
@@ -167,7 +210,7 @@ describe('cross-chapter pericope display', () => {
       </>
     );
     expect(
-      within(screen.getByText('7:1').closest('section')!).getByText('No content available')
+      within(screen.getByText('7:1').closest('section')!).getByText('Unable to load Bible content.')
     ).toBeInTheDocument();
     expect(
       within(screen.getByText('9:1').closest('section')!).getByText('Loading...')
@@ -213,6 +256,7 @@ describe('cross-chapter pericope display', () => {
               ...contextChapters.get(9)!,
               sourceVerses: [{ ...chapter9[0], text: content }],
               isLoading: loading,
+              sourceIsLoading: loading,
             },
           ],
         ]),

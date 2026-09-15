@@ -5,9 +5,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import {
+  targetTextQueryOptions,
+  useAddTranslatedVerse,
+} from '@/features/bible/hooks/useBibleTarget';
+import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
+import { translationLoader } from '@/features/bible/TranslationLoader';
 import { config } from '@/lib/config';
 import { type PericopeGroup, type ProjectItem } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { createTestQueryClient } from '@/test/render';
 
@@ -116,6 +123,8 @@ describe('usePericopeContext', () => {
     expect(result.current.chapters.get(1)).toEqual({
       isLoading: false,
       isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
       sourceVerses: [{ id: 101, verseNumber: 1, text: 'Previous chapter first verse' }],
       targetVerses: [
         {
@@ -209,10 +218,12 @@ describe('usePericopeContext', () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.chapters.get(1)).toEqual({
-      sourceVerses: [],
+      sourceVerses: [sources[0]],
       targetVerses: [],
       isLoading: false,
       isError: true,
+      sourceIsLoading: false,
+      sourceIsError: false,
     });
 
     let releaseRetry: () => void = () => {};
@@ -231,7 +242,8 @@ describe('usePericopeContext', () => {
     });
     await waitFor(() => expect(result.current.chapters.get(1)?.isLoading).toBe(true));
     expect(result.current.isLoading).toBe(true);
-    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([]);
+    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([sources[0]]);
+    expect(result.current.chapters.get(1)?.sourceIsLoading).toBe(false);
     await act(async () => {
       releaseRetry();
       await retry;
@@ -279,6 +291,8 @@ describe('usePericopeContext', () => {
       ],
       isLoading: false,
       isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
     });
   });
 
@@ -300,6 +314,8 @@ describe('usePericopeContext', () => {
       targetVerses: [],
       isLoading: false,
       isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
     });
   });
 
@@ -328,6 +344,8 @@ describe('usePericopeContext', () => {
       targetVerses: [],
       isLoading: true,
       isError: false,
+      sourceIsLoading: true,
+      sourceIsError: false,
     });
     expect(result.current.isLoading).toBe(true);
 
@@ -345,6 +363,8 @@ describe('usePericopeContext', () => {
       targetVerses: [],
       isLoading: false,
       isError: true,
+      sourceIsLoading: false,
+      sourceIsError: true,
     });
   });
 
@@ -410,5 +430,186 @@ describe('usePericopeContext', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     expect(result.current.chapters.get(1)?.targetVerses[0].content).toBe('New project translation');
+  });
+
+  it('reuses raw chapter caches when context becomes an assignment and then context again', async () => {
+    const requests: string[] = [];
+    server.use(
+      http.get(`${config.api.url}/bibles/9/books/1/chapters/1/texts`, () => {
+        requests.push('source');
+        return HttpResponse.json(sources);
+      }),
+      http.get(`${config.api.url}/translated-verses`, () => {
+        requests.push('target');
+        return HttpResponse.json([previousTranslation]);
+      })
+    );
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const first = renderHook(
+      () => usePericopeContext({ projectItem, pericopes: previousOnly, enabled: true }),
+      { wrapper }
+    );
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(first.result.current.chapters.get(1)?.sourceVerses).toEqual([sources[0]]);
+    first.unmount();
+
+    useAppStore.setState({ userdetail: { id: 1 } as never, currentProjectItem: null });
+    const assignment = await translationLoader({
+      context: { queryClient },
+      location: {
+        state: { projectItem: { ...projectItem, chapterAssignmentId: 1, chapterNumber: 1 } },
+      },
+    });
+
+    expect(assignment.sourceVerses).toEqual(sources);
+    expect(assignment.targetVerses[0]).toEqual({
+      id: previousTranslation.id,
+      verseNumber: 1,
+      content: previousTranslation.content,
+      markers: previousTranslation.markers,
+    });
+    expect(queryClient.getQueryData(targetTextQueryOptions(8, 1, 1).queryKey)).toEqual([
+      previousTranslation,
+    ]);
+    expect(queryClient.getQueryData(bibleTextQueryOptions(9, 1, 1).queryKey)).toEqual(sources);
+
+    const second = renderHook(
+      () => usePericopeContext({ projectItem, pericopes: previousOnly, enabled: true }),
+      { wrapper }
+    );
+    expect(second.result.current.isLoading).toBe(false);
+    expect(second.result.current.chapters.get(1)?.targetVerses[0].content).toBe(
+      previousTranslation.content
+    );
+    expect(requests.sort()).toEqual(['source', 'target']);
+  });
+
+  it('shares source chapters across project units while isolating target and Bible identities', async () => {
+    const requests: string[] = [];
+    server.use(
+      http.get(`${config.api.url}/bibles/:bible/books/1/chapters/1/texts`, ({ params }) => {
+        requests.push(`source:${String(params.bible)}`);
+        return HttpResponse.json(
+          params.bible === '9' ? sources : [{ id: 1901, verseNumber: 1, text: 'Other Bible' }]
+        );
+      }),
+      http.get(`${config.api.url}/translated-verses`, ({ request }) => {
+        const unit = new URL(request.url).searchParams.get('projectUnitId');
+        requests.push(`target:${unit}`);
+        return HttpResponse.json([
+          { ...previousTranslation, projectUnitId: Number(unit), content: `Unit ${unit}` },
+        ]);
+      })
+    );
+    const { result, rerender } = renderHook(
+      ({ item }) =>
+        usePericopeContext({ projectItem: item, pericopes: previousOnly, enabled: true }),
+      { wrapper: Wrapper, initialProps: { item: projectItem } }
+    );
+    await waitFor(() =>
+      expect(result.current.chapters.get(1)?.targetVerses[0].content).toBe('Unit 8')
+    );
+
+    rerender({ item: { ...projectItem, projectId: 17, projectUnitId: 18 } });
+    expect(result.current.chapters.get(1)?.targetVerses).toEqual([]);
+    await waitFor(() =>
+      expect(result.current.chapters.get(1)?.targetVerses[0].content).toBe('Unit 18')
+    );
+    expect(requests.filter(value => value === 'source:9')).toHaveLength(1);
+
+    rerender({ item: { ...projectItem, bibleId: 19 } });
+    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([]);
+    await waitFor(() =>
+      expect(result.current.chapters.get(1)?.sourceVerses[0].text).toBe('Other Bible')
+    );
+    expect(result.current.chapters.get(1)?.targetVerses).toEqual([]);
+    expect(requests.sort()).toEqual(['source:19', 'source:9', 'target:18', 'target:8']);
+  });
+
+  it('refreshes invalidated translations before initializing an assignment after a save', async () => {
+    const requests: string[] = [];
+    let saved = previousTranslation.content;
+    let releaseRefresh: () => void = () => {};
+    const refreshReady = new Promise<void>(resolve => {
+      releaseRefresh = resolve;
+    });
+    server.use(
+      http.get(`${config.api.url}/bibles/9/books/1/chapters/1/texts`, () => {
+        requests.push('source');
+        return HttpResponse.json(sources);
+      }),
+      http.get(`${config.api.url}/translated-verses`, async ({ request }) => {
+        const unit = new URL(request.url).searchParams.get('projectUnitId');
+        requests.push(`target:${unit}`);
+        if (unit === '8' && saved !== previousTranslation.content) await refreshReady;
+        return HttpResponse.json([
+          {
+            ...previousTranslation,
+            projectUnitId: Number(unit),
+            content: unit === '8' ? saved : 'Other unit',
+          },
+        ]);
+      }),
+      http.post(`${config.api.url}/translated-verses`, async ({ request }) => {
+        const body = (await request.json()) as { content: string };
+        saved = body.content;
+        return HttpResponse.json({ ...previousTranslation, content: saved });
+      })
+    );
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const context = renderHook(
+      () => usePericopeContext({ projectItem, pericopes: previousOnly, enabled: true }),
+      { wrapper }
+    );
+    await waitFor(() => expect(context.result.current.isLoading).toBe(false));
+    context.unmount();
+    await queryClient.fetchQuery(targetTextQueryOptions(18, 1, 1));
+    const mutation = renderHook(useAddTranslatedVerse, { wrapper });
+
+    await act(() =>
+      mutation.result.current.mutateAsync({
+        verseData: {
+          projectUnitId: 8,
+          bibleTextId: 101,
+          assignedUserId: 1,
+          content: 'Saved new draft',
+        },
+      })
+    );
+    expect(queryClient.getQueryState(targetTextQueryOptions(8, 1, 1).queryKey)?.isInvalidated).toBe(
+      true
+    );
+    expect(
+      queryClient.getQueryState(targetTextQueryOptions(18, 1, 1).queryKey)?.isInvalidated
+    ).toBe(false);
+
+    useAppStore.setState({ userdetail: { id: 1 } as never, currentProjectItem: null });
+    let loaded = false;
+    const assignmentPromise = translationLoader({
+      context: { queryClient },
+      location: {
+        state: { projectItem: { ...projectItem, chapterAssignmentId: 1, chapterNumber: 1 } },
+      },
+    }).then(assignment => {
+      loaded = true;
+      return assignment;
+    });
+    await waitFor(() => expect(requests.filter(value => value === 'target:8')).toHaveLength(2));
+    expect(loaded).toBe(false);
+    releaseRefresh();
+    const assignment = await assignmentPromise;
+
+    expect(assignment.targetVerses[0].content).toBe('Saved new draft');
+    expect(requests.filter(value => value === 'source')).toHaveLength(1);
+    expect(requests.filter(value => value === 'target:18')).toHaveLength(1);
+    expect(
+      queryClient.getQueryData(targetTextQueryOptions(8, 1, 1).queryKey)?.[0].bibleTextId
+    ).toBe(101);
   });
 });

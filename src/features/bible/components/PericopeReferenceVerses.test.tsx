@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { createInstance } from 'i18next';
 import { http, HttpResponse } from 'msw';
 import { initReactI18next } from 'react-i18next';
@@ -6,7 +7,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
-import { renderWithProviders, screen, within } from '@/test/render';
+import {
+  act,
+  createTestQueryClient,
+  render,
+  renderWithProviders,
+  screen,
+  within,
+} from '@/test/render';
 
 const i18n = createInstance();
 
@@ -225,6 +233,7 @@ describe('PericopeReferenceVerses', () => {
     await screen.findByText(/no content available/i);
     expect(screen.getByText('9:1')).toBeInTheDocument();
     expect(screen.queryByText('Aquifer chapter nine')).not.toBeInTheDocument();
+    expect(screen.queryByText(/unable to load/i)).not.toBeInTheDocument();
   });
 
   it('shows a failed resource request beside its verse label', async () => {
@@ -245,6 +254,82 @@ describe('PericopeReferenceVerses', () => {
     await screen.findByText(/unable to load/i);
     expect(screen.getByText('9:1')).toBeInTheDocument();
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+  });
+
+  it.each([500, 503])(
+    'shows an Aquifer HTTP %i failure instead of missing content',
+    async status => {
+      server.use(
+        http.get(
+          `${config.api.aquifer_url}/bibles/11/texts`,
+          () => new HttpResponse(null, { status })
+        )
+      );
+
+      renderWithProviders(
+        <p>
+          <PericopeReferenceVerses
+            bibleId='aq-11'
+            bookCode='MRK'
+            chapterNumber={9}
+            showChapter={true}
+            verses={[chapterNineVerses[0]]}
+          />
+        </p>
+      );
+
+      const failedVerse = await screen.findByText(/unable to load/i);
+      expect(failedVerse.parentElement).toHaveTextContent('9:1');
+      expect(failedVerse).toHaveClass('text-muted-foreground', 'text-sm');
+      expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
+    }
+  );
+
+  it('preserves cached Aquifer text and shows refetch failures only for missing verses', async () => {
+    server.use(
+      http.get(`${config.api.aquifer_url}/bibles/11/texts`, () =>
+        HttpResponse.json({
+          ...aquiferChapter(9),
+          chapters: [{ number: 9, verses: [{ number: 1, text: 'Aquifer cached verse' }] }],
+        })
+      )
+    );
+    const queryClient = createTestQueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <p>
+          <PericopeReferenceVerses
+            bibleId='aq-11'
+            bookCode='MRK'
+            chapterNumber={9}
+            showChapter={true}
+            verses={chapterNineVerses}
+          />
+        </p>
+      </QueryClientProvider>
+    );
+
+    await screen.findByText('Aquifer cached verse');
+    expect(screen.getByText(/no content available/i).parentElement).toHaveTextContent('9:3');
+    server.use(
+      http.get(
+        `${config.api.aquifer_url}/bibles/11/texts`,
+        () => new HttpResponse(null, { status: 503 })
+      )
+    );
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['aquifer-bible-text', 11, 'MRK', 9] });
+    });
+
+    const failedVerse = await screen.findByText(/unable to load/i);
+    expect(failedVerse.parentElement).toHaveTextContent('9:3');
+    const cachedVerse = screen.getByText('Aquifer cached verse');
+    expect(cachedVerse.parentElement).toHaveTextContent('9:1');
+    expect(cachedVerse).not.toHaveClass('text-muted-foreground');
+    expect(screen.getAllByText(/unable to load/i)).toHaveLength(1);
+    expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
   });
 
   it.each([

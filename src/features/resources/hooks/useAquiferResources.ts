@@ -317,10 +317,11 @@ const fetchAquiferBibleText = async (
   }
 
   if (!response.ok) {
-    Logger.logException(new Error('Failed to fetch Aquifer bible text'), {
+    const error = new Error('Failed to fetch Aquifer bible text');
+    Logger.logException(error, {
       context: `status=${response.status} bibleId=${bibleId} bookCode=${bookCode} chapter=${chapter}`,
     });
-    return emptyResponse;
+    throw error;
   }
 
   return (await response.json()) as AquiferBibleTextResponse;

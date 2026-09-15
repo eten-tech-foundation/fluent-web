@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { PericopeText } from '@/features/bible/components/PericopeText';
 import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
 import { orderedPericopeRefs } from '@/features/bible/lib/pericope-display';
 import type { PericopeGroup } from '@/lib/types';
@@ -49,21 +50,18 @@ export const PericopeContextText = ({
               const content = data?.targetVerses.find(
                 v => v.verseNumber === ref.verseNumber
               )?.content;
-              const placeholder = data?.isLoading
-                ? t('loading', 'Loading...')
-                : source
-                  ? t('pericopeNotDrafted', 'Not drafted')
-                  : t('noContentAvailable', 'No content available');
               return (
                 <Fragment key={`${chapter}:${ref.verseNumber}`}>
                   <span className='mr-1.5 font-bold'>
                     {chapter}:{ref.verseNumber}
                   </span>
-                  <span
-                    className={`mr-3 ${!content?.length ? 'text-muted-foreground text-sm' : ''}`}
-                  >
-                    {content?.length ? content : placeholder}
-                  </span>
+                  <PericopeText
+                    className='mr-3'
+                    content={content}
+                    emptyState={source ? 'not-drafted' : 'unavailable'}
+                    isError={data?.isError}
+                    isLoading={data?.isLoading}
+                  />
                 </Fragment>
               );
             })}

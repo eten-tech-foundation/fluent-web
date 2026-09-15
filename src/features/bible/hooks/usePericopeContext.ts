@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { type UseQueryResult, useQueries } from '@tanstack/react-query';
 
-import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
-import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
+import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
+import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 export interface PericopeContextChapter {
@@ -11,6 +11,8 @@ export interface PericopeContextChapter {
   targetVerses: TargetVerse[];
   isLoading: boolean;
   isError: boolean;
+  sourceIsLoading: boolean;
+  sourceIsError: boolean;
 }
 
 interface UsePericopeContextProps {
@@ -19,13 +21,18 @@ interface UsePericopeContextProps {
   enabled: boolean;
 }
 
-interface ContextTarget extends TargetVerse {
-  bibleTextId: number;
-}
-
-interface ContextData {
-  sourceVerses: Source[];
-  targetVerses: ContextTarget[];
+// useQueries structurally shares this combined array, so unrelated renders do not rebuild
+// the projected chapter map or its refetch callback.
+function combineChapterQueries<T>(
+  queries: Array<UseQueryResult<T, Error>>
+): Array<Pick<UseQueryResult<T, Error>, 'data' | 'error' | 'isFetching' | 'isError' | 'refetch'>> {
+  return queries.map(({ data, error, isFetching, isError, refetch }) => ({
+    data,
+    error,
+    isFetching,
+    isError,
+    refetch,
+  }));
 }
 
 /**
@@ -53,79 +60,68 @@ export function usePericopeContext({ projectItem, pericopes, enabled }: UsePeric
     () => Array.from(references.keys()).sort((a, b) => a - b),
     [references]
   );
-  const combine = useCallback(
-    (queries: Array<UseQueryResult<ContextData, Error>>) => {
-      const chapters = new Map<number, PericopeContextChapter>();
-      let error: Error | null = null;
-      for (const [index, query] of queries.entries()) {
-        error ??= query.error;
-        const chapterNumber = chapterNumbers[index];
-        const requestedVerses = references.get(chapterNumber);
-        const sourceVerses = (query.data?.sourceVerses ?? [])
-          .filter(verse => requestedVerses?.has(verse.verseNumber))
-          .map(({ id, verseNumber, text }) => ({ id, verseNumber, text }))
-          .sort((a, b) => a.verseNumber - b.verseNumber);
-
-        // Verse numbers repeat in each chapter; translated row IDs are not source text IDs.
-        const targetsBySourceId = new Map(
-          (query.data?.targetVerses ?? []).map(verse => [verse.bibleTextId, verse])
-        );
-        const targetVerses = sourceVerses.flatMap(source => {
-          const target = targetsBySourceId.get(source.id);
-          return target
-            ? [
-                {
-                  id: target.id,
-                  verseNumber: source.verseNumber,
-                  content: target.content,
-                  markers: target.markers ?? null,
-                },
-              ]
-            : [];
-        });
-        chapters.set(chapterNumber, {
-          sourceVerses,
-          targetVerses,
-          isLoading: query.isFetching && !query.data,
-          isError: query.isError,
-        });
-      }
-
-      return {
-        chapters,
-        isLoading: Array.from(chapters.values()).some(chapter => chapter.isLoading),
-        isError: error !== null,
-        error,
-        refetch: () => Promise.all(queries.map(query => query.refetch())),
-      };
-    },
-    [chapterNumbers, references]
-  );
-
-  return useQueries({
-    queries: chapterNumbers.map(chapterNumber => ({
-      queryKey: [
-        'pericope-context',
-        projectItem.projectId,
-        projectItem.projectUnitId,
-        projectItem.bibleId,
-        projectItem.bookId,
-        projectItem.chapterNumber,
-        chapterNumber,
-      ],
-      queryFn: async () => {
-        const [sourceData, targetData] = await Promise.all([
-          fetchBibleText(projectItem.bibleId, projectItem.bookId, chapterNumber),
-          fetchTargetText(projectItem.projectUnitId, projectItem.bookId, chapterNumber),
-        ]);
-        // These shared fetch functions still declare ProjectItem[] for their JSON response.
-        // The chapter text endpoints return verse rows, as in TranslationLoader.
-        return {
-          sourceVerses: sourceData as unknown as Source[],
-          targetVerses: targetData as unknown as ContextTarget[],
-        };
-      },
-    })),
-    combine,
+  const sourceQueries = useQueries({
+    queries: chapterNumbers.map(chapterNumber =>
+      bibleTextQueryOptions(projectItem.bibleId, projectItem.bookId, chapterNumber)
+    ),
+    combine: combineChapterQueries,
   });
+  const targetQueries = useQueries({
+    queries: chapterNumbers.map(chapterNumber =>
+      targetTextQueryOptions(projectItem.projectUnitId, projectItem.bookId, chapterNumber)
+    ),
+    combine: combineChapterQueries,
+  });
+
+  return useMemo(() => {
+    const chapters = new Map<number, PericopeContextChapter>();
+    let error: Error | null = null;
+    for (const [index, chapterNumber] of chapterNumbers.entries()) {
+      const sourceQuery = sourceQueries[index];
+      const targetQuery = targetQueries[index];
+      error ??= sourceQuery.error ?? targetQuery.error;
+      const requestedVerses = references.get(chapterNumber);
+      const sourceVerses = (sourceQuery.data ?? [])
+        .filter(verse => requestedVerses?.has(verse.verseNumber))
+        .map(({ id, verseNumber, text }) => ({ id, verseNumber, text }))
+        .sort((a, b) => a.verseNumber - b.verseNumber);
+
+      // Keep raw cached rows intact: translations join to source IDs, not translated row IDs
+      // or verse numbers, which repeat in every chapter.
+      const targetsBySourceId = new Map(
+        (targetQuery.data ?? []).map(verse => [verse.bibleTextId, verse])
+      );
+      const targetVerses = sourceVerses.flatMap(source => {
+        const target = targetsBySourceId.get(source.id);
+        return target
+          ? [
+              {
+                id: target.id,
+                verseNumber: source.verseNumber,
+                content: target.content,
+                markers: target.markers ?? null,
+              },
+            ]
+          : [];
+      });
+      const sourceIsLoading = sourceQuery.isFetching && !sourceQuery.data;
+      chapters.set(chapterNumber, {
+        sourceVerses,
+        targetVerses,
+        sourceIsLoading,
+        sourceIsError: sourceQuery.isError,
+        isLoading: sourceIsLoading || (targetQuery.isFetching && !targetQuery.data),
+        isError: sourceQuery.isError || targetQuery.isError,
+      });
+    }
+
+    return {
+      chapters,
+      isLoading: Array.from(chapters.values()).some(chapter => chapter.isLoading),
+      isError: error !== null,
+      error,
+      refetch: () =>
+        Promise.all([...sourceQueries, ...targetQueries].map(query => query.refetch())),
+    };
+  }, [chapterNumbers, references, sourceQueries, targetQueries]);
 }

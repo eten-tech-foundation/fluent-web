@@ -1,5 +1,4 @@
-import { useTranslation } from 'react-i18next';
-
+import { PericopeText } from '@/features/bible/components/PericopeText';
 import { useAquiferBibleText } from '@/features/resources/hooks/useAquiferResources';
 import {
   useYouVersionChapterMeta,
@@ -22,7 +21,6 @@ export const PericopeReferenceVerses = ({
   verses,
   showChapter,
 }: PericopeReferenceVersesProps) => {
-  const { t } = useTranslation();
   const bible = /^(aq|yv)-(\d+)$/.exec(bibleId);
   const rawId = bible ? Number(bible[2]) : null;
   const isAquifer = bible?.[1] === 'aq';
@@ -67,7 +65,6 @@ export const PericopeReferenceVerses = ({
         .sort((a, b) => a.verseNumber - b.verseNumber)
         .map(verse => {
           const text = textByVerse.get(verse.verseNumber);
-          const unavailable = !text?.trim();
           const passage = passageByVerse.get(verse.verseNumber);
           const loading =
             (isAquifer && aquifer.isLoading) ||
@@ -75,22 +72,13 @@ export const PericopeReferenceVerses = ({
           const failed =
             (isAquifer && aquifer.isError) ||
             (isYouVersion && (youVersion.isError || passage?.isError));
-          const content = !unavailable
-            ? text
-            : loading
-              ? t('loading', 'Loading...')
-              : failed
-                ? t('errorLoadingBibleContent', 'Unable to load Bible content.')
-                : t('noContentAvailable', 'No content available');
 
           return (
             <span key={verse.verseNumber} className='mr-3'>
               <span className='mr-1 font-bold'>
                 {showChapter ? `${chapterNumber}:${verse.verseNumber}` : verse.verseNumber}
               </span>
-              <span className={unavailable ? 'text-muted-foreground text-sm' : ''}>
-                {content}
-              </span>{' '}
+              <PericopeText content={text} isError={!!failed} isLoading={!!loading} />{' '}
             </span>
           );
         })}

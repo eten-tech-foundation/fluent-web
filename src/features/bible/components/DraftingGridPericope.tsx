@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
 import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
+import { PericopeText } from '@/features/bible/components/PericopeText';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
 import {
@@ -464,7 +465,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
           const showResourcePlaceholder =
             selectedPanel === 2 &&
             chapters.length === 1 &&
-            (resourceBibleLoading || bibleVerseMap.size === 0);
+            !refs.some(ref => bibleVerseMap.get(ref.verseNumber)?.trim());
           const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
           return (
@@ -553,14 +554,10 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                                 : undefined;
                           const loading =
                             selectedPanel === 1
-                              ? !isCurrentChapter && context?.isLoading
+                              ? !isCurrentChapter && context?.sourceIsLoading
                               : resourceBibleLoading;
-                          const unavailable = !content?.trim();
-                          const textToRender = unavailable
-                            ? loading
-                              ? t('loading', 'Loading...')
-                              : t('noContentAvailable', 'No content available')
-                            : content;
+                          const failed =
+                            selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
@@ -568,11 +565,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                                   ? `${chapter}:${ref.verseNumber}`
                                   : ref.verseNumber}
                               </span>
-                              <span
-                                className={`mr-3 ${unavailable ? 'text-muted-foreground text-sm' : ''}`}
-                              >
-                                {textToRender}
-                              </span>
+                              <PericopeText
+                                className='mr-3'
+                                content={content}
+                                isError={!!failed}
+                                isLoading={!!loading}
+                              />
                             </React.Fragment>
                           );
                         });
