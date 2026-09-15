@@ -1,5 +1,6 @@
 import { createTtsSegment } from '../lib/createTtsSegment';
 
+import { licenceBar } from './licenceFence';
 import { recordedSourceForVerse } from './selectTrack';
 
 import type { ChapterAudioCache } from './chapterCache';
@@ -29,7 +30,12 @@ export interface SourceResolverContext
   recordedRecovery: new (options: RecordedRecoveryOptions) => RecoveryStrategy;
   /** Omit for individual verse playables; supply for one pericope containing these rows in order. */
   pericopeId?: string;
-  // phase 08: enforce the licence fence. Carry the API spelling, not the DB column name.
+  // The licence fence. Carry the API spelling, not the DB column name.
+  /**
+   * The assignment's status is authoritative when supplied. The chapter
+   * response is a fallback for callers without assignment metadata, so a
+   * cleared Bible keeps its voice through a provider outage.
+   */
   ttsLicenseStatus?: ChapterSourceAudio['ttsLicenseStatus'];
   licenseNotice?: ChapterSourceAudio['licenseNotice'];
 }
@@ -83,31 +89,47 @@ export const resolvePlayables = (
               const { signal, run, requests } = resolution;
               signal.throwIfAborted();
               const canUseRecording = () => !run.forceTts;
+              let response: ChapterSourceAudio | undefined;
               if (canUseRecording()) {
-                let response: ChapterSourceAudio | undefined;
                 try {
                   response = await ctx.cache.get(chapter, signal);
                 } catch {
-                  // An unavailable recording path earns TTS, but cancellation never earns synthesis.
+                  // An unavailable recording path earns TTS where the licence
+                  // allows it; cancellation never earns synthesis.
                   signal.throwIfAborted();
                 }
                 signal.throwIfAborted();
-                // A downgrade may have happened while this chapter request was in flight.
-                const source =
-                  canUseRecording() && response
-                    ? recordedSourceForVerse(response, row.verseNumber, ctx.cache.supportsOpus)
-                    : undefined;
-                if (source) {
-                  requests.attach(
-                    new ctx.recordedRecovery({
-                      chapter,
-                      cache: ctx.cache,
-                      verseNumber: row.verseNumber,
-                      ttsSource,
-                    })
-                  );
-                  return source;
-                }
+              }
+              // The fence, in one branch: synthesis exists only for a Bible
+              // whose status says `allowed`. The status travels with the
+              // assignment, so this holds when no recording answer arrives at
+              // all — and a status nobody supplied is not a clearance.
+              const barred = licenceBar(
+                ctx.ttsLicenseStatus ??
+                  response?.ttsLicenseStatus ??
+                  ctx.cache.peek(chapter)?.ttsLicenseStatus
+              );
+              // A downgrade may have happened while this chapter request was in flight.
+              const source =
+                canUseRecording() && response
+                  ? recordedSourceForVerse(response, row.verseNumber, ctx.cache.supportsOpus)
+                  : undefined;
+              if (source) {
+                requests.attach(
+                  new ctx.recordedRecovery({
+                    chapter,
+                    cache: ctx.cache,
+                    verseNumber: row.verseNumber,
+                    // Barred audio hands off to nothing: an exhausted recording
+                    // ends the run rather than reaching for a voice.
+                    ttsSource: barred === null ? ttsSource : null,
+                  })
+                );
+                return source;
+              }
+              if (barred !== null) {
+                // Diagnostic, never shown: the host names the reason a listener reads.
+                throw new Error(`Synthesis barred by the licence fence (${barred})`);
               }
               return ttsSource(resolution);
             },

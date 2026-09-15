@@ -269,6 +269,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         projectUnitId: assignment.projectUnitId,
         bibleId: assignment.bibleId,
         bibleName: projectSource,
+        // The drafting page's audio fence reads these; dropping them here would
+        // leave the PM path unable to tell a cleared Bible from an uncleared one.
+        ttsLicenseStatus: assignment.ttsLicenseStatus,
+        licenseNotice: assignment.licenseNotice,
         targetLanguage: projectTargetLanguageName,
         // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
         // the progress endpoint now surfaces this so the PM path no longer

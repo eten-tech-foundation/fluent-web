@@ -37,6 +37,10 @@ const setup = () => {
       cache,
       engine: { synthesize },
       recordedRecovery: RecordedRecoveryStrategy,
+      // These are retry tests on a cleared Bible. The host reads this from the
+      // chapter assignment, so it is present even when no lookup succeeds —
+      // which is what lets an exhausted lookup still reach TTS.
+      ttsLicenseStatus: 'allowed',
     }
   ).flatMap(playable => playable.segments);
   return { fetchFn, cache, synthesize, segments };

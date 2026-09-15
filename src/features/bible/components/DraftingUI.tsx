@@ -933,6 +933,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     engine: ttsEngine,
     rows: ttsRows,
     referenceBibleId: selectedPanel === 2 ? referenceBibleId : null,
+    // The source Bible's audio licence, carried on the assignment this page
+    // already loaded. Read before any audio provider is called, and unaffected
+    // by one being unreachable.
+    sourceLicence: {
+      status: projectItem.ttsLicenseStatus,
+      notice: projectItem.licenseNotice ?? null,
+    },
     // The reference panel has provider-specific ids, not this Fluent Bible id.
     // Keep its own-text TTS path until reference recording identity is wired.
     sourceChapter:

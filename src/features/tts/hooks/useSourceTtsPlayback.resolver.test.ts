@@ -66,6 +66,9 @@ const props = (extra: Partial<UseSourceTtsPlaybackOptions> = {}): UseSourceTtsPl
   engine,
   rows,
   sourceChapter: sourceChapterRequest,
+  // The drafting surface reads this from the chapter assignment; a cleared
+  // Bible is the ordinary case these tests exercise.
+  sourceLicence: { status: 'allowed', notice: 'Test Bible. Public domain.' },
   referenceBibleId: 'aq-test',
   pageKey: 'assignment-1',
   getRowElement: () => null,

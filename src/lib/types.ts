@@ -104,6 +104,11 @@ export interface Chapter {
 
 export interface ChapterAssignmentProgress {
   bibleId: number;
+  // Surfaced here as well as on the user-assignments endpoint, because the PM
+  // "open chapter" path builds its ProjectItem from this response (BUG #3's
+  // lesson, applied to the audio licence).
+  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  licenseNotice?: string | null;
   bookId: number;
   bookCode: string;
   sourceLangCode: string;
@@ -142,6 +147,16 @@ export interface ProjectItem {
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
+  /**
+   * Whether anyone may synthesise speech from this Bible — never a user
+   * permission. Carried on the assignment so the drafting page knows before it
+   * asks an audio provider anything, and still knows when one is unreachable.
+   * Optional only for responses from an API without this field yet; absent is
+   * treated as uncleared, never as permission.
+   */
+  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  /** Human-curated attribution for this Bible, shown with its audio. */
+  licenseNotice?: string | null;
   /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
   /**
@@ -318,6 +333,10 @@ export interface UserChapterAssignment {
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
+  // Handed to the drafting route as the ProjectItem, so the source Bible's
+  // audio licence rides along with it. See ProjectItem for why it is optional.
+  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  licenseNotice?: string | null;
   chapterStatus: string;
   /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
