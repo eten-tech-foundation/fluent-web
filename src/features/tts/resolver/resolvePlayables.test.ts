@@ -11,6 +11,7 @@ import {
 
 import { ChapterAudioCache } from './chapterCache';
 import { resolvePlayables } from './resolvePlayables';
+import { recordedSourceForVerse } from './selectTrack';
 
 import type {
   RecordedRecoveryOptions,
@@ -231,11 +232,76 @@ describe('resolvePlayables', () => {
     expect(context.requests.markAi).not.toHaveBeenCalled();
   });
 
-  it('carries forbidden licence facts but leaves enforcement to phase 08', async () => {
-    const chapter = windowlessChapter();
+  // ─── The licence fence ──────────────────────────────────────────────────────
+  // `allowed` is the only value that opens synthesis. `forbidden` and `unknown`
+  // behave identically here; they differ only in the reason a listener reads.
+
+  it.each(['forbidden', 'unknown'] as const)(
+    'plays the recording on a %s Bible and gives its recovery no voice to fall back on',
+    async ttsLicenseStatus => {
+      const chapter = bsbChapter();
+      chapter.ttsLicenseStatus = ttsLicenseStatus;
+      const { ctx, synthesize } = setup(chapter);
+      const context = resolution();
+      const source = await resolve(resolvePlayables(rows, ctx)[0].segments[0], context);
+      expect(source).toEqual(recordedSourceForVerse(chapter, 1, true));
+      expect(synthesize).not.toHaveBeenCalled();
+      const attached = vi.mocked(context.requests.attach).mock.calls[0][0] as RecordedPolicy;
+      // An exhausted recording ends the run instead of reaching for a voice.
+      expect(attached.options.ttsSource).toBeNull();
+    }
+  );
+
+  it.each(['forbidden', 'unknown'] as const)(
+    'refuses to synthesize a %s Bible that has no recording for the verse',
+    async ttsLicenseStatus => {
+      const chapter = windowlessChapter();
+      chapter.ttsLicenseStatus = ttsLicenseStatus;
+      const { ctx, synthesize } = setup(chapter);
+      const context = resolution();
+      await expect(resolve(resolvePlayables(rows, ctx)[0].segments[0], context)).rejects.toThrow(
+        'licence fence'
+      );
+      expect(synthesize).not.toHaveBeenCalled();
+      expect(context.requests.attach).not.toHaveBeenCalled();
+      expect(context.requests.markAi).not.toHaveBeenCalled();
+    }
+  );
+
+  it('refuses a barred Bible even when a downgraded run asks for the voice directly', async () => {
+    const chapter = bsbChapter();
     chapter.ttsLicenseStatus = 'forbidden';
-    const { ctx, synthesize } = setup(chapter);
-    expect(ctx.ttsLicenseStatus).toBe('forbidden');
+    const { ctx, load, synthesize } = setup(chapter);
+    const context = resolution({ forceTts: true });
+    await expect(resolve(resolvePlayables(rows, ctx)[0].segments[0], context)).rejects.toThrow(
+      'licence fence'
+    );
+    expect(synthesize).not.toHaveBeenCalled();
+    // The assignment already answered: a forced run still asks no provider.
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('treats a licence nobody supplied as uncleared, not as permission', async () => {
+    const { ctx, load, synthesize } = setup();
+    load.mockRejectedValue(new Error('source audio unavailable'));
+    const barred: SourceResolverContext = { ...ctx, ttsLicenseStatus: undefined };
+    await expect(resolve(resolvePlayables(rows, barred)[0].segments[0])).rejects.toThrow(
+      'licence fence'
+    );
+    expect(synthesize).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the response's own licence when the assignment carries none", async () => {
+    const { ctx, synthesize } = setup(windowlessChapter());
+    const older: SourceResolverContext = { ...ctx, ttsLicenseStatus: undefined };
+    await resolve(resolvePlayables(rows, older)[0].segments[0]);
+    // The fixture is a cleared Bible, so the voice is still permitted.
+    expect(synthesize).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a cleared Bible speaking when the recording lookup fails outright', async () => {
+    const { ctx, load, synthesize } = setup();
+    load.mockRejectedValue(new Error('source audio unavailable'));
     await resolve(resolvePlayables(rows, ctx)[0].segments[0]);
     expect(synthesize).toHaveBeenCalledOnce();
   });
