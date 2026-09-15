@@ -191,4 +191,90 @@ describe('cross-chapter pericope display', () => {
     expect(screen.getByText('No content available')).toBeInTheDocument();
     expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
   });
+
+  const unavailableContentCases = [
+    { description: 'empty text at rest', content: '', loading: false },
+    { description: 'whitespace at rest', content: ' \t\n ', loading: false },
+    { description: 'empty text while pending', content: '', loading: true },
+    { description: 'whitespace while pending', content: ' \t\n ', loading: true },
+  ];
+
+  it.each(unavailableContentCases)(
+    'shows muted source placeholders for $description in the current and neighboring chapters',
+    ({ content, loading }) => {
+      renderChapter(8, {
+        sourceVerses: chapter8.map(verse =>
+          verse.verseNumber === 31 ? { ...verse, text: content } : verse
+        ),
+        contextChapters: new Map([
+          [
+            9,
+            {
+              ...contextChapters.get(9)!,
+              sourceVerses: [{ ...chapter9[0], text: content }],
+              isLoading: loading,
+            },
+          ],
+        ]),
+      });
+      const sourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
+      const currentText = within(sourceColumn).getByText('8:31').nextElementSibling!;
+      const neighborText = within(sourceColumn).getByText('9:1').nextElementSibling!;
+
+      expect(currentText.textContent).toBe('No content available');
+      expect(neighborText.textContent).toBe(loading ? 'Loading...' : 'No content available');
+      expect(currentText).toHaveClass('text-muted-foreground', 'text-sm');
+      expect(neighborText).toHaveClass('text-muted-foreground', 'text-sm');
+    }
+  );
+
+  it.each(unavailableContentCases)(
+    'shows muted resource placeholders for $description',
+    ({ content, loading }) => {
+      renderChapter(8, {
+        selectedPanel: 2,
+        bibleVerseMap: new Map([[31, content]]),
+        resourceBibleLoading: loading,
+      });
+      const resourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
+      const resourceText = within(resourceColumn).getByText('8:31').nextElementSibling!;
+
+      expect(resourceText.textContent).toBe(loading ? 'Loading...' : 'No content available');
+      expect(resourceText).toHaveClass('text-muted-foreground', 'text-sm');
+    }
+  );
+
+  it.each([1, 2] as const)(
+    'preserves surrounding whitespace in available scripture text on panel %i',
+    selectedPanel => {
+      const content = '  Scripture text with surrounding whitespace \t\n ';
+      renderChapter(8, {
+        selectedPanel,
+        sourceVerses: chapter8.map(verse =>
+          verse.verseNumber === 31 ? { ...verse, text: content } : verse
+        ),
+        bibleVerseMap: new Map([[31, content]]),
+        contextChapters: new Map([
+          [
+            9,
+            {
+              ...contextChapters.get(9)!,
+              sourceVerses: [{ ...chapter9[0], text: content }],
+            },
+          ],
+        ]),
+      });
+      const scriptureColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0]
+        .parentElement!;
+      const currentText = within(scriptureColumn).getByText('8:31').nextElementSibling!;
+
+      expect(currentText.textContent).toBe(content);
+      expect(currentText).not.toHaveClass('text-muted-foreground');
+      if (selectedPanel === 1) {
+        const neighborText = within(scriptureColumn).getByText('9:1').nextElementSibling!;
+        expect(neighborText.textContent).toBe(content);
+        expect(neighborText).not.toHaveClass('text-muted-foreground');
+      }
+    }
+  );
 });

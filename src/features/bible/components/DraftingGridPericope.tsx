@@ -555,11 +555,12 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                             selectedPanel === 1
                               ? !isCurrentChapter && context?.isLoading
                               : resourceBibleLoading;
-                          const textToRender =
-                            content ??
-                            (loading
+                          const unavailable = !content?.trim();
+                          const textToRender = unavailable
+                            ? loading
                               ? t('loading', 'Loading...')
-                              : t('noContentAvailable', 'No content available'));
+                              : t('noContentAvailable', 'No content available')
+                            : content;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
@@ -568,7 +569,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                                   : ref.verseNumber}
                               </span>
                               <span
-                                className={`mr-3 ${content === undefined ? 'text-muted-foreground text-sm' : ''}`}
+                                className={`mr-3 ${unavailable ? 'text-muted-foreground text-sm' : ''}`}
                               >
                                 {textToRender}
                               </span>
