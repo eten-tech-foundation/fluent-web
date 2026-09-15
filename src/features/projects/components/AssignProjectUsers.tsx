@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import {
+  isRemovableAssignmentForUser,
   useAddProjectUsers,
   useProjectUsers,
   useRemoveProjectUser,
@@ -289,9 +290,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const getActiveAssignmentCount = useCallback(
     (userId: number) => {
       if (!chapterAssignments) return 0;
-      return chapterAssignments.filter(
-        a => a.assignedUser?.id === userId || a.peerChecker?.id === userId
-      ).length;
+      return chapterAssignments.filter(a => isRemovableAssignmentForUser(a, userId).isRemovable)
+        .length;
     },
     [chapterAssignments]
   );
@@ -312,16 +312,10 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         return;
       }
 
-      if (getActiveAssignmentCount(pu.userId) > 0) {
-        setRemoveTarget(null);
-        setRemoveBlockedReason(`${pu.displayName} still has assigned work.`);
-        return;
-      }
-
       setRemoveBlockedReason(null);
       setRemoveTarget(pu);
     },
-    [projectManagerCount, chapterAssignments, getActiveAssignmentCount]
+    [projectManagerCount, chapterAssignments]
   );
 
   const handleConfirmRemove = useCallback(async () => {
@@ -406,7 +400,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                     return (
                       <button
                         key={role.value}
-                        className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors hover:bg-white/60 ${
+                        className={`hover:bg-accent hover:text-accent-foreground flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors ${
                           isSelected ? 'font-medium' : ''
                         }`}
                         type='button'
@@ -427,6 +421,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      aria-label='Remove user from project'
                       className='h-7 w-7 p-0 hover:text-red-500'
                       disabled={removingUserIds.has(pu.userId)}
                       size='sm'
@@ -503,21 +498,20 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30'>
-            <span className='text-sm text-red-700 dark:text-red-400'>
-              Remove {removeTarget.displayName} from this project?
-            </span>
-            <div className='flex shrink-0 gap-2'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
+            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+              {getActiveAssignmentCount(removeTarget.userId) > 0 ? (
+                <>
+                  <span>Remove {removeTarget.displayName} from this project?</span>
+                  <span>Their chapter assignments will be removed.</span>
+                </>
+              ) : (
+                <span>Remove {removeTarget.displayName} from this project?</span>
+              )}
+            </div>
+            <div className='flex shrink-0 flex-col gap-1.5'>
               <Button
-                className='h-7 px-2.5 text-xs'
-                size='sm'
-                variant='outline'
-                onClick={() => setRemoveTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className='h-7 bg-red-500 px-2.5 text-xs text-white hover:bg-red-600'
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
                 disabled={removingUserIds.has(removeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRemove}
@@ -527,6 +521,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 ) : (
                   'Remove'
                 )}
+              </Button>
+              <Button
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
+                size='sm'
+                variant='outline'
+                onClick={() => setRemoveTarget(null)}
+              >
+                Cancel
               </Button>
             </div>
           </div>
@@ -644,7 +646,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   Role
                 </Label>
                 <Select value={selectedRole ?? ''} onValueChange={value => setSelectedRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
                     <SelectValue placeholder='Select a role'>{selectedRoleLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -683,7 +685,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Email Address
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-email'
                   placeholder='user@example.com'
                   type='email'
@@ -707,7 +709,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Display Name
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-display-name'
                   placeholder='Display Name'
                   value={inviteDisplayName}
@@ -720,7 +722,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Role
                 </Label>
                 <Select value={inviteRole ?? ''} onValueChange={value => setInviteRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
                     <SelectValue placeholder='Select a role'>{inviteRoleLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>

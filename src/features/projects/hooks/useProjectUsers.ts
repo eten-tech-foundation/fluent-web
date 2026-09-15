@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
+import { type ChapterAssignmentProgress } from '@/lib/types';
 
 export interface ProjectUser {
   projectId: number;
@@ -8,8 +9,50 @@ export interface ProjectUser {
   displayName: string;
   roleID: number;
   roleName: string;
-  addedAt: string | null;
+  addedAt?: string | null;
 }
+
+export interface AssignmentUserRef {
+  id: number;
+  displayName?: string;
+}
+
+export interface RemovableAssignmentCheck {
+  assignedUser?: AssignmentUserRef | null;
+  peerChecker?: AssignmentUserRef | null;
+  status: string;
+}
+
+export const isRemovableDrafterAssignment = (
+  assignment: RemovableAssignmentCheck,
+  userId: number
+): boolean => {
+  return (
+    assignment.assignedUser?.id === userId &&
+    (assignment.status === 'not_started' || assignment.status === 'draft')
+  );
+};
+
+export const isRemovablePeerCheckerAssignment = (
+  assignment: RemovableAssignmentCheck,
+  userId: number
+): boolean => {
+  return (
+    assignment.peerChecker?.id === userId &&
+    (assignment.status === 'not_started' ||
+      assignment.status === 'draft' ||
+      assignment.status === 'peer_check')
+  );
+};
+
+export const isRemovableAssignmentForUser = (
+  assignment: RemovableAssignmentCheck,
+  userId: number
+): { clearDrafter: boolean; clearChecker: boolean; isRemovable: boolean } => {
+  const clearDrafter = isRemovableDrafterAssignment(assignment, userId);
+  const clearChecker = isRemovablePeerCheckerAssignment(assignment, userId);
+  return { clearDrafter, clearChecker, isRemovable: clearDrafter || clearChecker };
+};
 
 interface ApiErrorResponse {
   message?: string;
@@ -109,6 +152,35 @@ export const useRemoveProjectUser = (projectId: number) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.filter(u => u.userId !== userId) : []
       );
+      const updateAssignments = (old: ChapterAssignmentProgress[] | undefined) => {
+        if (!old) return old;
+        return old.map(assignment => {
+          const { clearDrafter, clearChecker, isRemovable } = isRemovableAssignmentForUser(
+            assignment,
+            userId
+          );
+
+          if (!isRemovable) return assignment;
+
+          let newStatus = assignment.status;
+          if (clearDrafter) {
+            const hasProgress = assignment.completedVerses > 0;
+            newStatus = hasProgress ? assignment.status : 'not_started';
+          }
+
+          return {
+            ...assignment,
+            assignedUser: clearDrafter ? null : assignment.assignedUser,
+            peerChecker: clearChecker ? null : assignment.peerChecker,
+            status: newStatus,
+          };
+        });
+      };
+
+      queryClient.setQueryData(['chapterAssignments', projectId.toString()], updateAssignments);
+
+      void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
+      void queryClient.invalidateQueries({ queryKey: ['userChapterAssignments', userId] });
     },
   });
 };
