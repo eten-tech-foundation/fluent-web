@@ -976,20 +976,40 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // for it rather than assuming a format (T3).
   const ttsVerseRefFor = useCallback((verseNumber: number) => String(verseNumber), []);
 
-  // Alt+P / Alt+Shift+P / Alt+S (§12.1 Keyboard). Mounted HERE, and only here,
-  // because the shortcuts act on the host's notion of the active verse (T2) —
-  // the row the caret is in — which is drafting's state, not the queue's. The
-  // playing row and the active row are deliberately different things: a
-  // translator keeps typing in verse 4 while verse 2 is being read aloud, and
-  // Alt+P then plays 4.
+  // Use the same source-row membership as the visible pericope controls.
+  const ttsKeyboardGroups = isPericopeMode
+    ? (pericopes ?? []).map(group =>
+        sourceVerses
+          .filter(row => group.verses.some(verse => verse.verseNumber === row.verseNumber))
+          .map(row => ttsVerseRefFor(row.verseNumber))
+      )
+    : null;
+  const ttsCaretRef = ttsVerseRefFor(activeVerseId);
+  const ttsCaretGroup = ttsKeyboardGroups?.find(refs => refs.includes(ttsCaretRef)) ?? [];
+
+  // Audio shortcuts are mounted HERE, and only here,
+  // because the caret belongs to drafting, not the queue. Verse mode acts on
+  // that verse; pericope mode acts on its visible player, using the existing
+  // scrub seek for a fresh/different caret verse and resuming its saved position.
   //
-  // `enabled` is the flag gate, not an activity gate: Stop must work whenever
-  // the feature is on, including while a clip is still loading.
+  // Chapter view has no audio control yet: never narrate invisibly there.
+  // Pause is app-wide, including while a clip is still loading.
   useTtsKeyboardShortcuts({
-    enabled: ttsEnabled,
-    onPlayVerse: () => tts.playVerse(ttsVerseRefFor(activeVerseId)),
-    onPlayFromHere: () => tts.playFromVerse(ttsVerseRefFor(activeVerseId)),
-    onStop: tts.stop,
+    enabled: ttsEnabled && !isChapterMode,
+    onPlay: () =>
+      ttsKeyboardGroups
+        ? tts.playGroupAtVerse(ttsCaretGroup, ttsCaretRef)
+        : tts.playVerse(ttsCaretRef),
+    onPlayFromHere: () =>
+      ttsKeyboardGroups
+        ? tts.playFromGroups(ttsKeyboardGroups, ttsCaretRef)
+        : tts.playFromVerse(ttsCaretRef),
+    onPause: playbackRegistry.silenceAll,
+    onRestart: () => {
+      if (playbackRegistry.restartLive()) return;
+      if (ttsKeyboardGroups) tts.restartGroup(ttsCaretGroup);
+      else tts.restartVerse(ttsCaretRef);
+    },
   });
 
   // G3a: pericope mode's own props. A different shape from the verse grid's on
