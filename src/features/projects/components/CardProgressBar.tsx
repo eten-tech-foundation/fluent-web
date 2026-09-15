@@ -34,9 +34,22 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
                 />
               </TooltipTrigger>
               <TooltipContent side='top'>
-                <p>
-                  {segment.count} {segment.displayName}
-                </p>
+                {segment.subSegments && segment.subSegments.length > 0 ? (
+                  <div className='flex flex-col gap-1'>
+                    <p className='mb-1 border-b pb-1 font-bold'>
+                      {segment.count} {segment.displayName}
+                    </p>
+                    {segment.subSegments.map((sub, idx) => (
+                      <p key={idx} className='text-xs'>
+                        {sub.label}: {Math.round(sub.percentage)}%
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>
+                    {segment.count} {segment.displayName}
+                  </p>
+                )}
               </TooltipContent>
             </Tooltip>
           ))}

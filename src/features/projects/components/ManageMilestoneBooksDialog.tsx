@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,6 +29,7 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
   initialSelectedBookIds,
 }) => {
   const [selectedBooks, setSelectedBooks] = useState<number[]>([]);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (isOpen) {
@@ -67,6 +69,10 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
         addBooks: addBooks.length > 0 ? addBooks : undefined,
         removeBooks: removeBooks.length > 0 ? removeBooks : undefined,
       });
+
+      // Invalidate related caches so the UI reflects the changes immediately
+      void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-unit-books'] });
 
       toast.success('Milestone books updated successfully');
       onClose();

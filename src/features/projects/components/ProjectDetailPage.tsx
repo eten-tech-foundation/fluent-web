@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
-import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
+import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
@@ -44,6 +44,7 @@ import { TruncatedCardText } from './TruncatedText';
 interface MilestoneDetailPageProps {
   projectId?: number | null;
   milestoneId?: number | null;
+  milestoneName?: string;
   projectTitle: string;
   projectSourceLanguageName: string;
   projectTargetLanguageName: string;
@@ -51,7 +52,6 @@ interface MilestoneDetailPageProps {
   projectSourceBibleId: number;
   projectConnectivityProfile?: string | null;
   projectLastActivityAt?: string | null;
-  projectChapterStatusCounts: ChapterStatusCounts;
   projectWorkflowConfig: WorkflowStep[];
   isAddUserOpen?: boolean;
   onBack?: () => void;
@@ -64,6 +64,7 @@ interface MilestoneDetailPageProps {
 export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   projectId,
   milestoneId,
+  milestoneName,
   projectTitle,
   projectSourceLanguageName,
   projectTargetLanguageName,
@@ -71,7 +72,6 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   projectSourceBibleId,
   projectConnectivityProfile,
   projectLastActivityAt,
-  projectChapterStatusCounts,
   projectWorkflowConfig,
   isAddUserOpen = false,
   onBack,
@@ -100,9 +100,38 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     isFetching: assignmentsFetching,
   } = useChapterAssignments(projectId ? projectId.toString() : '0');
 
-  const { data: books, isLoading: booksLoading } = useProjectUnitBooks(
+  const { data: books, isLoading: booksLoading } = useProjectBooks(
     projectId ? projectId.toString() : '0'
   );
+
+  const milestoneFilteredAssignments = useMemo(() => {
+    if (!chapterAssignments) return [];
+    if (milestoneId) {
+      return chapterAssignments.filter(a => a.projectUnitId === milestoneId);
+    }
+    return chapterAssignments;
+  }, [chapterAssignments, milestoneId]);
+
+  const milestoneBooks = useMemo(() => {
+    if (!books) return [];
+    if (milestoneId) {
+      const validBookIds = new Set(milestoneFilteredAssignments.map(a => a.bookId));
+      return books.filter(b => validBookIds.has(b.bookId));
+    }
+    return books;
+  }, [books, milestoneFilteredAssignments, milestoneId]);
+
+  const computedChapterStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of milestoneFilteredAssignments) {
+      counts[a.status] = (counts[a.status] || 0) + 1;
+    }
+    return counts as ChapterStatusCounts;
+  }, [milestoneFilteredAssignments]);
+
+  const memoizedSelectedBookIds = useMemo(() => {
+    return milestoneFilteredAssignments.map(a => a.bookId).filter((v, i, a) => a.indexOf(v) === i);
+  }, [milestoneFilteredAssignments]);
 
   const activeOrgId = userdetail?.lastActiveOrgId;
   const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
@@ -177,16 +206,15 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   );
 
   const filteredAssignments = useMemo(() => {
-    if (!chapterAssignments) return [];
-    if (!selectedBook || selectedBook === 'all') return chapterAssignments;
+    if (!selectedBook || selectedBook === 'all') return milestoneFilteredAssignments;
 
-    const selectedBookData = books?.find(book => book.bookId.toString() === selectedBook);
-    if (!selectedBookData) return chapterAssignments;
+    const selectedBookData = milestoneBooks.find(book => book.bookId.toString() === selectedBook);
+    if (!selectedBookData) return milestoneFilteredAssignments;
 
-    return chapterAssignments.filter(
+    return milestoneFilteredAssignments.filter(
       assignment => assignment.bookNameEng === selectedBookData.engDisplayName
     );
-  }, [chapterAssignments, selectedBook, books]);
+  }, [milestoneFilteredAssignments, selectedBook, milestoneBooks]);
 
   const handleChapterRowClick = useCallback(
     (assignment: ChapterAssignmentProgress) => {
@@ -246,14 +274,13 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
 
   const handleAddBook = useCallback(() => {
     if (selectedAssignments.length > 0) {
-      const firstSelectedAssignment = chapterAssignments?.find(
+      const firstSelectedAssignment = milestoneFilteredAssignments.find(
         assignment => assignment.assignmentId === selectedAssignments[0]
       );
 
-      const statuses =
-        chapterAssignments
-          ?.filter(assignment => selectedAssignments.includes(assignment.assignmentId))
-          .map(assignment => assignment.status) ?? [];
+      const statuses = milestoneFilteredAssignments
+        .filter(assignment => selectedAssignments.includes(assignment.assignmentId))
+        .map(assignment => assignment.status);
 
       setSelectedAssignmentsStatuses(statuses);
 
@@ -271,7 +298,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
 
       setIsDialogOpen(true);
     }
-  }, [selectedAssignments, chapterAssignments, projectUsers]);
+  }, [selectedAssignments, milestoneFilteredAssignments, projectUsers]);
 
   const handleAssignUser = useCallback(async () => {
     const drafterId = selectedDrafter === '' ? null : parseInt(selectedDrafter);
@@ -336,9 +363,10 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     );
   }
 
-  const headerTitle = `${projectTargetLanguageName} - ${projectTitle}`;
+  const displayTitle = milestoneName ?? projectTitle;
+  const headerTitle = `${projectTargetLanguageName} - ${displayTitle}`;
   const isLoadingData = assignmentsLoading || assignChapterMutation.isPending;
-  const isDisabled = booksLoading || !books?.length || !chapterAssignments?.length;
+  const isDisabled = booksLoading || !milestoneBooks.length || !milestoneFilteredAssignments.length;
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
@@ -417,7 +445,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                 </p>
               </div>
               <CardProgressBar
-                chapterStatusCounts={projectChapterStatusCounts}
+                chapterStatusCounts={computedChapterStatusCounts}
                 workflowConfig={projectWorkflowConfig}
               />
             </CardContent>
@@ -427,7 +455,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
-                chapterAssignments={chapterAssignments}
+                chapterAssignments={milestoneFilteredAssignments}
                 isAddUserOpen={isAddUserOpen}
                 projectId={projectId}
                 referenceHeight={detailsHeight}
@@ -450,7 +478,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='all'>Books</SelectItem>
-                  {books?.map(book => (
+                  {milestoneBooks.map(book => (
                     <SelectItem key={book.bookId} value={book.bookId.toString()}>
                       {book.engDisplayName}
                     </SelectItem>
@@ -510,12 +538,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
       />
       {isManageBooksOpen && milestoneId && projectId && (
         <ManageMilestoneBooksDialog
-          initialSelectedBookIds={
-            chapterAssignments
-              ?.filter(a => a.projectUnitId === milestoneId)
-              .map(a => a.bookId)
-              .filter((v, i, a) => a.indexOf(v) === i) ?? []
-          }
+          initialSelectedBookIds={memoizedSelectedBookIds}
           isOpen={isManageBooksOpen}
           milestoneId={milestoneId}
           projectId={Number(projectId)}

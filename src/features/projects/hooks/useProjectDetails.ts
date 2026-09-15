@@ -22,6 +22,7 @@ export interface ProjectDetails {
   workflowConfig: WorkflowStep[];
   pericopeSetId?: number | null;
   lastActivityAt: string | null;
+  lastChapterActivity: string | null;
   sourceBibleId: number;
 }
 

@@ -3,7 +3,6 @@ import { useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2, Plus } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,8 +33,6 @@ interface ProjectHubPageProps {
   onBack: () => void;
   milestones: any[] | undefined;
   milestonesLoading: boolean;
-  onEditMetadata?: () => void;
-  onExport?: () => void;
 }
 
 export const ProjectHubPage: React.FC<ProjectHubPageProps> = ({
@@ -49,40 +46,16 @@ export const ProjectHubPage: React.FC<ProjectHubPageProps> = ({
   onBack,
   milestones,
   milestonesLoading,
-  onEditMetadata,
-  onExport,
 }: any) => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  // useTranslation is not used here
+
   const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
-        rightContent={
-          <div className='flex items-center gap-2'>
-            {isManager && onEditMetadata && (
-              <Button
-                className='border-primary text-primary hover flex items-center gap-2 border-2'
-                size='sm'
-                variant='outline'
-                onClick={onEditMetadata}
-              >
-                {t('editProjectMetadata')}
-              </Button>
-            )}
-            {onExport && (
-              <Button
-                className='border-primary text-primary hover flex items-center gap-2 border-2'
-                size='sm'
-                variant='outline'
-                onClick={onExport}
-              >
-                Export Project
-              </Button>
-            )}
-          </div>
-        }
+        rightContent={<div className='flex items-center gap-2'></div>}
         title={`${project.targetLanguageName} - ${project.name}`}
         onBack={onBack}
       />

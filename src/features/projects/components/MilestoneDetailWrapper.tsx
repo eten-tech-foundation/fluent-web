@@ -3,10 +3,14 @@ import { useMemo } from 'react';
 import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 
+import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
-import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
+import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
+import { useAppStore } from '@/store/store';
 
+import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { MilestoneDetailPage } from './ProjectDetailPage';
 
@@ -24,9 +28,21 @@ export const MilestoneDetailWrapper: React.FC = () => {
   } = useProjectDetails(projectId);
   const { data: chapterAssignments, isLoading: assignmentsLoading } =
     useChapterAssignments(projectId);
-  const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
+  const { data: books, isLoading: booksLoading } = useProjectBooks(projectId);
 
   const location = useLocation();
+  const { userdetail } = useAppStore();
+
+  const isManager = isProjectManager(
+    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
+    project?.id
+  );
+
+  const { data: milestones } = useGetMilestones(projectId);
+  const currentMilestone = useMemo(
+    () => milestones?.find(m => m.id === Number(milestoneId)),
+    [milestones, milestoneId]
+  );
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
@@ -56,23 +72,62 @@ export const MilestoneDetailWrapper: React.FC = () => {
     });
   };
 
-  const projectUnitId = useMemo(
-    () => chapterAssignments?.[0]?.projectUnitId ?? null,
-    [chapterAssignments]
-  );
+  const handleOpenMetadata = () => {
+    void navigate({
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
+      search: { modal: 'metadata' as const },
+      state: location.state,
+    });
+  };
+
+  const handleCloseMetadata = () => {
+    void navigate({
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
+      search: {},
+      state: location.state,
+    });
+  };
+
+  const handleOpenAddUser = () => {
+    void navigate({
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
+      search: { modal: 'add' as const },
+      state: location.state,
+    });
+  };
+
+  const handleCloseAddUser = () => {
+    void navigate({
+      to: '/projects/$projectId/milestones/$milestoneId',
+      params: { projectId, milestoneId },
+      search: {},
+      state: location.state,
+    });
+  };
+
+  const projectUnitId = useMemo(() => Number(milestoneId) || null, [milestoneId]);
 
   const exportBooks = useMemo(() => {
-    if (!books || !chapterAssignments) return [];
+    if (!books || !chapterAssignments || !milestoneId) return [];
+
+    const milestoneAssignments = chapterAssignments.filter(
+      a => a.projectUnitId === Number(milestoneId)
+    );
+    const validBookIds = new Set(milestoneAssignments.map(a => a.bookId));
+    const milestoneBooks = books.filter(b => validBookIds.has(b.bookId));
 
     const assignmentsByBook = new Map<string, typeof chapterAssignments>();
-    for (const a of chapterAssignments) {
+    for (const a of milestoneAssignments) {
       if (!assignmentsByBook.has(a.bookNameEng)) {
         assignmentsByBook.set(a.bookNameEng, []);
       }
       assignmentsByBook.get(a.bookNameEng)?.push(a);
     }
 
-    return books.map(book => {
+    return milestoneBooks.map(book => {
       const bookAssignments = assignmentsByBook.get(book.engDisplayName) ?? [];
       const completedChapters = bookAssignments.filter(
         a => a.completedVerses === a.totalVerses
@@ -85,7 +140,7 @@ export const MilestoneDetailWrapper: React.FC = () => {
         totalChapters: bookAssignments.length,
       };
     });
-  }, [books, chapterAssignments]);
+  }, [books, chapterAssignments, milestoneId]);
 
   if (projectLoading) {
     return (
@@ -113,8 +168,9 @@ export const MilestoneDetailWrapper: React.FC = () => {
   return (
     <>
       <MilestoneDetailPage
+        isAddUserOpen={modal === 'add'}
         milestoneId={Number(milestoneId)}
-        projectChapterStatusCounts={project.chapterStatusCounts}
+        milestoneName={currentMilestone?.name}
         projectConnectivityProfile={project.metadata.connectivityProfile}
         projectId={project.id}
         projectLastActivityAt={project.lastActivityAt}
@@ -124,7 +180,10 @@ export const MilestoneDetailWrapper: React.FC = () => {
         projectTargetLanguageName={project.targetLanguageName}
         projectTitle={project.name}
         projectWorkflowConfig={project.workflowConfig}
+        onAddUser={handleOpenAddUser}
         onBack={handleBack}
+        onCloseAddUser={handleCloseAddUser}
+        onEditMetadata={handleOpenMetadata}
         onExport={handleOpenExport}
       />
       <ExportProjectDialog
@@ -134,6 +193,11 @@ export const MilestoneDetailWrapper: React.FC = () => {
         projectName={project.name}
         projectUnitId={projectUnitId}
         onClose={handleCloseExport}
+      />
+      <EditProjectMetadataDialog
+        isOpen={isManager && modal === 'metadata'}
+        projectUnitId={projectUnitId}
+        onClose={handleCloseMetadata}
       />
     </>
   );
