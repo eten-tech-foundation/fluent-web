@@ -16,9 +16,9 @@ interface UserMultiSelectProps {
 }
 
 // Chip layout constants (must match UserChip CSS exactly)
-// px-2 = 8px left + 8px right, gap-1 = 4px between chips
-// rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium
-const CHIP_PADDING_X = 16; // px-2 on both sides = 8+8
+// px-2.5 = 10px left + 10px right, gap-1 = 4px between chips
+// rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold
+const CHIP_PADDING_X = 16; // px-2.5 on both sides = 10+10
 const CHIP_MAX_CONTENT = 120; // max-w-[120px] minus padding = capped text width
 const GAP = 4; // gap-1
 const CHEVRON_W = 32; // ml-2 + w-4 icon
@@ -98,7 +98,7 @@ export function UserMultiSelect({
   const [availableWidth, setAvailableWidth] = useState(0);
 
   // Resolve the font once from the wrapper element so canvas uses the real font
-  const [chipFont, setChipFont] = useState('500 12px ui-sans-serif');
+  const [chipFont, setChipFont] = useState('600 12px ui-sans-serif');
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -109,11 +109,11 @@ export function UserMultiSelect({
       setAvailableWidth(w - TRIGGER_PADDING_X - CHEVRON_W);
     };
 
-    // Resolve font from computed styles (text-xs font-medium = 12px 500)
+    // Resolve font from computed styles (text-xs font-semibold = 12px 600)
     const style = window.getComputedStyle(el);
     const size = '12px';
     const family = style.fontFamily || 'ui-sans-serif, system-ui, sans-serif';
-    setChipFont(`500 ${size} ${family}`);
+    setChipFont(`600 ${size} ${family}`);
 
     updateWidth();
 
