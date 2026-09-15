@@ -168,19 +168,39 @@ describe('PlayableControl', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
+  it('advertises exactly the registered control keys across idle and playing states', () => {
+    const h = render(<PlayableControl {...base} />);
+    const advertised = new Set<string>();
+    const collect = () => {
+      for (const button of screen.getAllByRole('button')) {
+        advertised.add(button.getAttribute('aria-keyshortcuts')!);
+      }
+    };
+    collect();
+    h.rerender(<PlayableControl {...base} canRestart state='playing' />);
+    collect();
+    // Play-from-here gets its sole hover-text host with HideAudioSettings.
+    // Extend this proof to all four when that settings surface is implemented.
+    const { playFromHere, ...controlKeys } = TTS_KEYBOARD_SHORTCUTS;
+    expect(advertised).toEqual(new Set(Object.values(controlKeys)));
+    expect(advertised.has(playFromHere)).toBe(false);
+  });
+
   it('focus tooltip and aria-keyshortcuts follow Play/Pause and Restart constants', async () => {
     const { rerender } = render(<PlayableControl {...base} />);
     const user = userEvent.setup();
     await user.tab();
     expect(primary()).toHaveFocus();
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      `Play (${TTS_KEYBOARD_SHORTCUTS.playVerse})`
+      `Play (${TTS_KEYBOARD_SHORTCUTS.play})`
     );
-    expect(primary()).toHaveAttribute('aria-keyshortcuts', TTS_KEYBOARD_SHORTCUTS.playVerse);
+    expect(primary()).toHaveAttribute('aria-keyshortcuts', TTS_KEYBOARD_SHORTCUTS.play);
     expect(primary()).not.toHaveAttribute('title');
     rerender(<PlayableControl {...base} canRestart state='playing' />);
-    expect(primary()).toHaveAttribute('aria-keyshortcuts', TTS_KEYBOARD_SHORTCUTS.stop);
-    expect(screen.getByRole('tooltip')).toHaveTextContent(`Pause (${TTS_KEYBOARD_SHORTCUTS.stop})`);
+    expect(primary()).toHaveAttribute('aria-keyshortcuts', TTS_KEYBOARD_SHORTCUTS.pause);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      `Pause (${TTS_KEYBOARD_SHORTCUTS.pause})`
+    );
     await user.tab();
     expect(restart()).toHaveFocus();
     expect(await screen.findByRole('tooltip')).toHaveTextContent(

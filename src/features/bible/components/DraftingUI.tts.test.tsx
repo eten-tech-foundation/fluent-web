@@ -12,7 +12,7 @@ import { useLayoutEffect } from 'react';
 
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type * as TtsFeature from '@/features/tts';
@@ -21,6 +21,7 @@ import type * as AudioModule from '@/features/tts/lib/audioElement';
 import type * as SourceClient from '@/features/tts/resolver/sourceAudioClient';
 import { FakeClipElement } from '@/features/tts/testing/fakeClipElement';
 import { windowlessChapter } from '@/features/tts/testing/sourceAudioFixtures';
+import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
   type ProjectItem,
@@ -28,6 +29,7 @@ import {
   type TargetVerse,
   type User,
 } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -57,6 +59,12 @@ vi.mock('react-i18next', () => ({
       ),
     i18n: { language: 'en', changeLanguage: vi.fn() },
   }),
+}));
+
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { error: toastError } }));
+vi.mock('./DraftingChapterView', () => ({
+  DraftingChapterView: () => <div data-testid='chapter-audio-gate-test' />,
 }));
 
 // ── Drafting-side hooks (same shape as DraftingUI.test.tsx) ─────────────────
@@ -253,6 +261,8 @@ vi.mock('@/features/tts', async importOriginal => {
         playVerse,
         playFromVerse,
         playGroup,
+        playGroupAtVerse: vi.fn(),
+        playFromGroups: vi.fn(),
         playFromGroup,
         // G3a: the real hook derives this from `activeVerseRef`, so the double
         // does too — a group is speaking iff it contains the playing row.
@@ -378,7 +388,14 @@ const renderDrafting = () =>
     }
   );
 
+const initialRteFlag = config.features.rtePericope;
+afterEach(() => {
+  config.features.rtePericope = initialRteFlag;
+  vi.restoreAllMocks();
+});
+
 beforeEach(() => {
+  useAppStore.setState({ displayMode: 'verse' });
   vi.clearAllMocks();
   mockFeatureFlag.mockReturnValue(true);
   ttsRows = [];
@@ -694,6 +711,377 @@ describe('DraftingUI — playback actions and highlight', () => {
  * is wired. Only the host can, and this file is the host's.
  */
 describe('DraftingUI — keyboard shortcuts', () => {
+  it('pericope Alt+P seeks the caret inside the FULL player and shares its pointer resume and Restart', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    mockActiveVerseId = 2;
+    renderDrafting();
+    const key = playback.groupKey(['1', '2'])!;
+    const bar = screen.getAllByRole('slider')[0];
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('2');
+    expect(registry.isLive(key)).toBe(true);
+    expect(registry.isLive(playback.verseKey('2')!)).toBe(false);
+    expect(playback.groupView(['1', '2']).segments.map(item => item.verseRef)).toEqual(['1', '2']);
+    expect(playback.groupView(['1', '2']).currentIndex).toBe(1);
+    expect(Number(bar.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+    act(() => {
+      elements[0].currentTime = 2.5;
+      elements[0].emit('playing');
+    });
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    expect(registry.getRecord(key)).toMatchObject({
+      itemIndex: 1,
+      verseRef: '2',
+      currentTime: 2.5,
+    });
+    expect(registry.getRecord(playback.verseKey('2')!)).toBeNull();
+    expect(playback.groupView(['1', '2']).currentIndex).toBe(1);
+    // Pointer Play resumes the KEYBOARD position, in the same player.
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[1].currentTime).toBe(2.5);
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    expect(playback.status).toBe('idle');
+    // Keyboard Play resumes too, rather than repeatedly re-seeking the verse start.
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[2]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[2].currentTime).toBe(2.5);
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(registry.getRecord(key)).toBeNull();
+    expect(playback.groupView(['1', '2']).currentIndex).toBe(0);
+    expect(elements).toHaveLength(3);
+  });
+
+  it('pericope Alt+P continues to the pericope end, not just the caret verse or the page', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('ended'));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('2');
+    expect(registry.isLive(playback.groupKey(['1', '2'])!)).toBe(true);
+    act(() => elements[1].emit('ended'));
+    expect(playback.status).toBe('idle');
+    expect(elements).toHaveLength(2);
+  });
+
+  it('continuous pericope reading keeps full group identities, bars and pause records across boundaries', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    mockActiveVerseId = 2;
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('2');
+    expect(registry.isLive(playback.groupKey(['1', '2'])!)).toBe(true);
+    expect(playback.groupView(['1', '2']).segments.map(item => item.verseRef)).toEqual(['1', '2']);
+    act(() => elements[0].emit('ended'));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[1].currentTime = 2;
+      elements[1].emit('playing');
+    });
+    expect(playback.activeVerseRef).toBe('3');
+    expect(registry.isLive(playback.groupKey(['3'])!)).toBe(true);
+    expect(playback.groupView(['1', '2']).segments.map(item => item.verseRef)).toEqual(['1', '2']);
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    expect(registry.getRecord(playback.groupKey(['3'])!)).toMatchObject({
+      itemIndex: 0,
+      verseRef: '3',
+      currentTime: 2,
+    });
+    expect(registry.getRecord(playback.verseKey('3')!)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:3' }));
+    await waitFor(() => expect(elements[2]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[2].currentTime).toBe(2);
+  });
+
+  it('a different caret verse seeks in the same paused pericope rather than resuming the old verse', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    mockActiveVerseId = 2;
+    renderDrafting();
+    const key = playback.groupKey(['1', '2'])!;
+    act(() =>
+      registry.setRecord(key, { itemIndex: 0, verseRef: '1', currentTime: 3, forceTts: false })
+    );
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('2');
+    expect(elements[0].currentTime).toBe(0);
+    expect(registry.isLive(key)).toBe(true);
+  });
+
+  it.each(['{Alt>}p{/Alt}', '{Alt>}{Shift>}p{/Shift}{/Alt}'])(
+    'a reference hole skips the optional caret jump, not the otherwise playable pericope (%s)',
+    async chord => {
+      enterPericopeMode();
+      mockPericopes = [
+        {
+          pericopeNumber: '1',
+          pericopeTitle: null,
+          verses: [1, 2, 3].map(verseNumber => ({ chapterNumber: 1, verseNumber })),
+        },
+      ];
+      realPlayback = true;
+      mockActiveVerseId = 3;
+      renderDrafting();
+      await selectReferenceBible();
+      await userEvent.keyboard(chord);
+      await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+      expect(playback.activeVerseRef).toBe('1');
+      expect(registry.isLive(playback.groupKey(['1', '2', '3'])!)).toBe(true);
+      expect(playback.groupView(['1', '2', '3']).segments.map(item => item.verseRef)).toEqual([
+        '1',
+        '2',
+      ]);
+      expect(toastError).not.toHaveBeenCalled();
+    }
+  );
+
+  it('pericope offline primary explains while keyboard Restart and direct scrub stay inert', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    renderDrafting();
+    registry.silenceAll();
+    const key = playback.groupKey(['1', '2'])!;
+    act(() =>
+      registry.setRecord(key, { itemIndex: 1, verseRef: '2', currentTime: 3, forceTts: false })
+    );
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    expect(toastError).toHaveBeenCalledTimes(2);
+    expect(toastError).toHaveBeenLastCalledWith("You're offline. Reconnect to play audio.");
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    act(() => playback.seekGroup(['1', '2'], '1', 0));
+    expect(registry.getRecord(key)?.currentTime).toBe(3);
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledTimes(2);
+  });
+
+  it('pericope keyboard starts share the pericope impossible guard, not the verse key', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    mockActiveVerseId = 2;
+    renderDrafting();
+    act(() => registry.setImpossible(playback.groupKey(['1', '2'])!, 'Pericope unavailable.'));
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    expect(toastError).toHaveBeenCalledTimes(2);
+    expect(toastError).toHaveBeenLastCalledWith('Pericope unavailable.');
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(elements).toHaveLength(0);
+  });
+
+  it('Alt+S records the sounding verse in a run; Alt+P at that caret resumes its offset', async () => {
+    realPlayback = true;
+    const h = renderDrafting();
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('ended'));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[1].currentTime = 2.5;
+      elements[1].emit('playing');
+    });
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    const key = playback.verseKey('2')!;
+    expect(registry.getRecord(key)?.currentTime).toBe(2.5);
+    expect(registry.getRecord(playback.verseKey('1')!)).toBeNull();
+    expect(playback.status).toBe('idle');
+    mockActiveVerseId = 2;
+    // Cause a normal host render so the keyboard ref observes the new caret.
+    h.rerender(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+    const next = elements.length;
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[next]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[next].currentTime).toBe(2.5);
+    expect(playback.activeVerseRef).toBe('2');
+  });
+
+  it('Alt+P on the sounding verse uses primary Pause, not Stop/reset', async () => {
+    realPlayback = true;
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[0].currentTime = 3;
+      elements[0].emit('playing');
+    });
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    expect(playback.status).toBe('idle');
+    expect(registry.getRecord(playback.verseKey('1')!)?.currentTime).toBe(3);
+  });
+
+  it('Alt+R reaches a sounding sidebar Restart rather than the caret', async () => {
+    renderDrafting();
+    const sidebarRestart = vi.fn();
+    registry.claim(vi.fn(), sidebarRestart);
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(sidebarRestart).toHaveBeenCalledOnce();
+    expect(restartVerse).not.toHaveBeenCalled();
+  });
+
+  it('Alt+R restarts the sounding bounded pericope from its first verse, not the caret', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    mockActiveVerseId = 3;
+    renderDrafting();
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('ended'));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[1].currentTime = 2;
+      elements[1].emit('playing');
+    });
+    const next = elements.length;
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    await waitFor(() => expect(elements[next]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('1');
+    expect(elements[next].currentTime).toBe(0);
+    expect(registry.isLive(playback.groupKey(['1', '2'])!)).toBe(true);
+    expect(registry.getRecord(playback.groupKey(['1', '2'])!)).toBeNull();
+  });
+
+  it('Alt+R in a verse-key run restarts the sounding verse, not the whole run', async () => {
+    realPlayback = true;
+    renderDrafting();
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('ended'));
+    await waitFor(() => expect(elements[1]?.playCalls.length).toBeGreaterThan(0));
+    act(() => {
+      elements[1].currentTime = 2;
+      elements[1].emit('playing');
+    });
+    const next = elements.length;
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    await waitFor(() => expect(elements[next]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[next].currentTime).toBe(0);
+    expect(playback.activeVerseRef).toBe('2');
+    act(() => elements[next].emit('ended'));
+    expect(playback.status).toBe('idle');
+  });
+
+  it('silent Alt+R clears only the active verse record; disabled Restart does nothing', async () => {
+    realPlayback = true;
+    renderDrafting();
+    registry.silenceAll();
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(synthesize).not.toHaveBeenCalled();
+    const record = { itemIndex: 0, verseRef: '1', currentTime: 3, forceTts: true };
+    act(() => {
+      registry.setRecord(playback.verseKey('1')!, record);
+      registry.setRecord(playback.verseKey('2')!, { ...record, verseRef: '2' });
+    });
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(registry.getRecord(playback.verseKey('1')!)).toBeNull();
+    expect(registry.getRecord(playback.verseKey('2')!)?.currentTime).toBe(3);
+    expect(playback.status).toBe('idle');
+    expect(synthesize).not.toHaveBeenCalled();
+  });
+
+  it('Alt+P and play-from-here share the impossible button reason and start nothing', async () => {
+    realPlayback = true;
+    renderDrafting();
+    act(() => registry.setImpossible(playback.verseKey('1')!, 'Licence forbids audio.'));
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    expect(toastError).toHaveBeenCalledTimes(3);
+    expect(toastError.mock.calls.every(([reason]) => reason === 'Licence forbids audio.')).toBe(
+      true
+    );
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(elements).toHaveLength(0);
+  });
+
+  it('offline shortcuts explain primary, keep Restart inert, and recover on the same mount', async () => {
+    realPlayback = true;
+    renderDrafting();
+    registry.silenceAll();
+    const key = playback.verseKey('1')!;
+    act(() =>
+      registry.setRecord(key, { itemIndex: 0, verseRef: '1', currentTime: 3, forceTts: false })
+    );
+    const online = vi.spyOn(navigator, 'onLine', 'get');
+    online.mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    expect(toastError).toHaveBeenCalledTimes(2);
+    expect(toastError).toHaveBeenLastCalledWith("You're offline. Reconnect to play audio.");
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(toastError).toHaveBeenCalledTimes(2);
+    expect(registry.getRecord(key)?.currentTime).toBe(3);
+    expect(synthesize).not.toHaveBeenCalled();
+    online.mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(elements[0].currentTime).toBe(3);
+    online.mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    expect(elements).toHaveLength(1);
+    expect(registry.isLive(key)).toBe(true);
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    expect(playback.status).toBe('idle');
+    expect(registry.getRecord(key)?.currentTime).toBe(3);
+  });
+
+  it('chapter view has no control yet; shortcuts must not narrate invisibly', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    expect(await screen.findByTestId('chapter-audio-gate-test')).toBeInTheDocument();
+    expect(screen.queryByTestId('tts-verse-controls')).not.toBeInTheDocument();
+    for (const [code, shiftKey] of [
+      ['KeyP', false],
+      ['KeyP', true],
+      ['KeyS', false],
+      ['KeyR', false],
+    ] as const) {
+      const event = new KeyboardEvent('keydown', {
+        code,
+        shiftKey,
+        altKey: true,
+        cancelable: true,
+      });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(initialClaimPause).not.toHaveBeenCalled();
+    expect(elements).toHaveLength(0);
+    expect(synthesize).not.toHaveBeenCalled();
+  });
+
   it('Alt+P plays the verse the caret is in, not the one that is playing', async () => {
     // The two are different on purpose (T2): a translator types in verse 4
     // while verse 2 is read aloud, and Alt+P must play 4.
@@ -716,13 +1104,16 @@ describe('DraftingUI — keyboard shortcuts', () => {
     expect(playVerse).not.toHaveBeenCalled();
   });
 
-  it('Alt+S stops', async () => {
-    isBusy = true;
+  it('Alt+S pauses a sidebar claimant app-wide and leaves the claim list empty', async () => {
     renderDrafting();
-
+    const sidebarPause = vi.fn();
+    registry.claim(sidebarPause);
     await userEvent.keyboard('{Alt>}s{/Alt}');
-
-    expect(stopPlayback).toHaveBeenCalledTimes(1);
+    expect(sidebarPause).toHaveBeenCalledOnce();
+    registry.silenceAll();
+    expect(sidebarPause).toHaveBeenCalledOnce();
+    expect(registry.restartLive()).toBe(false);
+    expect(stopPlayback).not.toHaveBeenCalled();
   });
 
   it('is silent while the feature is off (§6.3)', async () => {
