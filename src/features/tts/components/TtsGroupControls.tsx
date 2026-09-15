@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -7,6 +9,7 @@ import {
 import { buildSpans, calibratedEstimator, dotPosition, elapsedReadout } from '../lib/barGeometry';
 import { useOffline } from '../lib/useOffline';
 import { usePlayableState } from '../registry/usePlayableState';
+import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
 
 import { ScrubBar } from './ScrubBar';
 import { TimeReadout } from './TimeReadout';
@@ -55,9 +58,18 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
   const { t } = useTranslation();
   const view = playback.groupView(verseRefs);
   const saved = usePlayableState(view.key ?? '');
+  const registry = usePlaybackRegistry();
+  const impossibleReason = saved.impossibleReason ?? view.impossibleReason ?? null;
+  // This component owns the displayed grouping. Latch cheap host knowledge on
+  // that exact identity, not only on the constituent verse keys.
+  useEffect(() => {
+    if (view.key && view.impossibleReason) {
+      registry.setImpossible(view.key, view.impossibleReason);
+    }
+  }, [registry, view.impossibleReason, view.key]);
   const offline = useOffline();
   const geometry = geometryFor(view);
-  const impossible = saved.impossibleReason !== null;
+  const impossible = impossibleReason !== null;
   const state: PlayableControlState = offline
     ? 'offline'
     : impossible
@@ -82,7 +94,7 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
         }
         canRestart={view.isLive || saved.canRestart}
         disabled={view.key === null}
-        impossibleReason={saved.impossibleReason ?? undefined}
+        impossibleReason={impossibleReason ?? undefined}
         label={t('ttsPericopeLabel', 'pericope {{groupLabel}}', { groupLabel })}
         playableKey={view.key ?? ''}
         state={state}

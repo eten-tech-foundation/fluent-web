@@ -344,6 +344,10 @@ const mockProjectItem: ProjectItem = {
   projectUnitId: 10,
   bibleId: 1,
   bibleName: 'WEB',
+  // Carried on the assignment: a cleared Bible is the ordinary case, and the
+  // audio fence reads it from here rather than from an audio provider.
+  ttsLicenseStatus: 'allowed',
+  licenseNotice: 'World English Bible. Public domain.',
   targetLanguage: 'Spanish',
   targetLangCode: 'spa',
   bookId: 1,
@@ -370,10 +374,10 @@ const RegistryProbe = () => {
   return null;
 };
 
-const renderDrafting = () =>
+const renderDrafting = (projectItem: ProjectItem = mockProjectItem) =>
   render(
     <DraftingUI
-      projectItem={mockProjectItem}
+      projectItem={projectItem}
       sourceVerses={mockSourceVerses}
       targetVerses={mockTargetVerses}
       userdetail={{ id: 1 } as unknown as User}
@@ -600,6 +604,21 @@ describe('DraftingUI — source switch with the real host, queue and registry', 
     expect(registry.getRecord(youVersionKey)?.currentTime).toBe(4);
     await play();
     expect(elements.at(-1)?.currentTime).toBe(2);
+  });
+
+  it('turns a barred verse into a pressable control that explains itself, and never synthesizes', async () => {
+    realPlayback = true;
+    // A Bible nobody cleared, with no recording to fall back on: the one case
+    // where the fence has to take the audio away entirely.
+    renderDrafting({ ...mockProjectItem, ttsLicenseStatus: 'unknown' });
+    const play = () => screen.getByRole('button', { name: 'Play verse 1' });
+    await userEvent.click(play());
+    await waitFor(() => expect(play()).toHaveAttribute('aria-disabled', 'true'));
+    expect(synthesize).not.toHaveBeenCalled();
+    // Pressable, not inert: pressing again says why rather than doing nothing.
+    await userEvent.click(play());
+    expect(toastError).toHaveBeenCalledWith('Text-to-speech has not been cleared for this Bible.');
+    expect(synthesize).not.toHaveBeenCalled();
   });
 
   it('a request failure reports failure but does not disable visible online controls', async () => {
@@ -1224,6 +1243,35 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     expect(playback.status).toBe('idle');
     expect(registry.getRecord(playback.verseKey('3')!)?.currentTime).toBe(2);
     expect(registry.getRecord(playback.groupKey(['3'])!)).toBeNull();
+  });
+
+  it('latches every windowless barred pericope without an AI badge and shares the reason with keyboard starts', async () => {
+    enterPericopeMode();
+    realPlayback = true;
+    renderDrafting({ ...mockProjectItem, ttsLicenseStatus: 'unknown' });
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+    for (const label of ['1:1-2', '1:3']) {
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: `Play pericope ${label}` })).toHaveAttribute(
+          'aria-disabled',
+          'true'
+        )
+      );
+      expect(screen.getByRole('button', { name: `Restart pericope ${label}` })).toBeDisabled();
+    }
+    for (const refs of [['1', '2'], ['3']]) {
+      const key = playback.groupKey(refs)!;
+      expect(registry.getSnapshot(key).impossibleReason).toBe(
+        'Text-to-speech has not been cleared for this Bible.'
+      );
+      expect(playback.groupView(refs).staticAi).toBe(false);
+    }
+    expect(document.querySelector('.lucide-sparkles')).toBeNull();
+    toastError.mockClear();
+    act(() => playback.playGroupAtVerse(['3'], '3'));
+    expect(toastError).toHaveBeenCalledWith('Text-to-speech has not been cleared for this Bible.');
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(elements).toHaveLength(0);
   });
 
   it('retains a bounded pericope position and resumes without confusing seconds and fractions', async () => {

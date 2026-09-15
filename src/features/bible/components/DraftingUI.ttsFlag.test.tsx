@@ -160,6 +160,10 @@ const mockProjectItem: ProjectItem = {
   projectUnitId: 10,
   bibleId: 1,
   bibleName: 'WEB',
+  // Carried on the assignment: a cleared Bible is the ordinary case, and the
+  // audio fence reads it from here rather than from an audio provider.
+  ttsLicenseStatus: 'allowed',
+  licenseNotice: 'World English Bible. Public domain.',
   targetLanguage: 'Spanish',
   targetLangCode: 'spa',
   bookId: 1,

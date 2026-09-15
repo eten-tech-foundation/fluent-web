@@ -29,9 +29,20 @@ import {
 import { useOffline } from '../lib/useOffline';
 import { writeRecord } from '../registry/pauseRecord';
 import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
-import { ChapterAudioCache } from '../resolver/chapterCache';
+import { ChapterAudioCache, chapterAudioKey } from '../resolver/chapterCache';
+import {
+  impossibleLicenceReason,
+  knownChapterTts,
+  licenceBarReason,
+  licenceVerdictForVerse,
+  noteLicenceBar,
+  recordedFailedBarredReason,
+} from '../resolver/licenceFence';
 import { resolvePlayables, type SourceAudioRow } from '../resolver/resolvePlayables';
-import { type ChapterSourceAudioRequest } from '../resolver/sourceAudioClient';
+import {
+  type ChapterSourceAudio,
+  type ChapterSourceAudioRequest,
+} from '../resolver/sourceAudioClient';
 import { type Playable, type Segment } from '../seam/types';
 import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy';
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
@@ -45,6 +56,15 @@ export interface UseSourceTtsPlaybackOptions {
   rows: readonly SourceAudioRow[];
   /** Null for reference-panel text: its provider identity is not a Fluent Bible id. */
   sourceChapter: ChapterSourceAudioRequest | null;
+  /**
+   * The source Bible's audio licence, from the chapter assignment the surface
+   * already loaded. The fence prefers this to the copy on the chapter-audio
+   * response, because this one survives a provider outage.
+   */
+  sourceLicence?: {
+    status?: 'allowed' | 'forbidden' | 'unknown';
+    notice?: string | null;
+  };
   /** Domain-qualified reference selection identity; never used to select an audio provider. */
   referenceBibleId: string | null;
   /** Resolve a row's DOM node for scroll geometry. */
@@ -76,6 +96,8 @@ export interface PericopePlaybackView {
   isLive: boolean;
   staticAi: boolean;
   dynamicAi: boolean;
+  /** Eager source facts; the rendered player latches them on its own group key. */
+  impossibleReason?: string | null;
   segments: Array<{
     verseRef: string;
     text: string;
@@ -151,25 +173,18 @@ export const useSourceTtsPlayback = (
     engine,
     rows,
     sourceChapter,
+    sourceLicence,
     referenceBibleId,
     getRowElement,
     getViewport,
     pageKey,
     enabled = true,
   } = options;
+  const licenceStatus = sourceLicence?.status;
   const { t } = useTranslation();
   const registry = usePlaybackRegistry();
   const offline = useOffline();
   const restartLiveRef = useRef<() => void>(() => {});
-  const disabledReason = useCallback(
-    (playable: Playable | undefined) =>
-      unavailableReason(t, {
-        offline,
-        missing: !playable,
-        impossibleReason: playable ? registry.getSnapshot(playable.key).impossibleReason : null,
-      }),
-    [offline, registry, t]
-  );
   const runRef = useRef<HostRun | null>(null);
   const releaseRef = useRef<(() => void) | null>(null);
   const timing = usePlaybackTiming(pageKey);
@@ -182,9 +197,18 @@ export const useSourceTtsPlayback = (
     engine,
     pageKey,
     sourceChapter,
+    licenceStatus,
     referenceBibleId,
   });
-  latest.current = { getRowElement, getViewport, engine, pageKey, sourceChapter, referenceBibleId };
+  latest.current = {
+    getRowElement,
+    getViewport,
+    engine,
+    pageKey,
+    sourceChapter,
+    licenceStatus,
+    referenceBibleId,
+  };
   const [cache] = useState(() => new ChapterAudioCache());
   const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
   const playablesFor = useCallback(
@@ -193,6 +217,7 @@ export const useSourceTtsPlayback = (
         engine: currentEngine,
         pageKey: currentPage,
         sourceChapter: chapter,
+        licenceStatus: currentLicence,
         referenceBibleId: referenceId,
       } = latest.current;
       const construction = {
@@ -208,6 +233,9 @@ export const useSourceTtsPlayback = (
           cache,
           recordedRecovery: RecordedRecoveryStrategy,
           pericopeId,
+          // The assignment's answer first; a held response only fills in for an
+          // API that does not carry the licence on the assignment yet.
+          ttsLicenseStatus: currentLicence ?? cache.peek(chapter)?.ttsLicenseStatus,
         });
       }
       // Reference Bibles still use their own text/language. Never resolve their
@@ -244,8 +272,58 @@ export const useSourceTtsPlayback = (
   const itemsRef = useRef<readonly SourceAudioRow[]>(items);
   itemsRef.current = items;
 
+  // The last chapter answer this page saw. A failed heal empties the cache, so
+  // without this the host could not tell "this verse has no recording" from
+  // "the recording we were playing just became unreachable" — and those two
+  // deserve different words and only one of them is permanent.
+  const lastChapterRef = useRef<{ key: string; response: ChapterSourceAudio } | null>(null);
+  const [knownChapter, setKnownChapter] = useState<ChapterSourceAudio>();
+  const rememberChapter = useCallback(
+    (chapter: ChapterSourceAudioRequest | null) => {
+      const response = chapter ? cache.peek(chapter) : undefined;
+      if (!chapter || !response) return lastChapterRef.current;
+      lastChapterRef.current = { key: chapterAudioKey(chapter), response };
+      // Cache writes alone are not React updates. Publish discovery explicitly
+      // so neighbouring controls update even with stable rows and i18n t.
+      setKnownChapter(response);
+      return lastChapterRef.current;
+    },
+    [cache]
+  );
+
+  const knownImpossibleReason = useCallback(
+    (playable: Playable | undefined): string | null => {
+      const chapter = latest.current.sourceChapter;
+      if (!chapter || !playable) return null;
+      const verseNumbers = playable.segments.flatMap(segment => {
+        const row = itemsRef.current.find(item => item.verseRef === segment.verseRef);
+        return row ? [row.verseNumber] : [];
+      });
+      return impossibleLicenceReason(
+        t,
+        cache.peek(chapter),
+        verseNumbers,
+        cache.supportsOpus,
+        latest.current.licenceStatus
+      );
+    },
+    [cache, t]
+  );
+  const disabledReason = useCallback(
+    (playable: Playable | undefined) =>
+      unavailableReason(t, {
+        offline,
+        missing: !playable,
+        impossibleReason:
+          (playable ? registry.getSnapshot(playable.key).impossibleReason : null) ??
+          knownImpossibleReason(playable),
+      }),
+    [knownImpossibleReason, offline, registry, t]
+  );
+
   const handleScrollRequest = useCallback(
     (verseRef: string) => {
+      rememberChapter(latest.current.sourceChapter);
       const run = runRef.current;
       const key = run?.items.find(item => item.verseRef === verseRef)?.playableKey;
       if (run && key) {
@@ -258,7 +336,7 @@ export const useSourceTtsPlayback = (
       // Scrolls only when the row is off-screen, and never calls focus().
       scrollRowIntoViewIfNeeded(resolveRow(verseRef), resolveViewport());
     },
-    [registry]
+    [registry, rememberChapter]
   );
 
   const handleError = useCallback(
@@ -266,17 +344,73 @@ export const useSourceTtsPlayback = (
       // §5.2: a failure the listener can see, in their language, naming the
       // verse — not a silent stop and not a raw engine message. The engine's
       // own message is deliberately unused: it is diagnostic, not user-facing.
+      //
+      // The licence fence's lazy half. A press is the first thing that fetches
+      // a chapter, so a barred Bible is often discovered here rather than on
+      // render. The verdict is read from the response the press just cached,
+      // never from the error's text.
+      const chapter = latest.current.sourceChapter;
+      const remembered = rememberChapter(chapter);
+      const response =
+        (chapter ? cache.peek(chapter) : undefined) ??
+        (chapter && remembered?.key === chapterAudioKey(chapter) ? remembered.response : undefined);
+      const row = itemsRef.current.find(candidate => candidate.verseRef === item.verseRef);
+      const verdict =
+        chapter && row
+          ? licenceVerdictForVerse(
+              response,
+              row.verseNumber,
+              cache.supportsOpus,
+              latest.current.licenceStatus
+            )
+          : undefined;
+      if (chapter && verdict?.bar != null) {
+        if (verdict.recorded) {
+          // A recording failed. Where the voice behind it is barred, say so —
+          // the recording may still play next time, so nothing is latched. An
+          // unconfirmed licence says nothing about the recording, so that case
+          // keeps the ordinary failure message below.
+          if (verdict.bar !== 'unconfirmed') {
+            toast.error(recordedFailedBarredReason(t));
+            return;
+          }
+        } else {
+          const reason = licenceBarReason(t, verdict.bar);
+          // Sticky for this playable, like the sparkle: nothing on this page
+          // can change a licence, so the control stays impossible once it is
+          // known. Only a chapter answer proves there is no recording either,
+          // and an unconfirmed licence is not a fact about the Bible — both
+          // say why the voice is unavailable without touching the control.
+          if (response && verdict.bar !== 'unconfirmed') {
+            registry.setImpossible(item.playableKey, reason);
+            noteLicenceBar(
+              cache,
+              latest.current.pageKey ?? '',
+              chapter,
+              response,
+              latest.current.licenceStatus
+            );
+          }
+          toast.error(reason);
+          return;
+        }
+      }
       toast.error(
         t('ttsPlaybackFailed', 'Could not play audio for verse {{verseRef}}. Please try again.', {
           verseRef: item.verseRef,
         })
       );
     },
-    [t]
+    [cache, registry, rememberChapter, t]
   );
 
   const queue = useTtsPlaybackQueue({
-    onTiming: timing.onTiming,
+    onTiming: report => {
+      // A clip has real timing only once its source resolved, so this is the
+      // last moment the chapter answer is certainly still in the cache.
+      rememberChapter(latest.current.sourceChapter);
+      timing.onTiming(report);
+    },
     onError: (error, segment) => {
       finishRun();
       handleError(error, segment);
@@ -355,7 +489,10 @@ export const useSourceTtsPlayback = (
       for (const key of keys) {
         registry.setLastDynamicAi(key, false);
         const chapter = latest.current.sourceChapter;
-        registry.setStaticAi(key, !chapter || cache.peek(chapter)?.verseAddressable === false);
+        registry.setStaticAi(
+          key,
+          !chapter || knownChapterTts(cache.peek(chapter), latest.current.licenceStatus)
+        );
       }
       registry.setLive(first.playableKey);
       setItemServing({});
@@ -610,6 +747,7 @@ export const useSourceTtsPlayback = (
       return {
         key: group?.key ?? null,
         isLive,
+        impossibleReason: knownImpossibleReason(group),
         staticAi: verseItems.some(item => registry.getSnapshot(item.playableKey).staticAi),
         dynamicAi:
           isLive && [group?.key ?? '', ...verseKeys].some(key => queue.aiMarkedKeys.has(key)),
@@ -624,7 +762,16 @@ export const useSourceTtsPlayback = (
         pendingFraction: isLive ? report?.pendingFraction : undefined,
       };
     },
-    [groupPlayable, liveGroupKey, queue.aiMarkedKeys, queue.status, registry, timing, versePlayable]
+    [
+      groupPlayable,
+      knownImpossibleReason,
+      liveGroupKey,
+      queue.aiMarkedKeys,
+      queue.status,
+      registry,
+      timing,
+      versePlayable,
+    ]
   );
 
   // The page this host is showing, as of the last commit. Compared rather
@@ -646,10 +793,43 @@ export const useSourceTtsPlayback = (
   useLayoutEffect(() => () => stopWithoutRecord(), [stopWithoutRecord]);
 
   // Rebuild static knowledge without fetching availability just for a badge.
+  // The licence fence's eager half rides along: when a response is already
+  // held, a barred Bible with no recording for a verse can never sound, so the
+  // control says why before anyone presses it.
   useEffect(() => {
-    const knownTts = !sourceChapter || cache.peek(sourceChapter)?.verseAddressable === false;
-    for (const playable of playablesFor(items)) registry.setStaticAi(playable.key, knownTts);
-  }, [cache, items, pageKey, playablesFor, referenceBibleId, registry, sourceChapter]);
+    const response = sourceChapter ? cache.peek(sourceChapter) : undefined;
+    const knownTts = !sourceChapter || knownChapterTts(response, licenceStatus);
+    playablesFor(items).forEach((playable, index) => {
+      registry.setStaticAi(playable.key, knownTts);
+      // One playable per row, in row order, so the index pairs them.
+      const row = items[index];
+      // A bar is only actionable once the recordings are known: until then the
+      // verse may still be heard, so nothing is said about it.
+      if (!sourceChapter || !response) return;
+      const verdict = licenceVerdictForVerse(
+        response,
+        row.verseNumber,
+        cache.supportsOpus,
+        licenceStatus
+      );
+      if (verdict.bar === null || verdict.bar === 'unconfirmed' || verdict.recorded) return;
+      registry.setImpossible(playable.key, licenceBarReason(t, verdict.bar));
+    });
+    if (sourceChapter && response) {
+      noteLicenceBar(cache, pageKey ?? '', sourceChapter, response, licenceStatus);
+    }
+  }, [
+    cache,
+    items,
+    knownChapter,
+    licenceStatus,
+    pageKey,
+    playablesFor,
+    referenceBibleId,
+    registry,
+    sourceChapter,
+    t,
+  ]);
 
   useEffect(() => {
     if (queue.status === 'idle') finishRun();
