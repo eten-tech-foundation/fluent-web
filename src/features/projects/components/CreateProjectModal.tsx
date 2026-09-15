@@ -10,9 +10,10 @@ import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
 import { type ConnectivityProfile } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
+import { type UsfmFilePayload } from '@/lib/types';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
-import { UsfmImportTab } from './UsfmImportTab';
+import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
 
 export interface CreateProjectData {
   title: string;
@@ -22,6 +23,8 @@ export interface CreateProjectData {
   books: number[];
   connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number;
+  /** Present only when creating from existing data: the server derives the books from these. */
+  usfmFiles?: UsfmFilePayload[];
 }
 
 interface CreateProjectModalProps {
@@ -83,7 +86,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     );
   };
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async (files?: AcceptedUsfmFile[]): Promise<void> => {
     if (isSubmitting) {
       return;
     }
@@ -105,11 +108,19 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         books: formData.books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
+        ...(files && {
+          usfmFiles: files.map(item => ({
+            fileName: item.file.name,
+            bookCode: item.bookCode,
+            usfm: item.usfm,
+          })),
+        }),
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'create project submit',
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -183,7 +194,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
                   disabled={isButtonDisabled}
                   type='button'
-                  onClick={handleSubmit}
+                  onClick={() => void handleSubmit()}
                 >
                   {isLoading ? (
                     <div className='flex items-center gap-2'>
@@ -204,7 +215,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 isSubmitting={isLoading || isSubmitting}
                 onBooksChange={handleBooksChange}
                 onFieldChange={updateFormData}
-                onSubmit={() => void handleSubmit()}
+                onSubmit={files => void handleSubmit(files)}
               />
             </TabsContent>
           )}

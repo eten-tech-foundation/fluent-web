@@ -62,7 +62,9 @@ export function ProjectFormFields({
 }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
-  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(formData.sourceBible);
+  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(
+    detectedBookCodes ? null : formData.sourceBible
+  );
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =

@@ -69,6 +69,7 @@ export const ProjectsWrapper: React.FC = () => {
         createdBy: Number(userdetail.id),
         metadata: buildProjectMetadata(projectData.connectivityProfile),
         pericopeSetId: projectData.pericopeSetId,
+        ...(projectData.usfmFiles && { usfmFiles: projectData.usfmFiles }),
       };
 
       await createProjectMutation.mutateAsync({
