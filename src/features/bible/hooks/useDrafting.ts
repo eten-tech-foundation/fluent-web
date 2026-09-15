@@ -98,11 +98,12 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
   }, []);
 
   const handleTextChange = useCallback(
-    // `markers` undefined means the caller derived none — the textarea path. It replaces whatever
-    // the verse carried, deliberately: keeping stored markers against text edited elsewhere would
-    // leave offsets pointing past the new content. The RTE always passes a concrete value.
+    // Textarea edits invalidate body offsets, but headings own their words and must survive.
+    // The RTE always supplies the complete structure, including explicit heading removal.
     (verseId: number, text: string, markers?: VerseMarkers | null) => {
       if (readOnly) return;
+      const headings = verses.find(verse => verse.verseNumber === verseId)?.markers?.headings;
+      if (markers === undefined && headings?.length) markers = { headings };
       setVerses(currentVerses => {
         const exists = currentVerses.some(v => v.verseNumber === verseId);
         if (!exists) {
@@ -124,7 +125,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
       if (textarea) autoResizeTextarea(textarea);
       updateButtonPosition();
     },
-    [readOnly, debouncedSave, autoResizeTextarea, updateButtonPosition]
+    [readOnly, verses, debouncedSave, autoResizeTextarea, updateButtonPosition]
   );
 
   const handleActiveVerseChange = useCallback(
