@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import {
+  isRemovableAssignmentForUser,
   useAddProjectUsers,
   useProjectUsers,
   useRemoveProjectUser,
@@ -289,14 +290,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const getActiveAssignmentCount = useCallback(
     (userId: number) => {
       if (!chapterAssignments) return 0;
-      return chapterAssignments.filter(a => {
-        const isRemovableDrafter =
-          a.assignedUser?.id === userId && (a.status === 'not_started' || a.status === 'draft');
-        const isRemovablePeerChecker =
-          a.peerChecker?.id === userId &&
-          (a.status === 'not_started' || a.status === 'draft' || a.status === 'peer_check');
-        return isRemovableDrafter || isRemovablePeerChecker;
-      }).length;
+      return chapterAssignments.filter(a => isRemovableAssignmentForUser(a, userId).isRemovable)
+        .length;
     },
     [chapterAssignments]
   );
@@ -405,7 +400,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                     return (
                       <button
                         key={role.value}
-                        className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors hover:bg-white/60 ${
+                        className={`hover:bg-accent hover:text-accent-foreground flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors ${
                           isSelected ? 'font-medium' : ''
                         }`}
                         type='button'
@@ -651,7 +646,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   Role
                 </Label>
                 <Select value={selectedRole ?? ''} onValueChange={value => setSelectedRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
                     <SelectValue placeholder='Select a role'>{selectedRoleLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -690,7 +685,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Email Address
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-email'
                   placeholder='user@example.com'
                   type='email'
@@ -714,7 +709,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Display Name
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-display-name'
                   placeholder='Display Name'
                   value={inviteDisplayName}
@@ -727,7 +722,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Role
                 </Label>
                 <Select value={inviteRole ?? ''} onValueChange={value => setInviteRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
                     <SelectValue placeholder='Select a role'>{inviteRoleLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>

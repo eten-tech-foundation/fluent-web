@@ -79,7 +79,7 @@ function computeVisibleCount(labels: string[], availableWidth: number, font: str
 
 function UserChip({ label }: { label: string }) {
   return (
-    <span className='bg-primary/10 inline-flex max-w-[120px] shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium'>
+    <span className='bg-accent text-accent-foreground border-border inline-flex max-w-[120px] shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold shadow-2xs'>
       <span className='truncate'>{label}</span>
     </span>
   );
@@ -152,7 +152,7 @@ export function UserMultiSelect({
   if (isLoading) {
     return (
       <div ref={wrapperRef} className='w-full'>
-        <div className='text-muted-foreground box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
+        <div className='bg-background text-muted-foreground border-input box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
           <div className='flex items-center gap-2'>
             <Loader2 className='h-4 w-4 animate-spin' />
             <span>Loading users...</span>
@@ -166,7 +166,7 @@ export function UserMultiSelect({
   if (disabled || users.length === 0) {
     return (
       <div ref={wrapperRef} className='w-full'>
-        <div className='text-muted-foreground box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
+        <div className='bg-background text-muted-foreground border-input box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
           <span className='truncate'>
             {users.length === 0 ? 'All users already added' : placeholder}
           </span>
@@ -179,7 +179,7 @@ export function UserMultiSelect({
   return (
     <div ref={wrapperRef} className='w-full'>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger className='box-border flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800'>
+        <PopoverTrigger className='bg-background text-foreground border-input hover:bg-accent hover:text-accent-foreground box-border flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm'>
           <div className='flex min-w-0 flex-1 items-center gap-1 overflow-hidden'>
             {selectedLabels.length === 0 ? (
               <span className='text-muted-foreground truncate'>{placeholder}</span>
@@ -201,7 +201,7 @@ export function UserMultiSelect({
 
         <PopoverContent
           align='start'
-          className='text-popover-foreground pointer-events-auto rounded-md border p-0 shadow-md'
+          className='bg-popover text-popover-foreground border-border pointer-events-auto rounded-md border p-0 shadow-md'
           side='bottom'
           style={{
             width:
@@ -224,7 +224,9 @@ export function UserMultiSelect({
                 <label
                   key={user.id}
                   className={`hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm ${
-                    checked ? 'bg-accent/40' : ''
+                    checked
+                      ? 'bg-accent text-accent-foreground font-semibold'
+                      : 'text-popover-foreground'
                   }`}
                 >
                   <Checkbox
