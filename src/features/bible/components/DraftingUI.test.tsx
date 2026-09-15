@@ -341,7 +341,7 @@ describe('DraftingUI', () => {
       resourcePanelMode.real = true;
       queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       server.use(
-        http.get(`${config.api.aquifer_url}/languages`, () =>
+        http.get(`${config.api.url}/aquifer/languages`, () =>
           HttpResponse.json([
             {
               id: 1,
@@ -359,17 +359,17 @@ describe('DraftingUI', () => {
             },
           ])
         ),
-        http.get(`${config.api.aquifer_url}/resources/collections/:resource`, () =>
+        http.get(`${config.api.url}/aquifer/resources/collections/:resource`, () =>
           HttpResponse.json({
             availableLanguages: [
               { languageId: 1, languageCode: 'eng', displayName: 'English', resourceItemCount: 1 },
             ],
           })
         ),
-        http.get(`${config.api.aquifer_url}/resources/search`, () =>
+        http.get(`${config.api.url}/aquifer/resources/search`, () =>
           HttpResponse.json({ items: [] })
         ),
-        http.get(`${config.api.aquifer_url}/bibles`, ({ request }) => {
+        http.get(`${config.api.url}/aquifer/bibles`, ({ request }) => {
           const spanish = new URL(request.url).searchParams.get('languageCode') === 'spa';
           return HttpResponse.json([
             {
@@ -380,7 +380,7 @@ describe('DraftingUI', () => {
           ]);
         }),
         http.get(`${config.api.youversion_url}/bibles`, () => HttpResponse.json({ data: [] })),
-        http.get(`${config.api.aquifer_url}/bibles/:id/texts`, ({ params }) =>
+        http.get(`${config.api.url}/aquifer/bibles/:id/texts`, ({ params }) =>
           HttpResponse.json({
             chapters: [
               {
@@ -448,7 +448,7 @@ describe('DraftingUI', () => {
         });
         let requested = false;
         server.use(
-          http.get(`${config.api.aquifer_url}/bibles/2/texts`, async () => {
+          http.get(`${config.api.url}/aquifer/bibles/2/texts`, async () => {
             requested = true;
             await pendingText;
             return HttpResponse.json({
