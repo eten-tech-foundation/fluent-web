@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
-import { useQueries } from '@tanstack/react-query';
+import { type UseQueryResult, useQueries } from '@tanstack/react-query';
 
 import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
 import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
@@ -9,6 +9,8 @@ import { type PericopeGroup, type ProjectItem, type Source, type TargetVerse } f
 export interface PericopeContextChapter {
   sourceVerses: Source[];
   targetVerses: TargetVerse[];
+  isLoading: boolean;
+  isError: boolean;
 }
 
 interface UsePericopeContextProps {
@@ -19,6 +21,11 @@ interface UsePericopeContextProps {
 
 interface ContextTarget extends TargetVerse {
   bibleTextId: number;
+}
+
+interface ContextData {
+  sourceVerses: Source[];
+  targetVerses: ContextTarget[];
 }
 
 /**
@@ -42,8 +49,60 @@ export function usePericopeContext({ projectItem, pericopes, enabled }: UsePeric
     return byChapter;
   }, [enabled, pericopes, projectItem.chapterNumber]);
 
-  const chapterNumbers = Array.from(references.keys()).sort((a, b) => a - b);
-  const queries = useQueries({
+  const chapterNumbers = useMemo(
+    () => Array.from(references.keys()).sort((a, b) => a - b),
+    [references]
+  );
+  const combine = useCallback(
+    (queries: Array<UseQueryResult<ContextData, Error>>) => {
+      const chapters = new Map<number, PericopeContextChapter>();
+      let error: Error | null = null;
+      for (const [index, query] of queries.entries()) {
+        error ??= query.error;
+        const chapterNumber = chapterNumbers[index];
+        const requestedVerses = references.get(chapterNumber);
+        const sourceVerses = (query.data?.sourceVerses ?? [])
+          .filter(verse => requestedVerses?.has(verse.verseNumber))
+          .map(({ id, verseNumber, text }) => ({ id, verseNumber, text }))
+          .sort((a, b) => a.verseNumber - b.verseNumber);
+
+        // Verse numbers repeat in each chapter; translated row IDs are not source text IDs.
+        const targetsBySourceId = new Map(
+          (query.data?.targetVerses ?? []).map(verse => [verse.bibleTextId, verse])
+        );
+        const targetVerses = sourceVerses.flatMap(source => {
+          const target = targetsBySourceId.get(source.id);
+          return target
+            ? [
+                {
+                  id: target.id,
+                  verseNumber: source.verseNumber,
+                  content: target.content,
+                  markers: target.markers ?? null,
+                },
+              ]
+            : [];
+        });
+        chapters.set(chapterNumber, {
+          sourceVerses,
+          targetVerses,
+          isLoading: query.isFetching && !query.data,
+          isError: query.isError,
+        });
+      }
+
+      return {
+        chapters,
+        isLoading: Array.from(chapters.values()).some(chapter => chapter.isLoading),
+        isError: error !== null,
+        error,
+        refetch: () => Promise.all(queries.map(query => query.refetch())),
+      };
+    },
+    [chapterNumbers, references]
+  );
+
+  return useQueries({
     queries: chapterNumbers.map(chapterNumber => ({
       queryKey: [
         'pericope-context',
@@ -67,50 +126,6 @@ export function usePericopeContext({ projectItem, pericopes, enabled }: UsePeric
         };
       },
     })),
+    combine,
   });
-
-  const chapters = new Map<number, PericopeContextChapter>();
-  let error: Error | null = null;
-  for (const [index, query] of queries.entries()) {
-    error ??= query.error;
-    if (!query.data) continue;
-    const chapterNumber = chapterNumbers[index];
-    const requestedVerses = references.get(chapterNumber);
-    const sourceVerses = query.data.sourceVerses
-      .filter(verse => requestedVerses?.has(verse.verseNumber))
-      .map(({ id, verseNumber, text }) => ({ id, verseNumber, text }))
-      .sort((a, b) => a.verseNumber - b.verseNumber);
-
-    if (sourceVerses.length !== requestedVerses?.size) {
-      error ??= new Error(`Some source verses are unavailable in chapter ${chapterNumber}`);
-      continue;
-    }
-
-    // Verse numbers repeat in each chapter; translated row IDs are not source text IDs.
-    const targetsBySourceId = new Map(
-      query.data.targetVerses.map(verse => [verse.bibleTextId, verse])
-    );
-    const targetVerses = sourceVerses.flatMap(source => {
-      const target = targetsBySourceId.get(source.id);
-      return target
-        ? [
-            {
-              id: target.id,
-              verseNumber: source.verseNumber,
-              content: target.content,
-              markers: target.markers ?? null,
-            },
-          ]
-        : [];
-    });
-    chapters.set(chapterNumber, { sourceVerses, targetVerses });
-  }
-
-  return {
-    chapters,
-    isLoading: queries.some(query => query.isLoading),
-    isError: error !== null,
-    error,
-    refetch: () => Promise.all(queries.map(query => query.refetch())),
-  };
 }

@@ -12,13 +12,11 @@ export const PericopeContextText = ({
   currentChapter,
   chapters,
   side,
-  isLoading = false,
 }: {
   group: PericopeGroup;
   currentChapter: number;
   chapters?: Map<number, PericopeContextChapter>;
   side: 'before' | 'after';
-  isLoading?: boolean;
 }) => {
   const { t } = useTranslation();
   const refs = orderedPericopeRefs(group).filter(ref =>
@@ -44,27 +42,31 @@ export const PericopeContextText = ({
           })}
         </p>
         <p className='text-foreground text-base leading-relaxed select-text'>
-          {data
-            ? refs
-                .filter(ref => ref.chapterNumber === chapter)
-                .map(ref => {
-                  const content = data.targetVerses.find(
-                    v => v.verseNumber === ref.verseNumber
-                  )?.content;
-                  return (
-                    <Fragment key={`${chapter}:${ref.verseNumber}`}>
-                      <span className='mr-1.5 font-bold'>
-                        {chapter}:{ref.verseNumber}
-                      </span>
-                      <span className='mr-3'>
-                        {content?.length ? content : t('pericopeNotDrafted', 'Not drafted')}
-                      </span>
-                    </Fragment>
-                  );
-                })
-            : isLoading
-              ? t('loading', 'Loading...')
-              : t('noContentAvailable', 'No content available')}
+          {refs
+            .filter(ref => ref.chapterNumber === chapter)
+            .map(ref => {
+              const source = data?.sourceVerses.find(v => v.verseNumber === ref.verseNumber);
+              const content = data?.targetVerses.find(
+                v => v.verseNumber === ref.verseNumber
+              )?.content;
+              const placeholder = data?.isLoading
+                ? t('loading', 'Loading...')
+                : source
+                  ? t('pericopeNotDrafted', 'Not drafted')
+                  : t('noContentAvailable', 'No content available');
+              return (
+                <Fragment key={`${chapter}:${ref.verseNumber}`}>
+                  <span className='mr-1.5 font-bold'>
+                    {chapter}:{ref.verseNumber}
+                  </span>
+                  <span
+                    className={`mr-3 ${!content?.length ? 'text-muted-foreground text-sm' : ''}`}
+                  >
+                    {content?.length ? content : placeholder}
+                  </span>
+                </Fragment>
+              );
+            })}
         </p>
       </section>
     );

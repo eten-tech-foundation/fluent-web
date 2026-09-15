@@ -648,6 +648,33 @@ describe('DraftingUI', () => {
     expect(handleTextChangeMock).toHaveBeenCalledWith(1, expect.any(String), undefined);
   });
 
+  it('retries both failed requests from the pericope error banner', async () => {
+    const user = userEvent.setup();
+    const refetchPericopes = vi.fn();
+    const refetchContext = vi.fn();
+    useAppStore.setState({ displayMode: 'pericope' });
+    mockUsePericope.mockReturnValue(
+      defaultPericopeHookResult({ isPericopeMode: true, isPericopeError: true, refetchPericopes })
+    );
+    mockUsePericopeContext.mockReturnValue({
+      chapters: new Map(),
+      isLoading: false,
+      isError: true,
+      refetch: refetchContext,
+    });
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetchPericopes).toHaveBeenCalledOnce();
+    expect(refetchContext).toHaveBeenCalledOnce();
+  });
+
   it('renders in Pericope Mode when enabled', () => {
     // Set displayMode to pericope in store and hook
     useAppStore.setState({ displayMode: 'pericope' });

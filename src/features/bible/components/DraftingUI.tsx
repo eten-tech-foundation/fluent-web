@@ -20,7 +20,6 @@ import {
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
-import { chapterGroupSources, pericopeHeading } from '@/features/bible/lib/pericope-display';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -41,7 +40,7 @@ import {
 import { useAppStore } from '@/store/store';
 
 import { BibleTabList, type ResourceBibleTab, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
-import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
+import { DraftingGridPericope } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
@@ -296,18 +295,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealNextVerse,
   });
 
-  const hasCrossChapterPericopes =
-    isPericopeMode &&
-    fullPericopes?.some(
-      group =>
-        group.verses.some(verse => verse.chapterNumber === projectItem.chapterNumber) &&
-        group.verses.some(verse => verse.chapterNumber !== projectItem.chapterNumber)
-    );
-  // A missing current resource chapter must not hide available neighboring references.
+  // Pericope mode handles missing resource content inside each group, so a crossing
+  // group can still show its available neighboring chapter.
   const showResourceBiblePlaceholder =
-    selectedPanel === 2 &&
-    !hasCrossChapterPericopes &&
-    (bibleContentLoading || bibleVerses.length === 0);
+    selectedPanel === 2 && !isPericopeMode && (bibleContentLoading || bibleVerses.length === 0);
   const pericopeContext = usePericopeContext({
     projectItem,
     pericopes: fullPericopes,
@@ -702,84 +693,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
-      if (isPericopeMode && pericopes) {
-        return (
-          <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
-              <div
-                className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
-              >
-                {middleContent}
-              </div>
-            </div>
-            <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map((group, groupIndex) => {
-                const fullGroup =
-                  fullPericopes?.find(g => g.pericopeNumber === group.pericopeNumber) ?? group;
-                const groupVerses = chapterGroupSources(
-                  group,
-                  sourceVerses,
-                  projectItem.chapterNumber
-                );
-                if (groupVerses.length === 0) return null;
-                const heading = pericopeHeading(fullGroup);
-
-                const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-                return (
-                  <div key={group.pericopeNumber} className='flex w-full flex-col space-y-2'>
-                    <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                      {heading}
-                    </h4>
-                    <div
-                      className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                        isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                      }`}
-                      onClick={e => {
-                        if (e.target === e.currentTarget) {
-                          const isGroupAlreadyActive = groupVerses.some(
-                            gv => gv.verseNumber === activeVerseId
-                          );
-                          if (!isGroupAlreadyActive) {
-                            handleActiveVerseChange(groupVerses[0].verseNumber);
-                          }
-                        }
-                      }}
-                    >
-                      <PericopeTargetGroup
-                        activeVerseId={activeVerseId}
-                        aiSuggestions={aiSuggestions}
-                        contextChapters={pericopeContext.chapters}
-                        contextLoading={pericopeContext.isLoading}
-                        fullGroup={fullGroup}
-                        globalNextUntouchedVerse={globalNextUntouchedVerse}
-                        groupIndex={groupIndex}
-                        groupVerses={groupVerses}
-                        handleActiveVerseChange={handleActiveVerseChange}
-                        handleKeyDown={handleKeyDown}
-                        handleNextClick={handleNextClick}
-                        handleNextPericopeClick={handleNextPericopeClick}
-                        handleTextChange={handleTextChangeWithTracking}
-                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
-                        isAiThresholdMet={isAiThresholdMet ?? false}
-                        isTranslationComplete={isTranslationComplete}
-                        pericopes={pericopes}
-                        projectItem={projectItem}
-                        readOnly={readOnly}
-                        sourceVerses={sourceVerses}
-                        suggestionStatus={suggestionStatus}
-                        textareaRefs={textareaRefs}
-                        verses={verses}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
       return (
         <div
           className='grid h-full items-start py-4'
@@ -824,21 +737,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       );
     },
     [
-      isPericopeMode,
-      pericopes,
-      fullPericopes,
-      pericopeContext.chapters,
-      pericopeContext.isLoading,
       sourceVerses,
       projectItem,
       activeVerseId,
-      globalNextUntouchedVerse,
       handleActiveVerseChange,
       handleKeyDown,
-      handleNextClick,
-      handleNextPericopeClick,
       handleTextChangeWithTracking,
-      isTranslationComplete,
       isDraft,
       readOnly,
       textareaRefs,
@@ -978,7 +882,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         variant='outline'
                         onClick={() => {
                           if (isPericopeError) void refetchPericopes();
-                          else void pericopeContext.refetch();
+                          if (pericopeContext.isError) void pericopeContext.refetch();
                         }}
                       >
                         {t('retry', 'Retry')}
@@ -1019,7 +923,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           aiSuggestions={aiSuggestions}
                           bibleVerseMap={bibleVerseMap}
                           contextChapters={pericopeContext.chapters}
-                          contextLoading={pericopeContext.isLoading}
                           fullPericopes={fullPericopes}
                           globalNextUntouchedVerse={globalNextUntouchedVerse}
                           handleActiveVerseChange={handleActiveVerseChange}

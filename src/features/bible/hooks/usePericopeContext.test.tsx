@@ -109,10 +109,13 @@ describe('usePericopeContext', () => {
     );
 
     expect(result.current.isLoading).toBe(true);
-    await waitFor(() => expect(result.current.chapters.size).toBe(2));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.chapters.size).toBe(2);
     expect(result.current.isLoading).toBe(false);
     expect(result.current.isError).toBe(false);
     expect(result.current.chapters.get(1)).toEqual({
+      isLoading: false,
+      isError: false,
       sourceVerses: [{ id: 101, verseNumber: 1, text: 'Previous chapter first verse' }],
       targetVerses: [
         {
@@ -160,7 +163,7 @@ describe('usePericopeContext', () => {
       { wrapper: Wrapper }
     );
 
-    await waitFor(() => expect(result.current.chapters.size).toBe(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.chapters.get(1)?.targetVerses).toEqual([]);
   });
 
@@ -170,7 +173,7 @@ describe('usePericopeContext', () => {
       ({ pericopes }) => usePericopeContext({ projectItem, pericopes, enabled: true }),
       { wrapper: Wrapper, initialProps: { pericopes: previousOnly } }
     );
-    await waitFor(() => expect(result.current.chapters.size).toBe(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     rerender({
       pericopes: [
@@ -205,10 +208,34 @@ describe('usePericopeContext', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.chapters.size).toBe(0);
+    expect(result.current.chapters.get(1)).toEqual({
+      sourceVerses: [],
+      targetVerses: [],
+      isLoading: false,
+      isError: true,
+    });
 
-    servePreviousChapter();
-    await act(() => result.current.refetch());
+    let releaseRetry: () => void = () => {};
+    const retryReady = new Promise<void>(resolve => {
+      releaseRetry = resolve;
+    });
+    server.use(
+      http.get(`${config.api.url}/translated-verses`, async () => {
+        await retryReady;
+        return HttpResponse.json([previousTranslation]);
+      })
+    );
+    let retry: ReturnType<typeof result.current.refetch>;
+    act(() => {
+      retry = result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.chapters.get(1)?.isLoading).toBe(true));
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([]);
+    await act(async () => {
+      releaseRetry();
+      await retry;
+    });
 
     await waitFor(() =>
       expect(result.current.chapters.get(1)?.targetVerses[0].content).toBe(
@@ -219,7 +246,43 @@ describe('usePericopeContext', () => {
     expect(result.current.chapters.has(2)).toBe(false);
   });
 
-  it('reports missing referenced source verses instead of silently presenting incomplete context', async () => {
+  it('keeps available context when a successful response omits some requested verses', async () => {
+    servePreviousChapter();
+    const pericopes = [
+      {
+        ...groups[0],
+        verses: [
+          { chapterNumber: 1, verseNumber: 1 },
+          { chapterNumber: 1, verseNumber: 3 },
+          { chapterNumber: 2, verseNumber: 1 },
+        ],
+      },
+    ];
+    const { result } = renderHook(
+      () => usePericopeContext({ projectItem, pericopes, enabled: true }),
+      { wrapper: Wrapper }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.chapters.get(1)).toEqual({
+      sourceVerses: [sources[0]],
+      targetVerses: [
+        {
+          id: previousTranslation.id,
+          verseNumber: 1,
+          content: previousTranslation.content,
+          markers: previousTranslation.markers,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+  });
+
+  it('treats an empty successful source response as unavailable content without a request error', async () => {
     servePreviousChapter();
     server.use(
       http.get(`${config.api.url}/bibles/9/books/1/chapters/1/texts`, () => HttpResponse.json([]))
@@ -229,9 +292,75 @@ describe('usePericopeContext', () => {
       { wrapper: Wrapper }
     );
 
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.chapters.get(1)).toEqual({
+      sourceVerses: [],
+      targetVerses: [],
+      isLoading: false,
+      isError: false,
+    });
+  });
+
+  it('keeps neighboring chapters independent while another chapter loads and fails', async () => {
+    servePreviousChapter();
+    let releaseNext: () => void = () => {};
+    const nextReady = new Promise<void>(resolve => {
+      releaseNext = resolve;
+    });
+    server.use(
+      http.get(`${config.api.url}/bibles/9/books/1/chapters/3/texts`, async () => {
+        await nextReady;
+        return HttpResponse.json({ message: 'Unavailable' }, { status: 500 });
+      })
+    );
+    const { result } = renderHook(
+      () => usePericopeContext({ projectItem, pericopes: groups, enabled: true }),
+      { wrapper: Wrapper }
+    );
+
+    await waitFor(() => expect(result.current.chapters.get(1)?.isLoading).toBe(false));
+    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([sources[0]]);
+    expect(result.current.chapters.get(1)?.isError).toBe(false);
+    expect(result.current.chapters.get(3)).toEqual({
+      sourceVerses: [],
+      targetVerses: [],
+      isLoading: true,
+      isError: false,
+    });
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      releaseNext();
+      await nextReady;
+    });
     await waitFor(() => expect(result.current.isError).toBe(true));
+
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.chapters.size).toBe(0);
+    expect(result.current.chapters.get(1)?.sourceVerses).toEqual([sources[0]]);
+    expect(result.current.chapters.get(1)?.isError).toBe(false);
+    expect(result.current.chapters.get(3)).toEqual({
+      sourceVerses: [],
+      targetVerses: [],
+      isLoading: false,
+      isError: true,
+    });
+  });
+
+  it('keeps the chapters map and refetch callback stable across unrelated rerenders', async () => {
+    servePreviousChapter();
+    const { result, rerender } = renderHook(
+      () => usePericopeContext({ projectItem, pericopes: previousOnly, enabled: true }),
+      { wrapper: Wrapper }
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const { chapters, refetch } = result.current;
+
+    rerender();
+
+    expect(result.current.chapters).toBe(chapters);
+    expect(result.current.refetch).toBe(refetch);
   });
 
   it('does not expose a late response from a previously selected project unit', async () => {
@@ -267,7 +396,8 @@ describe('usePericopeContext', () => {
     await waitFor(() => expect(oldRequestStarted).toBe(true));
 
     rerender({ item: { ...projectItem, projectUnitId: 18 } });
-    expect(result.current.chapters.size).toBe(0);
+    expect(result.current.chapters.get(1)?.targetVerses).toEqual([]);
+    expect(result.current.chapters.get(1)?.isLoading).toBe(true);
     await waitFor(() =>
       expect(result.current.chapters.get(1)?.targetVerses[0].content).toBe(
         'New project translation'

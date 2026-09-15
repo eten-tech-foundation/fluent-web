@@ -1,5 +1,6 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useMemo } from 'react';
 
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,6 @@ const PericopeRteGroup = lazy(() =>
 interface DraftingGridPericopeProps {
   fullPericopes?: PericopeGroup[];
   contextChapters?: Map<number, PericopeContextChapter>;
-  contextLoading?: boolean;
   resourceBibleId?: string;
   resourceBibleLoading?: boolean;
   pericopes: PericopeGroup[];
@@ -248,7 +248,6 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 interface PericopeTargetGroupProps {
   fullGroup?: PericopeGroup;
   contextChapters?: Map<number, PericopeContextChapter>;
-  contextLoading?: boolean;
   pericopes: PericopeGroup[];
   groupIndex: number;
   sourceVerses: Source[];
@@ -301,7 +300,6 @@ const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }
 export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   fullGroup,
   contextChapters,
-  contextLoading,
   pericopes,
   groupIndex,
   sourceVerses,
@@ -332,7 +330,6 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
           chapters={contextChapters}
           currentChapter={projectItem.chapterNumber}
           group={fullGroup}
-          isLoading={contextLoading}
           side='before'
         />
         <p className='text-muted-foreground text-sm font-medium'>
@@ -349,7 +346,6 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
         chapters={contextChapters}
         currentChapter={projectItem.chapterNumber}
         group={fullGroup}
-        isLoading={contextLoading}
         side='after'
       />
     ) : undefined;
@@ -418,7 +414,6 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   fullPericopes,
   contextChapters,
-  contextLoading,
   resourceBibleId,
   resourceBibleLoading = false,
   pericopes,
@@ -444,161 +439,196 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  const displayGroups = useMemo(() => {
+    const fullGroups = new Map(fullPericopes?.map(group => [group.pericopeNumber, group]));
+    return pericopes.map((group, groupIndex) => {
+      const fullGroup = fullGroups.get(group.pericopeNumber) ?? group;
+      const refs = orderedPericopeRefs(fullGroup);
+      return {
+        group,
+        groupIndex,
+        fullGroup,
+        groupVerses: chapterGroupSources(group, sourceVerses, projectItem.chapterNumber),
+        refs,
+        chapters: [...new Set(refs.map(ref => ref.chapterNumber))],
+        heading: pericopeHeading(fullGroup),
+      };
+    });
+  }, [pericopes, fullPericopes, sourceVerses, projectItem.chapterNumber]);
 
   return (
     <>
-      {pericopes.map((group, groupIndex) => {
-        const fullGroup =
-          fullPericopes?.find(g => g.pericopeNumber === group.pericopeNumber) ?? group;
-        const groupVerses = chapterGroupSources(group, sourceVerses, projectItem.chapterNumber);
-        if (groupVerses.length === 0) return null;
-        const refs = orderedPericopeRefs(fullGroup);
-        const chapters = [...new Set(refs.map(ref => ref.chapterNumber))];
-        const heading = pericopeHeading(fullGroup);
+      {displayGroups.map(
+        ({ group, groupIndex, fullGroup, groupVerses, refs, chapters, heading }) => {
+          if (groupVerses.length === 0) return null;
+          const showResourcePlaceholder =
+            selectedPanel === 2 &&
+            chapters.length === 1 &&
+            (resourceBibleLoading || bibleVerseMap.size === 0);
+          const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
-        const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-        return (
-          <div
-            key={group.pericopeNumber}
-            ref={el => {
-              groupVerses.forEach(gv => {
-                verseRefs.current[gv.verseNumber] = el;
-              });
-            }}
-            className='grid w-full items-start py-4'
-            style={{ gridTemplateColumns: '1fr 1fr' }}
-          >
-            <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
-              <div
-                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                }`}
-                role='button'
-                tabIndex={0}
-                onClick={() => {
-                  const isGroupAlreadyActive = groupVerses.some(
-                    gv => gv.verseNumber === activeVerseId
-                  );
-                  if (!isGroupAlreadyActive) {
-                    handleActiveVerseChange(groupVerses[0].verseNumber);
-                  }
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const isGroupAlreadyActive = groupVerses.some(
-                      gv => gv.verseNumber === activeVerseId
-                    );
-                    if (!isGroupAlreadyActive) {
-                      handleActiveVerseChange(groupVerses[0].verseNumber);
-                    }
-                  }
-                }}
-              >
-                <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
-                  {chapters.map(chapter => {
-                    const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
-                    if (
-                      selectedPanel === 2 &&
-                      chapter !== projectItem.chapterNumber &&
-                      resourceBibleId
-                    ) {
-                      return (
-                        <PericopeReferenceVerses
-                          key={chapter}
-                          bibleId={resourceBibleId}
-                          bookCode={projectItem.bookCode}
-                          chapterNumber={chapter}
-                          showChapter={true}
-                          verses={chapterRefs}
-                        />
+          return (
+            <div
+              key={group.pericopeNumber}
+              ref={el => {
+                groupVerses.forEach(gv => {
+                  verseRefs.current[gv.verseNumber] = el;
+                });
+              }}
+              className='grid w-full items-start py-4'
+              style={{ gridTemplateColumns: '1fr 1fr' }}
+            >
+              <div className='flex w-full flex-col space-y-2 px-6'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                {showResourcePlaceholder ? (
+                  <div className='bg-muted flex min-h-32 w-full items-center justify-center rounded-lg border-2 p-5'>
+                    {resourceBibleLoading ? (
+                      <Loader2
+                        aria-label={t('loading', 'Loading...')}
+                        className='text-muted-foreground h-6 w-6 animate-spin'
+                      />
+                    ) : (
+                      <p className='text-muted-foreground text-center text-sm'>
+                        {t('noContentAvailable', 'No content available')}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                      isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                    }`}
+                    role='button'
+                    tabIndex={0}
+                    onClick={() => {
+                      const isGroupAlreadyActive = groupVerses.some(
+                        gv => gv.verseNumber === activeVerseId
                       );
-                    }
-                    const sources =
-                      chapter === projectItem.chapterNumber
-                        ? sourceVerses
-                        : contextChapters?.get(chapter)?.sourceVerses;
-                    return chapterRefs.map(ref => {
-                      const textToRender =
-                        selectedPanel === 1
-                          ? (sources?.find(v => v.verseNumber === ref.verseNumber)?.text ??
-                            (contextLoading
+                      if (!isGroupAlreadyActive) {
+                        handleActiveVerseChange(groupVerses[0].verseNumber);
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const isGroupAlreadyActive = groupVerses.some(
+                          gv => gv.verseNumber === activeVerseId
+                        );
+                        if (!isGroupAlreadyActive) {
+                          handleActiveVerseChange(groupVerses[0].verseNumber);
+                        }
+                      }
+                    }}
+                  >
+                    <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                      {chapters.map(chapter => {
+                        const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
+                        if (
+                          selectedPanel === 2 &&
+                          chapter !== projectItem.chapterNumber &&
+                          resourceBibleId
+                        ) {
+                          return (
+                            <PericopeReferenceVerses
+                              key={chapter}
+                              bibleId={resourceBibleId}
+                              bookCode={projectItem.bookCode}
+                              chapterNumber={chapter}
+                              showChapter={true}
+                              verses={chapterRefs}
+                            />
+                          );
+                        }
+                        const context = contextChapters?.get(chapter);
+                        const isCurrentChapter = chapter === projectItem.chapterNumber;
+                        const sources = isCurrentChapter ? sourceVerses : context?.sourceVerses;
+                        return chapterRefs.map(ref => {
+                          const content =
+                            selectedPanel === 1
+                              ? sources?.find(v => v.verseNumber === ref.verseNumber)?.text
+                              : isCurrentChapter
+                                ? bibleVerseMap.get(ref.verseNumber)
+                                : undefined;
+                          const loading =
+                            selectedPanel === 1
+                              ? !isCurrentChapter && context?.isLoading
+                              : resourceBibleLoading;
+                          const textToRender =
+                            content ??
+                            (loading
                               ? t('loading', 'Loading...')
-                              : t('noContentAvailable', 'No content available')))
-                          : chapter === projectItem.chapterNumber
-                            ? resourceBibleLoading
-                              ? t('loading', 'Loading...')
-                              : (bibleVerseMap.get(ref.verseNumber) ??
-                                t('noContentAvailable', 'No content available'))
-                            : t('noContentAvailable', 'No content available');
-                      return (
-                        <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
-                          <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
-                            {chapters.length > 1
-                              ? `${chapter}:${ref.verseNumber}`
-                              : ref.verseNumber}
-                          </span>
-                          <span className='mr-3'>{textToRender}</span>
-                        </React.Fragment>
+                              : t('noContentAvailable', 'No content available'));
+                          return (
+                            <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
+                              <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                                {chapters.length > 1
+                                  ? `${chapter}:${ref.verseNumber}`
+                                  : ref.verseNumber}
+                              </span>
+                              <span
+                                className={`mr-3 ${content === undefined ? 'text-muted-foreground text-sm' : ''}`}
+                              >
+                                {textToRender}
+                              </span>
+                            </React.Fragment>
+                          );
+                        });
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className='flex w-full flex-col space-y-2 px-6'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                <div
+                  className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                    isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                  }`}
+                  onClick={e => {
+                    if (e.target === e.currentTarget) {
+                      const isGroupAlreadyActive = groupVerses.some(
+                        gv => gv.verseNumber === activeVerseId
                       );
-                    });
-                  })}
-                </p>
+                      if (!isGroupAlreadyActive) {
+                        handleActiveVerseChange(groupVerses[0].verseNumber);
+                      }
+                    }
+                  }}
+                >
+                  <PericopeTargetGroup
+                    activeVerseId={activeVerseId}
+                    aiSuggestions={aiSuggestions}
+                    contextChapters={contextChapters}
+                    fullGroup={fullGroup}
+                    globalNextUntouchedVerse={globalNextUntouchedVerse}
+                    groupIndex={groupIndex}
+                    groupVerses={groupVerses}
+                    handleActiveVerseChange={handleActiveVerseChange}
+                    handleKeyDown={handleKeyDown}
+                    handleNextClick={handleNextClick}
+                    handleNextPericopeClick={handleNextPericopeClick}
+                    handleTextChange={handleTextChange}
+                    isAiActive={isAiActive}
+                    isAiThresholdMet={isAiThresholdMet}
+                    isTranslationComplete={isTranslationComplete}
+                    pericopes={pericopes}
+                    projectItem={projectItem}
+                    readOnly={readOnly}
+                    sourceVerses={sourceVerses}
+                    suggestionStatus={suggestionStatus}
+                    textareaRefs={textareaRefs}
+                    verses={verses}
+                  />
+                </div>
               </div>
             </div>
-            <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
-              <div
-                className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                }`}
-                onClick={e => {
-                  if (e.target === e.currentTarget) {
-                    const isGroupAlreadyActive = groupVerses.some(
-                      gv => gv.verseNumber === activeVerseId
-                    );
-                    if (!isGroupAlreadyActive) {
-                      handleActiveVerseChange(groupVerses[0].verseNumber);
-                    }
-                  }
-                }}
-              >
-                <PericopeTargetGroup
-                  activeVerseId={activeVerseId}
-                  aiSuggestions={aiSuggestions}
-                  contextChapters={contextChapters}
-                  contextLoading={contextLoading}
-                  fullGroup={fullGroup}
-                  globalNextUntouchedVerse={globalNextUntouchedVerse}
-                  groupIndex={groupIndex}
-                  groupVerses={groupVerses}
-                  handleActiveVerseChange={handleActiveVerseChange}
-                  handleKeyDown={handleKeyDown}
-                  handleNextClick={handleNextClick}
-                  handleNextPericopeClick={handleNextPericopeClick}
-                  handleTextChange={handleTextChange}
-                  isAiActive={isAiActive}
-                  isAiThresholdMet={isAiThresholdMet}
-                  isTranslationComplete={isTranslationComplete}
-                  pericopes={pericopes}
-                  projectItem={projectItem}
-                  readOnly={readOnly}
-                  sourceVerses={sourceVerses}
-                  suggestionStatus={suggestionStatus}
-                  textareaRefs={textareaRefs}
-                  verses={verses}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })}
+          );
+        }
+      )}
     </>
   );
 };

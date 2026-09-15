@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { type ComponentProps } from 'react';
+
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingGridPericope } from '@/features/bible/components/DraftingGridPericope';
+import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
 import { config } from '@/lib/config';
 import type { PericopeGroup, ProjectItem, Source } from '@/lib/types';
 
@@ -20,11 +23,30 @@ const chapter8: Source[] = [1, 31, 32, 33, 34, 35, 36, 37, 38].map(verseNumber =
 }));
 const chapter9: Source[] = [{ id: 901, verseNumber: 1, text: 'Source Mark 9:1' }];
 const contextChapters = new Map([
-  [8, { sourceVerses: chapter8, targetVerses: [{ verseNumber: 31, content: 'Saved Mark 8:31' }] }],
-  [9, { sourceVerses: chapter9, targetVerses: [{ verseNumber: 1, content: 'Saved Mark 9:1' }] }],
+  [
+    8,
+    {
+      isLoading: false,
+      isError: false,
+      sourceVerses: chapter8,
+      targetVerses: [{ verseNumber: 31, content: 'Saved Mark 8:31' }],
+    },
+  ],
+  [
+    9,
+    {
+      isLoading: false,
+      isError: false,
+      sourceVerses: chapter9,
+      targetVerses: [{ verseNumber: 1, content: 'Saved Mark 9:1' }],
+    },
+  ],
 ]);
 const change = vi.fn();
-const renderChapter = (chapter: 8 | 9) => {
+const renderChapter = (
+  chapter: 8 | 9,
+  overrides: Partial<ComponentProps<typeof DraftingGridPericope>> = {}
+) => {
   const source = chapter === 8 ? chapter8 : chapter9;
   return render(
     <DraftingGridPericope
@@ -58,6 +80,7 @@ const renderChapter = (chapter: 8 | 9) => {
         verseNumber: v.verseNumber,
         content: `Draft ${chapter}:${v.verseNumber}`,
       }))}
+      {...overrides}
     />
   );
 };
@@ -89,5 +112,83 @@ describe('cross-chapter pericope display', () => {
       target: { value: 'Edited 8:31' },
     });
     expect(change).toHaveBeenCalledWith(31, 'Edited 8:31');
+  });
+  it('keeps local resource placeholders when another group crosses a chapter boundary', () => {
+    const local = {
+      pericopeNumber: 'local',
+      pericopeTitle: null,
+      verses: [{ chapterNumber: 8, verseNumber: 1 }],
+    };
+    renderChapter(8, {
+      selectedPanel: 2,
+      fullPericopes: [local, fullGroup],
+      pericopes: [
+        local,
+        { ...fullGroup, verses: fullGroup.verses.filter(ref => ref.chapterNumber === 8) },
+      ],
+    });
+    const localColumn = screen.getAllByRole('heading', { name: '8:1' })[0].parentElement!;
+    const placeholder = within(localColumn).getByText('No content available');
+    expect(placeholder).toHaveClass('text-muted-foreground', 'text-sm');
+    expect(placeholder.parentElement).toHaveClass('bg-muted');
+    expect(within(localColumn).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: '8:31–9:1' })).toHaveLength(2);
+    expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
+  });
+
+  it('distinguishes missing resource verses from scripture text', () => {
+    renderChapter(8, { selectedPanel: 2, bibleVerseMap: new Map([[31, 'Reference Mark 8:31']]) });
+    expect(screen.getByText('Reference Mark 8:31')).not.toHaveClass('text-muted-foreground');
+    for (const placeholder of screen.getAllByText('No content available')) {
+      expect(placeholder).toHaveClass('text-muted-foreground', 'text-sm');
+    }
+  });
+
+  it('shows loading for neighboring reference verses while the Bible selection is pending', () => {
+    renderChapter(8, { selectedPanel: 2, resourceBibleLoading: true });
+    const referenceGroup = screen.getByRole('button', { name: /8:31.*Loading/ });
+    expect(within(referenceGroup).getAllByText('Loading...')).toHaveLength(9);
+    expect(within(referenceGroup).queryByText('No content available')).not.toBeInTheDocument();
+  });
+
+  it('keeps each neighboring chapter loading state independent', () => {
+    const group = {
+      ...fullGroup,
+      verses: [{ chapterNumber: 7, verseNumber: 1 }, ...fullGroup.verses],
+    };
+    const chapters = new Map([
+      [7, { sourceVerses: [], targetVerses: [], isLoading: false, isError: true }],
+      [9, { sourceVerses: [], targetVerses: [], isLoading: true, isError: false }],
+    ]);
+    render(
+      <>
+        <PericopeContextText chapters={chapters} currentChapter={8} group={group} side='before' />
+        <PericopeContextText chapters={chapters} currentChapter={8} group={group} side='after' />
+      </>
+    );
+    expect(
+      within(screen.getByText('7:1').closest('section')!).getByText('No content available')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByText('9:1').closest('section')!).getByText('Loading...')
+    ).toBeInTheDocument();
+  });
+
+  it('keeps saved context beside unavailable verses without labeling them undrafted', () => {
+    const group = {
+      ...fullGroup,
+      verses: [...fullGroup.verses, { chapterNumber: 9, verseNumber: 2 }],
+    };
+    render(
+      <PericopeContextText
+        chapters={contextChapters}
+        currentChapter={8}
+        group={group}
+        side='after'
+      />
+    );
+    expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
+    expect(screen.getByText('No content available')).toBeInTheDocument();
+    expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
   });
 });

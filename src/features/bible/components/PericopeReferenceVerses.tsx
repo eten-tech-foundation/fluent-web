@@ -39,13 +39,10 @@ export const PericopeReferenceVerses = ({
     youVersion.data,
     isYouVersion && !youVersion.isLoading
   );
-  const loading =
-    (isAquifer && aquifer.isLoading) ||
-    (isYouVersion && (youVersion.isLoading || passages.some(passage => passage.isLoading)));
-  const failed = (isAquifer && aquifer.isError) || (isYouVersion && youVersion.isError);
 
   // Match the resource panel's plain-text normalization, scoped to this chapter.
   const textByVerse = new Map<number, string>();
+  const passageByVerse = new Map<number, (typeof passages)[number]>();
   if (isAquifer) {
     aquifer.data?.chapters
       .find(chapter => chapter.number === chapterNumber)
@@ -53,8 +50,12 @@ export const PericopeReferenceVerses = ({
   } else if (isYouVersion) {
     youVersion.data?.verses.forEach((verse, index) => {
       const [, chapter, verseNumber] = verse.passage_id.split('.');
-      if (Number(chapter) === chapterNumber && passages[index]?.data) {
-        textByVerse.set(parseInt(verseNumber, 10), passages[index].data.content);
+      const passage = passages[index];
+      if (Number(chapter) === chapterNumber) {
+        passageByVerse.set(parseInt(verseNumber, 10), passage);
+        if (passage.data) {
+          textByVerse.set(parseInt(verseNumber, 10), passage.data.content);
+        }
       }
     });
   }
@@ -67,22 +68,27 @@ export const PericopeReferenceVerses = ({
         .map(verse => {
           const text = textByVerse.get(verse.verseNumber);
           const unavailable = !text?.trim();
-          const content = loading
-            ? t('loading', 'Loading...')
-            : failed
-              ? t('errorLoadingBibleContent', 'Unable to load Bible content.')
-              : unavailable
-                ? t('noContentAvailable', 'No content available')
-                : text;
+          const passage = passageByVerse.get(verse.verseNumber);
+          const loading =
+            (isAquifer && aquifer.isLoading) ||
+            (isYouVersion && (youVersion.isLoading || passage?.isLoading));
+          const failed =
+            (isAquifer && aquifer.isError) ||
+            (isYouVersion && (youVersion.isError || passage?.isError));
+          const content = !unavailable
+            ? text
+            : loading
+              ? t('loading', 'Loading...')
+              : failed
+                ? t('errorLoadingBibleContent', 'Unable to load Bible content.')
+                : t('noContentAvailable', 'No content available');
 
           return (
             <span key={verse.verseNumber} className='mr-3'>
               <span className='mr-1 font-bold'>
                 {showChapter ? `${chapterNumber}:${verse.verseNumber}` : verse.verseNumber}
               </span>
-              <span
-                className={loading || failed || unavailable ? 'text-muted-foreground text-sm' : ''}
-              >
+              <span className={unavailable ? 'text-muted-foreground text-sm' : ''}>
                 {content}
               </span>{' '}
             </span>
