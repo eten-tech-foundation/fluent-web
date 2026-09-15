@@ -1,8 +1,3 @@
-/**
- * Keyboard tests (§12.1 "Keyboard" row): shortcuts act on the active verse's
- * handlers; typing plain characters never triggers playback (the collision
- * obligation from §5.1 — the drafting textarea owns unmodified keys).
- */
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -12,22 +7,12 @@ import {
   type UseTtsKeyboardShortcutsOptions,
 } from './useTtsKeyboardShortcuts';
 
-interface Harness {
-  onPlayVerse: ReturnType<typeof vi.fn>;
-  onPlayFromHere: ReturnType<typeof vi.fn>;
-  onStop: ReturnType<typeof vi.fn>;
-  unmount: () => void;
-}
-
-const createHarness = (overrides: Partial<UseTtsKeyboardShortcutsOptions> = {}): Harness => {
-  const onPlayVerse = vi.fn();
-  const onPlayFromHere = vi.fn();
-  const onStop = vi.fn();
-  const { unmount } = renderHook(() =>
-    useTtsKeyboardShortcuts({ enabled: true, onPlayVerse, onPlayFromHere, onStop, ...overrides })
-  );
-  return { onPlayVerse, onPlayFromHere, onStop, unmount };
-};
+const callbacks = () => ({
+  onPlay: vi.fn(),
+  onPlayFromHere: vi.fn(),
+  onPause: vi.fn(),
+  onRestart: vi.fn(),
+});
 
 const press = (init: KeyboardEventInit): KeyboardEvent => {
   const event = new KeyboardEvent('keydown', { ...init, cancelable: true, bubbles: true });
@@ -35,69 +20,92 @@ const press = (init: KeyboardEventInit): KeyboardEvent => {
   return event;
 };
 
+// Match every exported advertisement against the actual window listener, not
+// merely a second expected copy of the constant. New keys must name an action.
+const actions = {
+  play: 'onPlay',
+  playFromHere: 'onPlayFromHere',
+  pause: 'onPause',
+  restart: 'onRestart',
+} as const;
+const bindings = Object.entries(TTS_KEYBOARD_SHORTCUTS).map(([name, chord]) => ({
+  name: name as keyof typeof actions,
+  chord,
+  init: {
+    code: `Key${chord.at(-1)}`,
+    altKey: chord.includes('Alt+'),
+    shiftKey: chord.includes('Shift+'),
+  },
+}));
+
 describe('useTtsKeyboardShortcuts', () => {
-  it('documents the assignments for the help/title surfaces (§5.1)', () => {
+  it('exports the four documented bindings', () => {
     expect(TTS_KEYBOARD_SHORTCUTS).toEqual({
-      playVerse: 'Alt+P',
+      play: 'Alt+P',
       playFromHere: 'Alt+Shift+P',
-      stop: 'Alt+S',
+      pause: 'Alt+S',
       restart: 'Alt+R',
     });
   });
 
-  it('Alt+P plays the active verse; Alt+Shift+P plays from here; Alt+S stops', () => {
-    const harness = createHarness();
-
-    const play = press({ code: 'KeyP', altKey: true });
-    press({ code: 'KeyP', altKey: true, shiftKey: true });
-    press({ code: 'KeyS', altKey: true });
-
-    expect(harness.onPlayVerse).toHaveBeenCalledTimes(1);
-    expect(harness.onPlayFromHere).toHaveBeenCalledTimes(1);
-    expect(harness.onStop).toHaveBeenCalledTimes(1);
-    expect(play.defaultPrevented).toBe(true);
+  it.each(bindings)('$chord fires only $name once and prevents default', ({ name, init }) => {
+    const handlers = callbacks();
+    renderHook(() => useTtsKeyboardShortcuts({ enabled: true, ...handlers }));
+    expect(press(init).defaultPrevented).toBe(true);
+    for (const [key, handler] of Object.entries(handlers)) {
+      expect(handler).toHaveBeenCalledTimes(key === actions[name] ? 1 : 0);
+    }
   });
 
-  it('matches on the physical key code, so macOS Option+P ("π") still works', () => {
-    const harness = createHarness();
-
+  it('uses the physical key code even for macOS Option+P (π)', () => {
+    const handlers = callbacks();
+    renderHook(() => useTtsKeyboardShortcuts({ enabled: true, ...handlers }));
     press({ code: 'KeyP', key: 'π', altKey: true });
-
-    expect(harness.onPlayVerse).toHaveBeenCalledTimes(1);
+    expect(handlers.onPlay).toHaveBeenCalledOnce();
   });
 
-  it('typing plain characters never triggers playback (drafting-textarea collision check, §5.1)', () => {
-    const harness = createHarness();
-
-    const plain = press({ code: 'KeyP', key: 'p' });
-    press({ code: 'KeyS', key: 's' });
-    press({ code: 'Enter', key: 'Enter' }); // drafting: verse advance
-    press({ code: 'Enter', key: 'Enter', shiftKey: true }); // drafting: newline
-
-    expect(harness.onPlayVerse).not.toHaveBeenCalled();
-    expect(harness.onPlayFromHere).not.toHaveBeenCalled();
-    expect(harness.onStop).not.toHaveBeenCalled();
-    expect(plain.defaultPrevented).toBe(false);
+  it.each([
+    { code: 'KeyR', altKey: true, shiftKey: true },
+    { code: 'KeyS', altKey: true, shiftKey: true },
+    ...['KeyP', 'KeyS', 'KeyR'].flatMap(code => [
+      { code },
+      { code, ctrlKey: true },
+      { code, metaKey: true },
+      { code, altKey: true, ctrlKey: true },
+      { code, altKey: true, metaKey: true },
+    ]),
+    { code: 'Enter' },
+    { code: 'Enter', shiftKey: true },
+  ])('ignores unbound typing/browser combination %j', init => {
+    const handlers = callbacks();
+    renderHook(() => useTtsKeyboardShortcuts({ enabled: true, ...handlers }));
+    expect(press(init).defaultPrevented).toBe(false);
+    for (const handler of Object.values(handlers)) expect(handler).not.toHaveBeenCalled();
   });
 
-  it('Ctrl/Meta combos are left to the browser (Ctrl+P print, Cmd+S save…)', () => {
-    const harness = createHarness();
-
-    press({ code: 'KeyP', altKey: true, ctrlKey: true });
-    press({ code: 'KeyS', altKey: true, metaKey: true });
-
-    expect(harness.onPlayVerse).not.toHaveBeenCalled();
-    expect(harness.onStop).not.toHaveBeenCalled();
-  });
-
-  it('does nothing while disabled, and detaches on unmount', () => {
-    const harness = createHarness({ enabled: false });
-
-    press({ code: 'KeyP', altKey: true });
-    expect(harness.onPlayVerse).not.toHaveBeenCalled();
-
-    harness.unmount();
-    press({ code: 'KeyS', altKey: true });
-    expect(harness.onStop).not.toHaveBeenCalled();
+  it('uses fresh callbacks and enabled state without reattaching; detaches on unmount', () => {
+    const old = callbacks();
+    const fresh = callbacks();
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { rerender, unmount } = renderHook(
+      (options: UseTtsKeyboardShortcutsOptions) => useTtsKeyboardShortcuts(options),
+      { initialProps: { enabled: false, ...old } }
+    );
+    for (const { init } of bindings) expect(press(init).defaultPrevented).toBe(false);
+    for (const handler of Object.values(old)) expect(handler).not.toHaveBeenCalled();
+    const listener = add.mock.calls.find(([type]) => type === 'keydown')?.[1];
+    rerender({ enabled: true, ...fresh });
+    for (const { init } of bindings) expect(press(init).defaultPrevented).toBe(true);
+    for (const handler of Object.values(fresh)) expect(handler).toHaveBeenCalledOnce();
+    rerender({ enabled: false, ...old });
+    for (const { init } of bindings) expect(press(init).defaultPrevented).toBe(false);
+    expect(add.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1);
+    unmount();
+    expect(remove).toHaveBeenCalledWith('keydown', listener);
+    for (const { init } of bindings) expect(press(init).defaultPrevented).toBe(false);
+    for (const handler of Object.values(old)) expect(handler).not.toHaveBeenCalled();
+    add.mockRestore();
+    remove.mockRestore();
   });
 });

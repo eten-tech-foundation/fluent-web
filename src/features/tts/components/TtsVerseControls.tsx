@@ -2,13 +2,13 @@ import { useId } from 'react';
 
 import { Loader2, Pause, Play, PlayOff, RotateCcw, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 import { TTS_KEYBOARD_SHORTCUTS } from '../hooks/useTtsKeyboardShortcuts';
+import { pressPrimary, pressRestart, unavailableReason } from '../lib/controlActions';
 import { PLAYABLE_CONTROL_BUTTON_CLASS } from '../lib/controlLayout';
 
 export type PlayableControlState =
@@ -59,16 +59,14 @@ export function PlayableControl({
   const action = pauses ? t('ttsPause', 'Pause') : t('ttsPlay', 'Play');
   const restart = t('ttsRestart', 'Restart');
   const reason = impossibleReason ?? t('ttsAudioUnavailable', 'Audio is unavailable.');
-  // Registration lives in useTtsKeyboardShortcuts.ts; keep advertisements tied
-  // to its constants. Restart registration and pause parity follow separately.
-  const shortcut = pauses ? TTS_KEYBOARD_SHORTCUTS.stop : TTS_KEYBOARD_SHORTCUTS.playVerse;
-  const disabledReason = offline
-    ? t('ttsOfflineReason', "You're offline. Reconnect to play audio.")
-    : disabled
-      ? t('ttsAudioUnavailable', 'Audio is unavailable.')
-      : impossible
-        ? reason
-        : undefined;
+  // Primary tooltip/aria registration: hooks/useTtsKeyboardShortcuts.ts.
+  const shortcut = pauses ? TTS_KEYBOARD_SHORTCUTS.pause : TTS_KEYBOARD_SHORTCUTS.play;
+  const disabledReason = unavailableReason(t, {
+    offline,
+    missing: disabled,
+    impossibleReason: impossible ? reason : undefined,
+  });
+  const restartAllowed = disabledReason === undefined && canRestart;
   const primaryHelp = disabledReason ?? `${action} (${shortcut})`;
   const Icon =
     offline || impossible || disabled ? PlayOff : loading ? Loader2 : pauses ? Pause : Play;
@@ -100,11 +98,7 @@ export function PlayableControl({
                 size='icon'
                 type='button'
                 variant='ghost'
-                onClick={() => {
-                  // Disabled primary controls explain why; Restart stays inert.
-                  if (disabledReason) toast.error(disabledReason);
-                  else onPrimary();
-                }}
+                onClick={() => pressPrimary(disabledReason, onPrimary)}
               >
                 <Icon aria-hidden='true' className={loading ? 'animate-spin' : undefined} />
               </Button>
@@ -122,6 +116,7 @@ export function PlayableControl({
           </TooltipTrigger>
           <TooltipContent>{primaryHelp}</TooltipContent>
         </Tooltip>
+        {/* Restart tooltip/aria registration: hooks/useTtsKeyboardShortcuts.ts. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <span className='inline-flex'>
@@ -133,11 +128,11 @@ export function PlayableControl({
                   compact &&
                     'before:border-muted-foreground/60 relative rounded-full before:absolute before:inset-y-2 before:right-3 before:left-1 before:rounded-full before:border hover:bg-transparent [&_svg]:size-3.5 [&_svg]:-translate-x-1'
                 )}
-                disabled={offline || impossible || disabled || !canRestart}
+                disabled={!restartAllowed}
                 size='icon'
                 type='button'
                 variant='ghost'
-                onClick={onRestart}
+                onClick={() => pressRestart(restartAllowed, onRestart)}
               >
                 <RotateCcw aria-hidden='true' />
               </Button>

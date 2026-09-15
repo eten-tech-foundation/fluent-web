@@ -69,6 +69,45 @@ describe('PlaybackRegistryProvider', () => {
     expect(a).toHaveBeenCalledTimes(2);
   });
 
+  it('routes Restart only to the live claim and forgets it on release or silence', () => {
+    const { result } = setup();
+    const { registry } = result.current;
+    const pause = vi.fn();
+    const oldRestart = vi.fn();
+    const newRestart = vi.fn();
+    expect(registry.restartLive()).toBe(false);
+    const oldRelease = registry.claim(pause, oldRestart);
+    registry.claim(pause, newRestart);
+    oldRelease();
+    expect(registry.restartLive()).toBe(true);
+    expect(newRestart).toHaveBeenCalledOnce();
+    expect(oldRestart).not.toHaveBeenCalled();
+    registry.silenceAll();
+    expect(registry.restartLive()).toBe(false);
+    const release = registry.claim(pause, oldRestart);
+    release();
+    expect(registry.restartLive()).toBe(false);
+    expect(oldRestart).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to another playable when a native claimant has no Restart', () => {
+    const { result } = setup();
+    const pause = vi.fn();
+    result.current.registry.claim(pause);
+    expect(result.current.registry.restartLive()).toBe(true);
+    expect(pause).not.toHaveBeenCalled();
+  });
+
+  it('Restart may replace its claim without losing the new registration', () => {
+    const { result } = setup();
+    const { registry } = result.current;
+    const next = vi.fn();
+    registry.claim(vi.fn(), () => registry.claim(vi.fn(), next));
+    registry.restartLive();
+    registry.restartLive();
+    expect(next).toHaveBeenCalledOnce();
+  });
+
   it('lets a paused or unmounted host release its claim without pausing it again', () => {
     const { result } = setup();
     const pause = vi.fn();

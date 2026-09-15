@@ -14,8 +14,10 @@ type PauseClaimant = () => void;
 
 export interface PlaybackRegistry {
   /** Pauses the previous claimant. Release on direct pause or host unmount. */
-  claim: (pause: PauseClaimant) => () => void;
+  claim: (pause: PauseClaimant, restart?: () => void) => () => void;
   silenceAll: () => void;
+  /** True if a claimant exists, even if it has no Restart control. */
+  restartLive: () => boolean;
   setPageKey: (key: string) => void;
   getRecord: (key: PlayableKey) => PauseRecord | null;
   setRecord: (key: PlayableKey, record: PauseRecord) => void;
@@ -41,6 +43,8 @@ export class PlaybackRegistryStore implements PlaybackRegistry {
   private state: RegistryState = { playables: new Map(), liveKey: null };
   private pageKey: string | undefined;
   private readonly listeners = new Map<PlayableKey, Set<Listener>>();
+  // Behavior belongs only to live claims, never to saved per-playable data.
+  private readonly restarts = new WeakMap<PauseClaimant, () => void>();
 
   constructor(private readonly claimants: Set<PauseClaimant>) {}
 
@@ -57,7 +61,7 @@ export class PlaybackRegistryStore implements PlaybackRegistry {
     for (const listener of notify) listener();
   }
 
-  private replaceClaimant(pause?: PauseClaimant): () => void {
+  private replaceClaimant(pause?: PauseClaimant, restart?: () => void): () => void {
     // One loop for both exclusive starts and silence-all. These callbacks pause
     // and record; the registry neither owns nor retains a media element.
     for (const claimant of [...this.claimants]) claimant();
@@ -67,12 +71,21 @@ export class PlaybackRegistryStore implements PlaybackRegistry {
     // a newer claim that happens to reuse the same host callback.
     const claimant = () => pause();
     this.claimants.add(claimant);
+    if (restart) this.restarts.set(claimant, restart);
     return () => {
       this.claimants.delete(claimant);
     };
   }
 
-  claim = (pause: PauseClaimant): (() => void) => this.replaceClaimant(pause);
+  claim = (pause: PauseClaimant, restart?: () => void): (() => void) =>
+    this.replaceClaimant(pause, restart);
+
+  restartLive = (): boolean => {
+    const claimant = this.claimants.values().next().value;
+    if (!claimant) return false;
+    this.restarts.get(claimant)?.();
+    return true;
+  };
 
   silenceAll = (): void => {
     this.replaceClaimant();
