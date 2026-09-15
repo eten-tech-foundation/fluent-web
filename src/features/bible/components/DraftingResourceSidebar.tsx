@@ -16,11 +16,10 @@ interface DraftingResourceSidebarProps {
   currentLanguage: string;
   currentResource: ResourceName;
   clearBibleRef: React.MutableRefObject<(() => void) | null>;
-  setBibleTabLabel: (label: string) => void;
-  setOpenResourcePanel: (open: boolean) => void;
-  setSelectedPanel: (panel: 1 | 2) => void;
-  setBibleContentLoading: (loading: boolean) => void;
-  setBibleVerses: (verses: BibleVerse[]) => void;
+  onBibleSelect: (bible: { id: string; label: string; language: string }) => void;
+  onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
+  onBibleVersesChange: (bibleId: string, verses: BibleVerse[]) => void;
+  selectedBibleId: string | null;
   setCurrentLanguage: (lang: string) => void;
   setCurrentResource: (res: ResourceName) => void;
   /** Controlled active left-panel tab (Resources | Checks), persisted by the
@@ -46,11 +45,10 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   currentLanguage,
   currentResource,
   clearBibleRef,
-  setBibleTabLabel,
-  setOpenResourcePanel,
-  setSelectedPanel,
-  setBibleContentLoading,
-  setBibleVerses,
+  onBibleSelect,
+  onBibleLoadingChange,
+  onBibleVersesChange,
+  selectedBibleId,
   setCurrentLanguage,
   setCurrentResource,
   activeLeftTab,
@@ -128,18 +126,17 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
           resourcesContent={
             <ResourcePanel
               activeVerseId={resourceVerseId}
-              bibleResourceName={setBibleTabLabel}
               initialLanguage={currentLanguage}
               initialResource={currentResource}
-              openResourceBiblePanel={setOpenResourcePanel}
               registerClearBible={fn => {
                 clearBibleRef.current = fn;
               }}
               resourceNames={resourceNames}
-              selectPanel={panel => setSelectedPanel(panel as 1 | 2)}
+              selectedBibleId={selectedBibleId}
               sourceData={projectItem}
-              onBibleLoadingChange={setBibleContentLoading}
-              onBibleVersesChange={setBibleVerses}
+              onBibleLoadingChange={onBibleLoadingChange}
+              onBibleSelect={onBibleSelect}
+              onBibleVersesChange={onBibleVersesChange}
               onLanguageChange={setCurrentLanguage}
               onResourceChange={setCurrentResource}
             />

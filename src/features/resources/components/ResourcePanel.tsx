@@ -26,11 +26,10 @@ interface ResourcePanelProps {
   resourceNames: ResourceName[];
   onResourceChange?: (resource: ResourceName) => void;
   onLanguageChange?: (language: string) => void;
-  onBibleVersesChange?: (verses: BibleVerse[]) => void;
-  onBibleLoadingChange?: (loading: boolean) => void;
-  openResourceBiblePanel?: (open: boolean) => void;
-  selectPanel?: (panel: number) => void;
-  bibleResourceName: (name: string) => void;
+  onBibleSelect?: (bible: { id: string; label: string; language: string }) => void;
+  onBibleVersesChange?: (bibleId: string, verses: BibleVerse[]) => void;
+  onBibleLoadingChange?: (bibleId: string, loading: boolean) => void;
+  selectedBibleId?: string | null;
   registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
   initialLanguage?: string;
@@ -42,11 +41,10 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   resourceNames,
   onResourceChange,
   onLanguageChange,
+  onBibleSelect,
   onBibleVersesChange,
   onBibleLoadingChange,
-  openResourceBiblePanel,
-  selectPanel,
-  bibleResourceName,
+  selectedBibleId,
   registerClearBible,
   initialResource,
   initialLanguage,
@@ -139,6 +137,14 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
 
   const shouldFetchResources = isLanguageInitializedRef.current && selectedLanguage !== '';
 
+  // An open Bible tab owns its language even when another resource or Bible
+  // has changed the sidebar's current language in the meantime.
+  useEffect(() => {
+    if (isBibleResource && selectedBibleId && initialLanguage) {
+      handleLanguageChange(initialLanguage);
+    }
+  }, [handleLanguageChange, initialLanguage, isBibleResource, selectedBibleId]);
+
   // Non-Bible resource content
   const { localizeRefName, imageItems, loadingImages } = useResourceFetch(
     selectedResource,
@@ -177,8 +183,16 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     isBibleResource && shouldFetchResources
   );
 
+  // A tab can reactivate a Bible whose request was interrupted when another
+  // resource was selected. Reconnecting the hook resumes the keyed query and
+  // lets this panel publish its eventual content/loading state to that tab.
+  useEffect(() => {
+    if (!isBibleResource || !selectedBibleId || selectedBible?.id === selectedBibleId) return;
+    handleBibleChange(selectedBibleId);
+  }, [handleBibleChange, isBibleResource, selectedBible?.id, selectedBibleId]);
+
   // Register clearSelectedBible with DraftingUI once on mount so the × button
-  // and toggleResources can call it directly to reset hook-level bible state.
+  // can call it directly to reset hook-level bible state.
   useEffect(() => {
     registerClearBible?.(clearSelectedBible);
   }, [registerClearBible, clearSelectedBible]);
@@ -187,17 +201,17 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   // on reference changes that carry identical content.
   const prevBibleVersesStringRef = useRef<string>('');
   useEffect(() => {
-    if (!isBibleResource) return;
-    const versesString = JSON.stringify(bibleVerses);
+    if (!isBibleResource || !selectedBible) return;
+    const versesString = `${selectedBible.id}:${JSON.stringify(bibleVerses)}`;
     if (prevBibleVersesStringRef.current === versesString) return;
     prevBibleVersesStringRef.current = versesString;
-    onBibleVersesChange?.(bibleVerses);
-  }, [isBibleResource, bibleVerses, onBibleVersesChange]);
+    onBibleVersesChange?.(selectedBible.id, bibleVerses);
+  }, [isBibleResource, selectedBible, bibleVerses, onBibleVersesChange]);
 
   useEffect(() => {
-    if (!isBibleResource) return;
-    onBibleLoadingChange?.(loadingBibleContent);
-  }, [isBibleResource, loadingBibleContent, onBibleLoadingChange]);
+    if (!isBibleResource || !selectedBible) return;
+    onBibleLoadingChange?.(selectedBible.id, loadingBibleContent);
+  }, [isBibleResource, selectedBible, loadingBibleContent, onBibleLoadingChange]);
 
   // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {
@@ -213,11 +227,9 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   const handleBibleSelect = useCallback(
     (bible: UnifiedBible) => {
       handleBibleChange(bible.id);
-      openResourceBiblePanel?.(true);
-      selectPanel?.(2);
-      bibleResourceName(bible.abbreviation);
+      onBibleSelect?.({ id: bible.id, label: bible.abbreviation, language: selectedLanguage });
     },
-    [handleBibleChange, openResourceBiblePanel, selectPanel, bibleResourceName]
+    [handleBibleChange, onBibleSelect, selectedLanguage]
   );
 
   const handleAccordionChange = async (value: string[]) => {
