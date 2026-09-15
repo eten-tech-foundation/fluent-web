@@ -1,7 +1,8 @@
+import { type QueryClient } from '@tanstack/react-query';
 import { redirect } from '@tanstack/react-router';
 
-import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
-import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
+import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
+import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 import { hydrationPromise, useAppStore } from '@/store/store';
 
@@ -35,8 +36,10 @@ const toTargetVerse = (verse: TargetVerseData): TargetVerse => ({
 
 export const translationLoader = async ({
   location,
+  context,
 }: {
   location: { search?: Record<string, string>; state?: { projectItem?: ProjectItem } };
+  context: { queryClient: QueryClient };
 }) => {
   await hydrationPromise;
   const { userdetail, currentProjectItem, setCurrentProjectItem } = useAppStore.getState();
@@ -71,16 +74,22 @@ export const translationLoader = async ({
   const cacheParam = location.search?.t ?? Date.now().toString();
 
   const [sourceVerseData, targetVerseData] = await Promise.all([
-    fetchBibleText(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber),
-    fetchTargetText(projectItem.projectUnitId, projectItem.bookId, projectItem.chapterNumber),
+    context.queryClient.fetchQuery(
+      bibleTextQueryOptions(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber)
+    ),
+    context.queryClient.fetchQuery(
+      targetTextQueryOptions(
+        projectItem.projectUnitId,
+        projectItem.bookId,
+        projectItem.chapterNumber
+      )
+    ),
   ]);
 
-  const sourceVerses: Source[] = (sourceVerseData as unknown as SourceVerseData[]).map(
-    toSourceVerse
-  );
-  const targetVerses: TargetVerse[] = (targetVerseData as unknown as TargetVerseData[]).map(
-    toTargetVerse
-  );
+  // Cache raw rows, then project only this assignment's chapter into editable data. fetchQuery
+  // waits for invalidated translations instead of handing an old draft back to the editor.
+  const sourceVerses: Source[] = sourceVerseData.map(toSourceVerse);
+  const targetVerses: TargetVerse[] = targetVerseData.map(toTargetVerse);
 
   return {
     projectItem,

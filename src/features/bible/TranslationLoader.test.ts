@@ -1,18 +1,14 @@
+import { type QueryClient } from '@tanstack/react-query';
 import { isRedirect } from '@tanstack/react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { fetchTargetText } from '@/features/bible/hooks/useBibleTarget';
-import { fetchBibleText } from '@/features/bible/hooks/useBibleText';
 import { translationLoader } from '@/features/bible/TranslationLoader';
+import { config } from '@/lib/config';
 import type { ProjectItem } from '@/lib/types';
 import { useAppStore } from '@/store/store';
-
-vi.mock('@/features/bible/hooks/useBibleText', () => ({
-  fetchBibleText: vi.fn(),
-}));
-vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
-  fetchTargetText: vi.fn(),
-}));
+import { server } from '@/test/msw/server';
+import { createTestQueryClient } from '@/test/render';
 
 /**
  * A fresh session has neither `userdetail` nor `currentProjectItem` in the store — that is every
@@ -42,13 +38,32 @@ const projectItem: ProjectItem = {
 };
 
 describe('translationLoader without in-app navigation state', () => {
+  let queryClient: QueryClient;
+  let requests: string[];
   beforeEach(() => {
     useAppStore.setState({ userdetail: null, currentProjectItem: null });
-    vi.clearAllMocks();
+    queryClient = createTestQueryClient();
+    requests = [];
+    server.use(
+      http.get(`${config.api.url}/bibles/4/books/5/chapters/6/texts`, () => {
+        requests.push('source');
+        return HttpResponse.json([{ id: 10, verseNumber: 1, text: 'in the beginning' }]);
+      }),
+      http.get(`${config.api.url}/translated-verses`, ({ request }) => {
+        requests.push('target');
+        const params = new URL(request.url).searchParams;
+        expect(params.get('projectUnitId')).toBe('3');
+        expect(params.get('bookId')).toBe('5');
+        expect(params.get('chapterNumber')).toBe('6');
+        return HttpResponse.json([
+          { id: 20, bibleTextId: 10, projectUnitId: 3, verseNumber: 1, content: 'शुरुआत में' },
+        ]);
+      })
+    );
   });
 
   it('redirects to the dashboard when user details are missing', async () => {
-    const thrown = await translationLoader({ location: {} }).then(
+    const thrown = await translationLoader({ context: { queryClient }, location: {} }).then(
       () => undefined,
       error => error as unknown
     );
@@ -59,7 +74,7 @@ describe('translationLoader without in-app navigation state', () => {
     useAppStore.setState({
       userdetail: { id: 2, email: 't@fluent.local' } as never,
     });
-    const thrown = await translationLoader({ location: {} }).then(
+    const thrown = await translationLoader({ context: { queryClient }, location: {} }).then(
       () => undefined,
       error => error as unknown
     );
@@ -70,27 +85,12 @@ describe('translationLoader without in-app navigation state', () => {
     useAppStore.setState({
       userdetail: { id: 2, email: 't@fluent.local' } as never,
     });
-    vi.mocked(fetchBibleText).mockResolvedValue([
-      { id: 10, verseNumber: 1, text: 'in the beginning' },
-    ] as never);
-    vi.mocked(fetchTargetText).mockResolvedValue([
-      { id: 20, verseNumber: 1, content: 'शुरुआत में' },
-    ] as never);
-
     const result = await translationLoader({
+      context: { queryClient },
       location: { search: { t: '1700000000' }, state: { projectItem } },
     });
 
-    expect(fetchBibleText).toHaveBeenCalledWith(
-      projectItem.bibleId,
-      projectItem.bookId,
-      projectItem.chapterNumber
-    );
-    expect(fetchTargetText).toHaveBeenCalledWith(
-      projectItem.projectUnitId,
-      projectItem.bookId,
-      projectItem.chapterNumber
-    );
+    expect(requests.sort()).toEqual(['source', 'target']);
     expect(result).toEqual({
       projectItem,
       sourceVerses: [{ id: 10, verseNumber: 1, text: 'in the beginning' }],
@@ -110,10 +110,15 @@ describe('translationLoader without in-app navigation state', () => {
     useAppStore.setState({
       userdetail: { id: 2, email: 't@fluent.local' } as never,
     });
-    vi.mocked(fetchBibleText).mockResolvedValue([] as never);
-    vi.mocked(fetchTargetText).mockResolvedValue([] as never);
+    server.use(
+      http.get(`${config.api.url}/bibles/4/books/5/chapters/6/texts`, () => HttpResponse.json([])),
+      http.get(`${config.api.url}/translated-verses`, () => HttpResponse.json([]))
+    );
 
-    const result = await translationLoader({ location: { state: { projectItem } } });
+    const result = await translationLoader({
+      context: { queryClient },
+      location: { state: { projectItem } },
+    });
 
     expect(result.loadedAt).toMatch(/^\d+$/);
     expect(result.sourceVerses).toEqual([]);
