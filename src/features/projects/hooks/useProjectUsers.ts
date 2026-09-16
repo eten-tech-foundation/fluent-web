@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
-import { type ChapterAssignmentProgress } from '@/lib/types';
+import type { ChapterAssignmentProgress } from '@/lib/types';
+import { ChapterAssignmentStatus, ROLES } from '@/lib/types';
 
 export interface ProjectUser {
   projectId: number;
@@ -29,7 +30,8 @@ export const isRemovableDrafterAssignment = (
 ): boolean => {
   return (
     assignment.assignedUser?.id === userId &&
-    (assignment.status === 'not_started' || assignment.status === 'draft')
+    (assignment.status === ChapterAssignmentStatus.NOT_STARTED ||
+      assignment.status === ChapterAssignmentStatus.DRAFT)
   );
 };
 
@@ -39,9 +41,9 @@ export const isRemovablePeerCheckerAssignment = (
 ): boolean => {
   return (
     assignment.peerChecker?.id === userId &&
-    (assignment.status === 'not_started' ||
-      assignment.status === 'draft' ||
-      assignment.status === 'peer_check')
+    (assignment.status === ChapterAssignmentStatus.NOT_STARTED ||
+      assignment.status === ChapterAssignmentStatus.DRAFT ||
+      assignment.status === ChapterAssignmentStatus.PEER_CHECK)
   );
 };
 
@@ -62,6 +64,7 @@ const parseErrorMessage = async (res: Response, fallback: string): Promise<never
   const error = (await res.json().catch(() => null)) as ApiErrorResponse | null;
   throw new Error(error?.message ?? fallback);
 };
+
 // -------------------------
 // --- Fetch functions   ---
 // -------------------------
@@ -79,6 +82,7 @@ const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
 
   return (await res.json()) as ProjectUser[];
 };
+
 const addProjectUsers = async (
   projectId: number,
   userIds: number[],
@@ -165,7 +169,7 @@ export const useRemoveProjectUser = (projectId: number) => {
           let newStatus = assignment.status;
           if (clearDrafter) {
             const hasProgress = assignment.completedVerses > 0;
-            newStatus = hasProgress ? assignment.status : 'not_started';
+            newStatus = hasProgress ? assignment.status : ChapterAssignmentStatus.NOT_STARTED;
           }
 
           return {
@@ -179,8 +183,17 @@ export const useRemoveProjectUser = (projectId: number) => {
 
       queryClient.setQueryData(['chapterAssignments', projectId.toString()], updateAssignments);
 
-      void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
+      void queryClient.invalidateQueries({
+        queryKey: ['chapterAssignments'],
+        refetchType: 'none',
+      });
       void queryClient.invalidateQueries({ queryKey: ['userChapterAssignments', userId] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['chapterAssignments', projectId.toString()],
+      });
     },
   });
 };
@@ -209,13 +222,51 @@ export const useUpdateProjectUserRole = (projectId: number) => {
   return useMutation({
     mutationFn: ({ userId, roleName }: { userId: number; roleName: string }) =>
       updateProjectUserRole(projectId, userId, roleName),
-    onSuccess: (updatedUser, { userId }) => {
+    onSuccess: (updatedUser, { userId, roleName }) => {
       queryClient.setQueryData<ProjectUser[]>(['projectUsers', projectId], prev =>
         prev ? prev.map(u => (u.userId === userId ? updatedUser : u)) : []
       );
+
+      if (roleName === ROLES.PROJECT_OBSERVER) {
+        const updateAssignments = (old: ChapterAssignmentProgress[] | undefined) => {
+          if (!old) return old;
+          return old.map(assignment => {
+            const { clearDrafter, clearChecker, isRemovable } = isRemovableAssignmentForUser(
+              assignment,
+              userId
+            );
+
+            if (!isRemovable) return assignment;
+
+            let newStatus = assignment.status;
+            if (clearDrafter) {
+              const hasProgress = assignment.completedVerses > 0;
+              newStatus = hasProgress ? assignment.status : ChapterAssignmentStatus.NOT_STARTED;
+            }
+
+            return {
+              ...assignment,
+              assignedUser: clearDrafter ? null : assignment.assignedUser,
+              peerChecker: clearChecker ? null : assignment.peerChecker,
+              status: newStatus,
+            };
+          });
+        };
+
+        queryClient.setQueryData(['chapterAssignments', projectId.toString()], updateAssignments);
+
+        void queryClient.invalidateQueries({
+          queryKey: ['chapterAssignments'],
+          refetchType: 'none',
+        });
+        void queryClient.invalidateQueries({ queryKey: ['userChapterAssignments', userId] });
+      }
     },
     onError: () => {
       void queryClient.invalidateQueries({ queryKey: ['projectUsers', projectId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['chapterAssignments', projectId.toString()],
+      });
     },
   });
 };
