@@ -51,12 +51,12 @@ function aquiferChapter(chapter: number) {
 describe('PericopeReferenceVerses', () => {
   it('uses the requested Aquifer chapter and orders only its pericope references', async () => {
     server.use(
-      http.get(`${config.api.aquifer_url}/bibles/11/texts`, ({ request }) => {
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, ({ request }) => {
         const params = new URL(request.url).searchParams;
         if (
-          params.get('BookCode') !== 'MRK' ||
-          params.get('StartChapter') !== '9' ||
-          params.get('EndChapter') !== '9'
+          params.get('bookCode') !== 'MRK' ||
+          params.get('startChapter') !== '9' ||
+          params.get('endChapter') !== '9'
         ) {
           return new HttpResponse(null, { status: 404 });
         }
@@ -89,7 +89,7 @@ describe('PericopeReferenceVerses', () => {
 
   it('keeps the selected provider and chapter separate when verse numbers and Bible IDs collide', async () => {
     server.use(
-      http.get(`${config.api.aquifer_url}/bibles/11/texts`, () =>
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
         HttpResponse.json(aquiferChapter(9))
       ),
       http.get(`${config.api.youversion_url}/bibles/11/books/MRK/chapters/:chapter`, ({ params }) =>
@@ -168,7 +168,7 @@ describe('PericopeReferenceVerses', () => {
       release = resolve;
     });
     server.use(
-      http.get(`${config.api.aquifer_url}/bibles/11/texts`, async () => {
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, async () => {
         await ready;
         return HttpResponse.json(aquiferChapter(9));
       })
@@ -196,11 +196,11 @@ describe('PericopeReferenceVerses', () => {
 
   it('shows unavailable content for a missing selected Bible without retaining another Bible text', async () => {
     server.use(
-      http.get(`${config.api.aquifer_url}/bibles/11/texts`, () =>
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
         HttpResponse.json(aquiferChapter(9))
       ),
       http.get(
-        `${config.api.aquifer_url}/bibles/12/texts`,
+        `${config.api.url}/aquifer/bibles/12/texts`,
         () => new HttpResponse(null, { status: 404 })
       )
     );
@@ -237,7 +237,7 @@ describe('PericopeReferenceVerses', () => {
   });
 
   it('shows a failed resource request beside its verse label', async () => {
-    server.use(http.get(`${config.api.aquifer_url}/bibles/11/texts`, () => HttpResponse.error()));
+    server.use(http.get(`${config.api.url}/aquifer/bibles/11/texts`, () => HttpResponse.error()));
 
     renderWithProviders(
       <p>
@@ -261,7 +261,7 @@ describe('PericopeReferenceVerses', () => {
     async status => {
       server.use(
         http.get(
-          `${config.api.aquifer_url}/bibles/11/texts`,
+          `${config.api.url}/aquifer/bibles/11/texts`,
           () => new HttpResponse(null, { status })
         )
       );
@@ -287,7 +287,7 @@ describe('PericopeReferenceVerses', () => {
 
   it('preserves cached Aquifer text and shows refetch failures only for missing verses', async () => {
     server.use(
-      http.get(`${config.api.aquifer_url}/bibles/11/texts`, () =>
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
         HttpResponse.json({
           ...aquiferChapter(9),
           chapters: [{ number: 9, verses: [{ number: 1, text: 'Aquifer cached verse' }] }],
@@ -314,7 +314,7 @@ describe('PericopeReferenceVerses', () => {
     expect(screen.getByText(/no content available/i).parentElement).toHaveTextContent('9:3');
     server.use(
       http.get(
-        `${config.api.aquifer_url}/bibles/11/texts`,
+        `${config.api.url}/aquifer/bibles/11/texts`,
         () => new HttpResponse(null, { status: 503 })
       )
     );

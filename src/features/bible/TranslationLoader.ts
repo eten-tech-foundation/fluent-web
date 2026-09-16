@@ -72,18 +72,23 @@ export const translationLoader = async ({
   // Both routes declare `validateSearch`, so the router always supplies `search` — but the type
   // says it's optional, so read it as one instead of asserting it away.
   const cacheParam = location.search?.t ?? Date.now().toString();
+  // An explicit navigation cache buster also refreshes the shared chapter rows. A generated
+  // loadedAt value only identifies the editor load; ordinary navigation can reuse fresh data.
+  const refreshOptions = location.search?.t !== undefined ? { staleTime: 0 } : {};
 
   const [sourceVerseData, targetVerseData] = await Promise.all([
-    context.queryClient.fetchQuery(
-      bibleTextQueryOptions(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber)
-    ),
-    context.queryClient.fetchQuery(
-      targetTextQueryOptions(
+    context.queryClient.fetchQuery({
+      ...bibleTextQueryOptions(projectItem.bibleId, projectItem.bookId, projectItem.chapterNumber),
+      ...refreshOptions,
+    }),
+    context.queryClient.fetchQuery({
+      ...targetTextQueryOptions(
         projectItem.projectUnitId,
         projectItem.bookId,
         projectItem.chapterNumber
-      )
-    ),
+      ),
+      ...refreshOptions,
+    }),
   ]);
 
   // Cache raw rows, then project only this assignment's chapter into editable data. fetchQuery

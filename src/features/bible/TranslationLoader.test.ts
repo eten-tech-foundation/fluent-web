@@ -3,6 +3,8 @@ import { isRedirect } from '@tanstack/react-router';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
+import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { translationLoader } from '@/features/bible/TranslationLoader';
 import { config } from '@/lib/config';
 import type { ProjectItem } from '@/lib/types';
@@ -123,4 +125,72 @@ describe('translationLoader without in-app navigation state', () => {
     expect(result.loadedAt).toMatch(/^\d+$/);
     expect(result.sourceVerses).toEqual([]);
   });
+
+  it('refreshes both raw chapter caches when navigation explicitly supplies a cache buster', async () => {
+    useAppStore.setState({ userdetail: { id: 2 } as never });
+    const sourceOptions = bibleTextQueryOptions(4, 5, 6);
+    const targetOptions = targetTextQueryOptions(3, 5, 6);
+    await Promise.all([
+      queryClient.fetchQuery(sourceOptions),
+      queryClient.fetchQuery(targetOptions),
+    ]);
+    server.use(
+      http.get(`${config.api.url}/bibles/4/books/5/chapters/6/texts`, () => {
+        requests.push('source');
+        return HttpResponse.json([{ id: 10, verseNumber: 1, text: 'Updated source' }]);
+      }),
+      http.get(`${config.api.url}/translated-verses`, () => {
+        requests.push('target');
+        return HttpResponse.json([
+          { id: 20, bibleTextId: 10, projectUnitId: 3, verseNumber: 1, content: 'Updated draft' },
+        ]);
+      })
+    );
+
+    const result = await translationLoader({
+      context: { queryClient },
+      location: { search: { t: 'explicit-refresh' }, state: { projectItem } },
+    });
+
+    expect(result.sourceVerses[0].text).toBe('Updated source');
+    expect(result.targetVerses[0].content).toBe('Updated draft');
+    expect(result.loadedAt).toBe('explicit-refresh');
+    expect(requests.sort()).toEqual(['source', 'source', 'target', 'target']);
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(2);
+    expect(queryClient.getQueryData(sourceOptions.queryKey)?.[0].text).toBe('Updated source');
+    expect(queryClient.getQueryData(targetOptions.queryKey)?.[0]).toMatchObject({
+      bibleTextId: 10,
+      content: 'Updated draft',
+    });
+
+    // The override is local to this load: ordinary navigation still reuses the refreshed rows.
+    const next = await translationLoader({
+      context: { queryClient },
+      location: { state: { projectItem } },
+    });
+    expect(next.sourceVerses).toEqual(result.sourceVerses);
+    expect(next.targetVerses).toEqual(result.targetVerses);
+    expect(requests).toHaveLength(4);
+  });
+
+  it.each([undefined, {}])(
+    'reuses fresh raw chapter caches without search.t (%j)',
+    async search => {
+      useAppStore.setState({ userdetail: { id: 2 } as never });
+      await Promise.all([
+        queryClient.fetchQuery(bibleTextQueryOptions(4, 5, 6)),
+        queryClient.fetchQuery(targetTextQueryOptions(3, 5, 6)),
+      ]);
+
+      const result = await translationLoader({
+        context: { queryClient },
+        location: { search, state: { projectItem } },
+      });
+
+      expect(requests.sort()).toEqual(['source', 'target']);
+      expect(result.sourceVerses[0].text).toBe('in the beginning');
+      expect(result.targetVerses[0].content).toBe('शुरुआत में');
+      expect(result.loadedAt).toMatch(/^\d+$/);
+    }
+  );
 });

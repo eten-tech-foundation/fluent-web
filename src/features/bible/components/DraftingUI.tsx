@@ -44,6 +44,7 @@ import { DraftingGridPericope } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+import { PericopeText } from './PericopeText';
 
 const DraftingChapterView = lazy(() =>
   import('./DraftingChapterView').then(module => ({ default: module.DraftingChapterView }))
@@ -104,6 +105,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
   const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
   const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
+  const bibleContentError = activeResourceBibleTab?.isError ?? false;
 
   // Which left-panel tab is showing (Resources | Checks). Persisted in the
   // editor-state blob as `activeLeftTab` (W11, §6.6).
@@ -298,7 +300,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Pericope mode handles missing resource content inside each group, so a crossing
   // group can still show its available neighboring chapter.
   const showResourceBiblePlaceholder =
-    selectedPanel === 2 && !isPericopeMode && (bibleContentLoading || bibleVerses.length === 0);
+    selectedPanel === 2 && !isPericopeMode && !bibleVerses.some(verse => verse.text.trim());
   const pericopeContext = usePericopeContext({
     projectItem,
     pericopes: fullPericopes,
@@ -631,7 +633,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
         }
 
-        return [...currentTabs, { ...bible, verses: [], isLoading: true }];
+        return [...currentTabs, { ...bible, verses: [], isLoading: true, isError: false }];
       });
       setActiveBibleTabId(bible.id);
     },
@@ -664,6 +666,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const handleBibleLoadingChange = useCallback((bibleId: string, isLoading: boolean) => {
     setResourceBibleTabs(currentTabs =>
       currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isLoading } : tab))
+    );
+  }, []);
+
+  const handleBibleErrorChange = useCallback((bibleId: string, isError: boolean) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isError } : tab))
     );
   }, []);
 
@@ -802,6 +810,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
             showChecksTab={checksEnabled}
+            onBibleErrorChange={handleBibleErrorChange}
             onBibleLoadingChange={handleBibleLoadingChange}
             onBibleSelect={handleBibleSelect}
             onBibleVersesChange={handleBibleVersesChange}
@@ -823,6 +832,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             >
               <DraftingChapterView
                 activeBibleTabId={activeBibleTabId}
+                bibleContentError={bibleContentError}
                 bibleContentLoading={bibleContentLoading}
                 bibleVerseMap={bibleVerseMap}
                 handleActiveVerseChange={handleActiveVerseChange}
@@ -903,11 +913,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
                   {showResourceBiblePlaceholder &&
                     !bibleContentLoading &&
-                    bibleVerses.length === 0 &&
                     renderPanelTwoPlaceholder(
-                      <p className='text-muted-foreground px-6 text-center text-sm'>
-                        {t('noContentAvailable')}
-                      </p>,
+                      <PericopeText className='px-6 text-center' isError={bibleContentError} />,
                       false
                     )}
 

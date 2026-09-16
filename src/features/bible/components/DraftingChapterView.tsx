@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
 
 import { Loader2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { ChapterEditor } from '@/features/rte/components/ChapterEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 import { BibleTabList, type ResourceBibleTab } from './BibleTabList';
+import { PericopeText } from './PericopeText';
 
 interface DraftingChapterViewProps {
   sourceVerses: Source[];
@@ -19,6 +19,7 @@ interface DraftingChapterViewProps {
   activeBibleTabId: string;
   resourceBibleTabs: ResourceBibleTab[];
   bibleContentLoading: boolean;
+  bibleContentError: boolean;
   onBibleTabSelect: (tabId: string) => void;
   onBibleTabClose: (tabId: string) => void;
   handleTextChange: (
@@ -48,12 +49,13 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   activeBibleTabId,
   resourceBibleTabs,
   bibleContentLoading,
+  bibleContentError,
   onBibleTabSelect,
   onBibleTabClose,
   handleTextChange,
   handleActiveVerseChange,
 }) => {
-  const { t } = useTranslation();
+  const hasBibleContent = [...bibleVerseMap.values()].some(text => text.trim());
 
   const editorVerses = useMemo<PericopeVerseText[]>(
     () =>
@@ -96,15 +98,13 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
       </div>
 
       <div className='min-h-0 overflow-y-auto px-6 py-4' style={{ scrollbarGutter: 'stable' }}>
-        {selectedPanel === 2 && bibleContentLoading ? (
+        {selectedPanel === 2 && !hasBibleContent && bibleContentLoading ? (
           <div className='flex h-full items-center justify-center'>
             <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
           </div>
-        ) : selectedPanel === 2 && bibleVerseMap.size === 0 ? (
+        ) : selectedPanel === 2 && !hasBibleContent ? (
           <div className='flex h-full items-start justify-center pt-10'>
-            <p className='text-muted-foreground px-6 text-center text-sm'>
-              {t('noContentAvailable')}
-            </p>
+            <PericopeText className='px-6 text-center' isError={bibleContentError} />
           </div>
         ) : (
           <>

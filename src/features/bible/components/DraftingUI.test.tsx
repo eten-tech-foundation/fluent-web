@@ -1,7 +1,7 @@
 import { type ComponentProps } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -429,6 +429,62 @@ describe('DraftingUI', () => {
       await user.click(screen.getByRole('button', { name: language }));
     };
 
+    it.each([500, 503])('shows Aquifer HTTP %s as an error in verse mode', async status => {
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status })
+        )
+      );
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+
+      expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+      expect(screen.queryByText('No content available')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(
+        screen.getByText('In the beginning God created the heaven and the earth.')
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
+    it('keeps Aquifer 404 unavailable rather than showing a server error', async () => {
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status: 404 })
+        )
+      );
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+
+      expect(await screen.findByText('No content available')).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
+    it('keeps cached Aquifer text visible after a failed refetch', async () => {
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status: 503 })
+        )
+      );
+
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: ['aquifer-bible-text'] });
+      });
+      expect(queryClient.getQueriesData({ queryKey: ['aquifer-bible-text'] })).not.toHaveLength(0);
+      expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe('error');
+      expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
     it.each(['unavailable', 'loading'] as const)(
       'keeps neighboring reference verses visible when the current Bible chapter is %s',
       async currentState => {
@@ -465,10 +521,10 @@ describe('DraftingUI', () => {
           releaseText = resolve;
         });
         server.use(
-          http.get(`${config.api.aquifer_url}/bibles/1/texts`, async ({ request }) => {
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, async ({ request }) => {
             const params = new URL(request.url).searchParams;
-            const chapter = Number(params.get('StartChapter'));
-            if (params.get('BookCode') !== 'GEN' || params.get('EndChapter') !== String(chapter)) {
+            const chapter = Number(params.get('startChapter'));
+            if (params.get('bookCode') !== 'GEN' || params.get('endChapter') !== String(chapter)) {
               return new HttpResponse(null, { status: 400 });
             }
             if (chapter === 1) {
