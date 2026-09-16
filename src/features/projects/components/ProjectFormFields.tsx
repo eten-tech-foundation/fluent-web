@@ -106,9 +106,12 @@ export function ProjectFormFields({
         <SearchableSelect
           disabled={languagesLoading}
           options={languageOptions}
-          placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
+          placeholder={
+            languagesLoading ? 'Loading languages...' : 'Search by language name or code'
+          }
           value={formData.targetLanguage?.toString() ?? ''}
           onChange={value => onFieldChange('targetLanguage', parseInt(value, 10))}
+          onClear={() => onFieldChange('targetLanguage', null)}
         />
       </div>
 
