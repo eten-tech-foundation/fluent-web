@@ -29,6 +29,7 @@ interface ResourcePanelProps {
   onBibleSelect?: (bible: { id: string; label: string; language: string }) => void;
   onBibleVersesChange?: (bibleId: string, verses: BibleVerse[]) => void;
   onBibleLoadingChange?: (bibleId: string, loading: boolean) => void;
+  onBibleErrorChange?: (bibleId: string, isError: boolean) => void;
   selectedBibleId?: string | null;
   registerClearBible?: (fn: () => void) => void;
   initialResource?: ResourceName;
@@ -44,6 +45,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onBibleSelect,
   onBibleVersesChange,
   onBibleLoadingChange,
+  onBibleErrorChange,
   selectedBibleId,
   registerClearBible,
   initialResource,
@@ -172,6 +174,7 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     unifiedBibles,
     loadingBibles,
     loadingBibleContent,
+    bibleContentError,
     selectedBible,
     handleBibleChange,
     clearSelectedBible,
@@ -212,6 +215,11 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
     if (!isBibleResource || !selectedBible) return;
     onBibleLoadingChange?.(selectedBible.id, loadingBibleContent);
   }, [isBibleResource, selectedBible, loadingBibleContent, onBibleLoadingChange]);
+
+  useEffect(() => {
+    if (!isBibleResource || !selectedBible) return;
+    onBibleErrorChange?.(selectedBible.id, bibleContentError);
+  }, [isBibleResource, selectedBible, bibleContentError, onBibleErrorChange]);
 
   // Event handlers
   const handleResourceSelect = (resource: ResourceName) => {

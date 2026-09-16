@@ -13,6 +13,7 @@ export interface ResourceBibleTab {
   language: string;
   verses: BibleVerse[];
   isLoading: boolean;
+  isError: boolean;
 }
 
 interface BibleTabListProps {

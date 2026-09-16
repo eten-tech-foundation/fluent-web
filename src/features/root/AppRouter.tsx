@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -8,6 +9,7 @@ import { router } from '@/lib/router';
 import { useAppStore } from '@/store/store';
 
 export function AppRouter(): React.JSX.Element {
+  const queryClient = useQueryClient();
   const { isAuthenticated, isLoading } = useAuth();
   const { userdetail } = useAppStore();
 
@@ -24,6 +26,7 @@ export function AppRouter(): React.JSX.Element {
   return (
     <RouterProvider
       context={{
+        queryClient,
         auth: {
           isAuthenticated,
           isLoading,
