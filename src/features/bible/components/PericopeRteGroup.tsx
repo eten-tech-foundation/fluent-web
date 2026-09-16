@@ -10,6 +10,8 @@ import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
   hasTitle?: boolean;
+  beforeContent?: React.ReactNode;
+  afterContent?: React.ReactNode;
   groupVerses: Source[];
   verses: TargetVerse[];
   /** Identifies the chapter being drafted, so the editor reloads when the assignment changes. */
@@ -41,6 +43,8 @@ interface PericopeRteGroupProps {
  */
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   hasTitle = false,
+  beforeContent,
+  afterContent,
   groupVerses,
   verses,
   chapterAssignmentId,
@@ -136,6 +140,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   return (
     <div className='flex w-full flex-col gap-2'>
+      {beforeContent}
       <PericopeEditor
         bookCode={bookCode}
         chapterNumber={chapterNumber}
@@ -145,6 +150,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         onActiveVerseChange={handleActiveVerseChange}
         onVersesChange={handleVersesChange}
       />
+      {afterContent}
 
       {/*
         The textarea path says this in the empty verse's placeholder. The editor holds a document

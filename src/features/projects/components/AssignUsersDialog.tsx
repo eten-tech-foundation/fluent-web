@@ -165,7 +165,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
             value={selectedDrafter}
             onValueChange={onDrafterChange}
           >
-            <SelectTrigger className='w-full bg-white'>
+            <SelectTrigger className='bg-background text-foreground border-input w-full'>
               <SelectValue placeholder={usersLoading ? 'Loading users...' : 'Select a User'}>
                 {selectedDrafter ? (
                   <div className='flex w-full'>
@@ -211,7 +211,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
             value={selectedPeerChecker}
             onValueChange={onPeerCheckerChange}
           >
-            <SelectTrigger className='w-full bg-white'>
+            <SelectTrigger className='bg-background text-foreground border-input w-full'>
               <SelectValue placeholder={usersLoading ? 'Loading users...' : 'Select a User'}>
                 {selectedPeerChecker ? (
                   <div className='flex w-full'>

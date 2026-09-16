@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
+import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
 import {
   type LeftTab,
   useResourceState,
@@ -40,10 +41,12 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
+import { BibleTabList, type ResourceBibleTab, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
+import { DraftingGridPericope } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+import { PericopeText } from './PericopeText';
 
 const DraftingChapterView = lazy(() =>
   import('./DraftingChapterView').then(module => ({ default: module.DraftingChapterView }))
@@ -56,11 +59,14 @@ const DraftingChapterView = lazy(() =>
  * `finding.surf` on a miss, so "empty" is always safe.
  */
 const EMPTY_VERSE_TEXT_SNAPSHOT: ReadonlyMap<string, string> = new Map<string, string>();
+const EMPTY_BIBLE_VERSES: BibleVerse[] = [];
+
+const BIBLES_RESOURCE: ResourceName = { id: 'Bibles', name: 'Bibles' };
 
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
-  { id: 'Bibles', name: 'Bibles' },
+  BIBLES_RESOURCE,
   { id: 'UWTranslationQuestions', name: 'TQ' },
   { id: 'UWTranslationWords', name: 'TW' },
   { id: 'TyndaleStudyNotes', name: 'OSN' },
@@ -88,12 +94,20 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
 
-  // Bible tab state
-  const [selectedPanel, setSelectedPanel] = useState<1 | 2>(1);
-  const [openResourcePanel, setOpenResourcePanel] = useState(false);
-  const [bibleTabLabel, setBibleTabLabel] = useState('');
-  const [bibleVerses, setBibleVerses] = useState<BibleVerse[]>([]);
-  const [bibleContentLoading, setBibleContentLoading] = useState(false);
+  // The source tab is permanent; every Resources Bible keeps its own keyed
+  // content so selecting another one cannot replace either the source or a
+  // previously opened resource Bible (#471).
+  const [activeBibleTabId, setActiveBibleTabId] = useState(SOURCE_BIBLE_TAB_ID);
+  const [resourceBibleTabs, setResourceBibleTabs] = useState<ResourceBibleTab[]>([]);
+  const [resourcePanelSelectedBibleId, setResourcePanelSelectedBibleId] = useState<string | null>(
+    null
+  );
+
+  const activeResourceBibleTab = resourceBibleTabs.find(tab => tab.id === activeBibleTabId);
+  const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
+  const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
+  const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
+  const bibleContentError = activeResourceBibleTab?.isError ?? false;
 
   // Which left-panel tab is showing (Resources | Checks). Persisted in the
   // editor-state blob as `activeLeftTab` (W11, §6.6).
@@ -230,8 +244,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const {
     pericopes,
+    fullPericopes,
     isPericopeMode,
     isPericopeLoading,
+    isPericopeError,
+    refetchPericopes,
     getPericopeStyle,
     currentPericopeGroup,
     globalNextUntouchedVerse,
@@ -309,6 +326,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     isDraft,
     readOnly,
   ]);
+  // Pericope mode handles missing resource content inside each group, so a crossing
+  // group can still show its available neighboring chapter.
+  const showResourceBiblePlaceholder =
+    selectedPanel === 2 && !isPericopeMode && !bibleVerses.some(verse => verse.text.trim());
+  const pericopeContext = usePericopeContext({
+    projectItem,
+    pericopes: fullPericopes,
+    enabled: isPericopeMode,
+  });
 
   // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
 
@@ -697,33 +723,75 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [moveToNextVerse]
   );
 
-  const resetBibleState = useCallback(() => {
-    clearBibleRef.current?.();
-    setSelectedPanel(1);
-    setOpenResourcePanel(false);
-    setBibleTabLabel('');
-    setBibleVerses([]);
-    setBibleContentLoading(false);
+  const handleBibleSelect = useCallback(
+    (bible: { id: string; label: string; language: string }) => {
+      setResourcePanelSelectedBibleId(bible.id);
+      setResourceBibleTabs(currentTabs => {
+        const existing = currentTabs.find(tab => tab.id === bible.id);
+        if (existing) {
+          if (existing.label === bible.label && existing.language === bible.language)
+            return currentTabs;
+          return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
+        }
+
+        return [...currentTabs, { ...bible, verses: [], isLoading: true, isError: false }];
+      });
+      setActiveBibleTabId(bible.id);
+    },
+    []
+  );
+
+  const handleBibleTabSelect = useCallback(
+    (tabId: string) => {
+      setActiveBibleTabId(tabId);
+      if (tabId === SOURCE_BIBLE_TAB_ID) return;
+
+      setResourcePanelSelectedBibleId(tabId);
+      const tab = resourceBibleTabs.find(tab => tab.id === tabId);
+      if (tab) setCurrentLanguage(tab.language);
+      if (tab?.isLoading) {
+        setCurrentResource(BIBLES_RESOURCE);
+        setActiveLeftTab('resources');
+        setShowResources(true);
+      }
+    },
+    [resourceBibleTabs]
+  );
+
+  const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, verses: nextVerses } : tab))
+    );
+  }, []);
+
+  const handleBibleLoadingChange = useCallback((bibleId: string, isLoading: boolean) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isLoading } : tab))
+    );
+  }, []);
+
+  const handleBibleErrorChange = useCallback((bibleId: string, isError: boolean) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isError } : tab))
+    );
   }, []);
 
   const toggleResources = useCallback(() => {
-    setShowResources(prev => {
-      const nextShow = !prev;
+    setShowResources(prev => !prev);
+  }, []);
 
-      // When hiding the resource panel, ResourcePanel unmounts and loses its
-      // internal hook state (selectedBible resets to null).
-      if (!nextShow) {
-        resetBibleState();
+  const handleBibleTabClose = useCallback(
+    (bibleId: string) => {
+      setResourceBibleTabs(currentTabs => currentTabs.filter(tab => tab.id !== bibleId));
+      setActiveBibleTabId(currentId => (currentId === bibleId ? SOURCE_BIBLE_TAB_ID : currentId));
+
+      if (resourcePanelSelectedBibleId === bibleId) {
+        clearBibleRef.current?.();
+        setResourcePanelSelectedBibleId(null);
       }
-
-      return nextShow;
-    });
-  }, [resetBibleState]);
-
-  // Close Tab 2: reset all bible-related state, revert to panel 1
-  const handleBibleTabClose = useCallback(() => {
-    resetBibleState();
-  }, [resetBibleState]);
+    },
+    [resourcePanelSelectedBibleId]
+  );
 
   // O(1) verse lookup for the bible panel left column
   const bibleVerseMap = useMemo<Map<number, string>>(() => {
@@ -734,84 +802,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
-      if (isPericopeMode && pericopes) {
-        return (
-          <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
-              <div
-                className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
-              >
-                {middleContent}
-              </div>
-            </div>
-            <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map((group, groupIndex) => {
-                const groupVerses = sourceVerses.filter(sv =>
-                  group.verses.some(gv => gv.verseNumber === sv.verseNumber)
-                );
-                if (groupVerses.length === 0) return null;
-                const verseNumbers = groupVerses.map(gv => gv.verseNumber);
-                const minVerse = Math.min(...verseNumbers);
-                const maxVerse = Math.max(...verseNumbers);
-                const heading =
-                  minVerse === maxVerse
-                    ? `${projectItem.chapterNumber}:${minVerse}`
-                    : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
-
-                const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-                return (
-                  <div key={group.pericopeNumber} className='flex w-full flex-col space-y-2'>
-                    <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                      {heading}
-                    </h4>
-                    <div
-                      className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                        isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                      }`}
-                      onClick={e => {
-                        if (e.target === e.currentTarget) {
-                          const isGroupAlreadyActive = groupVerses.some(
-                            gv => gv.verseNumber === activeVerseId
-                          );
-                          if (!isGroupAlreadyActive) {
-                            handleActiveVerseChange(groupVerses[0].verseNumber);
-                          }
-                        }
-                      }}
-                    >
-                      <PericopeTargetGroup
-                        activeVerseId={activeVerseId}
-                        aiSuggestions={aiSuggestions}
-                        globalNextUntouchedVerse={globalNextUntouchedVerse}
-                        groupIndex={groupIndex}
-                        groupVerses={groupVerses}
-                        handleActiveVerseChange={handleActiveVerseChange}
-                        handleKeyDown={handleKeyDown}
-                        handleNextClick={handleNextClick}
-                        handleNextPericopeClick={handleNextPericopeClick}
-                        handleTextChange={handleTextChangeWithTracking}
-                        handleTitleChange={handleTitleChange}
-                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
-                        isAiThresholdMet={isAiThresholdMet ?? false}
-                        isTranslationComplete={isTranslationComplete}
-                        pericopes={pericopes}
-                        projectItem={projectItem}
-                        readOnly={readOnly}
-                        sourceVerses={sourceVerses}
-                        suggestionStatus={suggestionStatus}
-                        textareaRefs={textareaRefs}
-                        verses={verses}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
       return (
         <div
           className='grid h-full items-start py-4'
@@ -856,19 +846,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       );
     },
     [
-      isPericopeMode,
-      pericopes,
       sourceVerses,
       projectItem,
       activeVerseId,
-      globalNextUntouchedVerse,
       handleActiveVerseChange,
       handleKeyDown,
-      handleNextClick,
-      handleNextPericopeClick,
       handleTextChangeWithTracking,
-      handleTitleChange,
-      isTranslationComplete,
       isDraft,
       readOnly,
       textareaRefs,
@@ -924,14 +907,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             projectItem={projectItem}
             resourceNames={RESOURCE_NAMES}
             resourceVerseId={resourceVerseId}
-            setBibleContentLoading={setBibleContentLoading}
-            setBibleTabLabel={setBibleTabLabel}
-            setBibleVerses={setBibleVerses}
+            selectedBibleId={resourcePanelSelectedBibleId}
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
-            setOpenResourcePanel={setOpenResourcePanel}
-            setSelectedPanel={setSelectedPanel}
             showChecksTab={checksEnabled}
+            onBibleErrorChange={handleBibleErrorChange}
+            onBibleLoadingChange={handleBibleLoadingChange}
+            onBibleSelect={handleBibleSelect}
+            onBibleVersesChange={handleBibleVersesChange}
             onTabChange={handleTabChange}
           />
         )}
@@ -949,14 +932,20 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               }
             >
               <DraftingChapterView
+                activeBibleTabId={activeBibleTabId}
+                bibleContentError={bibleContentError}
+                bibleContentLoading={bibleContentLoading}
                 bibleVerseMap={bibleVerseMap}
                 handleActiveVerseChange={handleActiveVerseChange}
                 handleTextChange={handleTextChangeWithTracking}
                 projectItem={projectItem}
                 readOnly={readOnly}
+                resourceBibleTabs={resourceBibleTabs}
                 selectedPanel={selectedPanel}
                 sourceVerses={sourceVerses}
                 verses={verses}
+                onBibleTabClose={handleBibleTabClose}
+                onBibleTabSelect={handleBibleTabSelect}
               />
             </Suspense>
           ) : (
@@ -969,42 +958,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               }}
             >
               {!isPericopeMode && <div className='bg-background sticky top-0 z-10 w-8 px-4 py-3' />}
-              <div className='bg-background sticky top-0 z-10 flex items-center gap-1 px-6 py-3'>
-                <button
-                  className={`dark:text-foreground cursor-pointer text-2xl font-bold text-slate-800 transition-colors ${
-                    openResourcePanel
-                      ? selectedPanel === 1
-                        ? 'border-primary border-b-2 pb-1'
-                        : 'text-muted-foreground'
-                      : ''
-                  }`}
-                  disabled={!openResourcePanel}
-                  onClick={() => setSelectedPanel(1)}
-                >
-                  {projectItem.bibleName}
-                </button>
-
-                {openResourcePanel && (
-                  <>
-                    <span className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'>
-                      |
-                    </span>
-                    <button
-                      className={`cursor-pointer text-2xl font-bold transition-colors ${
-                        selectedPanel === 2
-                          ? 'border-primary border-b-2 pb-1'
-                          : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setSelectedPanel(2)}
-                    >
-                      {bibleTabLabel}
-                    </button>
-                    <X
-                      className='text-muted-foreground hover:text-foreground ml-1 h-4 w-4 cursor-pointer transition-colors'
-                      onClick={handleBibleTabClose}
-                    />
-                  </>
-                )}
+              <div className='bg-background sticky top-0 z-10 min-w-0 px-6 py-3'>
+                <BibleTabList
+                  activeTabId={activeBibleTabId}
+                  resourceTabs={resourceBibleTabs}
+                  sourceLabel={projectItem.bibleName}
+                  onClose={handleBibleTabClose}
+                  onSelect={handleBibleTabSelect}
+                />
               </div>
 
               <div className='bg-background sticky top-0 z-10 px-6 py-3'>
@@ -1022,24 +983,43 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   style={{ scrollbarGutter: 'stable' }}
                   onScroll={() => !readOnly && updateButtonPosition()}
                 >
-                  {selectedPanel === 2 &&
+                  {displayMode === 'pericope' && (isPericopeError || pericopeContext.isError) && (
+                    <div className='flex items-center gap-3 px-6 py-3 text-sm' role='alert'>
+                      <span>
+                        {t('pericopeContextLoadError', 'Could not load the complete pericope.')}
+                      </span>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => {
+                          if (isPericopeError) void refetchPericopes();
+                          if (pericopeContext.isError) void pericopeContext.refetch();
+                        }}
+                      >
+                        {t('retry', 'Retry')}
+                      </Button>
+                    </div>
+                  )}
+                  {isPericopeMode && pericopeContext.isLoading && (
+                    <p className='text-muted-foreground px-6 py-2 text-sm' role='status'>
+                      {t('pericopeContextLoading', 'Loading the rest of the pericope...')}
+                    </p>
+                  )}
+                  {showResourceBiblePlaceholder &&
                     bibleContentLoading &&
                     renderPanelTwoPlaceholder(
                       <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
                       true
                     )}
 
-                  {selectedPanel === 2 &&
+                  {showResourceBiblePlaceholder &&
                     !bibleContentLoading &&
-                    bibleVerses.length === 0 &&
                     renderPanelTwoPlaceholder(
-                      <p className='text-muted-foreground px-6 text-center text-sm'>
-                        {t('noContentAvailable')}
-                      </p>,
+                      <PericopeText className='px-6 text-center' isError={bibleContentError} />,
                       false
                     )}
 
-                  {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                  {!showResourceBiblePlaceholder && (
                     <>
                       {displayMode === 'pericope' && isPericopeLoading ? (
                         <div className='flex h-full items-center justify-center py-12'>
@@ -1050,6 +1030,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
                           bibleVerseMap={bibleVerseMap}
+                          contextChapters={pericopeContext.chapters}
+                          fullPericopes={fullPericopes}
                           globalNextUntouchedVerse={globalNextUntouchedVerse}
                           handleActiveVerseChange={handleActiveVerseChange}
                           handleKeyDown={handleKeyDown}
@@ -1063,6 +1045,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           pericopes={pericopes}
                           projectItem={projectItem}
                           readOnly={readOnly}
+                          resourceBibleId={activeResourceBibleTab?.id}
+                          resourceBibleLoading={bibleContentLoading}
                           selectedPanel={selectedPanel}
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}
