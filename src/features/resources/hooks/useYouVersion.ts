@@ -1,9 +1,9 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
-import { config, getYouVersionApiHeaders } from '@/lib/config';
+import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 
-const YOUVERSION_API_BASE_URL = config.api.youversion_url;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface YouVersionBible {
   id: number;
@@ -12,50 +12,47 @@ export interface YouVersionBible {
   title: string;
   localized_title: string;
   language_tag: string;
-  info: string;
-  copyright: string;
-  publisher_url: string;
-  promotional_content: string;
-  youversion_deep_link: string;
-  organization_id: string;
-  books: string[];
-}
-interface YouVersionBiblesResponse {
-  data: YouVersionBible[];
-  next_page_token: string | null;
-  total_size: number;
+  info?: string;
+  copyright?: string;
+  publisher_url?: string;
+  promotional_content?: string;
+  youversion_deep_link?: string;
+  organization_id?: string;
+  books?: string[];
 }
 
-export interface YouVersionVerseMeta {
-  id: number;
-  passage_id: string;
-  title: number;
-}
-
-export interface YouVersionChapterResponse {
-  id: number;
-  passage_id: string;
-  title: number;
-  verses: YouVersionVerseMeta[];
-}
-
-export interface YouVersionPassageResponse {
-  id: string;
+/** One verse returned by the server-side batch chapter-text endpoint. */
+export interface YouVersionBibleVerse {
+  verseNumber: number;
+  passageId: string;
   content: string;
-  reference: string;
 }
 
-// Fetch Functions
+/**
+ * Response for GET /youversion/bibles/{bibleId}/chapters/{chapterId}/text.
+ * The server fans out all passage fetches internally — one request per chapter.
+ */
+export interface YouVersionChapterText {
+  bibleId: number;
+  bookId: string;
+  chapterId: number;
+  verses: YouVersionBibleVerse[];
+}
 
-const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBible[]> => {
-  const response = await fetch(
-    `${YOUVERSION_API_BASE_URL}/bibles?language_tag=${encodeURIComponent(languageTag)}&language_ranges[]=${encodeURIComponent(languageTag)}`,
-    {
-      method: 'GET',
-      mode: 'cors',
-      headers: getYouVersionApiHeaders(),
-    }
-  );
+// ─── Fetch functions ──────────────────────────────────────────────────────────
+
+/**
+ * Fetches the list of YouVersion Bibles for a language tag.
+ * Calls fluent-api's /youversion/bibles proxy — the API key never leaves the server.
+ */
+export const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBible[]> => {
+  const url = new URL(`${config.api.url}/youversion/bibles`);
+  url.searchParams.set('language_tag', languageTag);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    credentials: 'include',
+  });
 
   if (!response.ok) {
     Logger.logException(new Error('Failed to fetch YouVersion bibles'), {
@@ -64,66 +61,38 @@ const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBib
     return [];
   }
 
-  const json = (await response.json()) as YouVersionBiblesResponse;
-  return json.data;
+  return (await response.json()) as YouVersionBible[];
 };
 
-const fetchYouVersionChapterMeta = async (
+/**
+ * Fetches all verse texts for a chapter via the server-side batch endpoint.
+ * Calls fluent-api's /youversion/bibles/{bibleId}/chapters/{chapterId}/text proxy.
+ * The server fans out the per-verse passage fetches using the server-held API key.
+ */
+export const fetchYouVersionChapterText = async (
   bibleId: number,
   bookId: string,
   chapterId: number
-): Promise<YouVersionChapterResponse> => {
-  const response = await fetch(
-    `${YOUVERSION_API_BASE_URL}/bibles/${bibleId}/books/${bookId}/chapters/${chapterId}`,
-    {
-      method: 'GET',
-      mode: 'cors',
-      headers: getYouVersionApiHeaders(),
-    }
-  );
+): Promise<YouVersionChapterText> => {
+  const url = new URL(`${config.api.url}/youversion/bibles/${bibleId}/chapters/${chapterId}/text`);
+  url.searchParams.set('bookId', bookId);
 
-  if (response.status === 404) {
-    return { id: 0, passage_id: '', title: 0, verses: [] };
-  }
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    credentials: 'include',
+  });
 
   if (!response.ok) {
-    Logger.logException(new Error('Failed to fetch YouVersion chapter metadata'), {
+    Logger.logException(new Error('Failed to fetch YouVersion chapter text'), {
       context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
     });
-    return { id: 0, passage_id: '', title: 0, verses: [] };
+    return { bibleId, bookId, chapterId, verses: [] };
   }
 
-  return (await response.json()) as YouVersionChapterResponse;
+  return (await response.json()) as YouVersionChapterText;
 };
 
-const fetchYouVersionPassage = async (
-  bibleId: number,
-  passageId: string
-): Promise<YouVersionPassageResponse> => {
-  const response = await fetch(
-    `${YOUVERSION_API_BASE_URL}/bibles/${bibleId}/passages/${encodeURIComponent(passageId)}`,
-    {
-      method: 'GET',
-      mode: 'cors',
-      headers: getYouVersionApiHeaders(),
-    }
-  );
-
-  if (response.status === 404) {
-    return { id: passageId, content: '', reference: '' };
-  }
-
-  if (!response.ok) {
-    Logger.logException(new Error('Failed to fetch YouVersion passage'), {
-      context: `status=${response.status} bibleId=${bibleId} passageId=${passageId}`,
-    });
-    return { id: passageId, content: '', reference: '' };
-  }
-
-  return (await response.json()) as YouVersionPassageResponse;
-};
-
-// React Query Hooks
+// ─── React Query hooks ────────────────────────────────────────────────────────
 
 export const useYouVersionBibles = (languageTag: string, enabled: boolean = true) => {
   return useQuery({
@@ -137,19 +106,24 @@ export const useYouVersionBibles = (languageTag: string, enabled: boolean = true
   });
 };
 
-export const useYouVersionChapterMeta = (
+/**
+ * Fetches all verse texts for a YouVersion bible chapter.
+ * Replaces the old two-step useYouVersionChapterMeta + useYouVersionChapterText(useQueries)
+ * fan-out — the server now handles the fan-out internally.
+ */
+export const useYouVersionChapterText = (
   bibleId: number | null,
   bookId: string,
   chapterId: number,
   enabled: boolean = true
 ) => {
   return useQuery({
-    queryKey: ['youversion-chapter-meta', bibleId, bookId, chapterId],
+    queryKey: ['youversion-chapter-text', bibleId, bookId, chapterId],
     queryFn: () => {
       if (bibleId === null) {
-        throw new Error('useYouVersionChapterMeta called with null bibleId');
+        throw new Error('useYouVersionChapterText called with null bibleId');
       }
-      return fetchYouVersionChapterMeta(bibleId, bookId, chapterId);
+      return fetchYouVersionChapterText(bibleId, bookId, chapterId);
     },
     enabled: enabled && bibleId !== null && !!bookId && !!chapterId,
     staleTime: 5 * 60 * 1000,
@@ -157,34 +131,4 @@ export const useYouVersionChapterMeta = (
     retry: false,
     throwOnError: false,
   });
-};
-
-export const useYouVersionChapterText = (
-  bibleId: number | null,
-  chapterMeta: YouVersionChapterResponse | undefined,
-  enabled: boolean = true
-): Array<{ data: YouVersionPassageResponse | undefined; isLoading: boolean }> => {
-  const verses = chapterMeta === undefined ? [] : chapterMeta.verses;
-
-  const results = useQueries({
-    queries: verses.map(verse => ({
-      queryKey: ['youversion-passage', bibleId, verse.passage_id],
-      queryFn: () => {
-        if (bibleId === null) {
-          throw new Error('useYouVersionChapterText called with null bibleId');
-        }
-        return fetchYouVersionPassage(bibleId, verse.passage_id);
-      },
-      enabled: enabled && bibleId !== null && !!verse.passage_id,
-      staleTime: 5 * 60 * 1000,
-      gcTime: 15 * 60 * 1000,
-      retry: false,
-      throwOnError: false,
-    })),
-  });
-
-  return results.map(r => ({
-    data: r.data,
-    isLoading: r.isLoading,
-  }));
 };
