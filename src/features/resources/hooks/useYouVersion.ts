@@ -87,10 +87,11 @@ const fetchYouVersionChapterMeta = async (
   }
 
   if (!response.ok) {
-    Logger.logException(new Error('Failed to fetch YouVersion chapter metadata'), {
+    const error = new Error('Failed to fetch YouVersion chapter metadata');
+    Logger.logException(error, {
       context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
     });
-    return { id: 0, passage_id: '', title: 0, verses: [] };
+    throw error;
   }
 
   return (await response.json()) as YouVersionChapterResponse;
@@ -114,10 +115,11 @@ const fetchYouVersionPassage = async (
   }
 
   if (!response.ok) {
-    Logger.logException(new Error('Failed to fetch YouVersion passage'), {
+    const error = new Error('Failed to fetch YouVersion passage');
+    Logger.logException(error, {
       context: `status=${response.status} bibleId=${bibleId} passageId=${passageId}`,
     });
-    return { id: passageId, content: '', reference: '' };
+    throw error;
   }
 
   return (await response.json()) as YouVersionPassageResponse;
@@ -163,7 +165,7 @@ export const useYouVersionChapterText = (
   bibleId: number | null,
   chapterMeta: YouVersionChapterResponse | undefined,
   enabled: boolean = true
-): Array<{ data: YouVersionPassageResponse | undefined; isLoading: boolean }> => {
+): Array<{ data: YouVersionPassageResponse | undefined; isLoading: boolean; isError: boolean }> => {
   const verses = chapterMeta === undefined ? [] : chapterMeta.verses;
 
   const results = useQueries({
@@ -186,5 +188,6 @@ export const useYouVersionChapterText = (
   return results.map(r => ({
     data: r.data,
     isLoading: r.isLoading,
+    isError: r.isError,
   }));
 };

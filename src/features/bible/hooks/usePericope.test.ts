@@ -166,4 +166,18 @@ describe('usePericope handleNextPericopeClick', () => {
     // where `handleNextPericopeClick` would have gone straight to verse 4.
     expect(handleActiveVerseChange).toHaveBeenCalledWith(2);
   });
+
+  it('keeps full references for display without treating a neighboring verse as a current-chapter draft', () => {
+    const full = [
+      PERICOPES[0],
+      { ...PERICOPES[1], verses: [...verseRefs(4, 5), { chapterNumber: 2, verseNumber: 1 }] },
+    ];
+    mockUseChapterPericopes.mockReturnValue({ data: full, isLoading: false });
+    const { result } = renderPericope(4, drafted(4, 5));
+
+    expect(result.current.fullPericopes).toEqual(full);
+    expect(result.current.pericopeMap.get(1)?.number).toBe('1');
+    expect(result.current.currentPericopeGroup?.verses).toEqual(verseRefs(4, 5));
+    expect(result.current.isNextButtonEnabled).toBe(true);
+  });
 });

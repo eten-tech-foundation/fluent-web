@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
@@ -83,6 +83,46 @@ const WITH_SUGGESTION: PericopeVerseText[] = [
 ];
 
 describe('PericopeEditor', () => {
+  it('does not save a heading containing a USFM escape and saves the corrected title', () => {
+    const onVersesChange = vi.fn();
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='limits'
+        verses={[{ verseNumber: 1, text: 'Verse.', markers: null }]}
+        onVersesChange={onVersesChange}
+      />
+    );
+    const document = (text: string): Usj => ({
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'para', marker: 's1', content: [text] },
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'Verse.'],
+        },
+      ],
+    });
+    act(() => editor.commit?.(document('Bad \\v heading')));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(onVersesChange).not.toHaveBeenCalled();
+    act(() => editor.commit?.(document('Valid title')));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      {
+        verseNumber: 1,
+        text: 'Verse.',
+        markers: {
+          paragraphs: [{ marker: 'p', offset: 0 }],
+          headings: [{ marker: 's1', text: 'Valid title' }],
+        },
+      },
+    ]);
+  });
+
   beforeEach(() => {
     editor.usj = undefined;
     editor.commit = undefined;
