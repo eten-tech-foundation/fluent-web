@@ -1,3 +1,5 @@
+import { type QueryClient } from '@tanstack/react-query';
+
 export interface AuthContext {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -10,5 +12,6 @@ export interface AuthContext {
 }
 
 export interface RouterContext {
+  queryClient: QueryClient;
   auth: AuthContext;
 }

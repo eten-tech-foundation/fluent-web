@@ -30,6 +30,23 @@ const draft = (onSave: (verse: number, payload: SavePayload) => Promise<void>) =
   );
 
 describe('useDrafting with markers', () => {
+  it('preserves standalone headings when editing verse text in the textarea', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const headings = [{ marker: 's1', text: 'The Creation' }];
+    const { result } = renderHook(() =>
+      useDrafting({
+        sourceVerses: SOURCES,
+        targetVerses: [{ ...TARGETS[0], markers: { ...SPLIT, headings } }],
+        readOnly: false,
+        onSave,
+      })
+    );
+    act(() => result.current.handleTextChange(1, 'Shorter verse.'));
+    await act(() => vi.advanceTimersByTimeAsync(2500));
+    expect(result.current.verses[0].markers).toEqual({ headings });
+    expect(onSave).toHaveBeenCalledWith(1, { content: 'Shorter verse.', markers: { headings } });
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

@@ -179,9 +179,16 @@ export interface VerseParagraph {
   offset: number;
 }
 
-/** A verse's paragraph context (fluent-api#264). `null` mirrors a row with none stored. */
+/** A standalone heading, anchored before its verse, in stored order. */
+export interface VerseHeading {
+  marker: string;
+  text: string;
+}
+
+/** A verse's structure (fluent-api#264/#288). `null` mirrors a row with none stored. */
 export interface VerseMarkers {
-  paragraphs: VerseParagraph[];
+  paragraphs?: VerseParagraph[];
+  headings?: VerseHeading[];
 }
 
 export interface VerseData {

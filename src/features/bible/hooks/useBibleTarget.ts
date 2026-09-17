@@ -1,14 +1,20 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
-import { type ProjectItem, type VerseData } from '@/lib/types';
+import { type ProjectItem, type TargetVerse, type VerseData } from '@/lib/types';
+
+export interface TargetText extends TargetVerse {
+  id: number;
+  bibleTextId: number;
+  projectUnitId: number;
+}
 
 export const fetchTargetText = async (
   projectUnitId: number,
   bookId: number,
   chapterNumber: number
-): Promise<ProjectItem[]> => {
+): Promise<TargetText[]> => {
   const res = await fetch(
     `${config.api.url}/translated-verses?projectUnitId=${projectUnitId}&bookId=${bookId}&chapterNumber=${chapterNumber}`,
     {
@@ -22,9 +28,23 @@ export const fetchTargetText = async (
 
   if (!res.ok) throw new Error('Failed to fetch Target Text');
 
-  const data = (await res.json()) as ProjectItem[];
+  const data = (await res.json()) as TargetText[];
   return data;
 };
+
+export const targetTextQueryOptions = (
+  projectUnitId: number,
+  bookId: number,
+  chapterNumber: number
+) =>
+  queryOptions({
+    queryKey: ['verse-text', { projectUnitId, bookId, chapterNumber }],
+    queryFn: () => fetchTargetText(projectUnitId, bookId, chapterNumber),
+    // Translations can change while another assignment is open. Reuse them briefly, and
+    // invalidate immediately after this client's saves so navigation cannot hydrate old drafts.
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
 const addTranslatedVerse = async (verseData: VerseData): Promise<ProjectItem> => {
   const res = await fetch(`${config.api.url}/translated-verses`, {
@@ -45,8 +65,10 @@ export const useAddTranslatedVerse = () => {
 
   return useMutation({
     mutationFn: ({ verseData }: { verseData: VerseData }) => addTranslatedVerse(verseData),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['verse-text'] });
+    onSuccess: (_data, { verseData }) => {
+      void queryClient.invalidateQueries({
+        queryKey: ['verse-text', { projectUnitId: verseData.projectUnitId }],
+      });
     },
     onError: error => {
       Logger.logException(error, { context: 'Error adding translated verse' });

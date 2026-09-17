@@ -11,6 +11,9 @@ export const router = createRouter({
   // doesn't add navigation latency on first visit to each route.
   defaultPreload: 'intent',
   context: {
+    // AppRouter supplies the provider client before any routes load.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- router context injection placeholder
+    queryClient: undefined!,
     auth: {
       isAuthenticated: false,
       isLoading: true,
