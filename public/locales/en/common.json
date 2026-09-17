@@ -82,5 +82,22 @@
   "noBooksInProject": "No books found in this project",
   "bookDetailsSaveFailed": "Failed to save changes",
   "close": "Close",
-  "usfmFilesValidated": "USFM file(s) validated"
+  "usfmFilesValidated": "USFM file(s) validated",
+  "organizations": "Organizations",
+  "organization": "Organization",
+  "organizationName": "Organization Name",
+  "createOrganization": "Create Organization",
+  "organizationCreated": "Organization created",
+  "organizationNameConflict": "An organization with this name already exists.",
+  "orgManagers": "Org Managers",
+  "created": "Created",
+  "members": "Members",
+  "noOrganizationsFound": "No organizations found",
+  "noMembersYet": "No members yet — invite an Org Manager to get started.",
+  "inviteOrgManager": "Invite Org Manager",
+  "sendInvite": "Send Invite",
+  "personAlreadyInOrganization": "This person is already in this organization.",
+  "inviteSent": "Invitation sent to {{email}}",
+  "existingUserAddedAsOrgManager": "{{email}} already has a Fluent account — they've been added as an Org Manager and sent a login link",
+  "backToOrganizations": "Back to organizations"
 }
