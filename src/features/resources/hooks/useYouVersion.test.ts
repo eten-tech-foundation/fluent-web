@@ -84,9 +84,19 @@ describe('useYouVersion', () => {
     });
   });
 
-  it('returns empty verses fallback object when fetchYouVersionChapterText receives non-2xx response', async () => {
+  it('rejects when fetchYouVersionChapterText receives a 5xx response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'Upstream Failure' }), { status: 502 })
+    );
+
+    await expect(fetchYouVersionChapterText(1, 'GEN', 1)).rejects.toThrow(
+      'YouVersion chapter text request failed with status 502'
+    );
+  });
+
+  it('returns empty verses fallback object when fetchYouVersionChapterText receives a 4xx response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
     );
 
     const data = await fetchYouVersionChapterText(1, 'GEN', 1);

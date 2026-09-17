@@ -86,6 +86,11 @@ export const fetchYouVersionChapterText = async (
     Logger.logException(new Error('Failed to fetch YouVersion chapter text'), {
       context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
     });
+    // 5xx: server-side fault — throw so React Query exposes error state.
+    if (response.status >= 500) {
+      throw new Error(`YouVersion chapter text request failed with status ${response.status}`);
+    }
+    // Other non-2xx (4xx etc.): treat as empty result.
     return { bibleId, bookId, chapterId, verses: [] };
   }
 
