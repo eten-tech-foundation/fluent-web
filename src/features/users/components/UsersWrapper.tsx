@@ -39,7 +39,18 @@ export const UsersWrapper: React.FC = () => {
 
   const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization ?? null;
 
-  const existingEmails = useMemo(() => new Set(users.map(u => u.email.toLowerCase())), [users]);
+  // GET /users spans every org the caller can see (and all users for
+  // SuperAdmin), so the duplicate-invite guard must be scoped to the active
+  // org — a Fluent account outside this org is still invitable.
+  const existingEmails = useMemo(
+    () =>
+      new Set(
+        users
+          .filter(u => (u.orgGrants ?? u.grants ?? []).some(g => g.orgId === activeOrgId))
+          .map(u => u.email.toLowerCase())
+      ),
+    [users, activeOrgId]
+  );
 
   const isModalOpen = modal === 'add' || modal === 'edit';
   const mode = modal === 'edit' ? 'edit' : 'create';
@@ -54,6 +65,11 @@ export const UsersWrapper: React.FC = () => {
 
   const handleClose = () => {
     setUserError(null);
+    // React Query keeps mutation errors until reset — without this a failed
+    // save would resurface as mutationError in the next dialog.
+    createUserMutation.reset();
+    updateUserMutation.reset();
+    updateOrgUserRoleMutation.reset();
     void navigate({
       to: '/users',
       search: {},

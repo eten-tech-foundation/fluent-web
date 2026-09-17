@@ -29,7 +29,10 @@ export const RemoveOrgUserBanner: React.FC<RemoveOrgUserBannerProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
-  const { data: assignments } = useChapterAssignmentsByUserId(user.id, orgId);
+  const { data: assignments, isPending: assignmentsLoading } = useChapterAssignmentsByUserId(
+    user.id,
+    orgId
+  );
 
   const hasAssignments =
     (assignments?.assignedChapters.length ?? 0) + (assignments?.peerCheckChapters.length ?? 0) > 0;
@@ -45,7 +48,7 @@ export const RemoveOrgUserBanner: React.FC<RemoveOrgUserBannerProps> = ({
         <div className='flex shrink-0 flex-col gap-1.5'>
           <Button
             className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
-            disabled={pending}
+            disabled={pending || assignmentsLoading}
             size='sm'
             onClick={onConfirm}
           >
