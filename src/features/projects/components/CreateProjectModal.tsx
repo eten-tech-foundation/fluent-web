@@ -74,6 +74,18 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setIsSubmitting(false);
   }, [isOpen]);
 
+  // onSave resolves whether the save succeeded or failed — the parent catches its own errors — so
+  // a resolved promise is not proof of success. isSubmitting therefore stays set once a submit
+  // resolves, and only a reported failure releases it for a retry; a success is released by the
+  // effect above when the route closes the dialog. Without this the button comes back for the
+  // moment between a successful save and `isOpen` flipping, and a second click there creates a
+  // duplicate project.
+  useEffect(() => {
+    if (error && !isLoading) {
+      setIsSubmitting(false);
+    }
+  }, [error, isLoading]);
+
   const isFormValid = (): boolean => {
     return Boolean(
       formData.title.trim() &&
@@ -105,7 +117,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: formData.targetLanguage,
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
-        books: formData.books,
+        // Both tabs share formData, so a book list picked on the New tab outlives a switch to
+        // Import. The files carry their own books and the server derives bookId from them, so
+        // sending the manual list too would put two contradictory book sets in one request.
+        books: files ? [] : formData.books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
         ...(files && {
@@ -120,7 +135,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'create project submit',
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
