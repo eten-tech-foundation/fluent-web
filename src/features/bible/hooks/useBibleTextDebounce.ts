@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 /**
  * What one verse save carries. `markers` undefined means the caller has no opinion (the textarea
@@ -108,25 +109,34 @@ export const useBibleTextDebounce = ({
           }
         }
       } catch (error) {
+        const errStatus = (error as { status?: number } | null | undefined)?.status;
+        const isForbidden = errStatus === 403 || errStatus === 401 || errStatus === 404;
+
+        if (isForbidden) {
+          useAppStore.getState().setRoleChangeWarning(true);
+        }
+
         // Only handle error if this is still the latest sequence
         if (sequenceNumber === (saveSequence.current.get(verseId) ?? 0)) {
           activeSaves.current.delete(verseId);
 
-          // Schedule a single retry after 10 seconds
-          const retryTimeout = setTimeout(() => {
-            retryTimeouts.current.delete(verseId);
-            const retryPayload = currentContent.current.get(verseId);
-            if (
-              retryPayload !== undefined &&
-              !samePayload(retryPayload, lastSavedContent.current.get(verseId))
-            ) {
-              const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
-              saveSequence.current.set(verseId, newSequence);
-              activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
-            }
-          }, retryDelayMs);
+          if (!isForbidden) {
+            // Schedule a single retry after 10 seconds for transient errors
+            const retryTimeout = setTimeout(() => {
+              retryTimeouts.current.delete(verseId);
+              const retryPayload = currentContent.current.get(verseId);
+              if (
+                retryPayload !== undefined &&
+                !samePayload(retryPayload, lastSavedContent.current.get(verseId))
+              ) {
+                const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
+                saveSequence.current.set(verseId, newSequence);
+                activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
+              }
+            }, retryDelayMs);
 
-          retryTimeouts.current.set(verseId, retryTimeout);
+            retryTimeouts.current.set(verseId, retryTimeout);
+          }
         } else {
           // If this is an outdated sequence that failed, still clean it up
           activeSaves.current.delete(verseId);

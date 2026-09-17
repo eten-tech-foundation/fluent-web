@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useAppStore } from '@/store/store';
 import { renderWithProviders } from '@/test/render';
 
 import Header from './index';
@@ -9,9 +10,11 @@ import Header from './index';
 // announced the main navigation as the account menu, and any name-based query (tests, automation)
 // silently matched the wrong one.
 
+const mockLocation = { pathname: '/', state: {} };
+
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useLocation: () => ({ pathname: '/', state: {} }),
+  useLocation: () => mockLocation,
 }));
 
 // Both menus hide themselves when nobody is signed in, so the triggers only exist for an
@@ -37,5 +40,22 @@ describe('Header menus', () => {
       .filter(Boolean);
 
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe('Header warnings', () => {
+  it('displays role change error banner on translation page when roleChangeWarning is true', () => {
+    mockLocation.pathname = '/translation/GEN/1';
+    useAppStore.setState({ roleChangeWarning: true });
+
+    renderWithProviders(<Header />);
+
+    expect(
+      screen.getByText('Your role has changed. You no longer have permission to edit this chapter.')
+    ).toBeInTheDocument();
+
+    // Cleanup
+    useAppStore.setState({ roleChangeWarning: false });
+    mockLocation.pathname = '/';
   });
 });
