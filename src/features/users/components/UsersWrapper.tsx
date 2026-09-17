@@ -1,18 +1,30 @@
 import { useMemo, useState } from 'react';
 
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 import { UserModal } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
-import { useCreateUser, useUpdateUser, useUsers, type InviteUserPayload } from '@/hooks/useUsers';
+import { RemoveOrgUserBanner } from '@/features/users/components/RemoveOrgUserBanner';
+import {
+  useCreateUser,
+  useRemoveOrgUser,
+  useUpdateOrgUserRole,
+  useUpdateUser,
+  useUsers,
+  type InviteUserPayload,
+} from '@/hooks/useUsers';
+import { getOrgLevelRoleName } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
+import { ROLES, type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 const routeApi = getRouteApi('/_authenticated/users/');
 
 export const UsersWrapper: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const { modal, userId } = routeApi.useSearch();
 
@@ -21,7 +33,13 @@ export const UsersWrapper: React.FC = () => {
 
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
+  const updateOrgUserRoleMutation = useUpdateOrgUserRole();
+  const removeOrgUserMutation = useRemoveOrgUser();
   const [userError, setUserError] = useState<string | null>(null);
+
+  const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization ?? null;
+
+  const existingEmails = useMemo(() => new Set(users.map(u => u.email.toLowerCase())), [users]);
 
   const isModalOpen = modal === 'add' || modal === 'edit';
   const mode = modal === 'edit' ? 'edit' : 'create';
@@ -30,6 +48,9 @@ export const UsersWrapper: React.FC = () => {
     () => (userId ? users.find(u => u.id === userId) : undefined),
     [userId, users]
   );
+
+  const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const handleClose = () => {
     setUserError(null);
@@ -53,17 +74,58 @@ export const UsersWrapper: React.FC = () => {
     });
   };
 
+  const handleRemoveUser = (user: User) => {
+    setRemoveError(null);
+    setRemoveTarget(user);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removeTarget || activeOrgId == null) return;
+    setRemoveError(null);
+    try {
+      await removeOrgUserMutation.mutateAsync({ orgId: activeOrgId, userId: removeTarget.id });
+      toast.success(t('userRemovedFromOrg', { name: removeTarget.username }));
+      setRemoveTarget(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unknown error occurred';
+      setRemoveError(message);
+      Logger.logException(error instanceof Error ? error : new Error(String(error)), {
+        source: 'Failed to remove org user',
+      });
+    }
+  };
+
   const handleSaveUser = async (userData: User | Omit<User, 'id'>): Promise<void> => {
     setUserError(null);
     try {
       if (mode === 'edit' && selectedUser) {
-        const res = await updateUserMutation.mutateAsync({
-          userData: userData as User,
-        });
-        if (selectedUser.email === userdetail?.email) {
+        // Org-level role changes go through the org-users endpoint (D1: the
+        // Users page manages org-level roles only — 'Org Member' demotes).
+        const currentOrgRole =
+          getOrgLevelRoleName(selectedUser.orgGrants ?? selectedUser.grants, activeOrgId) ??
+          ROLES.ORG_MEMBER;
+        const requestedRole = (userData as User).role as string | undefined;
+        const roleChanged = Boolean(requestedRole && requestedRole !== currentOrgRole);
+        const canPatchRole = roleChanged && requestedRole !== undefined && activeOrgId != null;
+        const profileChanged =
+          userData.username !== selectedUser.username ||
+          (userData.firstName ?? '') !== (selectedUser.firstName ?? '') ||
+          (userData.lastName ?? '') !== (selectedUser.lastName ?? '');
+
+        let res = selectedUser;
+        if (profileChanged) {
+          res = await updateUserMutation.mutateAsync({ userData: userData as User });
+        }
+        if (canPatchRole) {
+          res = await updateOrgUserRoleMutation.mutateAsync({
+            orgId: activeOrgId,
+            userId: selectedUser.id,
+            roleName: requestedRole,
+          });
+        }
+
+        if (selectedUser.email === userdetail?.email && res !== selectedUser) {
           const grants = res.orgGrants ?? res.grants ?? [];
-          const activeOrgId =
-            userdetail.lastActiveOrgId ?? grants.find(g => g.orgId !== null)?.orgId;
           const activeGrant = grants.find(g => g.orgId === activeOrgId);
 
           setUserDetail({
@@ -86,7 +148,6 @@ export const UsersWrapper: React.FC = () => {
         const inviteRoleName =
           userToInvite.roleName ??
           (typeof userToInvite.role === 'string' ? userToInvite.role : String(userToInvite.role));
-        const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
         const activeGrant = userdetail?.grants?.find(g => g.orgId === activeOrgId);
         const invitePayload: InviteUserPayload = {
           email: userToInvite.email,
@@ -107,26 +168,52 @@ export const UsersWrapper: React.FC = () => {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: `Failed to ${mode} user`,
       });
+      // Rethrow so UserModal can revert the role dropdown on a failed save.
+      throw error;
     }
   };
 
   const mutationIsLoading =
-    mode === 'edit' ? updateUserMutation.isPending : createUserMutation.isPending;
+    mode === 'edit'
+      ? updateUserMutation.isPending || updateOrgUserRoleMutation.isPending
+      : createUserMutation.isPending;
   const mutationError =
-    mode === 'edit' ? updateUserMutation.error?.message : createUserMutation.error?.message;
+    mode === 'edit'
+      ? (updateUserMutation.error ?? updateOrgUserRoleMutation.error)?.message
+      : createUserMutation.error?.message;
 
   return (
     <>
       <UsersPage
+        activeOrgId={activeOrgId}
+        banner={
+          removeTarget ? (
+            <RemoveOrgUserBanner
+              error={removeError}
+              orgId={activeOrgId}
+              pending={removeOrgUserMutation.isPending}
+              user={removeTarget}
+              onCancel={() => {
+                setRemoveTarget(null);
+                setRemoveError(null);
+              }}
+              onConfirm={() => void handleConfirmRemove()}
+            />
+          ) : undefined
+        }
+        currentUserEmail={userdetail?.email}
         loading={isLoading}
         users={users}
         onAddUser={handleAddUser}
         onEditUser={handleEditUser}
+        onRemoveUser={handleRemoveUser}
       />
 
       <UserModal
+        activeOrgId={activeOrgId}
         disableRoleSelection={userdetail?.email === selectedUser?.email}
         error={userError ?? mutationError}
+        existingEmails={existingEmails}
         isLoading={mutationIsLoading}
         isOpen={isModalOpen}
         mode={mode}

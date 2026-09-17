@@ -26,17 +26,55 @@ export function isSuperAdmin(grants: UserGrant[] | undefined): boolean {
 }
 
 /**
- * The role to show for a user within one org: the org-level role first
- * (projectId == null, not the Org Member anchor), then the first project role.
+ * Project-role display precedence when a user holds no org-level role (D3):
+ * Project Manager > Translator > Observer.
+ */
+const PROJECT_ROLE_PRIORITY = [
+  ROLES.PROJECT_MANAGER,
+  ROLES.PROJECT_TRANSLATOR,
+  ROLES.PROJECT_OBSERVER,
+] as const;
+
+/**
+ * The role to show for a user within one org (D3 precedence, top wins):
+ *   1. the org-level role (projectId == null, not the Org Member anchor)
+ *   2. the highest-priority project role (PM > Translator > Observer)
+ *   3. the Org Member anchor — the user holds no functional role in this org
  */
 export function getOrgRoleName(
   orgGrants: UserGrant[] | undefined,
   orgId: number | null | undefined
 ): string | undefined {
   if (!orgGrants || orgId == null) return undefined;
-  const inOrg = orgGrants.filter(g => g.orgId === orgId && g.roleName !== ROLES.ORG_MEMBER);
-  const orgLevel = inOrg.find(g => (g.projectId ?? null) === null);
-  return (orgLevel ?? inOrg.at(0))?.roleName;
+  const inOrg = orgGrants.filter(g => g.orgId === orgId);
+  const orgLevel = inOrg.find(
+    g => (g.projectId ?? null) === null && g.roleName !== ROLES.ORG_MEMBER
+  );
+  if (orgLevel) return orgLevel.roleName;
+  for (const roleName of PROJECT_ROLE_PRIORITY) {
+    if (inOrg.some(g => g.roleName === roleName)) return roleName;
+  }
+  if (inOrg.some(g => g.roleName === ROLES.ORG_MEMBER)) return ROLES.ORG_MEMBER;
+  return undefined;
+}
+
+/**
+ * The org-level role a user holds in this org — the thing the Users page
+ * edits (D1: project roles stay project-scoped). Returns ROLES.ORG_MEMBER for
+ * an anchor-only member; undefined when the user has no grants in the org.
+ */
+export function getOrgLevelRoleName(
+  orgGrants: UserGrant[] | undefined,
+  orgId: number | null | undefined
+): string | undefined {
+  if (!orgGrants || orgId == null) return undefined;
+  const inOrg = orgGrants.filter(g => g.orgId === orgId);
+  const orgLevel = inOrg.find(
+    g => (g.projectId ?? null) === null && g.roleName !== ROLES.ORG_MEMBER
+  );
+  if (orgLevel) return orgLevel.roleName;
+  if (inOrg.some(g => g.roleName === ROLES.ORG_MEMBER)) return ROLES.ORG_MEMBER;
+  return undefined;
 }
 
 /**
