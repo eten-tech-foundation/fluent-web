@@ -9,10 +9,35 @@
  * create projects, view users, and see all projects in the org.
  */
 
-import type { UserGrant } from '@/lib/types';
+import { ROLES, type UserGrant } from '@/lib/types';
 
 /** All roles that carry management privileges (project create, user view, etc). */
 const MANAGER_ROLES = ['Project Manager', 'Org Manager', 'Org Owner', 'SuperAdmin'];
+
+/**
+ * True if the user holds a global SuperAdmin grant (orgId == null, projectId == null).
+ * Looks at ALL grants, not the active-org subset — the global grant has no org.
+ */
+export function isSuperAdmin(grants: UserGrant[] | undefined): boolean {
+  if (!grants) return false;
+  return grants.some(
+    g => g.orgId === null && (g.projectId ?? null) === null && g.roleName === ROLES.SUPER_ADMIN
+  );
+}
+
+/**
+ * The role to show for a user within one org: the org-level role first
+ * (projectId == null, not the Org Member anchor), then the first project role.
+ */
+export function getOrgRoleName(
+  orgGrants: UserGrant[] | undefined,
+  orgId: number | null | undefined
+): string | undefined {
+  if (!orgGrants || orgId == null) return undefined;
+  const inOrg = orgGrants.filter(g => g.orgId === orgId && g.roleName !== ROLES.ORG_MEMBER);
+  const orgLevel = inOrg.find(g => (g.projectId ?? null) === null);
+  return (orgLevel ?? inOrg.at(0))?.roleName;
+}
 
 /**
  * Returns the grants that apply to the given active org.
