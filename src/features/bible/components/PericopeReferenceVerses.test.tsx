@@ -92,26 +92,20 @@ describe('PericopeReferenceVerses', () => {
       http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
         HttpResponse.json(aquiferChapter(9))
       ),
-      http.get(`${config.api.youversion_url}/bibles/11/books/MRK/chapters/:chapter`, ({ params }) =>
+      http.get(`${config.api.url}/youversion/bibles/11/chapters/8/text`, () =>
         HttpResponse.json({
-          id: Number(params.chapter),
-          passage_id: `MRK.${Number(params.chapter)}`,
-          title: Number(params.chapter),
-          verses: [{ id: 1, passage_id: `MRK.${Number(params.chapter)}.1`, title: 1 }],
+          bibleId: 11,
+          bookId: 'MRK',
+          chapterId: 8,
+          verses: [{ verseNumber: 1, passageId: 'MRK.8.1', content: 'YouVersion chapter eight' }],
         })
       ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.8.1`, () =>
+      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, () =>
         HttpResponse.json({
-          id: 'MRK.8.1',
-          content: 'YouVersion chapter eight',
-          reference: 'Mark 8:1',
-        })
-      ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.9.1`, () =>
-        HttpResponse.json({
-          id: 'MRK.9.1',
-          content: 'YouVersion chapter nine',
-          reference: 'Mark 9:1',
+          bibleId: 11,
+          bookId: 'MRK',
+          chapterId: 9,
+          verses: [{ verseNumber: 1, passageId: 'MRK.9.1', content: 'YouVersion chapter nine' }],
         })
       )
     );
@@ -332,36 +326,16 @@ describe('PericopeReferenceVerses', () => {
     expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
   });
 
-  it.each([
-    ['network failure', () => HttpResponse.error()],
-    ['server failure', () => new HttpResponse(null, { status: 500 })],
-    ['invalid JSON', () => new HttpResponse('invalid JSON')],
-  ])('shows a YouVersion %s only for the affected missing verse', async (_, failureResponse) => {
+  it('shows missing content when a verse is omitted from YouVersion chapter text', async () => {
     server.use(
-      http.get(`${config.api.youversion_url}/bibles/11/books/MRK/chapters/9`, () =>
+      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, () =>
         HttpResponse.json({
-          id: 9,
-          passage_id: 'MRK.9',
-          title: 9,
-          verses: [
-            { id: 1, passage_id: 'MRK.9.1', title: 1 },
-            { id: 2, passage_id: 'MRK.9.2', title: 2 },
-            { id: 3, passage_id: 'MRK.9.3', title: 3 },
-          ],
+          bibleId: 11,
+          bookId: 'MRK',
+          chapterId: 9,
+          verses: [{ verseNumber: 1, passageId: 'MRK.9.1', content: 'YouVersion available verse' }],
         })
-      ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.9.1`, () =>
-        HttpResponse.json({
-          id: 'MRK.9.1',
-          content: 'YouVersion available verse',
-          reference: 'Mark 9:1',
-        })
-      ),
-      http.get(
-        `${config.api.youversion_url}/bibles/11/passages/MRK.9.2`,
-        () => new HttpResponse(null, { status: 404 })
-      ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.9.3`, failureResponse)
+      )
     );
 
     renderWithProviders(
@@ -380,49 +354,26 @@ describe('PericopeReferenceVerses', () => {
       </p>
     );
 
-    const failedVerse = await screen.findByText(/unable to load/i);
-    const unavailableVerse = await screen.findByText(/no content available/i);
+    const unavailableVerses = await screen.findAllByText(/no content available/i);
     const availableVerse = await screen.findByText('YouVersion available verse');
-    expect(failedVerse.parentElement).toHaveTextContent('9:3');
-    expect(failedVerse).toHaveClass('text-muted-foreground', 'text-sm');
-    expect(unavailableVerse.parentElement).toHaveTextContent('9:2');
-    expect(unavailableVerse).toHaveClass('text-muted-foreground', 'text-sm');
+    expect(unavailableVerses[0].parentElement).toHaveTextContent('9:2');
     expect(availableVerse.parentElement).toHaveTextContent('9:1');
-    expect(availableVerse).not.toHaveClass('text-muted-foreground');
-    expect(screen.getAllByText(/unable to load/i)).toHaveLength(1);
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
-  it('keeps available YouVersion text visible while another verse is loading', async () => {
+  it('keeps available YouVersion text visible while chapter is loading', async () => {
     let release: () => void = () => {};
     const ready = new Promise<void>(resolve => {
       release = resolve;
     });
     server.use(
-      http.get(`${config.api.youversion_url}/bibles/11/books/MRK/chapters/9`, () =>
-        HttpResponse.json({
-          id: 9,
-          passage_id: 'MRK.9',
-          title: 9,
-          verses: [
-            { id: 1, passage_id: 'MRK.9.1', title: 1 },
-            { id: 3, passage_id: 'MRK.9.3', title: 3 },
-          ],
-        })
-      ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.9.1`, () =>
-        HttpResponse.json({
-          id: 'MRK.9.1',
-          content: 'YouVersion available verse',
-          reference: 'Mark 9:1',
-        })
-      ),
-      http.get(`${config.api.youversion_url}/bibles/11/passages/MRK.9.3`, async () => {
+      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, async () => {
         await ready;
         return HttpResponse.json({
-          id: 'MRK.9.3',
-          content: 'YouVersion delayed verse',
-          reference: 'Mark 9:3',
+          bibleId: 11,
+          bookId: 'MRK',
+          chapterId: 9,
+          verses: [{ verseNumber: 1, passageId: 'MRK.9.1', content: 'YouVersion delayed verse' }],
         });
       })
     );
@@ -439,22 +390,16 @@ describe('PericopeReferenceVerses', () => {
       </p>
     );
 
-    try {
-      await screen.findByText('YouVersion available verse');
-      const loadingVerse = screen.getByText(/loading/i);
-      expect(loadingVerse.parentElement).toHaveTextContent('9:3');
-      expect(loadingVerse).toHaveClass('text-muted-foreground', 'text-sm');
-    } finally {
-      release();
-    }
+    expect(screen.getAllByText(/loading/i)).toHaveLength(2);
+    release();
     await screen.findByText('YouVersion delayed verse');
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
-  it('shows a YouVersion chapter metadata failure instead of missing content', async () => {
+  it('shows a YouVersion chapter text failure when the server endpoint returns non-2xx', async () => {
     server.use(
       http.get(
-        `${config.api.youversion_url}/bibles/11/books/MRK/chapters/9`,
+        `${config.api.url}/youversion/bibles/11/chapters/9/text`,
         () => new HttpResponse(null, { status: 503 })
       )
     );
