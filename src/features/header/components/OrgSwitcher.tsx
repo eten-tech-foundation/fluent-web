@@ -62,7 +62,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
   });
 
   const activeOrgId = userdetail.lastActiveOrgId ?? Array.from(orgMap.keys())[0];
-  const activeOrgName = orgMap.get(activeOrgId) ?? 'Unknown Organization';
+  const activeOrgName = orgMap.get(activeOrgId) ?? 'Admin';
   const activeRoleName = userdetail.role;
   const organizations = Array.from(orgMap.entries())
     .map(([id, name]) => ({ id, name }))
