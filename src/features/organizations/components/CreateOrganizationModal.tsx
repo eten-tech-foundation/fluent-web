@@ -43,7 +43,7 @@ export const CreateOrganizationModal: React.FC<CreateOrganizationModalProps> = (
   const isValid = trimmed.length > 0 && trimmed.length <= ORG_NAME_MAX_LENGTH;
 
   const handleSubmit = async (): Promise<void> => {
-    if (!isValid) return;
+    if (!isValid || isLoading) return;
     try {
       await onSave(trimmed);
     } catch {

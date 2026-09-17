@@ -72,7 +72,16 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
                     onClick={() => onSelectOrganization(org.id)}
                   >
                     <TableCell className={cellClass}>
-                      <div className='truncate'>{org.name}</div>
+                      <button
+                        className='text-primary block max-w-full truncate text-left underline-offset-4 hover:underline'
+                        type='button'
+                        onClick={e => {
+                          e.stopPropagation();
+                          onSelectOrganization(org.id);
+                        }}
+                      >
+                        {org.name}
+                      </button>
                     </TableCell>
                     <TableCell className={cellClass}>{org.orgManagerCount}</TableCell>
                     <TableCell className={cellClass}>{formatOrgDate(org.createdAt)}</TableCell>

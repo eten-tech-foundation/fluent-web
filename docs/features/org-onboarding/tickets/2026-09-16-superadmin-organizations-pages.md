@@ -1,6 +1,6 @@
 # SuperAdmin Organizations pages: list, create org, invite first Org Manager
 
-> **Status: IMPLEMENTED (local)** — on branch `feat/organization-onboarding`, awaiting review before push.
+> **Status: IMPLEMENTED** — PR [fluent-web#494](https://github.com/eten-tech-foundation/fluent-web/pull/494).
 > GitHub: [fluent-web#492](https://github.com/eten-tech-foundation/fluent-web/issues/492)
 
 **Parent feature:** [`org-onboarding`](../plan.md) — Ticket WEB-1.

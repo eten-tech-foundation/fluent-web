@@ -9,9 +9,13 @@ const organizationDetailSearchSchema = z.object({
 });
 
 export const Route = createFileRoute('/_authenticated/organizations/$orgId/')({
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, params }) => {
     if (!context.auth.canManageOrgs) {
       throw redirect({ to: '/' });
+    }
+    const orgId = Number(params.orgId);
+    if (!Number.isInteger(orgId) || orgId <= 0) {
+      throw redirect({ to: '/organizations' });
     }
   },
   validateSearch: organizationDetailSearchSchema,
