@@ -1,7 +1,7 @@
 import { type ComponentProps } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +52,7 @@ const mockUseResourceState = vi.fn();
 const mockUseSaveResourceState = vi.fn();
 const mockUseDrafting = vi.fn();
 const mockUsePericope = vi.fn();
+const mockUsePericopeContext = vi.fn();
 
 vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
   useAddTranslatedVerse: () => mockUseAddTranslatedVerse() as unknown,
@@ -108,6 +109,12 @@ vi.mock('@/features/bible/components/DraftingChapterView', async () => {
 
 vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: (props: unknown) => mockUsePericope(props) as unknown,
+}));
+
+// These tests isolate drafting behavior with chapter-local fixtures. Cross-chapter loading
+// and saving use the real hooks in CrossChapterDrafting.test.tsx.
+vi.mock('@/features/bible/hooks/usePericopeContext', () => ({
+  usePericopeContext: () => mockUsePericopeContext() as unknown,
 }));
 
 // Mock the Repeated Word Check hooks (Phase 4). These wrap TanStack Query /
@@ -327,6 +334,11 @@ describe('DraftingUI', () => {
 
     mockUseDrafting.mockReturnValue(defaultDraftingHookResult());
     mockUsePericope.mockReturnValue(defaultPericopeHookResult());
+    mockUsePericopeContext.mockReturnValue({
+      chapters: new Map(),
+      isLoading: false,
+      isError: false,
+    });
     mockUseAiSuggestions.mockReturnValue({
       suggestions: {},
       isAiThresholdMet: false,
@@ -417,6 +429,164 @@ describe('DraftingUI', () => {
       await user.click(screen.getByRole('button', { name: language }));
     };
 
+    it.each([500, 503])('shows Aquifer HTTP %s as an error in verse mode', async status => {
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status })
+        )
+      );
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+
+      expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+      expect(screen.queryByText('No content available')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(
+        screen.getByText('In the beginning God created the heaven and the earth.')
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
+    it('keeps Aquifer 404 unavailable rather than showing a server error', async () => {
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status: 404 })
+        )
+      );
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+
+      expect(await screen.findByText('No content available')).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
+    it('keeps cached Aquifer text visible after a failed refetch', async () => {
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      server.use(
+        http.get(
+          `${config.api.url}/aquifer/bibles/1/texts`,
+          () => new HttpResponse(null, { status: 503 })
+        )
+      );
+
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: ['aquifer-bible-text'] });
+      });
+      expect(queryClient.getQueriesData({ queryKey: ['aquifer-bible-text'] })).not.toHaveLength(0);
+      expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe('error');
+      expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    });
+
+    it.each(['unavailable', 'loading'] as const)(
+      'keeps neighboring reference verses visible when the current Bible chapter is %s',
+      async currentState => {
+        useAppStore.setState({ displayMode: 'pericope' });
+        const localGroup = defaultPericopeHookResult().pericopes[0];
+        mockUsePericope.mockReturnValue(
+          defaultPericopeHookResult({
+            isPericopeMode: true,
+            fullPericopes: [
+              {
+                ...localGroup,
+                verses: [...localGroup.verses, { chapterNumber: 2, verseNumber: 1 }],
+              },
+            ],
+          })
+        );
+        mockUsePericopeContext.mockReturnValue({
+          chapters: new Map([
+            [
+              2,
+              {
+                sourceVerses: [
+                  { id: 201, verseNumber: 1, text: 'Project source neighboring verse' },
+                ],
+                targetVerses: [{ verseNumber: 1, content: 'Saved neighboring translation' }],
+              },
+            ],
+          ]),
+          isLoading: false,
+          isError: false,
+        });
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, async ({ request }) => {
+            const params = new URL(request.url).searchParams;
+            const chapter = Number(params.get('startChapter'));
+            if (params.get('bookCode') !== 'GEN' || params.get('endChapter') !== String(chapter)) {
+              return new HttpResponse(null, { status: 400 });
+            }
+            if (chapter === 1) {
+              if (currentState === 'unavailable') return new HttpResponse(null, { status: 404 });
+              await pendingText;
+            }
+            return HttpResponse.json({
+              bibleId: 1,
+              bibleName: 'English Bible',
+              bibleAbbreviation: 'ENG',
+              bookName: 'Genesis',
+              bookCode: 'GEN',
+              chapters: [
+                {
+                  number: chapter,
+                  verses: [
+                    {
+                      number: 1,
+                      text:
+                        chapter === 2
+                          ? 'Selected reference neighboring verse'
+                          : 'Selected reference current verse',
+                    },
+                  ],
+                },
+              ],
+            });
+          })
+        );
+
+        try {
+          const user = await openResources();
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+
+          await screen.findByText('Selected reference neighboring verse');
+          const referenceGroup = screen.getByRole('button', {
+            name: /Selected reference neighboring verse/,
+          });
+          expect(within(referenceGroup).getByText('1:1')).toBeInTheDocument();
+          expect(within(referenceGroup).getByText('1:2')).toBeInTheDocument();
+          expect(within(referenceGroup).getByText('2:1')).toBeInTheDocument();
+          expect(
+            within(referenceGroup).getAllByText(
+              currentState === 'loading' ? /loading/i : /no content available/i
+            )
+          ).toHaveLength(2);
+          expect(screen.queryByText('Project source neighboring verse')).not.toBeInTheDocument();
+          expect(screen.queryByText(mockSourceVerses[0].text)).not.toBeInTheDocument();
+          expect(screen.getByText('Saved neighboring translation')).toBeInTheDocument();
+          expect(screen.getAllByRole('textbox')).toHaveLength(2);
+
+          if (currentState === 'loading') {
+            releaseText();
+            await screen.findByText('Selected reference current verse');
+            expect(screen.getByText('Selected reference neighboring verse')).toBeInTheDocument();
+          }
+        } finally {
+          releaseText();
+        }
+      }
+    );
     it('keeps both Bible tabs and their cached verses when resources are hidden and shown', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
@@ -532,6 +702,33 @@ describe('DraftingUI', () => {
 
     // The tracking wrapper always forwards a markers slot; the textarea derives none.
     expect(handleTextChangeMock).toHaveBeenCalledWith(1, expect.any(String), undefined);
+  });
+
+  it('retries both failed requests from the pericope error banner', async () => {
+    const user = userEvent.setup();
+    const refetchPericopes = vi.fn();
+    const refetchContext = vi.fn();
+    useAppStore.setState({ displayMode: 'pericope' });
+    mockUsePericope.mockReturnValue(
+      defaultPericopeHookResult({ isPericopeMode: true, isPericopeError: true, refetchPericopes })
+    );
+    mockUsePericopeContext.mockReturnValue({
+      chapters: new Map(),
+      isLoading: false,
+      isError: true,
+      refetch: refetchContext,
+    });
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetchPericopes).toHaveBeenCalledOnce();
+    expect(refetchContext).toHaveBeenCalledOnce();
   });
 
   it('renders in Pericope Mode when enabled', () => {

@@ -3,10 +3,11 @@ import type { PericopeVerseText } from './pericope-usj';
 const DEFAULT_BLOCK_MARKER = 'p';
 
 const opensBlock = (row: PericopeVerseText): boolean =>
-  row.markers?.paragraphs.some(paragraph => paragraph.offset === 0) ?? false;
+  Boolean(row.markers?.headings?.length) ||
+  (row.markers?.paragraphs?.some(paragraph => paragraph.offset === 0) ?? false);
 
 const midVerseSplits = (row: PericopeVerseText) =>
-  row.markers?.paragraphs.filter(paragraph => paragraph.offset > 0) ?? [];
+  row.markers?.paragraphs?.filter(paragraph => paragraph.offset > 0) ?? [];
 
 /**
  * The marker of the block that is open at the *end* of a row — which is what the row after it
@@ -18,6 +19,7 @@ const midVerseSplits = (row: PericopeVerseText) =>
 function openBlockMarkerAfter(rows: PericopeVerseText[], index: number): string {
   for (let i = index; i >= 0; i--) {
     const paragraphs = rows[i].markers?.paragraphs ?? [];
+    if (paragraphs.length === 0 && rows[i].markers?.headings?.length) return DEFAULT_BLOCK_MARKER;
     if (paragraphs.length === 0) continue;
     return paragraphs.reduce((furthest, paragraph) =>
       paragraph.offset > furthest.offset ? paragraph : furthest
@@ -27,7 +29,7 @@ function openBlockMarkerAfter(rows: PericopeVerseText[], index: number): string 
 }
 
 /**
- * Scopes a block format (Poetry Line, Section Heading, Paragraph) to the verse the cursor is in.
+ * Scopes body formatting (Poetry Line, Paragraph) to the verse the cursor is in.
  *
  * A fresh chapter is a single paragraph holding every verse, so the editor's own block formatting
  * would restyle the whole chapter at once (#427). Instead: the active verse opens a block with the
@@ -56,14 +58,17 @@ export function scopeBlockFormatToVerse(
 
   const updatedActive: PericopeVerseText = {
     ...active,
-    markers: { paragraphs: [{ marker, offset: 0 }, ...midVerseSplits(active)] },
+    markers: { ...active.markers, paragraphs: [{ marker, offset: 0 }, ...midVerseSplits(active)] },
   };
 
   const updatedNext: PericopeVerseText | undefined =
     next && !opensBlock(next)
       ? {
           ...next,
-          markers: { paragraphs: [{ marker: reopenMarker, offset: 0 }, ...midVerseSplits(next)] },
+          markers: {
+            ...next.markers,
+            paragraphs: [{ marker: reopenMarker, offset: 0 }, ...midVerseSplits(next)],
+          },
         }
       : undefined;
 

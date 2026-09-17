@@ -1,4 +1,6 @@
-import type { VerseMarkers, VerseParagraph } from '@/lib/types';
+import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
+
+import { isHeadingMarker } from './heading-markers';
 
 import type { MarkerObject, Usj } from '@eten-tech-foundation/scripture-utilities';
 
@@ -37,11 +39,15 @@ export function pericopeVersesToUsj(
   };
 
   verses.forEach(verse => {
+    const headings = verse.markers?.headings ?? [];
+    for (const heading of headings) {
+      content.push({ type: 'para', marker: heading.marker, content: [heading.text] });
+    }
     const paragraphs = verse.markers?.paragraphs ?? [];
     const opening = paragraphs.find(paragraph => paragraph.offset === 0);
     if (opening) openPara(opening.marker);
     // The chapter's first verse carries no marker of its own: the classic default paragraph.
-    else if (!para) openPara(DEFAULT_PARAGRAPH_MARKER);
+    else if (!para || headings.length > 0) openPara(DEFAULT_PARAGRAPH_MARKER);
 
     const sid = bookCode ? `${bookCode} ${chapterNumber}:${verse.verseNumber}` : undefined;
     para?.content?.push({
@@ -120,13 +126,28 @@ interface VerseSegment {
 export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
   const order: number[] = [];
   const segments = new Map<number, VerseSegment[]>();
+  const headings = new Map<number, VerseHeading[]>();
+  let pendingHeadings: VerseHeading[] = [];
   let currentVerse: number | undefined;
 
   for (const node of usj.content) {
     if (typeof node === 'string') continue;
     const marker = node as MarkerObject;
     if (marker.type !== 'para' || !marker.content) continue;
-    const paraMarker = marker.marker ?? DEFAULT_PARAGRAPH_MARKER;
+    let paraMarker = marker.marker ?? DEFAULT_PARAGRAPH_MARKER;
+    let body = marker.content;
+    if (isHeadingMarker(paraMarker)) {
+      // Some imported documents omit the body paragraph and nest a verse in the heading.
+      // Only the prefix is heading text; scripture after the milestone remains verse text.
+      const firstVerse = body.findIndex(item => typeof item !== 'string' && item.type === 'verse');
+      const prefix = firstVerse < 0 ? body : body.slice(0, firstVerse);
+      const text = markerText({ ...marker, content: prefix }).trim();
+      if (text) pendingHeadings.push({ marker: paraMarker, text });
+      currentVerse = undefined;
+      if (firstVerse < 0) continue;
+      body = body.slice(firstVerse);
+      paraMarker = DEFAULT_PARAGRAPH_MARKER;
+    }
 
     let buffer = '';
     let paraHasPriorContent = false;
@@ -144,7 +165,7 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
       buffer = '';
     };
 
-    for (const item of marker.content) {
+    for (const item of body) {
       if (typeof item === 'string') {
         buffer += item;
         continue;
@@ -161,6 +182,10 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
         paraHasPriorContent = true;
         currentOpenedPara = opensPara;
         currentVerse = Number.parseInt(item.number ?? '0', 10);
+        if (pendingHeadings.length > 0) {
+          headings.set(currentVerse, pendingHeadings);
+          pendingHeadings = [];
+        }
         if (!segments.has(currentVerse)) {
           segments.set(currentVerse, []);
           order.push(currentVerse);
@@ -201,13 +226,19 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
     return {
       verseNumber,
       text: kept.map(record => record.text).join(' '),
-      markers: paragraphs.length > 0 ? { paragraphs } : null,
+      markers:
+        paragraphs.length > 0 || headings.has(verseNumber)
+          ? {
+              ...(paragraphs.length > 0 ? { paragraphs } : {}),
+              ...(headings.has(verseNumber) ? { headings: headings.get(verseNumber) } : {}),
+            }
+          : null,
     };
   });
 }
 
 function markersKey(markers: VerseMarkers | null): string {
-  return JSON.stringify(markers?.paragraphs ?? null);
+  return JSON.stringify([markers?.paragraphs ?? null, markers?.headings ?? null]);
 }
 
 /**

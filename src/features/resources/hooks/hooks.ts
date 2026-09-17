@@ -506,7 +506,11 @@ export const useBibleResources = (
 
   const isAquifer = selectedBible?.source === 'aquifer';
 
-  const { data: aquiferBibleText, isLoading: loadingAquiferText } = useAquiferBibleText(
+  const {
+    data: aquiferBibleText,
+    isLoading: loadingAquiferText,
+    isError: aquiferTextError,
+  } = useAquiferBibleText(
     isAquifer ? selectedBible.rawId : null,
     bookCode,
     chapterNumber,
@@ -518,14 +522,19 @@ export const useBibleResources = (
 
   const isYouVersion = selectedBible?.source === 'youversion';
 
-  const { data: yvChapterText, isLoading: loadingYVText } = useYouVersionChapterText(
+  const {
+    data: yvChapterText,
+    isLoading: loadingYVText,
+    isError: yvTextError,
+  } = useYouVersionChapterText(
     isYouVersion ? selectedBible.rawId : null,
     bookCode,
     chapterNumber,
     isYouVersion
   );
 
-  const loadingBibleContent = loadingAquiferText || loadingYVText;
+  const loadingBibleContent = isAquifer ? loadingAquiferText : isYouVersion && loadingYVText;
+  const bibleContentError = isAquifer ? aquiferTextError : isYouVersion && yvTextError;
 
   // Normalise to a flat verse list
 
@@ -574,6 +583,7 @@ export const useBibleResources = (
     unifiedBibles,
     loadingBibles,
     loadingBibleContent,
+    bibleContentError,
     selectedBible,
     handleBibleChange,
     clearSelectedBible,

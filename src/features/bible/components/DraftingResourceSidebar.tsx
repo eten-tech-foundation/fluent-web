@@ -18,6 +18,7 @@ interface DraftingResourceSidebarProps {
   clearBibleRef: React.MutableRefObject<(() => void) | null>;
   onBibleSelect: (bible: { id: string; label: string; language: string }) => void;
   onBibleLoadingChange: (bibleId: string, loading: boolean) => void;
+  onBibleErrorChange: (bibleId: string, isError: boolean) => void;
   onBibleVersesChange: (bibleId: string, verses: BibleVerse[]) => void;
   selectedBibleId: string | null;
   setCurrentLanguage: (lang: string) => void;
@@ -47,6 +48,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   clearBibleRef,
   onBibleSelect,
   onBibleLoadingChange,
+  onBibleErrorChange,
   onBibleVersesChange,
   selectedBibleId,
   setCurrentLanguage,
@@ -134,6 +136,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
               resourceNames={resourceNames}
               selectedBibleId={selectedBibleId}
               sourceData={projectItem}
+              onBibleErrorChange={onBibleErrorChange}
               onBibleLoadingChange={onBibleLoadingChange}
               onBibleSelect={onBibleSelect}
               onBibleVersesChange={onBibleVersesChange}
