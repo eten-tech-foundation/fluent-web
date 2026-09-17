@@ -1,6 +1,6 @@
 # SuperAdmin Organizations pages: list, create org, invite first Org Manager
 
-> **Status: NOT STARTED** — awaiting go-ahead to implement.
+> **Status: IMPLEMENTED (local)** — on branch `feat/organization-onboarding`, awaiting review before push.
 > GitHub: [fluent-web#492](https://github.com/eten-tech-foundation/fluent-web/issues/492)
 
 **Parent feature:** [`org-onboarding`](../plan.md) — Ticket WEB-1.
