@@ -17,10 +17,10 @@ vi.mock('@/features/rte/components/ChapterEditor', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) =>
+    t: (key: string, fallback?: string) =>
       key === 'noContentAvailable'
         ? "This Bible verse doesn't have content for this passage."
-        : key,
+        : (fallback ?? key),
   }),
 }));
 
@@ -56,8 +56,16 @@ const resourceBibleTabs: ResourceBibleTab[] = [
     language: 'eng',
     verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
     isLoading: false,
+    isError: false,
   },
-  { id: 'yv-empty', label: 'Empty Bible', language: 'eng', verses: [], isLoading: false },
+  {
+    id: 'yv-empty',
+    label: 'Empty Bible',
+    language: 'eng',
+    verses: [],
+    isLoading: false,
+    isError: false,
+  },
 ];
 
 const commonProps = {
@@ -68,6 +76,7 @@ const commonProps = {
   bibleVerseMap: new Map<number, string>(),
   resourceBibleTabs,
   bibleContentLoading: false,
+  bibleContentError: false,
   handleTextChange: vi.fn(),
   handleActiveVerseChange: vi.fn(),
   onBibleTabSelect: vi.fn(),
@@ -133,5 +142,34 @@ describe('DraftingChapterView', () => {
     expect(screen.getByText('In the beginning.')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Empty Bible' })).toBeInTheDocument();
+  });
+  it('shows a resource error instead of unavailable content in chapter mode', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        bibleContentError
+        activeBibleTabId='aq-alternative'
+        selectedPanel={2}
+      />
+    );
+    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(
+      screen.queryByText("This Bible verse doesn't have content for this passage.")
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(['loading', 'error'] as const)('keeps loaded resource text visible during %s', state => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        activeBibleTabId='aq-alternative'
+        bibleContentError={state === 'error'}
+        bibleContentLoading={state === 'loading'}
+        bibleVerseMap={new Map([[1, 'Cached chapter text']])}
+        selectedPanel={2}
+      />
+    );
+    expect(screen.getByText('Cached chapter text')).toBeInTheDocument();
+    expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
   });
 });

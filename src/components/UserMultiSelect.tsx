@@ -16,9 +16,9 @@ interface UserMultiSelectProps {
 }
 
 // Chip layout constants (must match UserChip CSS exactly)
-// px-2 = 8px left + 8px right, gap-1 = 4px between chips
-// rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium
-const CHIP_PADDING_X = 16; // px-2 on both sides = 8+8
+// px-2.5 = 10px left + 10px right, gap-1 = 4px between chips
+// rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold
+const CHIP_PADDING_X = 16; // px-2.5 on both sides = 10+10
 const CHIP_MAX_CONTENT = 120; // max-w-[120px] minus padding = capped text width
 const GAP = 4; // gap-1
 const CHEVRON_W = 32; // ml-2 + w-4 icon
@@ -79,7 +79,7 @@ function computeVisibleCount(labels: string[], availableWidth: number, font: str
 
 function UserChip({ label }: { label: string }) {
   return (
-    <span className='bg-primary/10 inline-flex max-w-[120px] shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium'>
+    <span className='bg-accent text-accent-foreground border-border inline-flex max-w-[120px] shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold shadow-2xs'>
       <span className='truncate'>{label}</span>
     </span>
   );
@@ -98,7 +98,7 @@ export function UserMultiSelect({
   const [availableWidth, setAvailableWidth] = useState(0);
 
   // Resolve the font once from the wrapper element so canvas uses the real font
-  const [chipFont, setChipFont] = useState('500 12px ui-sans-serif');
+  const [chipFont, setChipFont] = useState('600 12px ui-sans-serif');
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -109,11 +109,11 @@ export function UserMultiSelect({
       setAvailableWidth(w - TRIGGER_PADDING_X - CHEVRON_W);
     };
 
-    // Resolve font from computed styles (text-xs font-medium = 12px 500)
+    // Resolve font from computed styles (text-xs font-semibold = 12px 600)
     const style = window.getComputedStyle(el);
     const size = '12px';
     const family = style.fontFamily || 'ui-sans-serif, system-ui, sans-serif';
-    setChipFont(`500 ${size} ${family}`);
+    setChipFont(`600 ${size} ${family}`);
 
     updateWidth();
 
@@ -152,7 +152,7 @@ export function UserMultiSelect({
   if (isLoading) {
     return (
       <div ref={wrapperRef} className='w-full'>
-        <div className='text-muted-foreground box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
+        <div className='bg-background text-muted-foreground border-input box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
           <div className='flex items-center gap-2'>
             <Loader2 className='h-4 w-4 animate-spin' />
             <span>Loading users...</span>
@@ -166,7 +166,7 @@ export function UserMultiSelect({
   if (disabled || users.length === 0) {
     return (
       <div ref={wrapperRef} className='w-full'>
-        <div className='text-muted-foreground box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
+        <div className='bg-background text-muted-foreground border-input box-border flex w-full cursor-not-allowed items-center justify-between rounded-md border px-3 py-2 text-sm'>
           <span className='truncate'>
             {users.length === 0 ? 'All users already added' : placeholder}
           </span>
@@ -179,7 +179,7 @@ export function UserMultiSelect({
   return (
     <div ref={wrapperRef} className='w-full'>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger className='box-border flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800'>
+        <PopoverTrigger className='bg-background text-foreground border-input hover:bg-accent hover:text-accent-foreground box-border flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm'>
           <div className='flex min-w-0 flex-1 items-center gap-1 overflow-hidden'>
             {selectedLabels.length === 0 ? (
               <span className='text-muted-foreground truncate'>{placeholder}</span>
@@ -201,7 +201,7 @@ export function UserMultiSelect({
 
         <PopoverContent
           align='start'
-          className='text-popover-foreground pointer-events-auto rounded-md border p-0 shadow-md'
+          className='bg-popover text-popover-foreground border-border pointer-events-auto rounded-md border p-0 shadow-md'
           side='bottom'
           style={{
             width:
@@ -224,7 +224,9 @@ export function UserMultiSelect({
                 <label
                   key={user.id}
                   className={`hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm ${
-                    checked ? 'bg-accent/40' : ''
+                    checked
+                      ? 'bg-accent text-accent-foreground font-semibold'
+                      : 'text-popover-foreground'
                   }`}
                 >
                   <Checkbox
