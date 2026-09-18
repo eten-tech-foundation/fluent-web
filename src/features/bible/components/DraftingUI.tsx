@@ -20,6 +20,7 @@ import {
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -27,6 +28,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -159,6 +161,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [editorName, setPresenceWarning]);
 
   const trackAiUsageMutation = useTrackAiUsage();
+  const trackAiUsage = trackAiUsageMutation.mutate;
+
+  // Only scripture actually filled from AI can be recorded as an accepted verse draft.
+  const aiFilledVersesRef = useRef(new Set<string>());
 
   const saveVerse = useCallback(
     async (verse: number, payload: SavePayload) => {
@@ -184,7 +190,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         },
       });
 
-      if (projectItem.isAiEnabled) {
+      if (
+        projectItem.isAiEnabled &&
+        aiFilledVersesRef.current.has(`${projectItem.chapterAssignmentId}/${verse}`) &&
+        content.trim()
+      ) {
         trackAiUsageMutation.mutate({
           bibleTextId: sourceVerse.id,
           projectUnitId: projectItem.projectUnitId,
@@ -200,6 +210,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [
       addVerseMutation,
       projectItem.projectUnitId,
+      projectItem.chapterAssignmentId,
       sourceVerses,
       userdetail,
       projectItem.isAiEnabled,
@@ -240,35 +251,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [sourceVerses]);
 
   const {
-    suggestions: aiSuggestions,
-    isAiThresholdMet,
-    suggestionStatus,
-  } = useAiSuggestions(
-    projectItem.projectUnitId,
-    projectItem.bibleId,
-    projectItem.bookCode,
-    projectItem.chapterNumber,
-    verseMapping,
-    activeVerseId,
-    projectItem.isAiEnabled && isDraft
-  );
-
-  const fireToast = useAiSuggestionToast();
-
-  useEffect(() => {
-    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
-      fireToast(projectItem.targetLanguage);
-    }
-  }, [
-    isAiThresholdMet,
-    fireToast,
-    projectItem.targetLanguage,
-    projectItem.isAiEnabled,
-    isDraft,
-    readOnly,
-  ]);
-
-  const {
     pericopes,
     fullPericopes,
     isPericopeMode,
@@ -297,6 +279,61 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealNextVerse,
   });
 
+  const aiScope = useMemo(
+    () =>
+      isPericopeMode && pericopes
+        ? pericopeSuggestionScope(pericopes, activeVerseId, sourceVerses, targetVerses)
+        : undefined,
+    [isPericopeMode, pericopes, activeVerseId, sourceVerses, targetVerses]
+  );
+
+  // Remember translator-owned inputs even when they are intentionally cleared, so AI does not
+  // immediately request and refill them while the translator is still working.
+  const userTouchedVersesRef = useRef<Set<number>>(new Set());
+  const touchedTitlesRef = useRef(new Set<number>());
+  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
+  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+
+  const {
+    suggestions: aiSuggestions,
+    headingSuggestions = {},
+    isAiThresholdMet,
+    suggestionStatus,
+  } = useAiSuggestions(
+    projectItem.projectUnitId,
+    projectItem.bibleId,
+    projectItem.bookCode,
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    projectItem.isAiEnabled && isDraft && !readOnly,
+    {
+      pericope: aiScope,
+      canSuggest: isDraft && !readOnly && !(displayMode === 'pericope' && isPericopeLoading),
+      titledVerseNumbers: verses
+        .filter(verse => verse.markers?.headings?.length)
+        .map(verse => verse.verseNumber),
+      touchedTitleVerseNumbers: isAiJustEnabled ? [] : [...touchedTitlesRef.current],
+      draftedVerseNumbers: verses
+        .filter(verse => verse.content.trim())
+        .map(verse => verse.verseNumber),
+    }
+  );
+
+  const fireToast = useAiSuggestionToast();
+
+  useEffect(() => {
+    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
+      fireToast(projectItem.targetLanguage);
+    }
+  }, [
+    isAiThresholdMet,
+    fireToast,
+    projectItem.targetLanguage,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
   // Pericope mode handles missing resource content inside each group, so a crossing
   // group can still show its available neighboring chapter.
   const showResourceBiblePlaceholder =
@@ -400,6 +437,21 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
+  // Reset only resource state: remounting the drafting UI would discard pending verse saves.
+  useEffect(() => {
+    setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
+    setResourceBibleTabs([]);
+    setResourcePanelSelectedBibleId(null);
+    setCurrentResource(RESOURCE_NAMES[0]);
+    setCurrentLanguage('');
+    setShowResources(false);
+    setActiveLeftTab('resources');
+    setOccurrenceRules({});
+    isInitializedRef.current = false;
+    lastSavedStateRef.current = null;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  }, [projectItem.chapterAssignmentId]);
+
   // Initialize resource state from saved data
   useEffect(() => {
     if (!isFetched || isInitializedRef.current) return;
@@ -449,6 +501,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [
     isFetched,
     savedResourceState,
+    projectItem.chapterAssignmentId,
     projectItem.sourceLangCode,
     projectItem.book,
     projectItem.chapterNumber,
@@ -562,10 +615,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router,
   ]);
 
-  // Keep track of verses that the user has manually typed in or that have been
-  // auto-populated, so we never auto-populate a verse the user is working on.
-  const userTouchedVersesRef = useRef<Set<number>>(new Set());
-
   const handleTextChangeWithTracking = useCallback(
     (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
       userTouchedVersesRef.current.add(verseNumber);
@@ -574,35 +623,118 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [handleTextChange]
   );
 
+  const handleTitleChange = useCallback(
+    (verseNumber: number, title: string) => {
+      touchedTitlesRef.current.add(verseNumber);
+      if (title.trim() && !isValidHeadingText(title)) return;
+      const target = verses.find(verse => verse.verseNumber === verseNumber);
+      if (!target || readOnly) return;
+      const previous = target.markers?.headings ?? [];
+      const headings = title.trim()
+        ? [{ marker: previous[0]?.marker ?? 's1', text: title }, ...previous.slice(1)]
+        : previous.slice(1);
+      handleTextChange(verseNumber, target.content, { ...target.markers, headings });
+    },
+    [verses, readOnly, handleTextChange]
+  );
+
   useEffect(() => {
+    const justEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+    wasAiEnabledRef.current = projectItem.isAiEnabled;
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
-    // Which verses a suggestion may land in. The textarea path shows one verse at a time, so it
-    // fills the verse in focus. The pericope editor shows the whole pericope at once, so the
-    // pericope populates progressively, verse by verse, as each suggestion arrives (#314).
-    const candidateVerseNumbers =
-      config.features.rtePericope && currentPericopeGroup
-        ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
-        : [activeVerseId];
+    // An explicit opt-in is a new request for every empty input. While AI stays
+    // on, clearing a verse still leaves it alone so the drafter can type.
+    if (justEnabled) {
+      verses.forEach(verse => {
+        if (!verse.content.trim()) userTouchedVersesRef.current.delete(verse.verseNumber);
+        if (!verse.markers?.headings?.length) touchedTitlesRef.current.delete(verse.verseNumber);
+      });
+    }
 
-    pendingAiAutoFills({
+    // Both pericope surfaces display the whole group, independent of cursor focus.
+    const candidateVerseNumbers = currentPericopeGroup
+      ? sourceVerses
+          .filter(source =>
+            currentPericopeGroup.verses.some(
+              verse =>
+                verse.chapterNumber === projectItem.chapterNumber &&
+                verse.verseNumber === source.verseNumber
+            )
+          )
+          .map(verse => verse.verseNumber)
+      : [activeVerseId];
+
+    const fills = pendingAiAutoFills({
       candidateVerseNumbers,
       verses,
       suggestions: aiSuggestions,
       touchedVerseNumbers: userTouchedVersesRef.current,
-    }).forEach(fill => {
+    });
+    const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
+    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
+    const titleFill =
+      currentPericopeGroup?.pericopeTitle?.trim() &&
+      firstTarget &&
+      firstSource &&
+      !firstTarget.markers?.headings?.length &&
+      !touchedTitlesRef.current.has(firstTarget.verseNumber) &&
+      heading?.bibleTextId === firstSource.id &&
+      isValidHeadingText(heading.suggestedText)
+        ? {
+            verseNumber: firstTarget.verseNumber,
+            markers: {
+              ...firstTarget.markers,
+              headings: [{ marker: 's1', text: heading.suggestedText }],
+            },
+          }
+        : undefined;
+    if (titleFill) touchedTitlesRef.current.add(titleFill.verseNumber);
+
+    fills.forEach(fill => {
+      aiFilledVersesRef.current.add(`${projectItem.chapterAssignmentId}/${fill.verseNumber}`);
       userTouchedVersesRef.current.add(fill.verseNumber);
       // The verse's own markers ride along: a fill that dropped them would null the paragraph
       // structure of a verse the translator laid out and left empty (#400 review).
-      handleTextChange(fill.verseNumber, fill.text, fill.markers);
+      handleTextChange(
+        fill.verseNumber,
+        fill.text,
+        titleFill?.verseNumber === fill.verseNumber ? titleFill.markers : fill.markers
+      );
+      const source = sourceVerses.find(verse => verse.verseNumber === fill.verseNumber);
+      if (source) {
+        trackAiUsage({
+          bibleTextId: source.id,
+          projectUnitId: projectItem.projectUnitId,
+          wasUsed: false,
+        });
+      }
     });
+    if (titleFill && firstTarget && firstSource && currentPericopeGroup) {
+      if (!fills.some(fill => fill.verseNumber === titleFill.verseNumber)) {
+        handleTextChange(titleFill.verseNumber, firstTarget.content, titleFill.markers);
+      }
+      trackAiUsage({
+        bibleTextId: firstSource.id,
+        projectUnitId: projectItem.projectUnitId,
+        pericopeNumber: currentPericopeGroup.pericopeNumber,
+        wasUsed: false,
+      });
+    }
   }, [
     activeVerseId,
+    headingSuggestions,
     currentPericopeGroup,
     aiSuggestions,
     verses,
     handleTextChange,
     projectItem.isAiEnabled,
+    projectItem.projectUnitId,
+    projectItem.chapterAssignmentId,
+    projectItem.chapterNumber,
+    sourceVerses,
+    trackAiUsage,
     isDraft,
     readOnly,
   ]);
@@ -785,6 +917,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       <div ref={containerRef} className='flex h-full overflow-hidden'>
         {showResources && isInitializedRef.current && (
           <DraftingResourceSidebar
+            key={projectItem.chapterAssignmentId}
             activeFindingsCount={activeFindingsCount}
             activeLeftTab={effectiveActiveLeftTab}
             checksContent={
@@ -937,6 +1070,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           handleNextClick={handleNextClick}
                           handleNextPericopeClick={handleNextPericopeClick}
                           handleTextChange={handleTextChangeWithTracking}
+                          handleTitleChange={handleTitleChange}
                           isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                           isAiThresholdMet={isAiThresholdMet ?? false}
                           isTranslationComplete={isTranslationComplete}

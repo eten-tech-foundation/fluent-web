@@ -138,13 +138,13 @@ describe('PericopeRteGroup', () => {
       expect(screen.getByText('Generating...')).toBeInTheDocument();
     });
 
-    it('stops once the suggestion has landed', () => {
+    it('keeps the notice until the rest of the group is ready', () => {
       renderGroup({ ...waiting, aiSuggestions: { 1: 'Sugerencia.' } });
 
-      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
     });
 
-    it('says nothing about a verse that is already drafted', () => {
+    it('still shows pending work when the focused verse is already drafted', () => {
       renderGroup({
         ...waiting,
         verses: [
@@ -153,6 +153,11 @@ describe('PericopeRteGroup', () => {
         ] as TargetVerse[],
       });
 
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
+    });
+
+    it('stops once all suggestions have landed', () => {
+      renderGroup({ ...waiting, aiSuggestions: { 1: 'First draft', 2: 'Second draft' } });
       expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
     });
   });
@@ -177,6 +182,34 @@ describe('PericopeRteGroup', () => {
     ]);
   });
 
+  it('renders the title once and preserves it through scripture edits', () => {
+    const title = { marker: 's1', text: 'My section title' };
+    const secondary = { marker: 'r', text: 'A reference' };
+    renderGroup({
+      hasTitle: true,
+      verses: [
+        { verseNumber: 1, content: 'First verse', markers: { headings: [title, secondary] } },
+        { verseNumber: 2, content: '' },
+      ],
+    });
+    const props = editorProps.current as {
+      verses: Array<{ markers: { headings: unknown[] } }>;
+      onVersesChange: (changes: unknown[]) => void;
+    };
+    expect(props.verses[0].markers.headings).toEqual([secondary]);
+    props.onVersesChange([
+      {
+        verseNumber: 1,
+        text: 'Edited scripture',
+        markers: { headings: [secondary], paragraphs: [{ marker: 'p', offset: 0 }] },
+      },
+    ]);
+    expect(handleTextChange).toHaveBeenCalledWith(1, 'Edited scripture', {
+      headings: [title, secondary],
+      paragraphs: [{ marker: 'p', offset: 0 }],
+    });
+  });
+
   it('forwards editor markers to the save chain', () => {
     const split = {
       paragraphs: [
@@ -194,4 +227,19 @@ describe('PericopeRteGroup', () => {
 
     expect(handleTextChange).toHaveBeenCalledWith(1, 'Split text.', split);
   });
+
+  it.each(['generating', 'unavailable', 'error'] as const)(
+    'does not show %s for an optional title on fully drafted scripture',
+    status => {
+      renderGroup({
+        hasTitle: true,
+        isAiActive: true,
+        isAiThresholdMet: true,
+        suggestionStatus: status,
+      });
+      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+      expect(screen.queryByText(/AI translation not/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next Pericope' })).toBeEnabled();
+    }
+  );
 });
