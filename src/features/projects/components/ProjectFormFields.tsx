@@ -66,10 +66,13 @@ export function ProjectFormFields({
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =
-    languages?.map(lang => ({
-      value: lang.id.toString(),
-      label: `${lang.langName} (${lang.langCodeIso6393})`,
-    })) ?? [];
+    languages
+      ?.slice()
+      .sort((a, b) => a.langName.localeCompare(b.langName))
+      .map(lang => ({
+        value: lang.id.toString(),
+        label: `${lang.langName} (${lang.langCodeIso6393})`,
+      })) ?? [];
 
   return (
     <>
