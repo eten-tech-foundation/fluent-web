@@ -163,6 +163,10 @@ export function useAiSuggestions(
       if (stale) return;
       if (result.isError || headingResult?.isError) {
         setSuggestionStatus('error');
+        if (attempts < retries) {
+          attempts += 1;
+          timer = setTimeout(() => void fetchPending(), RETRY_DELAY_MS);
+        }
         return;
       }
       const ready = new Set(
@@ -218,7 +222,10 @@ export function useAiSuggestions(
     ? Number(activeNumbersKey.split(',')[0]) || 1
     : activeVerseNumber;
   const fetchHeadingsRef = useRef(fetchHeadings);
-  fetchHeadingsRef.current = fetchHeadings;
+  useEffect(() => {
+    fetchHeadingsRef.current = fetchHeadings;
+  }, [fetchHeadings]);
+  const hasPendingWork = !!requiredIdsKey || !!requiredTitlesKey;
   useEffect(() => {
     const contextChanged = queueContextRef.current !== contextKey;
     if (contextChanged) {
@@ -229,11 +236,9 @@ export function useAiSuggestions(
     const justEnabled = enabled && !wasQueueEnabledRef.current;
     wasQueueEnabledRef.current = enabled;
     if (!canSuggest || !idsStr || (isPericope && !pericopeNumbersKey)) return;
+    if (enabled && isPericope && !hasPendingWork) return;
     if (!enabled && checkedThresholdsRef.current.has(contextKey)) return;
     if (!isPericope && queueVerseNumber <= lastQueuedVerseRef.current && !justEnabled) return;
-    if (!isPericope) {
-      lastQueuedVerseRef.current = Math.max(lastQueuedVerseRef.current, queueVerseNumber);
-    }
     const controller = new AbortController();
     const queue = async () => {
       const pericopeRequest = isPericope && enabled;
@@ -259,6 +264,9 @@ export function useAiSuggestions(
       if (!res.ok) throw new Error('Failed to queue AI suggestions');
       const data = (await res.json()) as { thresholdMet: boolean };
       if (controller.signal.aborted) return;
+      if (!isPericope) {
+        lastQueuedVerseRef.current = Math.max(lastQueuedVerseRef.current, queueVerseNumber);
+      }
       checkedThresholdsRef.current.add(contextKey);
       setIsAiThresholdMet(data.thresholdMet);
       if (enabled)
@@ -281,6 +289,7 @@ export function useAiSuggestions(
     contextKey,
     idsStr,
     isPericope,
+    hasPendingWork,
     pericopeNumbersKey,
     queueVerseNumber,
     canSuggest,

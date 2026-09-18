@@ -38,4 +38,12 @@ describe('pericope suggestion scope', () => {
       titleVerseNumbers: {},
     });
   });
+
+  it('does not request optional titles for groups already saved in full', () => {
+    const targets = [1, 2].map(verseNumber => ({ verseNumber, content: 'Saved scripture' }));
+    expect(pericopeSuggestionScope(groups, 1, source, targets).titleVerseNumbers).toEqual({});
+    expect(pericopeSuggestionScope(groups, 1, source, targets.slice(1)).titleVerseNumbers).toEqual({
+      '0': 1,
+    });
+  });
 });

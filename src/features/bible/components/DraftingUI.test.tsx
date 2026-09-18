@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
+import type { SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import type * as ResourcePanelModule from '@/features/resources/components/ResourcePanel';
 import { config } from '@/lib/config';
 import {
@@ -799,6 +800,44 @@ describe('DraftingUI', () => {
     expect(screen.queryByRole('tab', { name: 'Alternative Bible' })).not.toBeInTheDocument();
   });
 
+  it('clears resource Bibles and pending resource persistence when assignments change', async () => {
+    const user = userEvent.setup();
+    const persist = vi.fn();
+    mockUseSaveResourceState.mockReturnValue({ mutate: persist });
+    const props = {
+      projectItem: mockProjectItem,
+      sourceVerses: mockSourceVerses,
+      targetVerses: mockTargetVerses,
+      userdetail: { id: 1 } as unknown as User,
+    };
+    const { rerender } = render(<DraftingUI {...props} />);
+    await user.click(screen.getByRole('button', { pressed: false }));
+    await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+
+    rerender(
+      <DraftingUI
+        {...props}
+        projectItem={{ ...mockProjectItem, chapterAssignmentId: 2, bookCode: 'MRK' }}
+      />
+    );
+    expect(screen.queryByText('Alternative verse 1 text')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 600));
+    });
+    expect(
+      persist.mock.calls.every(
+        ([payload]) =>
+          (payload as { resourceState: { resources: { tabStatus: boolean } } }).resourceState
+            .resources.tabStatus === false
+      )
+    ).toBe(true);
+    await user.click(screen.getByRole('button', { pressed: false }));
+    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('none');
+  });
+
   it('keeps each opened resource Bible beside the source with its own content', async () => {
     const user = userEvent.setup();
 
@@ -1107,7 +1146,7 @@ describe('DraftingUI', () => {
       expect(screen.getByLabelText('Section title')).toHaveValue('My title');
     });
 
-    it('preserves saved verse content when only its title needs a suggestion', () => {
+    it('preserves saved verse content without accepting an AI verse for a title-only fill', async () => {
       mockUseDrafting.mockReturnValue(
         defaultDraftingHookResult({
           verses: [{ verseNumber: 1, content: 'Saved scripture' }, EMPTY_PERICOPE[1]],
@@ -1125,6 +1164,123 @@ describe('DraftingUI', () => {
         headings: [{ marker: 's1', text: 'La creación' }],
       });
       expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+      await onSave(1, {
+        content: 'Saved scripture',
+        markers: {
+          headings: [{ marker: 's1', text: 'La creación' }],
+        },
+      });
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        pericopeNumber: '1',
+        wasUsed: false,
+      });
+    });
+
+    it('accepts a verse suggestion only after its filled scripture is saved', async () => {
+      renderWithAi();
+      mockTrackAiUsage.mockClear();
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+      await onSave(1, { content: 'Suggestion for 1' });
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        wasUsed: true,
+      });
+    });
+
+    it('keeps accepted AI verse usage scoped to the assignment that filled it', async () => {
+      const { rerender } = renderWithAi();
+      const saved = mockSourceVerses.map(verse => ({
+        verseNumber: verse.verseNumber,
+        content: 'Human scripture',
+      }));
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: saved, handleTextChange })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: {},
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, chapterAssignmentId: 2, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={saved}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      mockTrackAiUsage.mockClear();
+      const { onSave } = mockUseDrafting.mock.calls.at(-1)?.[0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+      await onSave(1, {
+        content: 'Human scripture',
+        markers: { headings: [{ marker: 's1', text: 'Title' }] },
+      });
+      expect(mockTrackAiUsage).not.toHaveBeenCalled();
+    });
+
+    it('matches AI fill candidates by chapter as well as verse number', () => {
+      mockUsePericope.mockReturnValue(
+        defaultPericopeHookResult({
+          isPericopeMode: true,
+          currentPericopeGroup: {
+            ...CURRENT_GROUP,
+            verses: [
+              { chapterNumber: 1, verseNumber: 2 },
+              { chapterNumber: 2, verseNumber: 1 },
+            ],
+          },
+        })
+      );
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledTimes(1);
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'Suggestion for 2', undefined);
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 102,
+        projectUnitId: 10,
+        wasUsed: false,
+      });
+    });
+
+    it('updates title eligibility when saved target verses arrive', () => {
+      const projectItem = { ...mockProjectItem, isAiEnabled: true };
+      const { rerender } = render(
+        <DraftingUI
+          projectItem={projectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={[]}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      const options = () =>
+        mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+          pericope: { titleVerseNumbers: Record<string, number> };
+        };
+      expect(options().pericope.titleVerseNumbers).toEqual({ '1': 1 });
+      rerender(
+        <DraftingUI
+          projectItem={projectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockSourceVerses.map(verse => ({
+            verseNumber: verse.verseNumber,
+            content: 'Saved text',
+          }))}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      expect(options().pericope.titleVerseNumbers).toEqual({});
     });
 
     it('does not suggest or render a title for a group without a source title', () => {

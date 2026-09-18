@@ -1,4 +1,4 @@
-import type { PericopeGroup, Source } from '@/lib/types';
+import type { PericopeGroup, Source, TargetVerse } from '@/lib/types';
 
 export interface PericopeSuggestionScope {
   verseNumbers: number[];
@@ -11,8 +11,14 @@ export interface PericopeSuggestionScope {
 export function pericopeSuggestionScope(
   pericopes: PericopeGroup[],
   activeVerseNumber: number,
-  sourceVerses: Source[]
+  sourceVerses: Source[],
+  initialTargetVerses: TargetVerse[] = []
 ): PericopeSuggestionScope {
+  // Saved scripture does not need an optional AI title when the chapter is reopened.
+  // Use the initial snapshot so a late title can still arrive after this session fills verses.
+  const drafted = new Set(
+    initialTargetVerses.filter(verse => verse.content.trim()).map(verse => verse.verseNumber)
+  );
   const available = new Set(sourceVerses.map(verse => verse.verseNumber));
   const groups = pericopes
     .map(group => ({
@@ -28,7 +34,10 @@ export function pericopeSuggestionScope(
     pericopeNumbers: requested.map(group => group.pericopeNumber),
     titleVerseNumbers: Object.fromEntries(
       requested
-        .filter(group => group.pericopeTitle?.trim())
+        .filter(
+          group =>
+            group.pericopeTitle?.trim() && !group.numbers.every(number => drafted.has(number))
+        )
         .map(group => [group.pericopeNumber, group.numbers[0]])
     ),
   };

@@ -18,7 +18,9 @@ missing verse drafts and eligible titles. Suggestions for the next group are fet
 the query cache, but are not inserted or logged until that group becomes active.
 
 Fetching retries every five seconds while a requested verse or title is missing, up to
-twelve retries in pericope view. The notice describes the whole active group. Moving the
+twelve retries in pericope view, including retries after transient fetch failures. Queue guards
+advance only after a successful response, so effect cleanup cannot permanently skip a request.
+The notice describes the whole active group. Moving the
 caret within a group does not restart generation. Changing the assignment changes the
 cache identity. Read-only and non-drafting surfaces do not queue or fetch suggestions.
 
@@ -36,7 +38,9 @@ is present, then restores it when passing scripture edits back to the save pipel
 keeps title words out of scripture text and avoids displaying the same title twice.
 
 Only an empty, untouched title receives the generated suggestion. A group without a source
-title requests no heading suggestion. The input uses the same 300-character, single-line
+title requests no heading suggestion. Groups whose scripture was already fully saved when loaded
+do not request an optional title or show title-only generation errors. A title can still arrive
+after verses generated during the current session. The input uses the same 300-character, single-line
 validation as the existing heading editor. Invalid input stays visible for correction and is
 not saved. The API independently validates generated text and tracks the selected pericope
 set, so an older set's in-flight result cannot become the current title.
@@ -55,6 +59,8 @@ save and preserve the current verse text.
 - `POST /ai-suggestions/usage`: each inserted verse is logged with `wasUsed: false` immediately.
 - `POST /ai-suggestions/pericopes/usage`: same payload plus `pericopeNumber`, logging the
   title separately. Prefetch, existing authored text, and hidden groups create no exposure.
+- Accepted verse usage is recorded only for verse text filled from a suggestion in the same
+  assignment. A title-only update preserves the verse without claiming an AI verse was accepted.
 
 Verse mode retains its cursor-based `queue-next` workflow. The server's separate heading
 jobs use `pericopeNumber` and `pericopeSetId`; the worker receives the source title and full

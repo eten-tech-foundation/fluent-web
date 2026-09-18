@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -24,19 +26,34 @@ interface HookProps {
   scope?: typeof pericope;
   unit: number;
   touchedTitleVerseNumbers?: number[];
+  draftedVerseNumbers?: number[];
 }
 
-function setup(enabled = true, canSuggest = true, initialScope: typeof pericope | null = pericope) {
+function setup(
+  enabled = true,
+  canSuggest = true,
+  initialScope: typeof pericope | null = pericope,
+  strict = false
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      {strict ? <StrictMode>{children}</StrictMode> : children}
+    </QueryClientProvider>
   );
   return renderHook(
-    ({ activeVerse, enabled: aiEnabled, scope, unit, touchedTitleVerseNumbers = [] }: HookProps) =>
+    ({
+      activeVerse,
+      enabled: aiEnabled,
+      scope,
+      unit,
+      touchedTitleVerseNumbers = [],
+      draftedVerseNumbers = [1, 2, 3],
+    }: HookProps) =>
       useAiSuggestions(unit, 2, 'GEN', 1, mapping, activeVerse, aiEnabled, {
         pericope: scope,
         canSuggest,
-        draftedVerseNumbers: [1, 2, 3],
+        draftedVerseNumbers,
         touchedTitleVerseNumbers,
       }),
     {
@@ -231,5 +248,112 @@ describe('AI requests', () => {
     rerender({ activeVerse: 2, enabled: true, scope: undefined, unit: 1 });
     await act(async () => {});
     expect(queuedVerses).toEqual([4, 5]);
+  });
+
+  it('reissues a queue request aborted by StrictMode setup cleanup', async () => {
+    const { result } = setup(true, true, null, true);
+    await waitFor(() => expect(result.current.isAiThresholdMet).toBe(true));
+    expect(queuedVerses).toContain(4);
+  });
+
+  it('can retry an aborted verse queue when navigation returns before it succeeds', async () => {
+    let complete: (() => void) | undefined;
+    let started = 0;
+    server.use(
+      http.post(`${api}/queue-next`, async () => {
+        started += 1;
+        if (started === 1)
+          await new Promise<void>(resolve => {
+            complete = resolve;
+          });
+        return HttpResponse.json({ thresholdMet: true });
+      })
+    );
+    const { result, rerender } = setup(true, true, null);
+    await waitFor(() => expect(started).toBe(1));
+    rerender({ activeVerse: 4, enabled: false, scope: undefined, unit: 1 });
+    rerender({ activeVerse: 4, enabled: true, scope: undefined, unit: 1 });
+    complete?.();
+    await waitFor(() => expect(result.current.isAiThresholdMet).toBe(true));
+    expect(started).toBeGreaterThan(1);
+  });
+
+  it('recovers from a failed poll without moving the cursor or reloading', async () => {
+    let failing = true;
+    server.use(
+      http.get(api, () =>
+        failing
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({
+              data: readyVerses.map(number => ({
+                bibleTextId: 100 + number,
+                suggestedText: `Draft ${number}`,
+              })),
+            })
+      )
+    );
+    const { result } = setup();
+    await waitFor(() => expect(result.current.suggestionStatus).toBe('error'));
+    failing = false;
+    await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'), { timeout: 7000 });
+    expect(result.current.suggestions[8]).toBe('Draft 8');
+  }, 10000);
+
+  it('cancels failed-poll retries when the hook unmounts', async () => {
+    let failedGets = 0;
+    server.use(
+      http.get(api, () => {
+        failedGets += 1;
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+    const { result, unmount } = setup();
+    await waitFor(() => expect(result.current.suggestionStatus).toBe('error'));
+    unmount();
+    const count = failedGets;
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 5200));
+    });
+    expect(failedGets).toBe(count);
+  }, 10000);
+
+  it('ignores a queue response from the previous assignment', async () => {
+    let complete: (() => void) | undefined;
+    let oldStarted = false;
+    server.use(
+      http.post(`${api}/queue-next`, async ({ request }) => {
+        const { projectUnitId } = (await request.json()) as { projectUnitId: number };
+        if (projectUnitId === 1) {
+          oldStarted = true;
+          await new Promise<void>(resolve => {
+            complete = resolve;
+          });
+        }
+        return HttpResponse.json({ thresholdMet: projectUnitId === 1 });
+      })
+    );
+    const { result, rerender } = setup(true, true, null);
+    await waitFor(() => expect(oldStarted).toBe(true));
+    rerender({ activeVerse: 4, enabled: true, scope: undefined, unit: 2 });
+    await act(async () => {
+      complete?.();
+    });
+    await waitFor(() => expect(result.current.suggestions[4]).toBe('Draft 4'));
+    expect(result.current.isAiThresholdMet).toBe(false);
+  });
+
+  it('does not queue a fully drafted scope without required titles', async () => {
+    const { result, rerender } = setup(false);
+    await waitFor(() => expect(queuedVerses).toHaveLength(1));
+    rerender({
+      activeVerse: 4,
+      enabled: true,
+      scope: pericope,
+      unit: 1,
+      draftedVerseNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    });
+    await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
+    expect(queued).toEqual([]);
+    expect(headingGets).toBe(0);
   });
 });

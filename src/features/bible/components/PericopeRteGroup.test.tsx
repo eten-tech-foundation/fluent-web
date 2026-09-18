@@ -227,4 +227,19 @@ describe('PericopeRteGroup', () => {
 
     expect(handleTextChange).toHaveBeenCalledWith(1, 'Split text.', split);
   });
+
+  it.each(['generating', 'unavailable', 'error'] as const)(
+    'does not show %s for an optional title on fully drafted scripture',
+    status => {
+      renderGroup({
+        hasTitle: true,
+        isAiActive: true,
+        isAiThresholdMet: true,
+        suggestionStatus: status,
+      });
+      expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+      expect(screen.queryByText(/AI translation not/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next Pericope' })).toBeEnabled();
+    }
+  );
 });

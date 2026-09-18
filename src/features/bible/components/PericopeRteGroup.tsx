@@ -112,7 +112,11 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   );
 
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+  const isPericopeDrafted = groupVerses.every(gv =>
+    verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
+  );
   const hasPendingTitle =
+    !isPericopeDrafted &&
     hasTitle &&
     !verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers?.headings
       ?.length;
@@ -123,12 +127,6 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         !aiSuggestions[verse.verseNumber] &&
         !verses.find(target => target.verseNumber === verse.verseNumber)?.content.trim()
     );
-
-  // The pericope-level reading of the verse button's "don't advance from an empty verse" rule:
-  // the whole pericope is on screen, so all of it has to be drafted before moving past it.
-  const isPericopeDrafted = groupVerses.every(gv =>
-    verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
-  );
 
   const showNextPericopeButton =
     !readOnly && isGroupActive && !isTranslationComplete && hasNextPericope;
