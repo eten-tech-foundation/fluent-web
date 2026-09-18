@@ -58,7 +58,11 @@ export const fetchYouVersionBibles = async (languageTag: string): Promise<YouVer
     Logger.logException(new Error('Failed to fetch YouVersion bibles'), {
       context: `status=${response.status} languageTag=${languageTag}`,
     });
-    return [];
+    // 404 means no bibles exist for this language — genuine empty list.
+    if (response.status === 404) return [];
+    // Everything else (5xx server fault, 401/403 auth failure, other 4xx) — throw
+    // so React Query exposes an error state rather than silently showing an empty dropdown.
+    throw new Error(`YouVersion bibles request failed with status ${response.status}`);
   }
 
   return (await response.json()) as YouVersionBible[];
@@ -66,7 +70,7 @@ export const fetchYouVersionBibles = async (languageTag: string): Promise<YouVer
 
 /**
  * Fetches all verse texts for a chapter via the server-side batch endpoint.
- * Calls fluent-api's /youversion/bibles/{bibleId}/chapters/{chapterId}/text proxy.
+ * Calls fluent-api's /youversion/bibles/{bibleId}/books/{bookId}/chapters/{chapterId}/text proxy.
  * The server fans out the per-verse passage fetches using the server-held API key.
  */
 export const fetchYouVersionChapterText = async (
@@ -74,8 +78,9 @@ export const fetchYouVersionChapterText = async (
   bookId: string,
   chapterId: number
 ): Promise<YouVersionChapterText> => {
-  const url = new URL(`${config.api.url}/youversion/bibles/${bibleId}/chapters/${chapterId}/text`);
-  url.searchParams.set('bookId', bookId);
+  const url = new URL(
+    `${config.api.url}/youversion/bibles/${bibleId}/books/${bookId}/chapters/${chapterId}/text`
+  );
 
   const response = await fetch(url.toString(), {
     method: 'GET',
@@ -86,12 +91,8 @@ export const fetchYouVersionChapterText = async (
     Logger.logException(new Error('Failed to fetch YouVersion chapter text'), {
       context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
     });
-    // 5xx: server-side fault — throw so React Query exposes error state.
-    if (response.status >= 500) {
-      throw new Error(`YouVersion chapter text request failed with status ${response.status}`);
-    }
-    // Other non-2xx (4xx etc.): treat as empty result.
-    return { bibleId, bookId, chapterId, verses: [] };
+    if (response.status === 404) return { bibleId, bookId, chapterId, verses: [] };
+    throw new Error(`YouVersion chapter text request failed with status ${response.status}`);
   }
 
   return (await response.json()) as YouVersionChapterText;
@@ -107,7 +108,6 @@ export const useYouVersionBibles = (languageTag: string, enabled: boolean = true
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: false,
-    throwOnError: false,
   });
 };
 

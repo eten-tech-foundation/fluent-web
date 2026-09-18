@@ -48,9 +48,39 @@ describe('useYouVersion', () => {
     expect(headers['api-key']).toBeUndefined();
   });
 
-  it('returns empty array when fetchYouVersionBibles receives non-2xx response', async () => {
+  it('rejects when fetchYouVersionBibles receives a 5xx response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: 'Server Error' }), { status: 500 })
+      new Response(JSON.stringify({ error: 'Server Error' }), { status: 502 })
+    );
+
+    await expect(fetchYouVersionBibles('eng')).rejects.toThrow(
+      'YouVersion bibles request failed with status 502'
+    );
+  });
+
+  it('rejects when fetchYouVersionBibles receives a 401 response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    );
+
+    await expect(fetchYouVersionBibles('eng')).rejects.toThrow(
+      'YouVersion bibles request failed with status 401'
+    );
+  });
+
+  it('rejects when fetchYouVersionBibles receives a 403 response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
+    );
+
+    await expect(fetchYouVersionBibles('eng')).rejects.toThrow(
+      'YouVersion bibles request failed with status 403'
+    );
+  });
+
+  it('returns empty array when fetchYouVersionBibles receives a 404 response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
     );
 
     const bibles = await fetchYouVersionBibles('eng');
@@ -77,7 +107,7 @@ describe('useYouVersion', () => {
     expect(data).toEqual(mockChapterText);
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(String(url)).toBe(`${config.api.url}/youversion/bibles/1/chapters/1/text?bookId=GEN`);
+    expect(String(url)).toBe(`${config.api.url}/youversion/bibles/1/books/GEN/chapters/1/text`);
     expect(init).toMatchObject({
       method: 'GET',
       credentials: 'include',
@@ -94,7 +124,17 @@ describe('useYouVersion', () => {
     );
   });
 
-  it('returns empty verses fallback object when fetchYouVersionChapterText receives a 4xx response', async () => {
+  it('rejects when fetchYouVersionChapterText receives a 401 response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    );
+
+    await expect(fetchYouVersionChapterText(1, 'GEN', 1)).rejects.toThrow(
+      'YouVersion chapter text request failed with status 401'
+    );
+  });
+
+  it('returns empty verses when fetchYouVersionChapterText receives a 404 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
     );

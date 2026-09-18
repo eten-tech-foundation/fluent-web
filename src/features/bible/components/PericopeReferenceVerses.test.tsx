@@ -92,7 +92,7 @@ describe('PericopeReferenceVerses', () => {
       http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
         HttpResponse.json(aquiferChapter(9))
       ),
-      http.get(`${config.api.url}/youversion/bibles/11/chapters/8/text`, () =>
+      http.get(`${config.api.url}/youversion/bibles/11/books/MRK/chapters/8/text`, () =>
         HttpResponse.json({
           bibleId: 11,
           bookId: 'MRK',
@@ -100,7 +100,7 @@ describe('PericopeReferenceVerses', () => {
           verses: [{ verseNumber: 1, passageId: 'MRK.8.1', content: 'YouVersion chapter eight' }],
         })
       ),
-      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, () =>
+      http.get(`${config.api.url}/youversion/bibles/11/books/MRK/chapters/9/text`, () =>
         HttpResponse.json({
           bibleId: 11,
           bookId: 'MRK',
@@ -328,7 +328,7 @@ describe('PericopeReferenceVerses', () => {
 
   it('shows missing content when a verse is omitted from YouVersion chapter text', async () => {
     server.use(
-      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, () =>
+      http.get(`${config.api.url}/youversion/bibles/11/books/MRK/chapters/9/text`, () =>
         HttpResponse.json({
           bibleId: 11,
           bookId: 'MRK',
@@ -367,7 +367,7 @@ describe('PericopeReferenceVerses', () => {
       release = resolve;
     });
     server.use(
-      http.get(`${config.api.url}/youversion/bibles/11/chapters/9/text`, async () => {
+      http.get(`${config.api.url}/youversion/bibles/11/books/MRK/chapters/9/text`, async () => {
         await ready;
         return HttpResponse.json({
           bibleId: 11,
@@ -399,7 +399,7 @@ describe('PericopeReferenceVerses', () => {
   it('shows a YouVersion chapter text failure when the server endpoint returns non-2xx', async () => {
     server.use(
       http.get(
-        `${config.api.url}/youversion/bibles/11/chapters/9/text`,
+        `${config.api.url}/youversion/bibles/11/books/MRK/chapters/9/text`,
         () => new HttpResponse(null, { status: 503 })
       )
     );

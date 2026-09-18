@@ -51,9 +51,7 @@ export const PericopeReferenceVerses = ({
           const text = textByVerse.get(verse.verseNumber);
           const loading =
             (isAquifer && aquifer.isLoading) || (isYouVersion && youVersion.isLoading);
-          const failed =
-            (isAquifer && aquifer.isError) ||
-            (isYouVersion && (youVersion.isError || youVersion.data?.verses.length === 0));
+          const failed = (isAquifer && aquifer.isError) || (isYouVersion && youVersion.isError);
 
           return (
             <span key={verse.verseNumber} className='mr-3'>
