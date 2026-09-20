@@ -49,6 +49,8 @@ export interface UseTtsPlaybackQueueOptions {
   /** Final latch values, synchronously reported before the host handles termination. */
   onRunEnd?: (aiMarkedKeys: ReadonlySet<PlayableKey>) => void;
   onScrollRequest?: (verseRef: string) => void;
+  /** Reports the sounding source without interpreting its resource metadata. */
+  onSourcePlaying?: (source: Source, segment: Segment) => void;
   onTiming?: (report: PlaybackTimingReport) => void;
   prefetchDepth?: number;
   createElement?: (src: string) => ClipAudioElement;
@@ -454,6 +456,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
         session.pendingFraction = undefined;
         reportTiming(session);
         setStatus('playing');
+        if (session.current) optionsRef.current.onSourcePlaying?.(session.current.source, segment);
         setItemState(segment.verseRef, 'playing');
       })
     );
@@ -462,6 +465,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       setActiveVerseRef(segment.verseRef);
       optionsRef.current.onScrollRequest?.(segment.verseRef);
       setItemState(segment.verseRef, 'playing');
+      optionsRef.current.onSourcePlaying?.(entry.source!, segment);
       supervision.continue();
     } else {
       element.playbackRate = rateRef.current;

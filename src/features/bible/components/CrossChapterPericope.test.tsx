@@ -131,7 +131,9 @@ describe('cross-chapter pericope display', () => {
         { ...fullGroup, verses: fullGroup.verses.filter(ref => ref.chapterNumber === 8) },
       ],
     });
-    const localColumn = screen.getAllByRole('heading', { name: '8:1' })[0].parentElement!;
+    const localColumn = screen
+      .getAllByRole('heading', { name: '8:1' })[0]
+      .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
     const placeholder = within(localColumn).getByText('No content available');
     expect(placeholder).toHaveClass('text-muted-foreground', 'text-sm');
     expect(placeholder.parentElement).toHaveClass('bg-muted');
@@ -261,7 +263,9 @@ describe('cross-chapter pericope display', () => {
           ],
         ]),
       });
-      const sourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
+      const sourceColumn = screen
+        .getAllByRole('heading', { name: '8:31–9:1' })[0]
+        .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
       const currentText = within(sourceColumn).getByText('8:31').nextElementSibling!;
       const neighborText = within(sourceColumn).getByText('9:1').nextElementSibling!;
 
@@ -280,7 +284,9 @@ describe('cross-chapter pericope display', () => {
         bibleVerseMap: new Map([[31, content]]),
         resourceBibleLoading: loading,
       });
-      const resourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
+      const resourceColumn = screen
+        .getAllByRole('heading', { name: '8:31–9:1' })[0]
+        .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
       const resourceText = within(resourceColumn).getByText('8:31').nextElementSibling!;
 
       expect(resourceText.textContent).toBe(loading ? 'Loading...' : 'No content available');
@@ -308,8 +314,9 @@ describe('cross-chapter pericope display', () => {
           ],
         ]),
       });
-      const scriptureColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0]
-        .parentElement!;
+      const scriptureColumn = screen
+        .getAllByRole('heading', { name: '8:31–9:1' })[0]
+        .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
       const currentText = within(scriptureColumn).getByText('8:31').nextElementSibling!;
 
       expect(currentText.textContent).toBe(content);

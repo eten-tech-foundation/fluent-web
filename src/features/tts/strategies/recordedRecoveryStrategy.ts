@@ -1,4 +1,5 @@
 import { recordedSourceForVerse } from '../resolver/selectTrack';
+import { SourceAudioLookupError } from '../resolver/sourceAudioClient';
 
 import type { FetchLike } from '../engines/serverTtsEngine';
 import type { RecordedRecoveryOptions } from '../resolver/resolvePlayables';
@@ -15,6 +16,7 @@ export interface RecordedRecoveryStrategyOptions extends RecordedRecoveryOptions
 export class RecordedRecoveryStrategy implements RecoveryStrategy {
   readonly supervision = { stallWatchdogMs: 10_000 };
   private readonly fetchFn: FetchLike;
+  private accessDenied = false;
 
   constructor(private readonly options: RecordedRecoveryStrategyOptions) {
     this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
@@ -22,6 +24,10 @@ export class RecordedRecoveryStrategy implements RecoveryStrategy {
 
   private fallBack(requests: RecoveryRequests, signal: AbortSignal): void {
     if (signal.aborted) return;
+    if (this.accessDenied) {
+      requests.giveUp('Recorded source access denied');
+      return;
+    }
     const reason = 'Recorded source unrecoverable';
     if (this.options.ttsSource === null) {
       requests.giveUp(reason);
@@ -73,6 +79,14 @@ export class RecordedRecoveryStrategy implements RecoveryStrategy {
           }
           return source;
         } catch (error) {
+          if (
+            error instanceof SourceAudioLookupError &&
+            (error.status === 401 || error.status === 403)
+          ) {
+            // Route authorization is terminal even when cached text clearance allows TTS.
+            // Retain it for any later exhaustion callback on this recovery strategy.
+            this.accessDenied = true;
+          }
           this.fallBack(requests, signal);
           throw error; // L3 suppresses the superseded load, not the hand-off.
         }

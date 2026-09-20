@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { supervisePlayback } from '../lib/playbackRecovery';
 import { ChapterAudioCache } from '../resolver/chapterCache';
 import { recordedSourceForVerse } from '../resolver/selectTrack';
+import { SourceAudioLookupError } from '../resolver/sourceAudioClient';
 import { FakeClipElement, fakeResponse } from '../testing/fakeClipElement';
 import {
   bsbChapter,
@@ -147,6 +148,36 @@ describe('RecordedRecoveryStrategy under player arbitration', () => {
     await fail(h);
     expect(h.fallback.recover).toHaveBeenCalledOnce();
     expect(h.onGiveUp).toHaveBeenCalledWith('TTS failed', undefined);
+  });
+
+  it.each([401, 403])('route %s is terminal without TTS, AI marking or handoff', async status => {
+    const h = await setup();
+    h.load.mockRejectedValue(new SourceAudioLookupError('Denied', false, undefined, status));
+    await fail(h);
+    expect(h.onGiveUp).toHaveBeenCalledWith('Recorded source access denied', 'recorded');
+    expect(h.ttsSource).not.toHaveBeenCalled();
+    expect(h.onHandOff).not.toHaveBeenCalled();
+    expect(h.onMarkAi).not.toHaveBeenCalled();
+    expect(h.element.loadCalls).toEqual([]);
+    // A delayed exhaustion callback must not revive the formerly available fallback.
+    const requests = {
+      play: vi.fn(),
+      attach: vi.fn(),
+      markAi: vi.fn(),
+      handOff: vi.fn(),
+      giveUp: vi.fn(),
+      poll: vi.fn(),
+    };
+    await h.recovery.recover(
+      { on: 'stall', source: h.source, positionMs: 0 },
+      requests,
+      new AbortController().signal
+    );
+    const options = requests.play.mock.calls[0][2] as { onExhausted: () => void };
+    options.onExhausted();
+    expect(requests.handOff).not.toHaveBeenCalled();
+    expect(requests.markAi).not.toHaveBeenCalled();
+    expect(requests.giveUp).toHaveBeenCalledWith('Recorded source access denied');
   });
 
   it.each(['resolve', 'probe', 'window'] as const)(

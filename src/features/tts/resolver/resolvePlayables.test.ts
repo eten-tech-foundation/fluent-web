@@ -291,12 +291,13 @@ describe('resolvePlayables', () => {
     expect(synthesize).not.toHaveBeenCalled();
   });
 
-  it("falls back to the response's own licence when the assignment carries none", async () => {
+  it('bars synthesis when explicit permission is absent despite allowed media metadata', async () => {
     const { ctx, synthesize } = setup(windowlessChapter());
     const older: SourceResolverContext = { ...ctx, ttsLicenseStatus: undefined };
-    await resolve(resolvePlayables(rows, older)[0].segments[0]);
-    // The fixture is a cleared Bible, so the voice is still permitted.
-    expect(synthesize).toHaveBeenCalledOnce();
+    await expect(resolve(resolvePlayables(rows, older)[0].segments[0])).rejects.toThrow(
+      'licence fence'
+    );
+    expect(synthesize).not.toHaveBeenCalled();
   });
 
   it('keeps a cleared Bible speaking when the recording lookup fails outright', async () => {

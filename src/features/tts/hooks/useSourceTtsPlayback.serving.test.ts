@@ -32,7 +32,16 @@ const setup = (served: Array<TtsServedFormat | undefined>) => {
       useSourceTtsPlayback({
         engine,
         rows: [{ verseRef: 'v1', verseNumber: 1, text: 'Source text' }],
-        sourceChapter: null,
+        sourceChapter: {
+          projectId: 1,
+          bibleId: 2,
+          bookCode: 'JHN',
+          chapter: 3,
+          languageCode: 'eng',
+          role: 'referenceBible',
+          textBibleKey: 'aq-20',
+        },
+        sourceLicence: { status: 'allowed' },
         referenceBibleId: 'aq-test',
         getRowElement: () => null,
         getViewport: () => null,
@@ -71,3 +80,15 @@ describe('useSourceTtsPlayback — which container served each clip', () => {
     expect(result.current.servingFor('v1')).toBeUndefined();
   });
 });
+
+vi.mock('../resolver/sourceAudioClient', async importOriginal => ({
+  ...(await importOriginal()),
+  fetchChapterSourceAudio: async () => ({
+    provider: 'aquifer',
+    bible: { name: 'Fixture', abbreviation: 'F' },
+    bookCode: 'JHN',
+    chapter: 3,
+    items: [],
+    verseAddressable: false,
+  }),
+}));

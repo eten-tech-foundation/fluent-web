@@ -20,7 +20,6 @@ import { toast } from 'sonner';
 
 import { isPlayableRow } from '../lib/buildTtsQueueItems';
 import { pressPrimary, pressRestart, unavailableReason } from '../lib/controlActions';
-import { createTtsSegment } from '../lib/createTtsSegment';
 import {
   type ScrollableRow,
   scrollRowIntoViewIfNeeded,
@@ -39,6 +38,7 @@ import {
   recordedFailedBarredReason,
 } from '../resolver/licenceFence';
 import { resolvePlayables, type SourceAudioRow } from '../resolver/resolvePlayables';
+import { recordingProvenance, type RecordingProvenance } from '../resolver/selectTrack';
 import {
   type ChapterSourceAudio,
   type ChapterSourceAudioRequest,
@@ -50,8 +50,11 @@ import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 import { usePlaybackTiming } from './usePlaybackTiming';
 import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
 
+import type { ProviderFactsAccess } from '../resolver/providerFacts';
+
 export interface UseSourceTtsPlaybackOptions {
   engine: TtsEngine;
+  facts?: ProviderFactsAccess;
   /** Rows in the order they are read on screen; unplayable ones may be included. */
   rows: readonly SourceAudioRow[];
   /** Null for reference-panel text: its provider identity is not a Fluent Bible id. */
@@ -111,6 +114,8 @@ export interface PericopePlaybackView {
 }
 
 export interface SourceTtsPlaybackApi {
+  /** Actual sounding recording metadata; no entry for TTS, loading or stopped playback. */
+  recording?: RecordingProvenance & { textBibleKey: string | null; notice: string | null };
   status: TtsPlaybackStatus;
   /** Live-run badge channel; idle controls read the registry instead. */
   aiMarkedKeys: ReadonlySet<string>;
@@ -174,13 +179,25 @@ export const useSourceTtsPlayback = (
     rows,
     sourceChapter,
     sourceLicence,
+    facts,
     referenceBibleId,
     getRowElement,
     getViewport,
     pageKey,
     enabled = true,
   } = options;
-  const licenceStatus = sourceLicence?.status;
+  const [, refreshFacts] = useState(0);
+  const textKey = sourceChapter?.textBibleKey ?? null;
+  const observedStatus = facts ? facts.observedStatus(textKey) : sourceLicence?.status;
+  const licenceStatus = facts ? facts.status(textKey) : sourceLicence?.status;
+  const [soundingRecording, setSoundingRecording] = useState<RecordingProvenance | null>(null);
+  const selectionSlot = JSON.stringify([
+    sourceChapter?.role ?? 'projectSource',
+    sourceChapter?.role === 'referenceBible' ? sourceChapter.textBibleKey : sourceChapter?.bibleId,
+  ]);
+  const selectionKey = sourceChapter
+    ? chapterAudioKey(sourceChapter)
+    : JSON.stringify(['reference', referenceBibleId]);
   const { t } = useTranslation();
   const registry = usePlaybackRegistry();
   const offline = useOffline();
@@ -199,6 +216,9 @@ export const useSourceTtsPlayback = (
     sourceChapter,
     licenceStatus,
     referenceBibleId,
+    facts,
+    selectionKey,
+    rows,
   });
   latest.current = {
     getRowElement,
@@ -208,6 +228,9 @@ export const useSourceTtsPlayback = (
     sourceChapter,
     licenceStatus,
     referenceBibleId,
+    facts,
+    selectionKey,
+    rows,
   };
   const [cache] = useState(() => new ChapterAudioCache());
   const [itemServing, setItemServing] = useState<Record<string, TtsServedFormat>>({});
@@ -218,7 +241,8 @@ export const useSourceTtsPlayback = (
         pageKey: currentPage,
         sourceChapter: chapter,
         licenceStatus: currentLicence,
-        referenceBibleId: referenceId,
+        facts: currentFacts,
+        selectionKey: capturedSelection,
       } = latest.current;
       const construction = {
         engine: currentEngine,
@@ -235,33 +259,22 @@ export const useSourceTtsPlayback = (
           pericopeId,
           // The assignment's answer first; a held response only fills in for an
           // API that does not carry the licence on the assignment yet.
-          ttsLicenseStatus: currentLicence ?? cache.peek(chapter)?.ttsLicenseStatus,
-        });
-      }
-      // Reference Bibles still use their own text/language. Never resolve their
-      // recording using the project's Bible id; provider identity wiring is separate.
-      if (referenceId === null) return [];
-      const groups = pericopeId === undefined ? sourceRows.map(row => [row]) : [sourceRows];
-      return groups
-        .filter(group => group.length > 0)
-        .map(group => {
-          const key = JSON.stringify([
-            construction.pageKey,
-            'referenceBible',
-            referenceId,
-            pericopeId ?? group[0].verseRef,
-            group.map(row => [row.verseNumber, row.langCode, row.text]),
-          ]);
-          return {
-            key,
-            segments: group.map(row =>
-              createTtsSegment(
-                { ...row, text: (row.text ?? '').trim(), langCode: row.langCode || undefined },
-                { ...construction, playableKey: key }
+          ttsLicenseStatus: currentFacts
+            ? currentFacts.status(chapter.textBibleKey ?? null)
+            : (currentLicence ?? cache.peek(chapter)?.ttsLicenseStatus),
+          facts: currentFacts,
+          isCurrent: () =>
+            latest.current.selectionKey === capturedSelection &&
+            sourceRows.every(row =>
+              latest.current.rows.some(
+                current =>
+                  current.verseRef === row.verseRef && !current.unavailable && !current.loading
               )
             ),
-          };
         });
+      }
+      // A reference must carry its exact descriptor and pass the same fence.
+      return [];
     },
     [cache]
   );
@@ -293,19 +306,27 @@ export const useSourceTtsPlayback = (
 
   const knownImpossibleReason = useCallback(
     (playable: Playable | undefined): string | null => {
-      const chapter = latest.current.sourceChapter;
-      if (!chapter || !playable) return null;
-      const verseNumbers = playable.segments.flatMap(segment => {
-        const row = itemsRef.current.find(item => item.verseRef === segment.verseRef);
-        return row ? [row.verseNumber] : [];
-      });
-      return impossibleLicenceReason(
-        t,
-        cache.peek(chapter),
-        verseNumbers,
-        cache.supportsOpus,
-        latest.current.licenceStatus
+      const baseChapter = latest.current.sourceChapter;
+      if (
+        !baseChapter ||
+        !playable ||
+        (latest.current.facts &&
+          latest.current.facts.read(baseChapter.textBibleKey ?? null).state !== 'ready')
+      )
+        return null;
+      const targetRows = playable.segments.flatMap(
+        segment => itemsRef.current.find(row => row.verseRef === segment.verseRef) ?? []
       );
+      const reasons = targetRows.map(row =>
+        impossibleLicenceReason(
+          t,
+          cache.peek({ ...baseChapter, chapter: row.chapterNumber ?? baseChapter.chapter }),
+          [row.verseNumber],
+          cache.supportsOpus,
+          latest.current.licenceStatus
+        )
+      );
+      return reasons.length && reasons.every(Boolean) ? (reasons[0] ?? null) : null;
     },
     [cache, t]
   );
@@ -315,15 +336,21 @@ export const useSourceTtsPlayback = (
         offline,
         missing: !playable,
         impossibleReason:
-          (playable ? registry.getSnapshot(playable.key).impossibleReason : null) ??
-          knownImpossibleReason(playable),
+          (facts && facts.read(textKey).state !== 'ready'
+            ? null
+            : playable
+              ? registry.getSnapshot(playable.key).impossibleReason
+              : null) ?? knownImpossibleReason(playable),
       }),
-    [knownImpossibleReason, offline, registry, t]
+    [knownImpossibleReason, offline, registry, t, facts, textKey]
   );
 
   const handleScrollRequest = useCallback(
     (verseRef: string) => {
-      rememberChapter(latest.current.sourceChapter);
+      const row = itemsRef.current.find(item => item.verseRef === verseRef);
+      const base = latest.current.sourceChapter;
+      rememberChapter(base ? { ...base, chapter: row?.chapterNumber ?? base.chapter } : null);
+      setSoundingRecording(null);
       const run = runRef.current;
       const key = run?.items.find(item => item.verseRef === verseRef)?.playableKey;
       if (run && key) {
@@ -349,7 +376,11 @@ export const useSourceTtsPlayback = (
       // a chapter, so a barred Bible is often discovered here rather than on
       // render. The verdict is read from the response the press just cached,
       // never from the error's text.
-      const chapter = latest.current.sourceChapter;
+      const errorRow = itemsRef.current.find(candidate => candidate.verseRef === item.verseRef);
+      const baseChapter = latest.current.sourceChapter;
+      const chapter = baseChapter
+        ? { ...baseChapter, chapter: errorRow?.chapterNumber ?? baseChapter.chapter }
+        : null;
       const remembered = rememberChapter(chapter);
       const response =
         (chapter ? cache.peek(chapter) : undefined) ??
@@ -381,7 +412,12 @@ export const useSourceTtsPlayback = (
           // known. Only a chapter answer proves there is no recording either,
           // and an unconfirmed licence is not a fact about the Bible — both
           // say why the voice is unavailable without touching the control.
-          if (response && verdict.bar !== 'unconfirmed') {
+          if (
+            response &&
+            verdict.bar !== 'unconfirmed' &&
+            (!latest.current.facts ||
+              latest.current.facts.read(chapter.textBibleKey ?? null).state === 'ready')
+          ) {
             registry.setImpossible(item.playableKey, reason);
             noteLicenceBar(
               cache,
@@ -405,6 +441,7 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
+    onSourcePlaying: source => setSoundingRecording(recordingProvenance(source) ?? null),
     onTiming: report => {
       // A clip has real timing only once its source resolved, so this is the
       // last moment the chapter answer is certainly still in the cache.
@@ -456,6 +493,7 @@ export const useSourceTtsPlayback = (
 
   const stopWithoutRecord = useCallback(() => {
     queueRef.current.stop();
+    setSoundingRecording(null);
     finishRun();
   }, [finishRun]);
 
@@ -467,6 +505,10 @@ export const useSourceTtsPlayback = (
       seek?: { index: number; fraction: number }
     ) => {
       if (!enabled) return;
+      const capturedKey = latest.current.selectionKey;
+      const keysForSelection = selectionKeys.current.get(capturedKey) ?? new Set<string>();
+      playables.forEach(playable => keysForSelection.add(playable.key));
+      selectionKeys.current.set(capturedKey, keysForSelection);
       const segments = playables.flatMap(playable => playable.segments);
       const first = segments.at(seek?.index ?? index);
       if (!first) return;
@@ -491,7 +533,7 @@ export const useSourceTtsPlayback = (
         const chapter = latest.current.sourceChapter;
         registry.setStaticAi(
           key,
-          !chapter || knownChapterTts(cache.peek(chapter), latest.current.licenceStatus)
+          !!chapter && knownChapterTts(cache.peek(chapter), latest.current.licenceStatus)
         );
       }
       registry.setLive(first.playableKey);
@@ -515,6 +557,56 @@ export const useSourceTtsPlayback = (
     [cache, enabled, pause, registry]
   );
 
+  useEffect(() => facts?.subscribe(() => refreshFacts(version => version + 1)), [facts]);
+  useEffect(() => {
+    if (!facts || !textKey || !enabled) return;
+    return facts.observe(textKey, () => refreshFacts(version => version + 1));
+  }, [facts, textKey, enabled]);
+  useEffect(() => {
+    if (!facts || !soundingRecording) return;
+    return facts.observe(soundingRecording.recordingKey, () =>
+      refreshFacts(version => version + 1)
+    );
+  }, [facts, soundingRecording]);
+  const previousPolicy = useRef({ selectionKey, observedStatus });
+  const selectionKeys = useRef(new Map<string, Set<string>>());
+  const slotSelections = useRef(new Map<string, string>());
+  useLayoutEffect(() => {
+    const previous = previousPolicy.current;
+    previousPolicy.current = { selectionKey, observedStatus };
+    const priorInSlot = slotSelections.current.get(selectionSlot);
+    slotSelections.current.set(selectionSlot, selectionKey);
+    const changedIdentity = priorInSlot !== undefined && priorInSlot !== selectionKey;
+    const policyRevoked =
+      previous.selectionKey === selectionKey &&
+      previous.observedStatus === 'allowed' &&
+      observedStatus !== 'allowed';
+    if (previous.selectionKey !== selectionKey || policyRevoked) {
+      if (changedIdentity || policyRevoked) stopWithoutRecord();
+      else pause();
+      cache.clear();
+      if (changedIdentity || policyRevoked) {
+        const invalidated = priorInSlot ?? selectionKey;
+        for (const key of selectionKeys.current.get(invalidated) ?? []) {
+          registry.clearRecord(key);
+          registry.setImpossible(key, null);
+        }
+        selectionKeys.current.delete(invalidated);
+      }
+      setKnownChapter(undefined);
+      lastChapterRef.current = null;
+    }
+  }, [selectionSlot, selectionKey, observedStatus, cache, pause, stopWithoutRecord, registry]);
+
+  useLayoutEffect(() => {
+    if (
+      runRef.current?.items.some(item =>
+        rows.some(row => row.verseRef === item.verseRef && row.unavailable)
+      )
+    )
+      stopWithoutRecord();
+  }, [rows, stopWithoutRecord]);
+
   const versePlayable = useCallback(
     (verseRef: string) => {
       const row = itemsRef.current.find(item => item.verseRef === verseRef);
@@ -526,10 +618,12 @@ export const useSourceTtsPlayback = (
   const groupPlayable = useCallback(
     (verseRefs: readonly string[]) => {
       const wanted = new Set(verseRefs);
+      if (rows.some(row => wanted.has(row.verseRef) && (row.loading || row.unavailable)))
+        return undefined;
       const group = itemsRef.current.filter(item => wanted.has(item.verseRef));
       return playablesFor(group, JSON.stringify(group.map(item => item.verseRef))).at(0);
     },
-    [playablesFor]
+    [playablesFor, rows]
   );
 
   const playBounded = useCallback(
@@ -798,28 +892,42 @@ export const useSourceTtsPlayback = (
   // control says why before anyone presses it.
   useEffect(() => {
     const response = sourceChapter ? cache.peek(sourceChapter) : undefined;
-    const knownTts = !sourceChapter || knownChapterTts(response, licenceStatus);
+
     playablesFor(items).forEach((playable, index) => {
-      registry.setStaticAi(playable.key, knownTts);
-      // One playable per row, in row order, so the index pairs them.
       const row = items[index];
+      const rowChapter = sourceChapter
+        ? { ...sourceChapter, chapter: row.chapterNumber ?? sourceChapter.chapter }
+        : null;
+      const rowResponse = rowChapter ? cache.peek(rowChapter) : undefined;
+      registry.setStaticAi(playable.key, knownChapterTts(rowResponse, licenceStatus));
+
+      // One playable per row, in row order, so the index pairs them.
       // A bar is only actionable once the recordings are known: until then the
       // verse may still be heard, so nothing is said about it.
-      if (!sourceChapter || !response) return;
+      if (!sourceChapter || !rowResponse || (facts && facts.read(textKey).state !== 'ready')) {
+        registry.setImpossible(playable.key, null);
+        return;
+      }
       const verdict = licenceVerdictForVerse(
-        response,
+        rowResponse,
         row.verseNumber,
         cache.supportsOpus,
         licenceStatus
       );
-      if (verdict.bar === null || verdict.bar === 'unconfirmed' || verdict.recorded) return;
-      registry.setImpossible(playable.key, licenceBarReason(t, verdict.bar));
+      registry.setImpossible(
+        playable.key,
+        verdict.bar === null || verdict.bar === 'unconfirmed' || verdict.recorded
+          ? null
+          : licenceBarReason(t, verdict.bar)
+      );
     });
     if (sourceChapter && response) {
       noteLicenceBar(cache, pageKey ?? '', sourceChapter, response, licenceStatus);
     }
   }, [
     cache,
+    facts,
+    textKey,
     items,
     knownChapter,
     licenceStatus,
@@ -876,7 +984,18 @@ export const useSourceTtsPlayback = (
     [queue.activeVerseRef]
   );
 
+  const noticeFacts = soundingRecording
+    ? facts?.read(soundingRecording.recordingKey, true)
+    : undefined;
   return {
+    recording:
+      queue.status === 'playing' && soundingRecording
+        ? {
+            ...soundingRecording,
+            textBibleKey: textKey,
+            notice: noticeFacts?.state === 'ready' ? noticeFacts.facts.licenseNotice : null,
+          }
+        : undefined,
     status: queue.status,
     aiMarkedKeys: queue.aiMarkedKeys,
     activeVerseRef: queue.activeVerseRef,

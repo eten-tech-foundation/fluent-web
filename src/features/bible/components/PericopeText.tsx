@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 interface PericopeTextProps {
   content?: string;
+  testId?: string;
   isLoading?: boolean;
   isError?: boolean;
   emptyState?: 'unavailable' | 'not-drafted';
@@ -11,6 +12,7 @@ interface PericopeTextProps {
 /** Keep loaded text visible; placeholders share the same precedence across pericope panels. */
 export const PericopeText = ({
   content,
+  testId,
   isLoading = false,
   isError = false,
   emptyState = 'unavailable',
@@ -29,7 +31,10 @@ export const PericopeText = ({
           : t('noContentAvailable', 'No content available');
 
   return (
-    <span className={`${className} ${unavailable ? 'text-muted-foreground text-sm' : ''}`.trim()}>
+    <span
+      className={`${className} ${unavailable ? 'text-muted-foreground text-sm' : ''}`.trim()}
+      data-testid={testId}
+    >
       {text}
     </span>
   );

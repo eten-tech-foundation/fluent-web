@@ -3,6 +3,17 @@ import { mapWindows } from './mapWindows';
 import type { ChapterSourceAudio, SourceAudioTimestamp } from './sourceAudioClient';
 import type { Source } from '../seam/types';
 
+export interface RecordingProvenance {
+  recordingKey: string;
+  trackId?: string;
+  provider: ChapterSourceAudio['provider'];
+  bookCode: string;
+  chapter: number;
+}
+// L3 transports Source objects without interpreting this L2-owned provenance.
+const recordingSources = new WeakMap<Source, RecordingProvenance>();
+export const recordingProvenance = (source: Source) => recordingSources.get(source);
+
 export interface SelectedTrack {
   item: ChapterSourceAudio['items'][number];
   timestamps: readonly SourceAudioTimestamp[];
@@ -51,10 +62,19 @@ export const recordedSourceForVerse = (
   if (!track) return undefined;
   const window = mapWindows(track.timestamps).get(verse);
   if (!window) return undefined;
-  return {
+  const source: Source = {
     url: track.item.url,
     window,
     durationMs: window[1] === undefined ? undefined : (window[1] - window[0]) * 1000,
     durationIsMeasured: window[1] !== undefined,
   };
+  if (track.item.recordingKey)
+    recordingSources.set(source, {
+      recordingKey: track.item.recordingKey,
+      trackId: track.item.trackId,
+      provider: response.provider,
+      bookCode: response.bookCode,
+      chapter: response.chapter,
+    });
+  return source;
 };

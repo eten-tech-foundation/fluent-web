@@ -28,6 +28,9 @@ const waitForRetry = (delay: number, signal: AbortSignal): Promise<void> =>
 
 export const chapterAudioKey = (chapter: ChapterSourceAudioRequest): string =>
   JSON.stringify([
+    chapter.role ?? 'projectSource',
+    chapter.textBibleKey ?? null,
+    chapter.selectedRecordingKey ?? null,
     chapter.projectId,
     chapter.bibleId,
     chapter.bookCode,
