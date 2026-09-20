@@ -304,6 +304,7 @@ describe('windowed segment queue', () => {
         cache,
         engine: { synthesize },
         recordedRecovery: Recorded,
+        ttsLicenseStatus: 'allowed',
       }
     );
     await act(async () => h.result.current.playFrom(playable.segments, 0));

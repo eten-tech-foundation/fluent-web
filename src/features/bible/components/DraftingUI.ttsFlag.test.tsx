@@ -315,3 +315,8 @@ describe('DraftingUI — forced-on with no TTS backend (phase 2b hand-off)', () 
     );
   });
 });
+
+vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
+  useReferenceChapterTexts: () => new Map(),
+}));

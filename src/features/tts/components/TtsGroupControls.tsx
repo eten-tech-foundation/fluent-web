@@ -59,11 +59,12 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
   const view = playback.groupView(verseRefs);
   const saved = usePlayableState(view.key ?? '');
   const registry = usePlaybackRegistry();
-  const impossibleReason = saved.impossibleReason ?? view.impossibleReason ?? null;
+  const impossibleReason =
+    view.impossibleReason !== undefined ? view.impossibleReason : saved.impossibleReason;
   // This component owns the displayed grouping. Latch cheap host knowledge on
   // that exact identity, not only on the constituent verse keys.
   useEffect(() => {
-    if (view.key && view.impossibleReason) {
+    if (view.key && view.impossibleReason !== undefined) {
       registry.setImpossible(view.key, view.impossibleReason);
     }
   }, [registry, view.impossibleReason, view.key]);

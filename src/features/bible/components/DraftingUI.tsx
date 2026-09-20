@@ -21,6 +21,7 @@ import {
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
 import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
+import { orderedPericopeRefs } from '@/features/bible/lib/pericope-display';
 import {
   canSetPericopeTitle,
   getPericopeTitle,
@@ -33,6 +34,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag, useFeatureFlags } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { useReferenceChapterTexts } from '@/features/resources/hooks/useReferenceChapterTexts';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
   ServerTtsEngine,
@@ -41,6 +43,7 @@ import {
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
+import { useProviderFacts } from '@/features/tts/resolver/providerFacts';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -901,21 +904,78 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // read, say, Hindi text as Greek. A panel-2 row with no verse simply has no
   // text, which is what makes its controls disabled (§5.1) — the row is not
   // silently skipped-over-and-clickable.
-  const ttsRows = useMemo<SourceAudioRow[]>(
-    () =>
-      sourceVerses.map(verse => ({
-        verseRef: String(verse.verseNumber),
-        verseNumber: verse.verseNumber,
-        text: selectedPanel === 1 ? verse.text : bibleVerseMap.get(verse.verseNumber),
-        // T18: sent when known. `currentLanguage` is the reference Bible's
-        // code and already falls back to the source code when unknown.
-        langCode: selectedPanel === 1 ? projectItem.sourceLangCode : currentLanguage,
-        // Provenance travels with the item rather than being re-derived from
-        // panel state later (T17).
-        audioSource: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
-      })),
-    [sourceVerses, selectedPanel, bibleVerseMap, projectItem.sourceLangCode, currentLanguage]
+  const visibleAudioRefs = isPericopeMode
+    ? [
+        ...new Map(
+          (fullPericopes ?? pericopes ?? [])
+            .filter(group =>
+              group.verses.some(ref => ref.chapterNumber === projectItem.chapterNumber)
+            )
+            .flatMap(orderedPericopeRefs)
+            .map(ref => [`${ref.chapterNumber}:${ref.verseNumber}`, ref])
+        ).values(),
+      ]
+    : sourceVerses.map(row => ({
+        chapterNumber: projectItem.chapterNumber,
+        verseNumber: row.verseNumber,
+      }));
+  const adjacentChapters = [...new Set(visibleAudioRefs.map(ref => ref.chapterNumber))].filter(
+    chapter => chapter !== projectItem.chapterNumber
   );
+  const referenceContext = useReferenceChapterTexts(
+    selectedPanel === 2 ? referenceBibleId : null,
+    projectItem.bookCode,
+    adjacentChapters
+  );
+  const textBibleKey = selectedPanel === 1 ? (projectItem.textBibleKey ?? null) : referenceBibleId;
+  const providerFacts = useProviderFacts(projectItem.projectId);
+  // Current-chapter refs preserve the existing host API; adjacent refs are chapter-qualified,
+  // and page identity scopes both. Equal verse numbers can never collide.
+  const ttsVerseRefFor = useCallback(
+    (verse: number, chapter = projectItem.chapterNumber) =>
+      chapter === projectItem.chapterNumber ? String(verse) : `${chapter}:${verse}`,
+    [projectItem.chapterNumber]
+  );
+  const audioRowDrafts: SourceAudioRow[] = visibleAudioRefs.map(ref => {
+    const current = ref.chapterNumber === projectItem.chapterNumber;
+    const context = pericopeContext.chapters.get(ref.chapterNumber);
+    const reference = referenceContext.get(ref.chapterNumber);
+    return {
+      verseRef: ttsVerseRefFor(ref.verseNumber, ref.chapterNumber),
+      verseNumber: ref.verseNumber,
+      chapterNumber: ref.chapterNumber,
+      text:
+        selectedPanel === 1
+          ? (current ? sourceVerses : context?.sourceIsError ? [] : context?.sourceVerses)?.find(
+              row => row.verseNumber === ref.verseNumber
+            )?.text
+          : current
+            ? bibleContentError
+              ? undefined
+              : bibleVerseMap.get(ref.verseNumber)
+            : reference?.texts.get(ref.verseNumber),
+      unavailable:
+        !current &&
+        (selectedPanel === 1
+          ? !context ||
+            context.sourceIsError ||
+            !context.sourceVerses.some(
+              row => row.verseNumber === ref.verseNumber && row.text?.trim()
+            )
+          : !reference || reference.error || !reference.texts.get(ref.verseNumber)?.trim()),
+      loading: current
+        ? selectedPanel === 2 && bibleContentLoading
+        : selectedPanel === 1
+          ? context?.sourceIsLoading
+          : reference?.loading,
+      langCode:
+        selectedPanel === 1 ? projectItem.sourceLangCode : (activeResourceBibleTab?.language ?? ''),
+      audioSource: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
+    };
+  });
+
+  const audioRowsJson = JSON.stringify(audioRowDrafts);
+  const ttsRows = useMemo(() => JSON.parse(audioRowsJson) as SourceAudioRow[], [audioRowsJson]);
 
   // A single engine for the page: a thin seam over the API route (§6.1), no
   // per-verse state, so it must not be rebuilt on every render.
@@ -924,8 +984,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Playback highlight geometry: the row elements the grid already registers,
   // measured against the target column's scroll container.
   const getTtsRowElement = useCallback(
-    (verseRef: string) => verseRefs.current[Number(verseRef)],
-    [verseRefs]
+    (verseRef: string) => {
+      const [chapter, verse] = verseRef.includes(':')
+        ? verseRef.split(':').map(Number)
+        : [projectItem.chapterNumber, Number(verseRef)];
+      if (chapter === projectItem.chapterNumber) return verseRefs.current[verse];
+      const group = fullPericopes?.find(group =>
+        group.verses.some(ref => ref.chapterNumber === chapter && ref.verseNumber === verse)
+      );
+      const current = group?.verses.find(ref => ref.chapterNumber === projectItem.chapterNumber);
+      return current ? verseRefs.current[current.verseNumber] : undefined;
+    },
+    [verseRefs, projectItem.chapterNumber, fullPericopes]
   );
   const getTtsViewport = useCallback(() => targetScrollRef.current, [targetScrollRef]);
 
@@ -933,25 +1003,19 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     engine: ttsEngine,
     rows: ttsRows,
     referenceBibleId: selectedPanel === 2 ? referenceBibleId : null,
-    // The source Bible's audio licence, carried on the assignment this page
-    // already loaded. Read before any audio provider is called, and unaffected
-    // by one being unreachable.
-    sourceLicence: {
-      status: projectItem.ttsLicenseStatus,
-      notice: projectItem.licenseNotice ?? null,
+    facts: providerFacts,
+    sourceLicence: { status: projectItem.ttsLicenseStatus },
+    sourceChapter: {
+      projectId: projectItem.projectId,
+      bibleId: projectItem.bibleId,
+      bookCode: projectItem.bookCode,
+      chapter: projectItem.chapterNumber,
+      languageCode:
+        selectedPanel === 1 ? projectItem.sourceLangCode : (activeResourceBibleTab?.language ?? ''),
+      role: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
+      textBibleKey,
+      selectedRecordingKey: selectedPanel === 1 ? (projectItem.selectedRecordingKey ?? null) : null,
     },
-    // The reference panel has provider-specific ids, not this Fluent Bible id.
-    // Keep its own-text TTS path until reference recording identity is wired.
-    sourceChapter:
-      selectedPanel === 1
-        ? {
-            projectId: projectItem.projectId,
-            bibleId: projectItem.bibleId,
-            bookCode: projectItem.bookCode,
-            chapter: projectItem.chapterNumber,
-            languageCode: projectItem.sourceLangCode,
-          }
-        : null,
     getRowElement: getTtsRowElement,
     getViewport: getTtsViewport,
     // Page-lifetime playback state is dropped on this key: the drafting route
@@ -981,15 +1045,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // Row identity for the queue is the verse number as a string; the grid asks
   // for it rather than assuming a format (T3).
-  const ttsVerseRefFor = useCallback((verseNumber: number) => String(verseNumber), []);
 
   // Use the same source-row membership as the visible pericope controls.
   const ttsKeyboardGroups = isPericopeMode
-    ? (pericopes ?? []).map(group =>
-        sourceVerses
-          .filter(row => group.verses.some(verse => verse.verseNumber === row.verseNumber))
-          .map(row => ttsVerseRefFor(row.verseNumber))
-      )
+    ? (pericopes ?? []).map(group => {
+        const full =
+          fullPericopes?.find(candidate => candidate.pericopeNumber === group.pericopeNumber) ??
+          group;
+        return orderedPericopeRefs(full).map(ref =>
+          ttsVerseRefFor(ref.verseNumber, ref.chapterNumber)
+        );
+      })
     : null;
   const ttsCaretRef = ttsVerseRefFor(activeVerseId);
   const ttsCaretGroup = ttsKeyboardGroups?.find(refs => refs.includes(ttsCaretRef)) ?? [];

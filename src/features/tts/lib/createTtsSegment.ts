@@ -8,6 +8,7 @@ import type { TtsEngine, TtsQueueItem, TtsServedFormat } from '../tts.types';
 
 export interface CreateTtsSegmentOptions {
   engine: TtsEngine;
+  beforeSynthesize?: (signal?: AbortSignal) => Promise<void>;
   playableKey: string;
   onServing?: (verseRef: string, servedAs: TtsServedFormat) => void;
   fetchFn?: FetchLike;
@@ -19,6 +20,8 @@ export const createTtsSegment = (
   options: CreateTtsSegmentOptions
 ): Segment & { source: SourceThunk } => {
   const generate = async (signal?: AbortSignal): Promise<Source> => {
+    if (options.beforeSynthesize) await options.beforeSynthesize(signal);
+    signal?.throwIfAborted();
     const clip = await options.engine.synthesize(
       { text: item.text, langCode: item.langCode },
       signal

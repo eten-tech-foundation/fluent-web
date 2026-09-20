@@ -82,7 +82,16 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
   const options: UseSourceTtsPlaybackOptions = {
     engine,
     rows,
-    sourceChapter: null,
+    sourceChapter: {
+      projectId: 1,
+      bibleId: 2,
+      bookCode: 'JHN',
+      chapter: 3,
+      languageCode: 'eng',
+      role: 'referenceBible',
+      textBibleKey: 'aq-20',
+    },
+    sourceLicence: { status: 'allowed' },
     referenceBibleId: 'aq-test',
     // Every row sits far below the viewport unless a test says otherwise.
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView, focus }),
@@ -299,7 +308,16 @@ describe('useSourceTtsPlayback — leaving the page mid-playback (§5.2)', () =>
   ): UseSourceTtsPlaybackOptions => ({
     engine,
     rows,
-    sourceChapter: null,
+    sourceChapter: {
+      projectId: 1,
+      bibleId: 2,
+      bookCode: 'JHN',
+      chapter: 3,
+      languageCode: 'eng',
+      role: 'referenceBible',
+      textBibleKey: 'aq-20',
+    },
+    sourceLicence: { status: 'allowed' },
     referenceBibleId: 'aq-test',
     getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
     getViewport: () => rect(0, 500),
@@ -383,7 +401,16 @@ describe('useSourceTtsPlayback — the enabled gate', () => {
         useSourceTtsPlayback({
           engine,
           rows,
-          sourceChapter: null,
+          sourceChapter: {
+            projectId: 1,
+            bibleId: 2,
+            bookCode: 'JHN',
+            chapter: 3,
+            languageCode: 'eng',
+            role: 'referenceBible',
+            textBibleKey: 'aq-20',
+          },
+          sourceLicence: { status: 'allowed' },
           referenceBibleId: 'aq-test',
           getRowElement: () => ({ ...rect(900, 960), scrollIntoView: vi.fn(), focus: vi.fn() }),
           getViewport: () => rect(0, 500),
