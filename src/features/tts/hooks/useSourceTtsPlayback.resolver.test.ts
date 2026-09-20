@@ -311,8 +311,83 @@ describe('useSourceTtsPlayback — pause records and Restart', () => {
     expect(synthesize).not.toHaveBeenCalled();
     playRejection = undefined;
     await start(() => result.current.playVerse('row-2'));
-    expect(elements.at(-1)?.currentTime).toBe(offset);
+    expect(elements.filter(element => !element.paused).at(-1)?.currentTime).toBe(offset);
     expect(registry.isLive(key)).toBe(true);
+  });
+
+  it('autoplay refusal becomes the preferred verse for continuous play', async () => {
+    const { result } = setup();
+    await start(() => result.current.playVerse('row-1'));
+    elements.at(-1)!.currentTime = 7;
+    act(() => result.current.pause());
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playVerse('row-2'));
+    const offset = bsbChapter().verseTimestamps![1].startSeconds;
+    expect(registry.getRecord(result.current.verseKey('row-2')!)?.currentTime).toBe(offset);
+    playRejection = undefined;
+
+    await start(() => result.current.playFromVerse('row-2'));
+
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(elements.filter(element => !element.paused).at(-1)?.currentTime).toBe(offset);
+  });
+
+  it('autoplay refusal becomes the preferred group for continuous play', async () => {
+    const { result } = setup();
+    await start(() => result.current.playGroup(['row-1']));
+    elements.at(-1)!.currentTime = 7;
+    act(() => result.current.pause());
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playGroup(['row-2']));
+    const offset = bsbChapter().verseTimestamps![1].startSeconds;
+    expect(registry.getRecord(result.current.groupKey(['row-2'])!)?.currentTime).toBe(offset);
+    playRejection = undefined;
+
+    await start(() => result.current.playFromGroups([['row-1'], ['row-2'], ['row-3']], 'row-2'));
+
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(elements.filter(element => !element.paused).at(-1)?.currentTime).toBe(offset);
+  });
+
+  it('continuous verse play retains a resolved zero-time refusal ahead of an older preference', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result } = setup();
+    await start(() => result.current.playVerse('row-1'));
+    elements.at(-1)!.currentTime = 7;
+    act(() => result.current.pause());
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playVerse('row-2'));
+    const key = result.current.verseKey('row-2')!;
+    expect(registry.getRecord(key)).toMatchObject({ verseRef: 'row-2', currentTime: 0 });
+    playRejection = undefined;
+
+    await start(() => result.current.playFromVerse('row-1'));
+
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(elements.filter(element => !element.paused).at(-1)?.currentTime).toBe(0);
+  });
+
+  it('continuous group play retains a resolved zero-time refusal until explicit Restart', async () => {
+    load.mockResolvedValue(windowlessChapter());
+    const { result } = setup();
+    await start(() => result.current.playGroup(['row-1']));
+    elements.at(-1)!.currentTime = 7;
+    act(() => result.current.pause());
+    playRejection = new DOMException('gesture required', 'NotAllowedError');
+    await start(() => result.current.playGroup(['row-2']));
+    const refs = ['row-2'];
+    const key = result.current.groupKey(refs)!;
+    expect(registry.getRecord(key)).toMatchObject({ verseRef: 'row-2', currentTime: 0 });
+    playRejection = undefined;
+
+    await start(() => result.current.playFromGroups([['row-1'], refs, ['row-3']], 'row-1'));
+    expect(result.current.activeVerseRef).toBe('row-2');
+    expect(elements.filter(element => !element.paused).at(-1)?.currentTime).toBe(0);
+
+    act(() => result.current.pause());
+    act(() => result.current.restartGroup(refs));
+    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.canRestart(key)).toBe(false);
   });
 
   it('persists the AI badge when a TTS resume is refused before React renders its mark', async () => {
@@ -388,7 +463,7 @@ describe('useSourceTtsPlayback — pause records and Restart', () => {
     expect(registry.getLastDynamicAi(result.current.verseKey('row-3')!)).toBe(false);
   });
 
-  it('unknown pending position creates no record; page change drops all old data before late results', async () => {
+  it('pending logical start is saved, then page change drops it before late results', async () => {
     let resolve!: (chapter: clientModule.ChapterSourceAudio) => void;
     load.mockImplementation(
       () =>
@@ -400,7 +475,7 @@ describe('useSourceTtsPlayback — pause records and Restart', () => {
     const key = result.current.verseKey('row-1')!;
     await start(() => result.current.playVerse('row-1'));
     act(() => result.current.pause());
-    expect(registry.getRecord(key)).toBeNull();
+    expect(registry.getRecord(key)).toMatchObject({ currentTime: 0, pendingFraction: 0 });
     act(() => registry.setLastDynamicAi(key, true));
     rerender(props({ pageKey: 'next-page' }));
     resolve(bsbChapter());

@@ -25,18 +25,33 @@ describe('pause records', () => {
     expect(store.canRestart('verse-2')).toBe(true);
   });
 
-  it('zero-zero stores nothing and clears an older position and downgrade', () => {
+  it('stores an explicit first-segment zero position and its recovery policy', () => {
     const store = setup();
     writeRecord(store, snapshot);
     writeRecord(store, { ...snapshot, currentTime: 0 });
-    expect(store.getRecord('verse-2')).toBeNull();
-    expect(store.canRestart('verse-2')).toBe(false);
+    expect(store.getRecord('verse-2')).toEqual({
+      itemIndex: 0,
+      verseRef: 'v2',
+      currentTime: 0,
+      forceTts: true,
+    });
+    expect(store.canRestart('verse-2')).toBe(true);
   });
 
   it('zero time on a later segment is a real position', () => {
     const store = setup();
     writeRecord(store, { ...snapshot, itemIndex: 2, currentTime: 0 });
     expect(store.getRecord('verse-2')?.itemIndex).toBe(2);
+  });
+
+  it('keeps a fractional scrub at the first segment without converting it to time', () => {
+    const store = setup();
+    writeRecord(store, { ...snapshot, currentTime: 0, pendingFraction: 0.625 });
+    expect(store.getRecord('verse-2')).toMatchObject({
+      itemIndex: 0,
+      currentTime: 0,
+      pendingFraction: 0.625,
+    });
   });
 
   it('survives displacement and same-page updates but drops on a page change', () => {
