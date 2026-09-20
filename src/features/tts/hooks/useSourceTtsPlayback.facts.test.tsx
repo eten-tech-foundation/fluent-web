@@ -14,6 +14,7 @@ import { FakeClipElement } from '../testing/fakeClipElement';
 import {
   bsbChapter,
   sourceChapterRequest,
+  unprovenDblChapter,
   windowlessChapter,
 } from '../testing/sourceAudioFixtures';
 
@@ -132,7 +133,7 @@ describe('shared playback authority and sounding metadata', () => {
     const h = setup();
     act(() => h.result.current.playVerse('1'));
     await settle();
-    act(() => elements[0].emit('playing'));
+    act(() => elements.at(-1)!.emit('playing'));
     await settle();
     expect(h.result.current.recording).toMatchObject({
       recordingKey: 'aq-20',
@@ -169,9 +170,47 @@ describe('shared playback authority and sounding metadata', () => {
     });
     act(() => elements[0].emit('error'));
     await settle();
-    act(() => elements[0].emit('playing'));
+    act(() => elements.at(-1)!.emit('playing'));
     await settle();
     expect(h.result.current.recording?.recordingKey).toBe('aq-21');
+  });
+
+  it('keeps direct and recovered linked DBL notices on the actual audio item identity', async () => {
+    const h = setup();
+    const linked = unprovenDblChapter();
+    linked.bible.name = 'Text Bible label';
+    linked.items[0].recordingKey = 'dbl-plain-audio';
+    linked.items[1].recordingKey = 'dbl-drama-audio';
+    h.put(row('dbl-drama-audio', 'unknown', 'Drama recording notice'));
+    h.put(row('dbl-plain-audio', 'unknown', 'Plain recording notice'));
+    vi.mocked(fetchChapterSourceAudio).mockResolvedValue(linked);
+
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    act(() => elements[0].emit('playing'));
+    await settle();
+    expect(h.result.current.recording).toMatchObject({
+      recordingKey: 'dbl-drama-audio',
+      recordingName: 'dbl-drama-audio',
+      notice: 'Drama recording notice',
+    });
+
+    const healed = setup();
+    healed.put(row('dbl-plain-audio', 'unknown', 'Plain recording notice'));
+    vi.mocked(fetchChapterSourceAudio).mockResolvedValue({
+      ...linked,
+      items: linked.items.map(item => ({ ...item, url: `${item.url}?healed` })),
+      verseTimestamps: [{ verse: 1, startSeconds: 1, endSeconds: 3, dblAudioBibleId: 'plain' }],
+    });
+    act(() => healed.result.current.playVerse('1'));
+    await settle();
+    act(() => elements.at(-1)!.emit('playing'));
+    await settle();
+    expect(healed.result.current.recording).toMatchObject({
+      recordingKey: 'dbl-plain-audio',
+      recordingName: 'dbl-plain-audio',
+      notice: 'Plain recording notice',
+    });
   });
 
   it.each([401, 403])(

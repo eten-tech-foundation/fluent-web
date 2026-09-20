@@ -48,12 +48,14 @@ import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 
 import { usePlaybackTiming } from './usePlaybackTiming';
+import { useRecordedNotice } from './useRecordedNotice';
 import {
   type PauseSnapshot,
   type TtsPlaybackStatus,
   useTtsPlaybackQueue,
 } from './useTtsPlaybackQueue';
 
+import type { RecordedNotice } from '../lib/ackStore';
 import type { ProviderFactsAccess } from '../resolver/providerFacts';
 
 export interface UseSourceTtsPlaybackOptions {
@@ -74,6 +76,8 @@ export interface UseSourceTtsPlaybackOptions {
   };
   /** Domain-qualified reference selection identity; never used to select an audio provider. */
   referenceBibleId: string | null;
+  /** Display label for the qualified text identity currently being heard. */
+  textBibleName?: string;
   /** Resolve a row's DOM node for scroll geometry. */
   getRowElement: (verseRef: string) => ScrollableRow | null | undefined;
   /** The scrolling container; null disables auto-scroll rather than guessing. */
@@ -115,11 +119,15 @@ export interface PericopePlaybackView {
   /** Segment-local seconds: components never inspect a media window. */
   currentTime: number;
   pendingFraction?: number;
+  recordedNotice?: RecordedNotice | null;
 }
 
 export interface SourceTtsPlaybackApi {
   /** Actual sounding recording metadata; no entry for TTS, loading or stopped playback. */
   recording?: RecordingProvenance & { textBibleKey: string | null; notice: string | null };
+  recordedNoticeDialog: RecordedNotice | null;
+  closeRecordedNotice: () => void;
+  showRecordedNotice: (notice: RecordedNotice) => void;
   status: TtsPlaybackStatus;
   /** Live-run badge channel; idle controls read the registry instead. */
   aiMarkedKeys: ReadonlySet<string>;
@@ -186,6 +194,7 @@ export const useSourceTtsPlayback = (
     sourceLicence,
     facts,
     referenceBibleId,
+    textBibleName = '',
     getRowElement,
     getViewport,
     pageKey,
@@ -195,7 +204,9 @@ export const useSourceTtsPlayback = (
   const textKey = sourceChapter?.textBibleKey ?? null;
   const observedStatus = facts ? facts.observedStatus(textKey) : sourceLicence?.status;
   const licenceStatus = facts ? facts.status(textKey) : sourceLicence?.status;
-  const [soundingRecording, setSoundingRecording] = useState<RecordingProvenance | null>(null);
+  const [soundingRecording, setSoundingRecording] = useState<
+    (RecordingProvenance & { playableKey: string; selectionKey: string }) | null
+  >(null);
   const selectionSlot = JSON.stringify([
     sourceChapter?.role ?? 'projectSource',
     sourceChapter?.role === 'referenceBible' ? sourceChapter.textBibleKey : sourceChapter?.bibleId,
@@ -457,7 +468,18 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
-    onSourcePlaying: source => setSoundingRecording(recordingProvenance(source) ?? null),
+    onSourcePlaying: (source, segment) => {
+      const provenance = recordingProvenance(source);
+      setSoundingRecording(
+        provenance
+          ? {
+              ...provenance,
+              playableKey: segment.playableKey,
+              selectionKey: latest.current.selectionKey,
+            }
+          : null
+      );
+    },
     onTiming: report => {
       // A clip has real timing only once its source resolved, so this is the
       // last moment the chapter answer is certainly still in the cache.
@@ -886,6 +908,44 @@ export const useSourceTtsPlayback = (
     },
     [disabledReason, groupPlayable, registry, startRun]
   );
+
+  const currentSounding =
+    soundingRecording?.selectionKey === selectionKey ? soundingRecording : null;
+  const noticeFacts = currentSounding ? facts?.read(currentSounding.recordingKey, true) : undefined;
+  const currentRecording =
+    currentSounding && noticeFacts?.state === 'ready'
+      ? {
+          ...currentSounding,
+          textBibleKey: textKey,
+          notice: noticeFacts.facts.licenseNotice,
+        }
+      : null;
+  const noticeUi = useRecordedNotice({
+    scopeKey: selectionKey,
+    textBibleKey:
+      textKey ??
+      (sourceChapter?.role === 'projectSource' ? `local-source:${sourceChapter.bibleId}` : null),
+    textBibleName,
+    recording: currentRecording
+      ? {
+          recordingKey: currentRecording.recordingKey,
+          recordingName: currentRecording.recordingName,
+          recordingProvider: currentRecording.provider,
+          notice: currentRecording.notice,
+          playableKey: currentRecording.playableKey,
+        }
+      : currentSounding
+        ? {
+            recordingKey: currentSounding.recordingKey,
+            recordingName: currentSounding.recordingName,
+            recordingProvider: currentSounding.provider,
+            notice: null,
+            playableKey: currentSounding.playableKey,
+          }
+        : null,
+    isPlaying: queue.status === 'playing',
+    enabled,
+  });
   const verseKey = useCallback(
     (verseRef: string) => versePlayable(verseRef)?.key ?? null,
     [versePlayable]
@@ -940,12 +1000,14 @@ export const useSourceTtsPlayback = (
         currentIndex,
         currentTime,
         pendingFraction: isLive ? report?.pendingFraction : record?.pendingFraction,
+        recordedNotice: group?.key ? noticeUi.infoFor(group.key) : null,
       };
     },
     [
       groupPlayable,
       knownImpossibleReason,
       liveGroupKey,
+      noticeUi,
       queue.aiMarkedKeys,
       queue.status,
       registry,
@@ -1073,18 +1135,14 @@ export const useSourceTtsPlayback = (
     [queue.activeVerseRef]
   );
 
-  const noticeFacts = soundingRecording
-    ? facts?.read(soundingRecording.recordingKey, true)
-    : undefined;
   return {
     recording:
-      queue.status === 'playing' && soundingRecording
-        ? {
-            ...soundingRecording,
-            textBibleKey: textKey,
-            notice: noticeFacts?.state === 'ready' ? noticeFacts.facts.licenseNotice : null,
-          }
+      queue.status === 'playing' && currentSounding
+        ? (currentRecording ?? { ...currentSounding, textBibleKey: textKey, notice: null })
         : undefined,
+    recordedNoticeDialog: noticeUi.dialog,
+    closeRecordedNotice: noticeUi.close,
+    showRecordedNotice: noticeUi.show,
     status: queue.status,
     aiMarkedKeys: queue.aiMarkedKeys,
     activeVerseRef: queue.activeVerseRef,
