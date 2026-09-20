@@ -8,7 +8,7 @@ import {
   windowlessChapter,
 } from '../testing/sourceAudioFixtures';
 
-import { recordedSourceForVerse, selectTrack } from './selectTrack';
+import { recordedSourceForVerse, recordingProvenance, selectTrack } from './selectTrack';
 
 describe('selectTrack', () => {
   it.each([true, false])(
@@ -94,5 +94,46 @@ describe('selectTrack', () => {
     const after = recordedSourceForVerse(chapter, 1, false);
     expect(before).toMatchObject({ url: chapter.items[1].url, window: [10, 20] });
     expect(after).toMatchObject({ url: chapter.items[0].url, window: [1, 3] });
+  });
+
+  it('uses the selected DBL item name, or its exact identity when the direct response name is blank', () => {
+    const chapter = unprovenDblChapter();
+    chapter.bible.name = '';
+    chapter.items = [
+      {
+        ...chapter.items[1],
+        recordingKey: 'dbl-drama-audio',
+        recordingName: 'Drama Audio Bible',
+      },
+    ];
+    const named = recordedSourceForVerse(chapter, 1, false)!;
+    expect(recordingProvenance(named)).toMatchObject({
+      recordingKey: 'dbl-drama-audio',
+      recordingName: 'Drama Audio Bible',
+    });
+    delete chapter.items[0].recordingName;
+    const identityFallback = recordedSourceForVerse(chapter, 1, false)!;
+    expect(recordingProvenance(identityFallback)).toMatchObject({
+      recordingKey: 'dbl-drama-audio',
+      recordingName: 'dbl-drama-audio',
+    });
+  });
+
+  it('tracks the actual linked DBL item across multiple audio Bibles and recovery', () => {
+    const chapter = unprovenDblChapter();
+    chapter.bible.name = 'Text Bible name must not leak';
+    chapter.items[0].recordingKey = 'dbl-plain-audio';
+    chapter.items[1].recordingKey = 'dbl-drama-audio';
+    const drama = recordedSourceForVerse(chapter, 1, false)!;
+    expect(recordingProvenance(drama)?.recordingName).toBe('dbl-drama-audio');
+
+    chapter.verseTimestamps = [
+      { verse: 1, startSeconds: 1, endSeconds: 3, dblAudioBibleId: 'plain' },
+    ];
+    const healed = recordedSourceForVerse(chapter, 1, false)!;
+    expect(recordingProvenance(healed)).toMatchObject({
+      recordingKey: 'dbl-plain-audio',
+      recordingName: 'dbl-plain-audio',
+    });
   });
 });

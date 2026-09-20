@@ -5,6 +5,7 @@ import type { Source } from '../seam/types';
 
 export interface RecordingProvenance {
   recordingKey: string;
+  recordingName: string;
   trackId?: string;
   provider: ChapterSourceAudio['provider'];
   bookCode: string;
@@ -71,6 +72,13 @@ export const recordedSourceForVerse = (
   if (track.item.recordingKey)
     recordingSources.set(source, {
       recordingKey: track.item.recordingKey,
+      // A linked DBL response names the text Bible, not necessarily the
+      // selected audio Bible. Never present that borrowed label as recording
+      // provenance. The qualified recording identity is truthful fallback UI.
+      recordingName:
+        response.provider === 'dbl'
+          ? track.item.recordingName?.trim() || track.item.recordingKey
+          : response.bible.name.trim() || track.item.recordingKey,
       trackId: track.item.trackId,
       provider: response.provider,
       bookCode: response.bookCode,
