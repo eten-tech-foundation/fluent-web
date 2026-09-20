@@ -231,6 +231,20 @@ describe('shared playback authority and sounding metadata', () => {
     expect(h.registry().getRecord(oldKey)).toBeNull();
   });
 
+  it('mapping changes invalidate a scrub-only position that never started media', () => {
+    const h = setup();
+    const refs = ['1'];
+    const oldKey = h.result.current.groupKey(refs)!;
+    act(() => h.result.current.seekGroup(refs, '1', 0.5));
+    expect(h.registry().getRecord(oldKey)?.pendingFraction).toBe(0.5);
+    expect(elements).toHaveLength(0);
+    h.rerender({
+      ...h.initial,
+      sourceChapter: { ...h.initial.sourceChapter!, selectedRecordingKey: 'aq-21' },
+    });
+    expect(h.registry().getRecord(oldKey)).toBeNull();
+  });
+
   it('cross-chapter groups preserve both same-number verses through pause, resume and seek', async () => {
     const h = setup({
       rows: [
@@ -250,7 +264,15 @@ describe('shared playback authority and sounding metadata', () => {
     act(() => elements[0].emit('playing'));
     const key = h.result.current.groupKey(refs)!;
     expect(h.result.current.groupView(refs).segments.map(item => item.verseRef)).toEqual(refs);
+    const startedElements = elements.length;
     act(() => h.result.current.seekGroup(refs, '4:1', 0.5));
+    expect(elements).toHaveLength(startedElements);
+    expect(h.result.current.status).toBe('idle');
+    expect(h.result.current.groupView(refs)).toMatchObject({
+      currentIndex: 1,
+      pendingFraction: 0.5,
+    });
+    act(() => h.result.current.playGroup(refs));
     await settle();
     act(() => elements.at(-1)!.emit('playing'));
     expect(h.result.current.activeVerseRef).toBe('4:1');

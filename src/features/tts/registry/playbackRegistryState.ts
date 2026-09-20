@@ -43,6 +43,7 @@ function sameRecord(a: PauseRecord | null, b: PauseRecord | null): boolean {
       a.itemIndex === b.itemIndex &&
       a.verseRef === b.verseRef &&
       a.currentTime === b.currentTime &&
+      a.pendingFraction === b.pendingFraction &&
       a.forceTts === b.forceTts)
   );
 }

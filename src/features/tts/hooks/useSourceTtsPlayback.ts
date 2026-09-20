@@ -48,7 +48,11 @@ import { RecordedRecoveryStrategy } from '../strategies/recordedRecoveryStrategy
 import { type TtsEngine, type TtsServedFormat } from '../tts.types';
 
 import { usePlaybackTiming } from './usePlaybackTiming';
-import { type TtsPlaybackStatus, useTtsPlaybackQueue } from './useTtsPlaybackQueue';
+import {
+  type PauseSnapshot,
+  type TtsPlaybackStatus,
+  useTtsPlaybackQueue,
+} from './useTtsPlaybackQueue';
 
 import type { ProviderFactsAccess } from '../resolver/providerFacts';
 
@@ -169,6 +173,7 @@ interface HostRun {
   items: Segment[];
   keys: Set<string>;
   liveKey: string;
+  selectionKey: string;
 }
 
 export const useSourceTtsPlayback = (
@@ -203,6 +208,7 @@ export const useSourceTtsPlayback = (
   const offline = useOffline();
   const restartLiveRef = useRef<() => void>(() => {});
   const runRef = useRef<HostRun | null>(null);
+  const preferredResumeKeysRef = useRef(new Map<string, string>());
   const releaseRef = useRef<(() => void) | null>(null);
   const timing = usePlaybackTiming(pageKey);
 
@@ -440,6 +446,16 @@ export const useSourceTtsPlayback = (
     [cache, registry, rememberChapter, t]
   );
 
+  const saveSnapshot = useCallback(
+    (snapshot: PauseSnapshot, runSelectionKey: string | undefined) => {
+      writeRecord(registry, snapshot);
+      if (runSelectionKey) {
+        preferredResumeKeysRef.current.set(runSelectionKey, snapshot.playableKey);
+      }
+    },
+    [registry]
+  );
+
   const queue = useTtsPlaybackQueue({
     onSourcePlaying: source => setSoundingRecording(recordingProvenance(source) ?? null),
     onTiming: report => {
@@ -453,7 +469,7 @@ export const useSourceTtsPlayback = (
       handleError(error, segment);
     },
     onAutoplayRefused: (snapshot, segment) => {
-      writeRecord(registry, snapshot);
+      saveSnapshot(snapshot, runRef.current?.selectionKey);
       finishRun();
       handleError(new Error('Playback requires a user gesture'), segment);
     },
@@ -486,10 +502,11 @@ export const useSourceTtsPlayback = (
   );
 
   const pause = useCallback(() => {
+    const runSelectionKey = runRef.current?.selectionKey;
     const snapshot = queueRef.current.pause();
-    if (snapshot) writeRecord(registry, snapshot);
+    if (snapshot) saveSnapshot(snapshot, runSelectionKey);
     finishRun();
-  }, [finishRun, registry]);
+  }, [finishRun, saveSnapshot]);
 
   const stopWithoutRecord = useCallback(() => {
     queueRef.current.stop();
@@ -502,7 +519,8 @@ export const useSourceTtsPlayback = (
       playables: Playable[],
       index = 0,
       bounded = false,
-      seek?: { index: number; fraction: number }
+      seek?: { index: number; fraction: number },
+      resumeKey?: string
     ) => {
       if (!enabled) return;
       const capturedKey = latest.current.selectionKey;
@@ -510,8 +528,8 @@ export const useSourceTtsPlayback = (
       playables.forEach(playable => keysForSelection.add(playable.key));
       selectionKeys.current.set(capturedKey, keysForSelection);
       const segments = playables.flatMap(playable => playable.segments);
-      const first = segments.at(seek?.index ?? index);
-      if (!first) return;
+      const requestedFirst = segments.at(seek?.index ?? index);
+      if (!requestedFirst) return;
       // The claim pauses AND records synchronously, before reading resume data.
       const previousKey = runRef.current?.liveKey;
       const previousIsInTarget = runRef.current?.items.some(
@@ -520,14 +538,33 @@ export const useSourceTtsPlayback = (
           segments.some(target => target.verseRef === item.verseRef)
       );
       releaseRef.current = registry.claim(pause, () => restartLiveRef.current());
-      const record = bounded ? registry.getRecord(first.playableKey) : null;
+      const resumeRecord = resumeKey ? registry.getRecord(resumeKey) : null;
+      const record = bounded ? registry.getRecord(requestedFirst.playableKey) : resumeRecord;
       // A seek within this playable keeps its fallback instruction, but seeking
       // a different pericope must not inherit another playable's fallback voice.
       const seekRecord =
         record ?? (previousKey && previousIsInTarget ? registry.getRecord(previousKey) : null);
-      const startIndex = seek?.index ?? record?.itemIndex ?? index;
+      const recordIndex = record
+        ? segments.findIndex(
+            segment =>
+              segment.playableKey === (resumeKey ?? requestedFirst.playableKey) &&
+              segment.verseRef === record.verseRef
+          )
+        : -1;
+      const resumeIndex = resumeKey
+        ? segments.findIndex(segment => segment.playableKey === resumeKey)
+        : -1;
+      const startIndex =
+        seek?.index ?? (recordIndex >= 0 ? recordIndex : resumeIndex >= 0 ? resumeIndex : index);
+      const first = segments.at(startIndex);
+      if (!first) return;
       const keys = new Set(segments.slice(startIndex).map(segment => segment.playableKey));
-      runRef.current = { items: segments, keys, liveKey: first.playableKey };
+      runRef.current = {
+        items: segments,
+        keys,
+        liveKey: first.playableKey,
+        selectionKey: capturedKey,
+      };
       for (const key of keys) {
         registry.setLastDynamicAi(key, false);
         const chapter = latest.current.sourceChapter;
@@ -547,6 +584,9 @@ export const useSourceTtsPlayback = (
           { fraction: seek.fraction },
           seekRecord ? { forceTts: seekRecord.forceTts } : undefined
         );
+      } else if (record?.pendingFraction !== undefined) {
+        registry.clearRecord(resumeKey ?? first.playableKey);
+        queueRef.current.playFrom(segments, startIndex, { fraction: record.pendingFraction }, seed);
       } else if (bounded && segments.length === 1) {
         if (record) queueRef.current.playOne(first, record.currentTime, seed);
         else queueRef.current.playOne(first);
@@ -587,6 +627,7 @@ export const useSourceTtsPlayback = (
       cache.clear();
       if (changedIdentity || policyRevoked) {
         const invalidated = priorInSlot ?? selectionKey;
+        preferredResumeKeysRef.current.delete(invalidated);
         for (const key of selectionKeys.current.get(invalidated) ?? []) {
           registry.clearRecord(key);
           registry.setImpossible(key, null);
@@ -647,14 +688,25 @@ export const useSourceTtsPlayback = (
 
   const playFromVerse = useCallback(
     (verseRef: string) => {
-      const index = itemsRef.current.findIndex(item => item.verseRef === verseRef);
-      pressPrimary(disabledReason(versePlayable(verseRef)), () => {
-        if (index < 0) return;
-        // A range has no persistent identity; recreate it from the caret.
-        startRun(playablesFor(itemsRef.current), index);
+      const pagePlayables = playablesFor(itemsRef.current);
+      const segments = pagePlayables.flatMap(playable => playable.segments);
+      const index = segments.findIndex(item => item.verseRef === verseRef);
+      const liveKey = runRef.current?.liveKey ?? null;
+      const preferredKey = preferredResumeKeysRef.current.get(latest.current.selectionKey) ?? null;
+      const caretKey = versePlayable(verseRef)?.key ?? null;
+      const resumeKey = [liveKey, preferredKey, caretKey].find(
+        key =>
+          key &&
+          segments.some(segment => segment.playableKey === key) &&
+          (key === liveKey || registry.getRecord(key))
+      );
+      const resumePlayable = pagePlayables.find(playable => playable.key === resumeKey);
+      pressPrimary(disabledReason(resumePlayable ?? versePlayable(verseRef)), () => {
+        if (index < 0 && !resumePlayable) return;
+        startRun(pagePlayables, Math.max(0, index), false, undefined, resumeKey ?? undefined);
       });
     },
-    [disabledReason, playablesFor, startRun, versePlayable]
+    [disabledReason, playablesFor, registry, startRun, versePlayable]
   );
 
   /**
@@ -757,9 +809,24 @@ export const useSourceTtsPlayback = (
       // indices. Carry the selected verse identity across that boundary.
       const index = playable.segments.findIndex(segment => segment.verseRef === targetVerseRef);
       if (index < 0) return;
-      startRun([playable], 0, true, { index, fraction });
+      // Use the registry claim path so whichever player is sounding records its
+      // own position before this group receives a distinct scrub intent.
+      registry.silenceAll();
+      const forceTts = registry.getRecord(playable.key)?.forceTts ?? false;
+      registry.setRecord(playable.key, {
+        itemIndex: index,
+        verseRef: targetVerseRef,
+        currentTime: 0,
+        pendingFraction: Math.max(0, Math.min(1, fraction)),
+        forceTts,
+      });
+      const capturedKey = latest.current.selectionKey;
+      const keysForSelection = selectionKeys.current.get(capturedKey) ?? new Set<string>();
+      keysForSelection.add(playable.key);
+      selectionKeys.current.set(capturedKey, keysForSelection);
+      preferredResumeKeysRef.current.set(latest.current.selectionKey, playable.key);
     },
-    [disabledReason, groupPlayable, startRun]
+    [disabledReason, groupPlayable, registry]
   );
   const playGroupAtVerse = useCallback(
     (verseRefs: readonly string[], verseRef: string) => {
@@ -770,12 +837,20 @@ export const useSourceTtsPlayback = (
         // A reference Bible can omit the caret verse. The jump is an extra,
         // never a reason to make an otherwise playable primary silently inert.
         const canSeekCaret = playable.segments.some(item => item.verseRef === verseRef);
-        if (liveGroupKey(verseRefs) || record?.verseRef === verseRef || !canSeekCaret) {
+        if (
+          liveGroupKey(verseRefs) ||
+          record?.pendingFraction !== undefined ||
+          record?.verseRef === verseRef ||
+          !canSeekCaret
+        ) {
           playGroup(verseRefs);
-        } else seekGroup(verseRefs, verseRef, 0);
+        } else {
+          const index = playable.segments.findIndex(item => item.verseRef === verseRef);
+          startRun([playable], 0, true, { index, fraction: 0 });
+        }
       });
     },
-    [disabledReason, groupPlayable, liveGroupKey, playGroup, registry, seekGroup]
+    [disabledReason, groupPlayable, liveGroupKey, playGroup, registry, startRun]
   );
   const playFromGroups = useCallback(
     (groups: ReadonlyArray<readonly string[]>, verseRef: string) => {
@@ -785,20 +860,31 @@ export const useSourceTtsPlayback = (
       });
       const targetRefs = groups.find(refs => refs.includes(verseRef));
       const target = targetRefs ? groupPlayable(targetRefs) : undefined;
-      pressPrimary(disabledReason(target), () => {
-        if (!target) return;
+      const liveKey = runRef.current?.liveKey ?? null;
+      const preferredKey = preferredResumeKeysRef.current.get(latest.current.selectionKey) ?? null;
+      const resumeKey = [liveKey, preferredKey, target?.key].find(
+        key =>
+          key &&
+          playables.some(playable => playable.key === key) &&
+          (key === liveKey || registry.getRecord(key))
+      );
+      const resumeTarget = playables.find(playable => playable.key === resumeKey);
+      pressPrimary(disabledReason(resumeTarget ?? target), () => {
+        const startPlayable = resumeTarget ?? target;
+        if (!startPlayable) return;
         const segments = playables.flatMap(group => group.segments);
         const caretIndex = segments.findIndex(item => item.verseRef === verseRef);
         const index =
           caretIndex >= 0
             ? caretIndex
-            : segments.findIndex(item => item.playableKey === target.key);
+            : segments.findIndex(item => item.playableKey === startPlayable.key);
         // Exactly the scrub start path, extended with the following full groups.
         // Their normal keys preserve controls, timing and pause records at boundaries.
-        startRun(playables, 0, false, { index, fraction: 0 });
+        if (resumeKey) startRun(playables, 0, false, undefined, resumeKey);
+        else startRun(playables, 0, false, { index, fraction: 0 });
       });
     },
-    [disabledReason, groupPlayable, startRun]
+    [disabledReason, groupPlayable, registry, startRun]
   );
   const verseKey = useCallback(
     (verseRef: string) => versePlayable(verseRef)?.key ?? null,
@@ -853,7 +939,7 @@ export const useSourceTtsPlayback = (
         })),
         currentIndex,
         currentTime,
-        pendingFraction: isLive ? report?.pendingFraction : undefined,
+        pendingFraction: isLive ? report?.pendingFraction : record?.pendingFraction,
       };
     },
     [
@@ -878,7 +964,10 @@ export const useSourceTtsPlayback = (
     const shown = shownPageKeyRef.current;
     shownPageKeyRef.current = pageKey;
 
-    if (shown !== pageKey) stopWithoutRecord();
+    if (shown !== pageKey) {
+      stopWithoutRecord();
+      preferredResumeKeysRef.current.clear();
+    }
     registry.setPageKey(pageKey ?? '');
   }, [pageKey, registry, stopWithoutRecord]);
 

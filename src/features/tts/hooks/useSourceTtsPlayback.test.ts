@@ -98,10 +98,14 @@ const setup = (overrides: Partial<UseSourceTtsPlaybackOptions> = {}) => {
     getViewport: () => rect(0, 500),
     ...overrides,
   };
-  const { result, rerender } = renderHook(() => useSourceTtsPlayback(options), {
-    wrapper: PlaybackRegistryProvider,
-  });
-  return { result, rerender, scrollIntoView, focus };
+  const { result, rerender } = renderHook(
+    (props: UseSourceTtsPlaybackOptions) => useSourceTtsPlayback(props),
+    {
+      initialProps: options,
+      wrapper: PlaybackRegistryProvider,
+    }
+  );
+  return { result, rerender, scrollIntoView, focus, options };
 };
 
 describe('useSourceTtsPlayback — play actions', () => {
@@ -125,6 +129,26 @@ describe('useSourceTtsPlayback — play actions', () => {
     expect(items.map(item => item.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
     // Row 3 on screen is queue index 1 — a rendered-row count would say 2.
     expect(index).toBe(1);
+  });
+
+  it('play-from-here continues a saved verse position ahead of a stale caret', () => {
+    const { result } = setup();
+    act(() => result.current.playVerse('GEN 1:3'));
+    pause.mockReturnValue({
+      playableKey: result.current.verseKey('GEN 1:3')!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 6.5,
+      forceTts: false,
+    });
+    act(() => result.current.pause());
+    playFrom.mockClear();
+
+    act(() => result.current.playFromVerse('GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toBe(6.5);
   });
 
   it('ignores play requests for an unplayable row (§5.1)', () => {
@@ -161,7 +185,7 @@ describe('useSourceTtsPlayback — play actions', () => {
 // ---------------------------------------------------------------------------
 
 describe('useSourceTtsPlayback — playGroup (G3a)', () => {
-  it('inherits fallback for a same-group seek, never from a different pericope it displaces', () => {
+  it('passively scrubs without starting media and preserves only same-group fallback', () => {
     const { result } = setup();
     act(() => result.current.playGroup(['GEN 1:1']));
     pause.mockReturnValue({
@@ -172,7 +196,10 @@ describe('useSourceTtsPlayback — playGroup (G3a)', () => {
       forceTts: true,
     });
     act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:3', 0.5));
-    expect(playFrom.mock.calls.at(-1)?.[3]).toBeUndefined();
+    expect(playFrom).not.toHaveBeenCalled();
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
+    expect(playFrom.mock.calls.at(-1)?.[2]).toEqual({ fraction: 0.5 });
+    expect(playFrom.mock.calls.at(-1)?.[3]).toEqual({ forceTts: false });
     pause.mockReturnValue({
       playableKey: result.current.groupKey(['GEN 1:3', 'GEN 1:4'])!,
       itemIndex: 0,
@@ -181,19 +208,182 @@ describe('useSourceTtsPlayback — playGroup (G3a)', () => {
       forceTts: true,
     });
     act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:4', 0.5));
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
     expect(playFrom.mock.calls.at(-1)?.[3]).toEqual({ forceTts: true });
   });
 
-  it('seeks exactly once with a tagged fraction and a playable-local filtered index', () => {
+  it('latest idle scrub wins and starts only on explicit Play', () => {
     const { result } = setup();
     act(() => result.current.seekGroup(['GEN 1:4', 'GEN 1:2', 'GEN 1:3'], 'GEN 1:4', 0.5));
+    act(() => result.current.seekGroup(['GEN 1:4', 'GEN 1:2', 'GEN 1:3'], 'GEN 1:3', 0.25));
+    expect(playFrom).not.toHaveBeenCalled();
+    expect(playOne).not.toHaveBeenCalled();
+    expect(result.current.groupView(['GEN 1:3', 'GEN 1:4'])).toMatchObject({
+      currentIndex: 0,
+      pendingFraction: 0.25,
+    });
+    act(() => result.current.playGroup(['GEN 1:4', 'GEN 1:2', 'GEN 1:3']));
     expect(playFrom).toHaveBeenCalledOnce();
     const [segments, index, start] = playFrom.mock.calls[0] as [Segment[], number, unknown];
     expect(segments.map(segment => segment.verseRef)).toEqual(['GEN 1:3', 'GEN 1:4']);
-    expect(index).toBe(1);
-    expect(start).toEqual({ fraction: 0.5 });
+    expect(index).toBe(0);
+    expect(start).toEqual({ fraction: 0.25 });
     act(() => result.current.seekGroup(['GEN 1:3'], 'GEN 1:4', 0.5));
     expect(playFrom).toHaveBeenCalledOnce();
+  });
+
+  it('a live scrub pauses once and remains paused until explicit Play', () => {
+    const { result } = setup();
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:3', 'GEN 1:4'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 7,
+      forceTts: true,
+    });
+    act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:4', 0.75));
+    expect(pause).toHaveBeenCalledOnce();
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(result.current.groupView(['GEN 1:3', 'GEN 1:4'])).toMatchObject({
+      currentIndex: 1,
+      pendingFraction: 0.75,
+    });
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
+    expect(playFrom.mock.calls.at(-1)?.[1]).toBe(1);
+    expect(playFrom.mock.calls.at(-1)?.[2]).toEqual({ fraction: 0.75 });
+    expect(playFrom.mock.calls.at(-1)?.[3]).toEqual({ forceTts: true });
+  });
+
+  it('scrubbing another group silences the current group without inheriting its fallback', () => {
+    const { result } = setup();
+    act(() => result.current.playGroup(['GEN 1:1']));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:1'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:1',
+      currentTime: 3,
+      forceTts: true,
+    });
+    act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:4', 0.4));
+    expect(pause).toHaveBeenCalledOnce();
+    expect(playFrom).not.toHaveBeenCalled();
+    act(() => result.current.playGroup(['GEN 1:3', 'GEN 1:4']));
+    expect(playFrom.mock.calls.at(-1)?.[2]).toEqual({ fraction: 0.4 });
+    expect(playFrom.mock.calls.at(-1)?.[3]).toEqual({ forceTts: false });
+  });
+
+  it('scrubbing another group preserves the displaced group resume record', () => {
+    const { result } = setup();
+    act(() => result.current.playGroup(['GEN 1:1']));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:1'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:1',
+      currentTime: 7,
+      forceTts: true,
+    });
+    act(() => result.current.seekGroup(['GEN 1:3'], 'GEN 1:3', 0.4));
+    playOne.mockClear();
+
+    act(() => result.current.playGroup(['GEN 1:1']));
+
+    expect(playOne).toHaveBeenCalledOnce();
+    expect(playOne.mock.calls[0]?.[1]).toBe(7);
+    expect(playOne.mock.calls[0]?.[2]).toEqual({ forceTts: true });
+  });
+
+  it('preserves a later-group fraction through loading pause and continuous resume', () => {
+    const { result } = setup();
+    const later = ['GEN 1:4'];
+    act(() => result.current.seekGroup(later, 'GEN 1:4', 0.55));
+    act(() => result.current.playFromGroups([['GEN 1:1'], later], 'GEN 1:1'));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(later)!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:4',
+      currentTime: 0,
+      pendingFraction: 0.55,
+      forceTts: false,
+    });
+    act(() => result.current.pause());
+    playFrom.mockClear();
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], later], 'GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0.55 });
+  });
+
+  it('preserves an ordinary later-group logical start through loading continuous play', () => {
+    const { result } = setup();
+    const later = ['GEN 1:4'];
+    act(() => result.current.playGroup(later));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(later)!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:4',
+      currentTime: 0,
+      pendingFraction: 0,
+      forceTts: false,
+    });
+    playFrom.mockClear();
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], later], 'GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0 });
+  });
+
+  it('continues from a resolved later group saved at zero', () => {
+    const { result } = setup();
+    const later = ['GEN 1:4'];
+    act(() => result.current.playGroup(later));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(later)!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:4',
+      currentTime: 0,
+      forceTts: false,
+    });
+    playFrom.mockClear();
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], later], 'GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toBe(0);
+  });
+
+  it('continues from a resolved live verse at zero ahead of a stale caret', () => {
+    const { result } = setup();
+    act(() => result.current.playVerse('GEN 1:3'));
+    pause.mockReturnValue({
+      playableKey: result.current.verseKey('GEN 1:3')!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 0,
+      forceTts: false,
+    });
+    playFrom.mockClear();
+
+    act(() => result.current.playFromVerse('GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toBe(0);
+  });
+
+  it('Alt+P-style group Play honors a scrub even when the caret is elsewhere', () => {
+    const { result } = setup();
+    const refs = ['GEN 1:3', 'GEN 1:4'];
+    act(() => result.current.seekGroup(refs, 'GEN 1:4', 0.7));
+    act(() => result.current.playGroupAtVerse(refs, 'GEN 1:3'));
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0.7 });
   });
 
   it('uses one resolver key for a pericope, distinct verse keys for a play-from-here run', () => {
@@ -259,6 +449,128 @@ describe('useSourceTtsPlayback — playGroup (G3a)', () => {
     act(() => result.current.playFromGroup(['GEN 1:2']));
 
     expect(playFrom).not.toHaveBeenCalled();
+  });
+
+  it('continuous Play resumes a scrubbed later group instead of rewinding to the caret', () => {
+    const { result } = setup();
+    act(() => result.current.seekGroup(['GEN 1:4'], 'GEN 1:4', 0.6));
+    expect(playFrom).not.toHaveBeenCalled();
+
+    act(() => result.current.playFromGroups([['GEN 1:1', 'GEN 1:3'], ['GEN 1:4']], 'GEN 1:1'));
+
+    const [segments, index, start] = playFrom.mock.calls[0] as [Segment[], number, unknown];
+    expect(segments.map(segment => segment.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
+    expect(index).toBe(2);
+    expect(start).toEqual({ fraction: 0.6 });
+  });
+
+  it('continuous Play resumes a visible scrub when the caret is outside every group', () => {
+    const { result } = setup();
+    act(() => result.current.seekGroup(['GEN 1:3', 'GEN 1:4'], 'GEN 1:4', 0.8));
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], ['GEN 1:3', 'GEN 1:4']], 'GEN 9:9'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(2);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0.8 });
+  });
+
+  it('continuous Play uses the target record when the preferred key is outside its groups', () => {
+    const { result } = setup();
+    act(() => result.current.seekGroup(['GEN 1:4'], 'GEN 1:4', 0.65));
+    act(() => result.current.seekGroup(['GEN 1:3'], 'GEN 1:3', 0.2));
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], ['GEN 1:4']], 'GEN 1:4'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0.65 });
+  });
+
+  it('restores each selection identity preferred scrub after A to B to A switching', () => {
+    const { result, rerender, options } = setup();
+    const aLater = ['GEN 1:4'];
+    act(() => result.current.seekGroup(aLater, 'GEN 1:4', 0.6));
+    const bOptions: UseSourceTtsPlaybackOptions = {
+      ...options,
+      sourceChapter: {
+        ...options.sourceChapter!,
+        role: 'projectSource',
+        bibleId: 99,
+        textBibleKey: 'aq-1',
+      },
+      referenceBibleId: null,
+    };
+    act(() => rerender(bOptions));
+    act(() => result.current.seekGroup(['GEN 1:3'], 'GEN 1:3', 0.2));
+    act(() => rerender(options));
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], aLater], 'GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(1);
+    expect(playFrom.mock.calls[0]?.[2]).toEqual({ fraction: 0.6 });
+  });
+
+  it('restores each selection identity preferred verse after sounding A to B to A switching', () => {
+    const { result, rerender, options } = setup();
+    act(() => result.current.playVerse('GEN 1:4'));
+    pause.mockReturnValue({
+      playableKey: result.current.verseKey('GEN 1:4')!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:4',
+      currentTime: 5,
+      forceTts: false,
+    });
+    act(() => result.current.pause());
+    const bOptions: UseSourceTtsPlaybackOptions = {
+      ...options,
+      sourceChapter: {
+        ...options.sourceChapter!,
+        role: 'projectSource',
+        bibleId: 99,
+        textBibleKey: 'aq-1',
+      },
+      referenceBibleId: null,
+    };
+    act(() => rerender(bOptions));
+    act(() => result.current.playVerse('GEN 1:3'));
+    pause.mockReturnValue({
+      playableKey: result.current.verseKey('GEN 1:3')!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 2,
+      forceTts: false,
+    });
+    act(() => result.current.pause());
+    act(() => rerender(options));
+    playFrom.mockClear();
+
+    act(() => result.current.playFromVerse('GEN 1:1'));
+
+    expect(playFrom).toHaveBeenCalledOnce();
+    expect(playFrom.mock.calls[0]?.[1]).toBe(2);
+    expect(playFrom.mock.calls[0]?.[2]).toBe(5);
+  });
+
+  it('continuous Play preserves the live group position and then keeps following groups', () => {
+    const { result } = setup();
+    act(() => result.current.playGroup(['GEN 1:3']));
+    pause.mockReturnValue({
+      playableKey: result.current.groupKey(['GEN 1:3'])!,
+      itemIndex: 0,
+      verseRef: 'GEN 1:3',
+      currentTime: 4.5,
+      forceTts: false,
+    });
+    playFrom.mockClear();
+
+    act(() => result.current.playFromGroups([['GEN 1:1'], ['GEN 1:3'], ['GEN 1:4']], 'GEN 1:1'));
+
+    const [segments, index, start] = playFrom.mock.calls[0] as [Segment[], number, unknown];
+    expect(segments.map(segment => segment.verseRef)).toEqual(['GEN 1:1', 'GEN 1:3', 'GEN 1:4']);
+    expect(index).toBe(1);
+    expect(start).toBe(4.5);
   });
 
   it('isGroupSpeaking follows the playing row, so both layouts light up from one source', () => {

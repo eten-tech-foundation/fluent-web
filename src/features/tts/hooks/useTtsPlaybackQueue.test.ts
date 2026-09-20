@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeClipElement } from '../testing/fakeClipElement';
 
-import { useTtsPlaybackQueue, type UseTtsPlaybackQueueOptions } from './useTtsPlaybackQueue';
+import {
+  type PauseSnapshot,
+  useTtsPlaybackQueue,
+  type UseTtsPlaybackQueueOptions,
+} from './useTtsPlaybackQueue';
 
 import type {
   PlaybackFailure,
@@ -123,6 +127,66 @@ describe('segment queue — source and run lifecycle', () => {
     expect(h.elements[0].currentTime).toBe(45.5);
     await act(async () => h.result.current.playFrom([segment(2)], 0, 0.5));
     expect(h.elements.at(-1)?.currentTime).toBe(0.5);
+  });
+
+  it('snapshots fractional intent while lazy source resolution is pending', async () => {
+    const h = setup({ prefetchDepth: 0 });
+    let finish!: (value: Source) => void;
+    const deferred = new Promise<Source>(resolve => {
+      finish = resolve;
+    });
+    act(() =>
+      h.result.current.playFrom([{ ...segment(2), source: () => deferred }], 0, { fraction: 0.7 })
+    );
+    let snapshot: PauseSnapshot | null = null;
+    act(() => {
+      snapshot = h.result.current.pause();
+    });
+    expect(snapshot).toMatchObject({
+      playableKey: 'key-2',
+      verseRef: 'row-2',
+      currentTime: 0,
+      pendingFraction: 0.7,
+      forceTts: false,
+    });
+    await act(async () => finish(source('cancelled')));
+    expect(h.elements).toHaveLength(0);
+  });
+
+  it('snapshots logical segment start while ordinary lazy resolution is pending', async () => {
+    const h = setup({ prefetchDepth: 0 });
+    act(() =>
+      h.result.current.playFrom([{ ...segment(3), source: () => new Promise<Source>(() => {}) }], 0)
+    );
+    let snapshot: PauseSnapshot | null = null;
+    act(() => {
+      snapshot = h.result.current.pause();
+    });
+    expect(snapshot).toMatchObject({
+      playableKey: 'key-3',
+      verseRef: 'row-3',
+      currentTime: 0,
+      pendingFraction: 0,
+    });
+  });
+
+  it('snapshots fractional intent while initial metadata is pending', async () => {
+    const h = setup({ prefetchDepth: 0 });
+    await act(async () => h.result.current.playFrom([segment(1)], 0, { fraction: 0.45 }));
+    expect(h.elements[0].currentTime).toBe(0);
+    let snapshot: PauseSnapshot | null = null;
+    act(() => {
+      snapshot = h.result.current.pause();
+    });
+    expect(snapshot).toMatchObject({
+      currentTime: 0,
+      pendingFraction: 0.45,
+    });
+    act(() => {
+      h.elements[0].duration = 20;
+      h.elements[0].emit('loadedmetadata');
+    });
+    expect(h.elements[0].currentTime).toBe(0);
   });
 
   it('applies a fractional target when initial metadata arrives, never again on later correction', async () => {
@@ -266,7 +330,7 @@ describe('segment queue — source and run lifecycle', () => {
     expect(h.onRunComplete).toHaveBeenCalledOnce();
   });
 
-  it('does not invent offset zero when paused before a lazy windowed source resolves', async () => {
+  it('tags logical start rather than inventing absolute zero before a lazy window resolves', async () => {
     const h = setup();
     let finish!: (value: Source) => void;
     const item: Segment = {
@@ -281,7 +345,7 @@ describe('segment queue — source and run lifecycle', () => {
     act(() => {
       snapshot = h.result.current.pause();
     });
-    expect(snapshot).toBeNull();
+    expect(snapshot).toMatchObject({ currentTime: 0, pendingFraction: 0 });
     expect(h.result.current.status).toBe('idle');
     await act(async () => finish({ ...source('late-window'), window: [12, 18] }));
     expect(h.elements).toHaveLength(0);
