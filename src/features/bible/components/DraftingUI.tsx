@@ -38,6 +38,7 @@ import { useReferenceChapterTexts } from '@/features/resources/hooks/useReferenc
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
   ServerTtsEngine,
+  RecordedNoticeDialog,
   type SourceAudioRow,
   usePlaybackRegistry,
   useSourceTtsPlayback,
@@ -1003,6 +1004,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     engine: ttsEngine,
     rows: ttsRows,
     referenceBibleId: selectedPanel === 2 ? referenceBibleId : null,
+    textBibleName:
+      selectedPanel === 1 ? projectItem.bibleName : (activeResourceBibleTab?.label ?? ''),
     facts: providerFacts,
     sourceLicence: { status: projectItem.ttsLicenseStatus },
     sourceChapter: {
@@ -1097,6 +1100,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             groupView: tts.groupView,
             restartGroup: tts.restartGroup,
             seekGroup: tts.seekGroup,
+            showRecordedNotice: tts.showRecordedNotice,
             activeVerseRef: tts.activeVerseRef,
             isGroupSpeaking: tts.isGroupSpeaking,
             playGroup: tts.playGroup,
@@ -1113,6 +1117,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       tts.groupView,
       tts.restartGroup,
       tts.seekGroup,
+      tts.showRecordedNotice,
       tts.activeVerseRef,
       tts.isGroupSpeaking,
       ttsShowServing,
@@ -1220,6 +1225,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
+      <RecordedNoticeDialog notice={tts.recordedNoticeDialog} onClose={tts.closeRecordedNotice} />
       <DraftingHeader
         activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}

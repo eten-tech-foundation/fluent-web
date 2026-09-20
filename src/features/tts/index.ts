@@ -64,6 +64,17 @@ export {
 export { SourceVerseControl } from './components/SourceVerseControl';
 
 export { PericopePlayer, type PericopePlayerProps } from './components/TtsGroupControls';
+export {
+  RecordedNoticeDialog,
+  type RecordedNoticeDialogProps,
+} from './components/RecordedNoticeDialog';
+export {
+  createRecordedNoticeAckStore,
+  recordedNoticeAckStore,
+  recordedNoticeKey,
+  type RecordedNotice,
+  type RecordedNoticeAcknowledgment,
+} from './lib/ackStore';
 
 export {
   buildTtsQueueItems,

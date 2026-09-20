@@ -33,6 +33,7 @@ export const sourceAudioResponseSchema = z.object({
       expiresAt: z.number().optional(),
       dblAudioBibleId: z.string().optional(),
       recordingKey: z.string().optional(),
+      recordingName: z.string().optional(),
       licenseNotice: z.string().nullable().optional(),
       trackId: z.string().optional(),
     })

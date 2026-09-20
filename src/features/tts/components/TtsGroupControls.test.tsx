@@ -44,6 +44,7 @@ const props = (view = model()): PericopePlayerProps => ({
     playGroup: vi.fn(),
     restartGroup: vi.fn(),
     seekGroup: vi.fn(),
+    showRecordedNotice: vi.fn(),
   },
 });
 const mount = (input: PericopePlayerProps) =>
@@ -104,6 +105,29 @@ describe('PericopePlayer', () => {
     expect(input.playback.seekGroup).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /^Play/ }));
     expect(input.playback.playGroup).toHaveBeenCalledWith(['1', '2']);
+  });
+
+  it('offers recording Info only for a retained fresh notice', () => {
+    const view: PericopePlaybackView = {
+      ...model(),
+      recordedNotice: {
+        textBibleKey: 'dbl-text',
+        textBibleName: 'Text Bible',
+        recordingKey: 'aq-1',
+        recordingName: 'Recording Bible',
+        recordingProvider: 'aquifer' as const,
+        notice: 'Curated notice',
+      },
+    };
+    const input = props(view);
+    const h = mount(input);
+    fireEvent.click(screen.getByRole('button', { name: 'Recording information for 1:1–2' }));
+    expect(input.playback.showRecordedNotice).toHaveBeenCalledWith(view.recordedNotice);
+    view.recordedNotice = null;
+    h.rerender(<PericopePlayer {...input} />);
+    expect(
+      screen.queryByRole('button', { name: 'Recording information for 1:1–2' })
+    ).not.toBeInTheDocument();
   });
 
   it('maps live playback, provenance and elapsed independently of the idle registry', () => {

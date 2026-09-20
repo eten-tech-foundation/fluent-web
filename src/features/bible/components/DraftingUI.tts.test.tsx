@@ -261,6 +261,9 @@ vi.mock('@/features/tts', async importOriginal => {
           .map(row => row.verseRef)
       );
       return {
+        recordedNoticeDialog: null,
+        closeRecordedNotice: vi.fn(),
+        showRecordedNotice: vi.fn(),
         status: isBusy ? 'playing' : 'idle',
         aiMarkedKeys: new Set<string>(),
         activeVerseRef,

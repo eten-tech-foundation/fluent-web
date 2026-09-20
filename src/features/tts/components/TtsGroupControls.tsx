@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 
+import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import {
   type PericopePlaybackView,
@@ -20,7 +24,7 @@ export interface PericopePlayerProps {
   verseRefs: readonly string[];
   playback: Pick<
     SourceTtsPlaybackApi,
-    'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup'
+    'status' | 'groupView' | 'playGroup' | 'restartGroup' | 'seekGroup' | 'showRecordedNotice'
   >;
 }
 
@@ -70,6 +74,7 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
   }, [registry, view.impossibleReason, view.key]);
   const offline = useOffline();
   const geometry = geometryFor(view);
+  const recordedNotice = view.recordedNotice;
   const impossible = impossibleReason !== null;
   const state: PlayableControlState = offline
     ? 'offline'
@@ -113,6 +118,28 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
         }}
       />
       <TimeReadout elapsed={geometry.elapsed} estimated={geometry.estimated} />
+      {recordedNotice && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t('recordedAudioInfo', 'Recording information for {{groupLabel}}', {
+                  groupLabel,
+                })}
+                className='text-muted-foreground size-10 shrink-0'
+                size='icon'
+                variant='ghost'
+                onClick={() => playback.showRecordedNotice(recordedNotice)}
+              >
+                <Info aria-hidden='true' className='size-4' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {t('recordedAudioNoticeTitle', 'Recording information')}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
