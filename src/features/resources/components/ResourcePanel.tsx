@@ -44,7 +44,6 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   onLanguageChange,
   onBibleSelect,
   onBibleVersesChange,
-  onBibleIdentityChange,
   onBibleLoadingChange,
   onBibleErrorChange,
   selectedBibleId,

@@ -62,7 +62,7 @@ export interface DraftingGridPericopeTts extends Pick<
   isGroupSpeaking: SourceTtsPlaybackApi['isGroupSpeaking'];
   /** Present only while verifying a deployment — see `ttsServingWashClass`. */
   servingFor?: (verseRef: string) => TtsServedFormat | undefined;
-  verseRefFor: (verseNumber: number) => string;
+  verseRefFor: (verseNumber: number, chapterNumber?: number) => string;
 }
 
 interface DraftingGridPericopeProps {
@@ -245,8 +245,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                 (() => {
                   switch (suggestionStatus) {
                     case 'error':
-
-          return (
+                      return (
                         <p className='text-destructive mt-1 text-sm font-medium'>
                           {t('aiTranslationNotAvailable', 'AI translation not available.')}
                         </p>
@@ -536,8 +535,16 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
             chapters.length === 1 &&
             !refs.some(ref => bibleVerseMap.get(ref.verseNumber)?.trim());
           const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-          const ttsGroupRefs = tts ? groupVerses.map(gv => tts.verseRefFor(gv.verseNumber)) : [];
+          const ttsGroupRefs = tts
+            ? refs.map(ref => tts.verseRefFor(ref.verseNumber, ref.chapterNumber))
+            : [];
           const isGroupSpeaking = tts?.isGroupSpeaking(ttsGroupRefs) ?? false;
+          const groupServed =
+            isGroupSpeaking && tts?.activeVerseRef != null
+              ? tts.servingFor?.(tts.activeVerseRef)
+              : undefined;
+          const isVerseSpeaking = (chapter: number, verse: number) =>
+            tts !== undefined && tts.verseRefFor(verse, chapter) === tts.activeVerseRef;
 
           return (
             <div
@@ -547,25 +554,25 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   verseRefs.current[gv.verseNumber] = el;
                 });
               }}
-              className='grid w-full items-start py-4'
+              className={`grid w-full items-start border-l-4 py-4 ${
+                isGroupSpeaking
+                  ? (ttsServingWashClass(groupServed) ?? 'border-l-primary bg-primary/5')
+                  : 'border-l-transparent'
+              }`}
+              data-testid={isGroupSpeaking ? 'tts-active-group' : undefined}
+              data-tts-served={isGroupSpeaking ? groupServed : undefined}
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
-              <div className='flex w-full flex-col space-y-2 px-6'>
-                <div className='flex min-h-10 items-center justify-between gap-2'>
-                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                  {heading}
-                </h4>
+              <div
+                className='flex w-full min-w-0 flex-col px-6'
+                data-testid='pericope-source-column'
+              >
+                <div className='flex h-6 min-w-0 items-center gap-2'>
+                  <h4 className='shrink-0 text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                    {heading}
+                  </h4>
                   {tts !== undefined && (
-                    <TtsGroupControls
-                      groupLabel={heading}
-                      hasPlayableText={ttsGroupRefs.some(ref => tts.isRowPlayable(ref))}
-                      isLoading={ttsGroupRefs.some(ref => tts.isRowLoading(ref))}
-                      isPlaying={isGroupSpeaking}
-                      showStop={tts.isBusy}
-                      onPlayFromGroup={() => tts.playFromGroup(ttsGroupRefs)}
-                      onPlayGroup={() => tts.playGroup(ttsGroupRefs)}
-                      onStop={tts.stop}
-                    />
+                    <PericopePlayer groupLabel={heading} playback={tts} verseRefs={ttsGroupRefs} />
                   )}
                 </div>
                 {showResourcePlaceholder ? (
@@ -583,7 +590,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   </div>
                 ) : (
                   <div
-                    className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                    className={`focus-visible:ring-primary mt-2 w-full cursor-pointer rounded-[12px] border-2 p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${isGroupSpeaking ? 'bg-primary/10 dark:bg-primary/20' : 'dark:bg-card bg-[#f0f4f9]'} ${
                       isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
                     }`}
                     role='button'
@@ -645,16 +652,23 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                             selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
-                              <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                              <span
+                                className={`mr-1.5 font-bold ${isVerseSpeaking(chapter, ref.verseNumber) ? 'text-primary' : 'text-slate-900 dark:text-slate-100'}`}
+                              >
                                 {chapters.length > 1
                                   ? `${chapter}:${ref.verseNumber}`
                                   : ref.verseNumber}
                               </span>
                               <PericopeText
-                                className='mr-3'
+                                className={`mr-3 ${isVerseSpeaking(chapter, ref.verseNumber) ? 'bg-primary/30 rounded-sm' : ''}`}
                                 content={content}
                                 isError={!!failed}
                                 isLoading={!!loading}
+                                testId={
+                                  isVerseSpeaking(chapter, ref.verseNumber)
+                                    ? 'tts-active-verse'
+                                    : undefined
+                                }
                               />
                             </React.Fragment>
                           );

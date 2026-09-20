@@ -6,7 +6,7 @@ import type { FetchLike } from '../engines/serverTtsEngine';
 
 // Mirror the additive source-audio wire contract, not the strict TTS request.
 export const sourceAudioResponseSchema = z.object({
-  provider: z.enum(['dbl', 'aquifer']),
+  provider: z.enum(['dbl', 'aquifer', 'youversion']),
   bible: z.object({
     aquiferBibleId: z.number().int().optional(),
     dblAudioBibleId: z.string().optional(),
@@ -14,6 +14,8 @@ export const sourceAudioResponseSchema = z.object({
     abbreviation: z.string(),
     fluentBibleId: z.number().int().optional(),
   }),
+  textBibleKey: z.string().nullable().optional(),
+  selectedRecordingKey: z.string().nullable().optional(),
   ttsLicenseStatus: z.enum(['allowed', 'forbidden', 'unknown']).optional(),
   licenseNotice: z.string().nullable().optional(),
   bookCode: z.string().regex(/^[A-Z0-9]{3}$/),
@@ -30,6 +32,9 @@ export const sourceAudioResponseSchema = z.object({
       // Published for mobile; web heals reactively and never reads this value.
       expiresAt: z.number().optional(),
       dblAudioBibleId: z.string().optional(),
+      recordingKey: z.string().optional(),
+      licenseNotice: z.string().nullable().optional(),
+      trackId: z.string().optional(),
     })
   ),
   verseAddressable: z.boolean(),
@@ -49,6 +54,9 @@ export type ChapterSourceAudio = z.infer<typeof sourceAudioResponseSchema>;
 export type SourceAudioTimestamp = NonNullable<ChapterSourceAudio['verseTimestamps']>[number];
 
 export interface ChapterSourceAudioRequest {
+  role?: 'projectSource' | 'referenceBible';
+  textBibleKey?: string | null;
+  selectedRecordingKey?: string | null;
   projectId: number;
   bookCode: string;
   chapter: number;
@@ -66,7 +74,8 @@ export class SourceAudioLookupError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
-    readonly cause?: unknown
+    readonly cause?: unknown,
+    readonly status?: number
   ) {
     super(message);
     this.name = 'SourceAudioLookupError';
@@ -94,10 +103,14 @@ export const fetchChapterSourceAudio = async (
     bibleId: String(chapter.bibleId),
     languageCode: chapter.languageCode,
   });
+  const route =
+    chapter.role === 'referenceBible'
+      ? `reference-audio/${encodeURIComponent(chapter.textBibleKey ?? '')}`
+      : 'playback-audio';
   let response: Response;
   try {
     response = await (options.fetchFn ?? fetch)(
-      `${base}/projects/${chapter.projectId}/source-audio/${encodeURIComponent(chapter.bookCode)}/${chapter.chapter}?${query}`,
+      `${base}/projects/${chapter.projectId}/${route}/${encodeURIComponent(chapter.bookCode)}/${chapter.chapter}?${query}`,
       { method: 'GET', credentials: 'include', signal }
     );
   } catch (error) {
@@ -108,7 +121,9 @@ export const fetchChapterSourceAudio = async (
     void response.body?.cancel().catch(() => {});
     throw new SourceAudioLookupError(
       `Failed to resolve source audio (HTTP ${response.status})`,
-      transientStatuses.has(response.status)
+      transientStatuses.has(response.status),
+      undefined,
+      response.status
     );
   }
   let body: unknown;

@@ -15,6 +15,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
 import type * as TtsFeature from '@/features/tts';
 import { PlaybackRegistryProvider, usePlaybackRegistry } from '@/features/tts';
 import type * as AudioModule from '@/features/tts/lib/audioElement';
@@ -54,8 +55,9 @@ vi.mock('@tanstack/react-router', async importOriginal => {
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (_key: string, defaultValue?: string, options?: Record<string, unknown>) =>
-      (defaultValue ?? _key).replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
-        String(options?.[name] ?? '')
+      (typeof defaultValue === 'string' ? defaultValue : _key).replace(
+        /\{\{(\w+)\}\}/g,
+        (_m, name: string) => String(options?.[name] ?? '')
       ),
     i18n: { language: 'en', changeLanguage: vi.fn() },
   }),
@@ -160,9 +162,17 @@ let mockPericopes: Array<{
   verses: Array<{ chapterNumber: number; verseNumber: number }>;
 }> = [];
 
+let mockFullPericopes: typeof mockPericopes | undefined;
+let mockContextChapters = new Map<number, PericopeContextChapter>();
+
+vi.mock('@/features/bible/hooks/usePericopeContext', () => ({
+  usePericopeContext: () => ({ chapters: mockContextChapters, isLoading: false, isError: false }),
+}));
+
 vi.mock('@/features/bible/hooks/usePericope', () => ({
   usePericope: () => ({
     pericopes: mockPericopes,
+    fullPericopes: mockFullPericopes,
     isPericopeMode: mockIsPericopeMode,
     isPericopeLoading: false,
     getPericopeStyle: () => 'border-border',
@@ -296,45 +306,40 @@ vi.mock('@/features/tts', async importOriginal => {
   };
 });
 
-// Panel 2 is missing verse 3 on purpose (§5.1): a reference Bible with a hole.
+// Panel 2 is missing verse 3 on purpose.
 vi.mock('@/features/resources/components/ResourcePanel', () => ({
   ResourcePanel: ({
     onBibleVersesChange,
-    onBibleIdentityChange,
-    selectPanel,
-    bibleResourceName,
-    openResourceBiblePanel,
+    onBibleSelect,
     onLanguageChange,
+    selectedBibleId,
+    onBibleLoadingChange,
   }: {
-    onBibleVersesChange: (verses: Array<{ verseNumber: number; text: string }>) => void;
-    onBibleIdentityChange: (id: string) => void;
-    selectPanel: (panel: number) => void;
-    bibleResourceName: (name: string) => void;
-    openResourceBiblePanel: (open: boolean) => void;
+    onBibleVersesChange: (id: string, verses: Array<{ verseNumber: number; text: string }>) => void;
+    onBibleSelect: (bible: { id: string; label: string; language: string }) => void;
     onLanguageChange?: (langCode: string) => void;
-  }) => (
-    <div data-testid='mock-resource-panel'>
-      <button
-        onClick={() => {
-          onBibleIdentityChange('aq-123');
-          bibleResourceName('Hindi Bible');
-          openResourceBiblePanel(true);
-          selectPanel(2);
-          onLanguageChange?.('hin');
-          onBibleVersesChange([
-            { verseNumber: 1, text: 'Hindi verse 1' },
-            { verseNumber: 2, text: 'Hindi verse 2' },
-          ]);
-        }}
-      >
-        Select Alternative Bible
-      </button>
-      <button onClick={() => onBibleIdentityChange('yv-123')}>
-        Select Same Text From Other Domain
-      </button>
-      <button onClick={() => bibleResourceName('Renamed Bible')}>Rename Selected Bible</button>
-    </div>
-  ),
+    selectedBibleId?: string;
+    onBibleLoadingChange: (id: string, loading: boolean) => void;
+  }) => {
+    const select = (id: string, label = 'Hindi Bible') => {
+      onBibleSelect({ id, label, language: 'hin' });
+      onLanguageChange?.('hin');
+      onBibleLoadingChange(id, false);
+      onBibleVersesChange(id, [
+        { verseNumber: 1, text: 'Hindi verse 1' },
+        { verseNumber: 2, text: 'Hindi verse 2' },
+      ]);
+    };
+    return (
+      <div data-testid='mock-resource-panel'>
+        <button onClick={() => select('aq-123')}>Select Alternative Bible</button>
+        <button onClick={() => select('yv-123')}>Select Same Text From Other Domain</button>
+        <button onClick={() => select(selectedBibleId ?? 'aq-123', 'Renamed Bible')}>
+          Rename Selected Bible
+        </button>
+      </div>
+    );
+  },
 }));
 
 const mockProjectItem: ProjectItem = {
@@ -416,6 +421,9 @@ beforeEach(() => {
   mockTargetScrollRef.current = null;
   mockIsPericopeMode = false;
   mockPericopes = [];
+  mockFullPericopes = undefined;
+  mockContextChapters = new Map();
+  mockReferenceChapters.clear();
 });
 
 /**
@@ -462,14 +470,14 @@ describe('DraftingUI — panel-aware TTS rows', () => {
   it('panel 1 reads the project source text in the project source language', () => {
     renderDrafting();
 
-    expect(sourceChapter).toEqual({
+    expect(sourceChapter).toMatchObject({
       projectId: mockProjectItem.projectId,
       bibleId: mockProjectItem.bibleId,
       bookCode: mockProjectItem.bookCode,
       chapter: mockProjectItem.chapterNumber,
       languageCode: mockProjectItem.sourceLangCode,
     });
-    expect(ttsRows).toEqual([
+    expect(ttsRows).toMatchObject([
       {
         verseRef: '1',
         verseNumber: 1,
@@ -501,9 +509,13 @@ describe('DraftingUI — panel-aware TTS rows', () => {
 
     // Not the project source text, and not the project source langCode —
     // reading Hindi text as English is the bug this guards.
-    expect(sourceChapter).toBeNull();
+    expect(sourceChapter).toMatchObject({
+      role: 'referenceBible',
+      textBibleKey: 'aq-123',
+      languageCode: 'hin',
+    });
     expect(referenceBibleId).toBe('aq-123');
-    expect(ttsRows.slice(0, 2)).toEqual([
+    expect(ttsRows.slice(0, 2)).toMatchObject([
       {
         verseRef: '1',
         verseNumber: 1,
@@ -567,7 +579,7 @@ describe('DraftingUI — source switch with the real host, queue and registry', 
     expect(registry.getRecord(key)).toMatchObject({ currentTime: 3.5, forceTts: true });
     expect(registry.getRecord(playback.verseKey('1')!)).toBeNull();
     expect(capturedPageKey).toBe('1');
-    await userEvent.click(screen.getByRole('button', { name: 'WEB' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'WEB' }));
     expect(playback.verseKey('1')).toBe(key);
     await play();
     expect(elements.at(-1)?.currentTime).toBe(3.5);
@@ -1531,4 +1543,108 @@ describe('DraftingUI — the serving tint', () => {
     expect(group).toHaveAttribute('data-tts-served', 'ogg');
     expect(group.className).toContain('bg-purple-500/20');
   });
+});
+
+vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+const mockReferenceChapters = new Map<
+  number,
+  { texts: Map<number, string>; loading: boolean; error: boolean }
+>();
+vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
+  useReferenceChapterTexts: () => mockReferenceChapters,
+}));
+// Provider transport/display has its own suite; this host suite exercises audio geometry.
+vi.mock('@/features/bible/components/PericopeReferenceVerses', () => ({
+  PericopeReferenceVerses: () => null,
+}));
+
+describe('DraftingUI — full cross-chapter audio scope', () => {
+  const crossing = () => {
+    realPlayback = true;
+    mockIsPericopeMode = true;
+    mockActiveVerseId = 3;
+    mockPericopes = [
+      {
+        pericopeNumber: 'crossing',
+        pericopeTitle: null,
+        verses: [{ chapterNumber: 1, verseNumber: 3 }],
+      },
+    ];
+    mockFullPericopes = [
+      {
+        ...mockPericopes[0],
+        verses: [...mockPericopes[0].verses, { chapterNumber: 2, verseNumber: 1 }],
+      },
+    ];
+    mockContextChapters.set(2, {
+      sourceVerses: [{ id: 201, verseNumber: 1, text: 'Adjacent chapter source text' }],
+      targetVerses: [],
+      isLoading: false,
+      isError: false,
+      sourceIsLoading: false,
+      sourceIsError: false,
+    });
+  };
+
+  it('mouse and keyboard share the complete visible range, bar and chapter-qualified identity', async () => {
+    crossing();
+    renderDrafting();
+    expect(screen.getByText('Adjacent chapter source text')).toBeInTheDocument();
+    expect(ttsRows.map(row => [row.verseRef, row.chapterNumber, row.text])).toEqual([
+      ['3', 1, 'And God said, Let there be light.'],
+      ['2:1', 2, 'Adjacent chapter source text'],
+    ]);
+    const refs = ['3', '2:1'];
+    const key = playback.groupKey(refs);
+    await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:3–2:1' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    act(() => elements[0].emit('playing'));
+    expect(playback.groupView(refs).segments.map(item => item.verseRef)).toEqual(refs);
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(playback.status).not.toBe('idle'));
+    expect(playback.groupKey(refs)).toBe(key);
+    expect(registry.isLive(key!)).toBe(true);
+  });
+
+  it.each(['missing', 'blank'] as const)(
+    'does not shorten reference playback when a nonempty adjacent chapter has %s promised text',
+    async kind => {
+      crossing();
+      mockActiveVerseId = 2;
+      mockPericopes[0].verses = [{ chapterNumber: 1, verseNumber: 2 }];
+      mockFullPericopes![0].verses = [
+        { chapterNumber: 1, verseNumber: 2 },
+        { chapterNumber: 2, verseNumber: 1 },
+      ];
+      const texts = new Map([[2, 'Another adjacent reference verse']]);
+      if (kind === 'blank') texts.set(1, '   ');
+      mockReferenceChapters.set(2, { texts, loading: false, error: false });
+      renderDrafting();
+      await selectReferenceBible();
+      expect(ttsRows.find(row => row.verseRef === '2')?.text).toBe('Hindi verse 2');
+      expect(ttsRows.find(row => row.verseRef === '2:1')?.unavailable).toBe(true);
+      expect(playback.groupKey(['2', '2:1'])).toBeNull();
+      const play = screen.getByRole('button', { name: 'Play pericope 1:2–2:1' });
+      expect(play).toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(play);
+      await userEvent.keyboard('{Alt>}p{/Alt}');
+      expect(synthesize).not.toHaveBeenCalled();
+      expect(elements).toHaveLength(0);
+    }
+  );
+
+  it.each(['error', 'missing'] as const)(
+    'does not silently omit adjacent %s source text',
+    async kind => {
+      crossing();
+      const context = mockContextChapters.get(2)!;
+      mockContextChapters.set(2, { ...context, sourceVerses: [], sourceIsError: kind === 'error' });
+      renderDrafting();
+      expect(ttsRows.find(row => row.verseRef === '2:1')?.unavailable).toBe(true);
+      expect(playback.groupKey(['3', '2:1'])).toBeNull();
+      await userEvent.keyboard('{Alt>}p{/Alt}');
+      expect(synthesize).not.toHaveBeenCalled();
+    }
+  );
 });

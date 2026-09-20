@@ -31,6 +31,13 @@ vi.mock('../lib/audioElement', async importOriginal => ({
   },
 }));
 
+const click = async (element: HTMLElement) => {
+  fireEvent.click(element);
+  await act(async () => {
+    for (let i = 0; i < 25; i++) await Promise.resolve();
+  });
+};
+
 type Mode = 'verse' | 'pericope';
 const rows = [1, 2, 3].map(number => ({
   verseRef: String(number),
@@ -45,7 +52,16 @@ function Harness({ mode, engine }: { mode: Mode; engine: TtsEngine }) {
   const playback = useSourceTtsPlayback({
     engine,
     rows,
-    sourceChapter: null,
+    sourceChapter: {
+      projectId: 1,
+      bibleId: 2,
+      bookCode: 'JHN',
+      chapter: 3,
+      languageCode: 'eng',
+      role: 'referenceBible',
+      textBibleKey: 'aq-20',
+    },
+    sourceLicence: { status: 'allowed' },
     referenceBibleId: 'aq-test',
     pageKey: 'controls-test',
     getRowElement: () => null,
@@ -115,7 +131,7 @@ const expectSpinners = (count: number) => {
 
 it('a verse-key run lights pericope players in turn; cross-pericope prefetch never spins the next player', async () => {
   const h = setup('pericope');
-  fireEvent.click(screen.getByRole('button', { name: 'Start run' }));
+  await click(screen.getByRole('button', { name: 'Start run' }));
   const first = await h.resolve(0);
   await h.playing(first);
   const second = await h.resolve(1);
@@ -141,12 +157,12 @@ for (const mode of ['verse', 'pericope'] as const) {
       const h = setup(mode);
       expect(h.synthesize).not.toHaveBeenCalled();
       expectSpinners(0);
-      fireEvent.click(h.primary());
+      await click(h.primary());
       expect(h.synthesize).toHaveBeenCalledTimes(1);
       expect(h.primary('Pause')).toHaveAttribute('aria-busy', 'true');
       expectSpinners(1);
       // Loading is still a cancelable primary action, not a disabled control.
-      fireEvent.click(h.primary('Pause'));
+      await click(h.primary('Pause'));
       expect(h.pending[0].signal?.aborted).toBe(true);
       expectSpinners(0);
       expect(h.primary()).not.toHaveAttribute('aria-disabled');
@@ -157,7 +173,7 @@ for (const mode of ['verse', 'pericope'] as const) {
 
     it('prefetches N+1 without spinning any control while N plays; waiting at its boundary spins only its owner', async () => {
       const h = setup(mode);
-      fireEvent.click(
+      await click(
         mode === 'verse' ? screen.getByRole('button', { name: 'Start run' }) : h.primary()
       );
       const first = await h.resolve(0);
@@ -181,7 +197,7 @@ for (const mode of ['verse', 'pericope'] as const) {
 
     it('a completed background prefetch neither spins its sibling nor starts it early', async () => {
       const h = setup(mode);
-      fireEvent.click(
+      await click(
         mode === 'verse' ? screen.getByRole('button', { name: 'Start run' }) : h.primary()
       );
       const first = await h.resolve(0);
@@ -198,7 +214,7 @@ for (const mode of ['verse', 'pericope'] as const) {
 
     it('a failed request reports itself but never latches offline or prevents a new press', async () => {
       const h = setup(mode);
-      fireEvent.click(h.primary());
+      await click(h.primary());
       await act(async () => h.pending[0].reject(new TypeError('Network request failed')));
       expect(toastError).toHaveBeenCalledWith(
         'Could not play audio for verse 1. Please try again.'
@@ -206,7 +222,7 @@ for (const mode of ['verse', 'pericope'] as const) {
       expectSpinners(0);
       expect(h.primary()).not.toHaveAttribute('aria-disabled');
       expect(h.primary()).toBeVisible();
-      fireEvent.click(h.primary());
+      await click(h.primary());
       expect(h.synthesize).toHaveBeenCalledTimes(2);
       expectSpinners(1);
     });
@@ -215,7 +231,7 @@ for (const mode of ['verse', 'pericope'] as const) {
       'browser offline overrides %s, then reconnect restores the same live state without another request',
       async state => {
         const h = setup(mode);
-        fireEvent.click(h.primary());
+        await click(h.primary());
         if (state === 'playing') {
           const first = await h.resolve(0);
           await h.playing(first);
@@ -227,7 +243,7 @@ for (const mode of ['verse', 'pericope'] as const) {
         expect(h.primary()).toBe(primary);
         expect(primary).toHaveAttribute('aria-disabled', 'true');
         expectSpinners(0);
-        fireEvent.click(primary);
+        await click(primary);
         expect(toastError).toHaveBeenCalledWith("You're offline. Reconnect to play audio.");
         expect(h.pending[0].signal?.aborted).toBe(false);
         expect(h.synthesize).toHaveBeenCalledTimes(calls);
@@ -238,7 +254,7 @@ for (const mode of ['verse', 'pericope'] as const) {
         expectSpinners(state === 'loading' ? 1 : 0);
         expect(h.synthesize).toHaveBeenCalledTimes(calls);
         // Reconnection restores the existing cancel/pause action, not a second run.
-        fireEvent.click(primary);
+        await click(primary);
         expect(h.pending[0].signal?.aborted).toBe(true);
         expectSpinners(0);
       }
@@ -246,11 +262,11 @@ for (const mode of ['verse', 'pericope'] as const) {
 
     it('offline preserves controls, explains on press/focus, blocks actions, and reconnect restores a paused owner without autoplay', async () => {
       const h = setup(mode);
-      fireEvent.click(h.primary());
+      await click(h.primary());
       const first = await h.resolve(0);
       await h.playing(first);
       first.currentTime = 2;
-      fireEvent.click(h.primary('Pause'));
+      await click(h.primary('Pause'));
       const primary = h.primary();
       const restart = screen.getByRole('button', { name: `Restart ${firstLabel(mode)}` });
       expect(restart).toBeEnabled();
@@ -265,8 +281,8 @@ for (const mode of ['verse', 'pericope'] as const) {
         expect(buttons[0]).toHaveAttribute('aria-disabled', 'true');
         expect(buttons[0]).toBeVisible();
         expect(buttons[1]).toBeDisabled();
-        fireEvent.click(buttons[0]);
-        fireEvent.click(buttons[1]);
+        await click(buttons[0]);
+        await click(buttons[1]);
       }
       expect(toastError).toHaveBeenCalledTimes(controls.length);
       expect(toastError).toHaveBeenLastCalledWith("You're offline. Reconnect to play audio.");
@@ -292,7 +308,7 @@ for (const mode of ['verse', 'pericope'] as const) {
       expect(first.paused).toBe(true);
       for (const slider of screen.queryAllByRole('slider'))
         expect(slider).toHaveAttribute('tabindex', '0');
-      fireEvent.click(primary);
+      await click(primary);
       const resumed = await h.resolve(calls);
       await h.playing(resumed);
       expect(resumed.currentTime).toBe(2);
@@ -300,3 +316,15 @@ for (const mode of ['verse', 'pericope'] as const) {
     });
   });
 }
+
+vi.mock('../resolver/sourceAudioClient', async importOriginal => ({
+  ...(await importOriginal()),
+  fetchChapterSourceAudio: async () => ({
+    provider: 'aquifer',
+    bible: { name: 'Fixture', abbreviation: 'F' },
+    bookCode: 'JHN',
+    chapter: 3,
+    items: [],
+    verseAddressable: false,
+  }),
+}));

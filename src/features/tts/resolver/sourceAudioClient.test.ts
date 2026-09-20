@@ -20,7 +20,7 @@ describe('fetchChapterSourceAudio', () => {
       { apiBaseUrl: 'https://api.test', fetchFn }
     );
     expect(fetchFn).toHaveBeenCalledWith(
-      'https://api.test/projects/1/source-audio/JHN/3?bibleId=2&languageCode=eng+%26+more',
+      'https://api.test/projects/1/playback-audio/JHN/3?bibleId=2&languageCode=eng+%26+more',
       { method: 'GET', credentials: 'include', signal: abort }
     );
     expect(result).toEqual(bsbChapter());

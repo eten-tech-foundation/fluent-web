@@ -359,7 +359,7 @@ describe('useSourceTtsPlayback — pause records and Restart', () => {
     expect(registry.getStaticAi(key)).toBe(true);
     expect(load).toHaveBeenCalledTimes(1);
     rerender(props({ sourceChapter: null }));
-    expect(registry.getStaticAi(result.current.verseKey('row-2')!)).toBe(true);
+    expect(result.current.verseKey('row-2')).toBeNull();
     expect(load).toHaveBeenCalledTimes(1);
   });
 
@@ -541,14 +541,25 @@ describe('useSourceTtsPlayback — recorded drafting integration', () => {
     const { result, rerender } = setup();
     await start(() => result.current.playVerse('row-1'));
     act(() => result.current.stop());
+    load.mockResolvedValue(windowlessChapter());
     rerender(
       props({
-        sourceChapter: null,
+        sourceChapter: {
+          ...sourceChapterRequest,
+          role: 'referenceBible',
+          textBibleKey: 'aq-20',
+          languageCode: 'hin',
+        },
         rows: [{ verseRef: 'row-1', verseNumber: 1, text: 'Reference text', langCode: 'hin' }],
       })
     );
     await start(() => result.current.playVerse('row-1'));
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(load.mock.calls[1][0]).toMatchObject({
+      role: 'referenceBible',
+      textBibleKey: 'aq-20',
+      languageCode: 'hin',
+    });
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({ text: 'Reference text', langCode: 'hin' }),
       expect.any(AbortSignal)
@@ -556,16 +567,13 @@ describe('useSourceTtsPlayback — recorded drafting integration', () => {
     expect(queue.aiMarkedKeys.size).toBe(1);
   });
 
-  it('omits an empty reference language code rather than sending an invalid TTS request', async () => {
+  it('does not synthesize a reference with no exact descriptor/language', async () => {
     const { result } = setup({
       sourceChapter: null,
       rows: [{ verseRef: 'row-1', verseNumber: 1, text: 'Reference text', langCode: '' }],
     });
     await start(() => result.current.playVerse('row-1'));
-    expect(synthesize).toHaveBeenCalledWith(
-      { text: 'Reference text', langCode: undefined },
-      expect.any(AbortSignal)
-    );
+    expect(synthesize).not.toHaveBeenCalled();
   });
 
   it('cancels a pending chapter lookup on unmount without generating TTS', async () => {
