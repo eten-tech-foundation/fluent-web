@@ -39,6 +39,8 @@ export interface PauseSnapshot {
   verseRef: string;
   /** File-absolute element time, with no window start subtracted. */
   currentTime: number;
+  /** Fractional intent retained until a lazy source/metadata resolves it. */
+  pendingFraction?: number;
   forceTts: boolean;
 }
 
@@ -109,6 +111,8 @@ interface PlaybackSession {
   segmentCleanups: Array<() => void>;
   startOffset?: number;
   pendingFraction?: number;
+  /** Start-of-segment intent before a lazy source reveals its absolute window. */
+  pendingLogicalStart: boolean;
 }
 
 const teardownSegment = (session: PlaybackSession): void => {
@@ -187,16 +191,19 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     const currentTime = session.current
       ? (session.activeElement?.currentTime ?? session.current.startOffset)
       : session.startOffset;
+    const pendingFraction =
+      session.pendingFraction ?? (session.pendingLogicalStart ? 0 : undefined);
     // No file position exists before lazy resolution. Zero would fabricate a
     // resume offset outside a yet-unknown window; pausing still cancels the run.
-    if (currentTime === undefined) return null;
+    if (currentTime === undefined && pendingFraction === undefined) return null;
     return {
       playableKey: segment.playableKey,
       itemIndex: session.items
         .slice(0, session.index)
         .filter(item => item.playableKey === segment.playableKey).length,
       verseRef: segment.verseRef,
-      currentTime,
+      currentTime: currentTime ?? 0,
+      ...(pendingFraction === undefined ? {} : { pendingFraction }),
       // Copy the run instruction and this key's latch; never choose media from them.
       forceTts: session.resolutionState.forceTts || session.aiMarked.has(segment.playableKey),
     };
@@ -331,6 +338,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   ): void => {
     const segment = session.items[index];
     session.index = index;
+    session.pendingLogicalStart = false;
     session.budgets.clear();
     const initialOffset = resolvePlaybackStart(
       startOffset,
@@ -484,6 +492,8 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     session.startOffset = typeof startOffset === 'number' ? startOffset : undefined;
     session.pendingFraction =
       typeof startOffset === 'object' ? Math.max(0, Math.min(1, startOffset.fraction)) : undefined;
+    session.pendingLogicalStart =
+      startOffset === undefined && typeof session.items[index]?.source === 'function';
     session.budgets.clear();
     const segment = session.items[index] as Segment | undefined;
     if (!segment) {
@@ -559,6 +569,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       prefetches: new Map(),
       clipCleanups: [],
       segmentCleanups: [],
+      pendingLogicalStart: false,
     };
     sessionRef.current = session;
     setAiMarkedKeys(new Set());
