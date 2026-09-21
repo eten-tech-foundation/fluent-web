@@ -402,7 +402,7 @@ describe('DraftingUI', () => {
             },
           ]);
         }),
-        http.get(`${config.api.youversion_url}/bibles`, () => HttpResponse.json({ data: [] })),
+        http.get(`${config.api.url}/youversion/bibles`, () => HttpResponse.json([])),
         http.get(`${config.api.url}/aquifer/bibles/:id/texts`, ({ params }) =>
           HttpResponse.json({
             chapters: [

@@ -86,6 +86,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 }) => {
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
   // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
   // other views' rows level, and a chapter has no rows to keep level (#397).
   const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
@@ -184,17 +185,21 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       // one past the end of the content. The textarea path carries no offsets and keeps its trim.
       const content = payload.markers === undefined ? payload.content.trim() : payload.content;
 
-      await addVerseMutation.mutateAsync({
-        verseData: {
-          projectUnitId: projectItem.projectUnitId,
-          content,
-          bibleTextId: sourceVerse.id,
-          assignedUserId: userdetail.id,
-          // Only when the caller derived markers (the RTE): the API overwrites stored markers
-          // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
-          ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
-        },
-      });
+      try {
+        await addVerseMutation.mutateAsync({
+          verseData: {
+            projectUnitId: projectItem.projectUnitId,
+            content,
+            bibleTextId: sourceVerse.id,
+            assignedUserId: userdetail.id,
+            // Only when the caller derived markers (the RTE): the API overwrites stored markers
+            // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
+            ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
+          },
+        });
+      } catch (err: unknown) {
+        throw err;
+      }
 
       const aiFillKey = `${projectItem.chapterAssignmentId}/${verse}`;
       if (
@@ -608,19 +613,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const handleSubmit = useCallback(async () => {
     if (!isTranslationComplete) return;
 
-    const savePromises = verses
-      .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
-      .map(verse =>
-        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
-      );
+    try {
+      const savePromises = verses
+        .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
+        .map(verse =>
+          saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+        );
 
-    await Promise.all(savePromises);
+      await Promise.all(savePromises);
 
-    await submitChapterMutation.mutateAsync({
-      chapterAssignmentId: projectItem.chapterAssignmentId,
-    });
-    clearCurrentProjectItem();
-    router.history.back();
+      await submitChapterMutation.mutateAsync({
+        chapterAssignmentId: projectItem.chapterAssignmentId,
+      });
+      clearCurrentProjectItem();
+      router.history.back();
+    } catch {
+      // Permission errors (403/401/404) are handled centrally
+      // by useBibleTarget.ts mutation onError handlers.
+    }
   }, [
     isTranslationComplete,
     verses,
@@ -1131,11 +1141,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                             <TooltipTrigger asChild>
                               <Button
                                 className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
-                                  isNextButtonEnabled
+                                  isNextButtonEnabled && !roleChangeWarning
                                     ? 'hover:bg-primary-hover cursor-pointer text-white'
                                     : 'cursor-not-allowed bg-gray-300 text-gray-500'
                                 }`}
-                                disabled={!isNextButtonEnabled}
+                                disabled={!isNextButtonEnabled || roleChangeWarning}
                                 onClick={handleNextClick}
                               >
                                 {t('nextVerse', 'Next Verse')}

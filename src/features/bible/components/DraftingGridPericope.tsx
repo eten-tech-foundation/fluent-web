@@ -24,6 +24,7 @@ import {
   type TargetVerse,
   type VerseMarkers,
 } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 import { PericopeTitleInput } from './PericopeTitleInput';
 
@@ -106,6 +107,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
   const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
   const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
 
@@ -194,8 +196,8 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
                 {isButtonRow && (
                   <Button
-                    className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all'
-                    disabled={isActiveVerseEmpty}
+                    className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-not-allowed cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all disabled:opacity-50'
+                    disabled={isActiveVerseEmpty || roleChangeWarning}
                     onClick={handleNextClick}
                   >
                     {t('nextVerse', 'Next Verse')}
