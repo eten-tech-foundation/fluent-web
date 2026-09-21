@@ -61,8 +61,6 @@ export default defineConfig(({ mode }) => {
       // changes the surface under test. Suites opt in via config.features.*, not the env.
       env: {
         VITE_API_URL: 'https://api.test.local',
-        VITE_YOUVERSION_API_URL: 'https://youversion.test.local',
-        VITE_YOUVERSION_API_KEY: 'test-youversion-key',
         VITE_BETTER_AUTH_URL: 'https://auth.test.local',
         VITE_ENVIRONMENT: 'production',
         VITE_APP_INSIGHTS_CONNECTION_STRING: '',
