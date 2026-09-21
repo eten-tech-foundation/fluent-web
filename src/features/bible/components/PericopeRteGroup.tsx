@@ -95,6 +95,13 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     [chapterAssignmentId, chapterNumber, groupVerses]
   );
 
+  const titleVerseNumber = groupVerses[0]?.verseNumber;
+  const hiddenTitle = hasTitle
+    ? getPericopeTitle(verses.find(verse => verse.verseNumber === titleVerseNumber)?.markers)
+    : undefined;
+  const reservedHeadingSlots =
+    hiddenTitle && groupVerses.length > 0 ? { [titleVerseNumber]: 1 } : undefined;
+
   const handleVersesChange = useCallback(
     (changed: PericopeVerseText[]) => {
       changed.forEach(verse => {
@@ -150,6 +157,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         chapterNumber={chapterNumber}
         contentKey={contentKey}
         readOnly={readOnly}
+        reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
         onActiveVerseChange={handleActiveVerseChange}
         onVersesChange={handleVersesChange}

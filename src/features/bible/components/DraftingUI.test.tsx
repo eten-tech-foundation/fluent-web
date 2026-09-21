@@ -1399,6 +1399,37 @@ describe('DraftingUI', () => {
       expect(acceptedUsageCalls()).toHaveLength(2);
     });
 
+    it('does not accept later human text after clearing an AI-filled verse', async () => {
+      renderWithAi();
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+
+      await act(async () => onSave(1, { content: '   ' }));
+      await act(async () => onSave(1, { content: 'Written from scratch' }));
+
+      expect(acceptedUsageCalls()).toHaveLength(0);
+    });
+
+    it('retains AI provenance when saving a cleared verse fails', async () => {
+      const saveError = new Error('Save unavailable');
+      mockUseAddTranslatedVerse.mockReturnValue({
+        mutateAsync: vi.fn().mockRejectedValueOnce(saveError).mockResolvedValue(undefined),
+        isPending: false,
+      });
+      renderWithAi();
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+
+      await act(async () => {
+        await expect(onSave(1, { content: '' })).rejects.toThrow(saveError);
+      });
+      await act(async () => onSave(1, { content: 'Restored suggestion' }));
+
+      expect(acceptedUsageCalls()).toHaveLength(1);
+    });
+
     it('tracks an accepted suggestion when AI is disabled before the save', async () => {
       const { rerender } = renderWithAi();
       mockUseAiSuggestions.mockReturnValue({

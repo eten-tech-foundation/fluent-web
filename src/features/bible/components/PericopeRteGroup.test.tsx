@@ -197,6 +197,11 @@ describe('PericopeRteGroup', () => {
       onVersesChange: (changes: unknown[]) => void;
     };
     expect(props.verses[0].markers.headings).toEqual([secondary]);
+    expect((editorProps.current as { reservedHeadingSlots: unknown }).reservedHeadingSlots).toEqual(
+      {
+        1: 1,
+      }
+    );
     props.onVersesChange([
       {
         verseNumber: 1,
@@ -245,6 +250,9 @@ describe('PericopeRteGroup', () => {
       onVersesChange: (changes: unknown[]) => void;
     };
     expect(props.verses[0].markers.headings).toEqual(headings);
+    expect(
+      (editorProps.current as { reservedHeadingSlots: unknown }).reservedHeadingSlots
+    ).toBeUndefined();
     props.onVersesChange([{ verseNumber: 1, text: 'Edited scripture', markers: { headings } }]);
     expect(handleTextChange).toHaveBeenCalledWith(1, 'Edited scripture', { headings });
   });

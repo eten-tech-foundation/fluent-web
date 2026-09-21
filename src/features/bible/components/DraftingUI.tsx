@@ -202,9 +202,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       }
 
       const aiFillKey = `${projectItem.chapterAssignmentId}/${verse}`;
-      if (
+      if (!content.trim()) {
+        aiFilledVersesRef.current.delete(aiFillKey);
+      } else if (
         aiFilledVersesRef.current.has(aiFillKey) &&
-        content.trim() &&
         !aiUsageInFlightRef.current.has(aiFillKey)
       ) {
         aiUsageInFlightRef.current.add(aiFillKey);
