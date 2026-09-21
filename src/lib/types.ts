@@ -71,6 +71,13 @@ export interface PericopeGroup {
   verses: PericopeVerseRef[];
 }
 
+/** One validated USFM file sent when creating a project from existing data. */
+export interface UsfmFilePayload {
+  fileName: string;
+  bookCode: string;
+  usfm: string;
+}
+
 export interface CreateProject {
   id: number;
   name: string;
@@ -82,6 +89,8 @@ export interface CreateProject {
   sourceLanguage: number;
   targetLanguage: number;
   pericopeSetId?: number;
+  /** Create-from-existing-data (#419): one validated USFM file per book. */
+  usfmFiles?: UsfmFilePayload[];
 }
 
 export interface Chapter {
