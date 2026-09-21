@@ -56,14 +56,16 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
-      // Dummy values so src/lib/config.ts env validation passes under vitest.
+      // Dummy values so src/lib/config.ts env validation passes under vitest. Feature flags are
+      // pinned off: vitest also reads the developer's .env, and a flag left on there silently
+      // changes the surface under test. Suites opt in via config.features.*, not the env.
       env: {
         VITE_API_URL: 'https://api.test.local',
-        VITE_YOUVERSION_API_URL: 'https://youversion.test.local',
-        VITE_YOUVERSION_API_KEY: 'test-youversion-key',
         VITE_BETTER_AUTH_URL: 'https://auth.test.local',
         VITE_ENVIRONMENT: 'production',
         VITE_APP_INSIGHTS_CONNECTION_STRING: '',
+        VITE_RTE_PERICOPE: 'false',
+        VITE_USFM_IMPORT: 'false',
       },
     },
   };
