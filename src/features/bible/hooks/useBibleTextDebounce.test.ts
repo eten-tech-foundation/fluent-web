@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { VerseMarkers } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 import { useBibleTextDebounce } from './useBibleTextDebounce';
 
@@ -45,6 +46,7 @@ describe('useBibleTextDebounce with markers', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    useAppStore.getState().setRoleChangeWarning(false);
   });
 
   it('saves a markers-only change so a new paragraph reaches the server', async () => {
@@ -98,5 +100,29 @@ describe('useBibleTextDebounce with markers', () => {
       content: 'Starts here and continues.',
       markers: SPLIT,
     });
+  });
+
+  it('cancels pending saves and skips new saves when a 403 permission error occurs', async () => {
+    const forbiddenError = new Error('Forbidden');
+    (forbiddenError as { status?: number }).status = 403;
+    const onSave = vi.fn().mockRejectedValueOnce(forbiddenError);
+
+    const { result } = renderHook(() =>
+      useBibleTextDebounce({ onSave, debounceMs: 50, retryDelayMs: 100 })
+    );
+
+    result.current.setInitialContent(1, { content: 'Original', markers: null });
+    result.current.debouncedSave(1, { content: 'Modified', markers: null });
+
+    // Advance timer to trigger first save, which fails with 403
+    await vi.advanceTimersByTimeAsync(60);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    // Further debouncedSave calls should be ignored
+    result.current.debouncedSave(1, { content: 'Another edit', markers: null });
+    await vi.advanceTimersByTimeAsync(200);
+
+    // onSave should not have been called again (no retries, no new saves)
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });
