@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type Source, type TargetVerse } from '@/lib/types';
 
+import '../styles/source-fonts.css';
+
 interface DraftingTargetColumnProps {
   verseNumber: number;
   readOnly: boolean;
@@ -164,7 +166,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             <div className='flex w-8 items-start px-4'>
               <span className='text-lg font-medium'>{verse.verseNumber}</span>
             </div>
-            <div className='flex flex-col px-6'>
+            <div className='source-scripture flex flex-col px-6'>
               {selectedPanel === 1 ? (
                 <div className={getPericopeStyle(verse.verseNumber, isActive, 'bg-card')}>
                   <p className='min-h-12 leading-relaxed'>{verse.text}</p>

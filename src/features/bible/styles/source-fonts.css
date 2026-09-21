@@ -1,0 +1,9 @@
+@import '../../rte/styles/noto-fonts.css';
+
+/* Keep Latin in Inter and try the bundled scripture fonts before system fallbacks. */
+.source-scripture {
+  font-family:
+    'Inter', 'Noto Serif Devanagari', 'Noto Serif Gujarati', 'Noto Serif Malayalam',
+    'Noto Serif Kannada', 'Noto Serif Telugu', 'Noto Serif Tamil', 'Noto Naskh Arabic',
+    var(--font-sans);
+}
