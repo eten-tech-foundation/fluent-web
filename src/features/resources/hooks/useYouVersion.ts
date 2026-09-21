@@ -8,16 +8,16 @@ import { Logger } from '@/lib/services/logger';
 export interface YouVersionBible {
   id: number;
   abbreviation: string;
-  localized_abbreviation: string;
+  localizedAbbreviation: string;
   title: string;
-  localized_title: string;
-  language_tag: string;
+  localizedTitle: string;
+  languageTag: string;
   info?: string;
   copyright?: string;
-  publisher_url?: string;
-  promotional_content?: string;
-  youversion_deep_link?: string;
-  organization_id?: string;
+  publisherUrl?: string;
+  promotionalContent?: string;
+  youversionDeepLink?: string;
+  organizationId?: string;
   books?: string[];
 }
 
@@ -47,7 +47,7 @@ export interface YouVersionChapterText {
  */
 export const fetchYouVersionBibles = async (languageTag: string): Promise<YouVersionBible[]> => {
   const url = new URL(`${config.api.url}/youversion/bibles`);
-  url.searchParams.set('language_tag', languageTag);
+  url.searchParams.set('languageTag', languageTag);
 
   const response = await fetch(url.toString(), {
     method: 'GET',
@@ -58,10 +58,9 @@ export const fetchYouVersionBibles = async (languageTag: string): Promise<YouVer
     Logger.logException(new Error('Failed to fetch YouVersion bibles'), {
       context: `status=${response.status} languageTag=${languageTag}`,
     });
-    // 404 means no bibles exist for this language — genuine empty list.
-    if (response.status === 404) return [];
-    // Everything else (5xx server fault, 401/403 auth failure, other 4xx) — throw
-    // so React Query exposes an error state rather than silently showing an empty dropdown.
+    // fluent-api's /youversion/bibles only emits 200/400/401/403/502/500.
+    // A 404 here means the route isn't deployed or VITE_API_URL is misconfigured —
+    // throw so React Query surfaces an error rather than silently showing an empty dropdown.
     throw new Error(`YouVersion bibles request failed with status ${response.status}`);
   }
 
@@ -91,7 +90,10 @@ export const fetchYouVersionChapterText = async (
     Logger.logException(new Error('Failed to fetch YouVersion chapter text'), {
       context: `status=${response.status} bibleId=${bibleId} bookId=${bookId} chapterId=${chapterId}`,
     });
-    if (response.status === 404) return { bibleId, bookId, chapterId, verses: [] };
+    // fluent-api's chapter-text route only emits 200/400/401/403/502/500.
+    // A genuine "no verses" result arrives as 200 with an empty payload.
+    // A 404 means the route isn't deployed yet or the proxy is misconfigured —
+    // throw so React Query surfaces an error rather than masking the deploy dependency.
     throw new Error(`YouVersion chapter text request failed with status ${response.status}`);
   }
 

@@ -18,10 +18,10 @@ describe('useYouVersion', () => {
       {
         id: 1,
         abbreviation: 'NIV',
-        localized_abbreviation: 'NIV',
+        localizedAbbreviation: 'NIV',
         title: 'New International Version',
-        localized_title: 'New International Version',
-        language_tag: 'eng',
+        localizedTitle: 'New International Version',
+        languageTag: 'eng',
       },
     ];
 
@@ -37,7 +37,7 @@ describe('useYouVersion', () => {
     expect(bibles).toEqual(mockBibles);
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(String(url)).toBe(`${config.api.url}/youversion/bibles?language_tag=eng`);
+    expect(String(url)).toBe(`${config.api.url}/youversion/bibles?languageTag=eng`);
     expect(init).toMatchObject({
       method: 'GET',
       credentials: 'include',
@@ -78,13 +78,14 @@ describe('useYouVersion', () => {
     );
   });
 
-  it('returns empty array when fetchYouVersionBibles receives a 404 response', async () => {
+  it('rejects when fetchYouVersionBibles receives a 404 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
     );
 
-    const bibles = await fetchYouVersionBibles('eng');
-    expect(bibles).toEqual([]);
+    await expect(fetchYouVersionBibles('eng')).rejects.toThrow(
+      'YouVersion bibles request failed with status 404'
+    );
   });
 
   it('routes fetchYouVersionChapterText through fluent-api batch endpoint with credentials', async () => {
@@ -134,17 +135,13 @@ describe('useYouVersion', () => {
     );
   });
 
-  it('returns empty verses when fetchYouVersionChapterText receives a 404 response', async () => {
+  it('rejects when fetchYouVersionChapterText receives a 404 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
     );
 
-    const data = await fetchYouVersionChapterText(1, 'GEN', 1);
-    expect(data).toEqual({
-      bibleId: 1,
-      bookId: 'GEN',
-      chapterId: 1,
-      verses: [],
-    });
+    await expect(fetchYouVersionChapterText(1, 'GEN', 1)).rejects.toThrow(
+      'YouVersion chapter text request failed with status 404'
+    );
   });
 });
