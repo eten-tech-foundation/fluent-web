@@ -21,6 +21,11 @@ import {
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
 import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
+import {
+  canSetPericopeTitle,
+  getPericopeTitle,
+  withPericopeTitle,
+} from '@/features/bible/lib/pericope-title';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -165,6 +170,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // Only scripture actually filled from AI can be recorded as an accepted verse draft.
   const aiFilledVersesRef = useRef(new Set<string>());
+  const aiUsageInFlightRef = useRef(new Set<string>());
 
   const saveVerse = useCallback(
     async (verse: number, payload: SavePayload) => {
@@ -190,16 +196,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         },
       });
 
+      const aiFillKey = `${projectItem.chapterAssignmentId}/${verse}`;
       if (
-        projectItem.isAiEnabled &&
-        aiFilledVersesRef.current.has(`${projectItem.chapterAssignmentId}/${verse}`) &&
-        content.trim()
+        aiFilledVersesRef.current.has(aiFillKey) &&
+        content.trim() &&
+        !aiUsageInFlightRef.current.has(aiFillKey)
       ) {
-        trackAiUsageMutation.mutate({
-          bibleTextId: sourceVerse.id,
-          projectUnitId: projectItem.projectUnitId,
-          wasUsed: true,
-        });
+        aiUsageInFlightRef.current.add(aiFillKey);
+        void trackAiUsageMutation
+          .mutateAsync({
+            bibleTextId: sourceVerse.id,
+            projectUnitId: projectItem.projectUnitId,
+            wasUsed: true,
+          })
+          .then(() => aiFilledVersesRef.current.delete(aiFillKey))
+          .catch(() => {
+            // The mutation logs the error; retain the marker so a later save can retry.
+          })
+          .finally(() => aiUsageInFlightRef.current.delete(aiFillKey));
       }
 
       // Bump on the successful auto-save event so the Repeated Word Check
@@ -213,7 +227,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       projectItem.chapterAssignmentId,
       sourceVerses,
       userdetail,
-      projectItem.isAiEnabled,
       trackAiUsageMutation,
     ]
   );
@@ -311,7 +324,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       pericope: aiScope,
       canSuggest: isDraft && !readOnly && !(displayMode === 'pericope' && isPericopeLoading),
       titledVerseNumbers: verses
-        .filter(verse => verse.markers?.headings?.length)
+        .filter(
+          verse => Boolean(getPericopeTitle(verse.markers)) || !canSetPericopeTitle(verse.markers)
+        )
         .map(verse => verse.verseNumber),
       touchedTitleVerseNumbers: isAiJustEnabled ? [] : [...touchedTitlesRef.current],
       draftedVerseNumbers: verses
@@ -437,7 +452,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
-  // Reset only resource state: remounting the drafting UI would discard pending verse saves.
+  // Reset assignment-local state without remounting and discarding pending verse saves.
   useEffect(() => {
     setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
     setResourceBibleTabs([]);
@@ -449,6 +464,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     setOccurrenceRules({});
     isInitializedRef.current = false;
     lastSavedStateRef.current = null;
+    userTouchedVersesRef.current.clear();
+    touchedTitlesRef.current.clear();
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
   }, [projectItem.chapterAssignmentId]);
 
@@ -628,12 +645,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedTitlesRef.current.add(verseNumber);
       if (title.trim() && !isValidHeadingText(title)) return;
       const target = verses.find(verse => verse.verseNumber === verseNumber);
-      if (!target || readOnly) return;
-      const previous = target.markers?.headings ?? [];
-      const headings = title.trim()
-        ? [{ marker: previous[0]?.marker ?? 's1', text: title }, ...previous.slice(1)]
-        : previous.slice(1);
-      handleTextChange(verseNumber, target.content, { ...target.markers, headings });
+      if (!target || readOnly || (title.trim() && !canSetPericopeTitle(target.markers))) return;
+      handleTextChange(verseNumber, target.content, withPericopeTitle(target.markers, title));
     },
     [verses, readOnly, handleTextChange]
   );
@@ -648,7 +661,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     if (justEnabled) {
       verses.forEach(verse => {
         if (!verse.content.trim()) userTouchedVersesRef.current.delete(verse.verseNumber);
-        if (!verse.markers?.headings?.length) touchedTitlesRef.current.delete(verse.verseNumber);
+        if (!getPericopeTitle(verse.markers)) touchedTitlesRef.current.delete(verse.verseNumber);
       });
     }
 
@@ -678,16 +691,14 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       currentPericopeGroup?.pericopeTitle?.trim() &&
       firstTarget &&
       firstSource &&
-      !firstTarget.markers?.headings?.length &&
+      !getPericopeTitle(firstTarget.markers) &&
+      canSetPericopeTitle(firstTarget.markers) &&
       !touchedTitlesRef.current.has(firstTarget.verseNumber) &&
       heading?.bibleTextId === firstSource.id &&
       isValidHeadingText(heading.suggestedText)
         ? {
             verseNumber: firstTarget.verseNumber,
-            markers: {
-              ...firstTarget.markers,
-              headings: [{ marker: 's1', text: heading.suggestedText }],
-            },
+            markers: withPericopeTitle(firstTarget.markers, heading.suggestedText),
           }
         : undefined;
     if (titleFill) touchedTitlesRef.current.add(titleFill.verseNumber);

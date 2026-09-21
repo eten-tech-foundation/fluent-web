@@ -4,6 +4,12 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import {
+  canSetPericopeTitle,
+  getPericopeTitle,
+  restorePericopeTitle,
+  withoutPericopeTitle,
+} from '@/features/bible/lib/pericope-title';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
@@ -72,10 +78,8 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
           verseNumber: source.verseNumber,
           text: target?.content ?? '',
           markers:
-            hasTitle &&
-            source.verseNumber === groupVerses[0]?.verseNumber &&
-            target?.markers?.headings?.length
-              ? { ...target.markers, headings: target.markers.headings.slice(1) }
+            hasTitle && source.verseNumber === groupVerses[0]?.verseNumber
+              ? withoutPericopeTitle(target?.markers)
               : (target?.markers ?? null),
         };
       }),
@@ -94,16 +98,14 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   const handleVersesChange = useCallback(
     (changed: PericopeVerseText[]) => {
       changed.forEach(verse => {
-        const title =
-          hasTitle && verse.verseNumber === groupVerses[0]?.verseNumber
-            ? verses.find(target => target.verseNumber === verse.verseNumber)?.markers
-                ?.headings?.[0]
-            : undefined;
         handleTextChange(
           verse.verseNumber,
           verse.text,
-          title
-            ? { ...verse.markers, headings: [title, ...(verse.markers?.headings ?? [])] }
+          hasTitle && verse.verseNumber === groupVerses[0]?.verseNumber
+            ? restorePericopeTitle(
+                verse.markers,
+                verses.find(target => target.verseNumber === verse.verseNumber)?.markers
+              )
             : verse.markers
         );
       });
@@ -118,8 +120,12 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   const hasPendingTitle =
     !isPericopeDrafted &&
     hasTitle &&
-    !verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers?.headings
-      ?.length;
+    canSetPericopeTitle(
+      verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers
+    ) &&
+    !getPericopeTitle(
+      verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers
+    );
   const hasPendingSuggestion =
     hasPendingTitle ||
     groupVerses.some(

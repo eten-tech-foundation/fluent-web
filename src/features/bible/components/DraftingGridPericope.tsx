@@ -15,6 +15,7 @@ import {
   pericopeHeading,
 } from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
+import { canSetPericopeTitle, getPericopeTitle } from '@/features/bible/lib/pericope-title';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -358,10 +359,11 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   const hasTitle = !!pericopes[groupIndex]?.pericopeTitle?.trim();
   const firstVerse = groupVerses[0];
   const firstTarget = verses.find(verse => verse.verseNumber === firstVerse.verseNumber);
-  const title = firstTarget?.markers?.headings?.[0]?.text ?? '';
+  const title = getPericopeTitle(firstTarget?.markers)?.text ?? '';
   const titleContent =
     hasTitle && handleTitleChange ? (
       <PericopeTitleInput
+        maxHeadingsReached={!canSetPericopeTitle(firstTarget?.markers)}
         readOnly={readOnly}
         value={title}
         verseNumber={firstVerse.verseNumber}

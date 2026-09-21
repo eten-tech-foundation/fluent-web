@@ -228,6 +228,60 @@ describe('PericopeRteGroup', () => {
     expect(handleTextChange).toHaveBeenCalledWith(1, 'Split text.', split);
   });
 
+  it('keeps references and subtitles in the body when the title is empty', () => {
+    const headings = [
+      { marker: 'r', text: '(Matthew 1:1)' },
+      { marker: 's2', text: 'A subtitle' },
+    ];
+    renderGroup({
+      hasTitle: true,
+      verses: [
+        { verseNumber: 1, content: 'First verse', markers: { headings } },
+        { verseNumber: 2, content: '' },
+      ],
+    });
+    const props = editorProps.current as {
+      verses: Array<{ markers: { headings: unknown[] } }>;
+      onVersesChange: (changes: unknown[]) => void;
+    };
+    expect(props.verses[0].markers.headings).toEqual(headings);
+    props.onVersesChange([{ verseNumber: 1, text: 'Edited scripture', markers: { headings } }]);
+    expect(handleTextChange).toHaveBeenCalledWith(1, 'Edited scripture', { headings });
+  });
+
+  it('restores a section title after a leading reference without changing heading order', () => {
+    const reference = { marker: 'r', text: '(Matthew 1:1)' };
+    const title = { marker: 's1', text: 'My section title' };
+    const subtitle = { marker: 's2', text: 'A subtitle' };
+    renderGroup({
+      hasTitle: true,
+      verses: [
+        {
+          verseNumber: 1,
+          content: 'First verse',
+          markers: { headings: [reference, title, subtitle] },
+        },
+        { verseNumber: 2, content: '' },
+      ],
+    });
+    const props = editorProps.current as {
+      verses: Array<{ markers: { headings: unknown[] } }>;
+      onVersesChange: (changes: unknown[]) => void;
+    };
+    expect(props.verses[0].markers.headings).toEqual([reference, subtitle]);
+    const editedReference = { ...reference, text: '(Matthew 1:2)' };
+    props.onVersesChange([
+      {
+        verseNumber: 1,
+        text: 'Edited scripture',
+        markers: { headings: [editedReference, subtitle] },
+      },
+    ]);
+    expect(handleTextChange).toHaveBeenCalledWith(1, 'Edited scripture', {
+      headings: [editedReference, title, subtitle],
+    });
+  });
+
   it.each(['generating', 'unavailable', 'error'] as const)(
     'does not show %s for an optional title on fully drafted scripture',
     status => {

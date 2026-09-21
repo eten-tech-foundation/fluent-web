@@ -9,12 +9,20 @@ interface Props {
   value: string;
   verseNumber: number;
   readOnly: boolean;
+  maxHeadingsReached?: boolean;
   onChange: (verseNumber: number, title: string) => void;
   onFocus: () => void;
 }
 
-/** The first stored heading is the pericope title; its words stay outside scripture. */
-export function PericopeTitleInput({ value, verseNumber, readOnly, onChange, onFocus }: Props) {
+/** The top-level section title stays separate from scripture and other headings. */
+export function PericopeTitleInput({
+  value,
+  verseNumber,
+  readOnly,
+  maxHeadingsReached = false,
+  onChange,
+  onFocus,
+}: Props) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
@@ -26,12 +34,12 @@ export function PericopeTitleInput({ value, verseNumber, readOnly, onChange, onF
         {t('pericopeSectionTitle', 'Section title')}
       </label>
       <Input
-        aria-describedby={invalid ? `${id}-error` : undefined}
+        aria-describedby={invalid || maxHeadingsReached ? `${id}-error` : undefined}
         aria-invalid={invalid || undefined}
         className='bg-transparent font-semibold'
         id={id}
         maxLength={300}
-        readOnly={readOnly}
+        readOnly={readOnly || maxHeadingsReached}
         value={draft}
         onChange={event => {
           setDraft(event.target.value);
@@ -39,12 +47,17 @@ export function PericopeTitleInput({ value, verseNumber, readOnly, onChange, onF
         }}
         onFocus={onFocus}
       />
-      {invalid && (
+      {(invalid || maxHeadingsReached) && (
         <p className='text-destructive text-sm' id={`${id}-error`}>
-          {t(
-            'pericopeTitleInvalid',
-            'Use a single line of up to 300 characters without backslashes.'
-          )}
+          {maxHeadingsReached
+            ? t(
+                'headingCountError',
+                'Keep at most four headings before a verse to save your changes.'
+              )
+            : t(
+                'pericopeTitleInvalid',
+                'Use a single line of up to 300 characters without backslashes.'
+              )}
         </p>
       )}
     </div>

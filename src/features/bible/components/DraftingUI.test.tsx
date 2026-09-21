@@ -81,10 +81,15 @@ const mockUseAiSuggestions = vi.fn((..._args: unknown[]) => ({
   suggestionStatus: 'idle',
 }));
 const mockTrackAiUsage = vi.fn();
+const mockTrackAiUsageAsync = vi.fn<(payload: unknown) => Promise<void>>();
 
 vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
   useAiSuggestions: (...args: unknown[]) => mockUseAiSuggestions(...args),
-  useTrackAiUsage: () => ({ mutate: mockTrackAiUsage, isPending: false }),
+  useTrackAiUsage: () => ({
+    mutate: mockTrackAiUsage,
+    mutateAsync: mockTrackAiUsageAsync,
+    isPending: false,
+  }),
 }));
 
 // The rich text surface is covered in `PericopeRteGroup.test.tsx`; standing it in here keeps the
@@ -302,6 +307,7 @@ const defaultPericopeHookResult = (overrides = {}) => ({
 describe('DraftingUI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTrackAiUsageAsync.mockReset().mockResolvedValue(undefined);
     resourcePanelMode.real = false;
 
     // Default: Repeated Word Check feature ON (see mock definition above).
@@ -1125,7 +1131,7 @@ describe('DraftingUI', () => {
         {
           verseNumber: 1,
           content: '',
-          markers: { headings: [{ marker: 's2', text: 'My title' }] },
+          markers: { headings: [{ marker: 's1', text: 'My title' }] },
         },
         EMPTY_PERICOPE[1],
       ];
@@ -1144,6 +1150,126 @@ describe('DraftingUI', () => {
         )
       ).toBe(false);
       expect(screen.getByLabelText('Section title')).toHaveValue('My title');
+    });
+
+    it('fills a title without replacing a first reference or subsection heading', () => {
+      const bodyHeadings = [
+        { marker: 'r', text: 'See John 1' },
+        { marker: 's2', text: 'A subsection' },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [
+            { verseNumber: 1, content: '', markers: { headings: bodyHeadings } },
+            EMPTY_PERICOPE[1],
+          ],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Verse one', {
+        headings: [{ marker: 's1', text: 'La creación' }, ...bodyHeadings],
+      });
+      const options = mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+        titledVerseNumbers: number[];
+      };
+      expect(options.titledVerseNumbers).not.toContain(1);
+    });
+
+    it('keeps four body headings without requesting or filling a fifth heading', () => {
+      const headings = [
+        { marker: 'r', text: 'See John 1' },
+        { marker: 's2', text: 'A subsection' },
+        { marker: 's3', text: 'Another subsection' },
+        { marker: 's4', text: 'One more subsection' },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 1, content: '', markers: { headings } }, EMPTY_PERICOPE[1]],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Verse one', { headings });
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText('Section title')).toHaveAttribute('readonly');
+      expect(
+        screen.getByText('Keep at most four headings before a verse to save your changes.')
+      ).toBeInTheDocument();
+      const options = mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+        titledVerseNumbers: number[];
+      };
+      expect(options.titledVerseNumbers).toContain(1);
+    });
+
+    it('clears only the section title and keeps other headings when typing a replacement', async () => {
+      const bodyHeadings = [
+        { marker: 'r', text: 'See John 1' },
+        { marker: 's2', text: 'A subsection' },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [
+            {
+              verseNumber: 1,
+              content: 'Saved scripture',
+              markers: {
+                headings: [bodyHeadings[0], { marker: 's1', text: 'Old title' }, bodyHeadings[1]],
+              },
+            },
+            EMPTY_PERICOPE[1],
+          ],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: {},
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      const { rerender } = renderWithAi();
+      const user = userEvent.setup();
+      expect(screen.getByLabelText('Section title')).toHaveValue('Old title');
+      await user.clear(screen.getByLabelText('Section title'));
+      expect(handleTextChange).toHaveBeenLastCalledWith(1, 'Saved scripture', {
+        headings: bodyHeadings,
+      });
+
+      const cleared = [
+        { verseNumber: 1, content: 'Saved scripture', markers: { headings: bodyHeadings } },
+        EMPTY_PERICOPE[1],
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: cleared, handleTextChange })
+      );
+      rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={cleared}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      expect(screen.getByLabelText('Section title')).toHaveValue('');
+      await user.type(screen.getByLabelText('Section title'), 'New title');
+      expect(handleTextChange).toHaveBeenLastCalledWith(1, 'Saved scripture', {
+        headings: [{ marker: 's1', text: 'New title' }, ...bodyHeadings],
+      });
     });
 
     it('preserves saved verse content without accepting an AI verse for a title-only fill', async () => {
@@ -1189,11 +1315,120 @@ describe('DraftingUI', () => {
         onSave: (verse: number, payload: SavePayload) => Promise<void>;
       };
       await onSave(1, { content: 'Suggestion for 1' });
-      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+      expect(mockTrackAiUsageAsync).toHaveBeenCalledWith({
         bibleTextId: 101,
         projectUnitId: 10,
         wasUsed: true,
       });
+    });
+
+    it('fills reused verse numbers and the title after changing assignments', () => {
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'First assignment verse', 2: 'Second verse' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      const { rerender } = renderWithAi();
+      handleTextChange.mockClear();
+      mockTrackAiUsage.mockClear();
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'New assignment verse', 2: 'New second verse' },
+        headingSuggestions: { '1': { ...titleSuggestion, suggestedText: 'New title' } },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+
+      rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, chapterAssignmentId: 2, isAiEnabled: true }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={EMPTY_PERICOPE}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'New assignment verse', {
+        headings: [{ marker: 's1', text: 'New title' }],
+      });
+      expect(handleTextChange).toHaveBeenCalledWith(2, 'New second verse', undefined);
+      expect(mockTrackAiUsage).toHaveBeenCalledTimes(3);
+    });
+
+    const acceptedUsageCalls = () =>
+      [...mockTrackAiUsage.mock.calls, ...mockTrackAiUsageAsync.mock.calls].filter(
+        ([payload]) => (payload as { wasUsed: boolean }).wasUsed
+      );
+
+    it('tracks accepted usage once across concurrent and later saves', async () => {
+      let finishTracking = () => {};
+      mockTrackAiUsageAsync.mockReturnValueOnce(
+        new Promise<void>(resolve => {
+          finishTracking = resolve;
+        })
+      );
+      renderWithAi();
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+
+      await act(async () => {
+        await Promise.all([
+          onSave(1, { content: 'Suggestion for 1' }),
+          onSave(1, { content: 'Edited suggestion' }),
+        ]);
+      });
+      expect(acceptedUsageCalls()).toHaveLength(1);
+      await act(async () => finishTracking());
+      await act(async () => onSave(1, { content: 'Another edit' }));
+      expect(acceptedUsageCalls()).toHaveLength(1);
+    });
+
+    it('retries accepted usage on a later save after tracking fails', async () => {
+      mockTrackAiUsageAsync.mockRejectedValueOnce(new Error('Tracking unavailable'));
+      renderWithAi();
+      const { onSave } = mockUseDrafting.mock.calls[0][0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+
+      await act(async () => onSave(1, { content: 'Suggestion for 1' }));
+      expect(acceptedUsageCalls()).toHaveLength(1);
+      await act(async () => onSave(1, { content: 'Edited suggestion' }));
+      expect(acceptedUsageCalls()).toHaveLength(2);
+      await act(async () => onSave(1, { content: 'Another edit' }));
+      expect(acceptedUsageCalls()).toHaveLength(2);
+    });
+
+    it('tracks an accepted suggestion when AI is disabled before the save', async () => {
+      const { rerender } = renderWithAi();
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: {},
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      rerender(
+        <DraftingUI
+          projectItem={{ ...mockProjectItem, isAiEnabled: false }}
+          sourceVerses={mockSourceVerses}
+          targetVerses={EMPTY_PERICOPE}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      const { onSave } = mockUseDrafting.mock.calls.at(-1)?.[0] as {
+        onSave: (verse: number, payload: SavePayload) => Promise<void>;
+      };
+
+      await act(async () => onSave(1, { content: 'Edited suggestion' }));
+      expect(acceptedUsageCalls()).toEqual([
+        [
+          {
+            bibleTextId: 101,
+            projectUnitId: 10,
+            wasUsed: true,
+          },
+        ],
+      ]);
     });
 
     it('keeps accepted AI verse usage scoped to the assignment that filled it', async () => {
@@ -1228,6 +1463,7 @@ describe('DraftingUI', () => {
         markers: { headings: [{ marker: 's1', text: 'Title' }] },
       });
       expect(mockTrackAiUsage).not.toHaveBeenCalled();
+      expect(mockTrackAiUsageAsync).not.toHaveBeenCalled();
     });
 
     it('matches AI fill candidates by chapter as well as verse number', () => {

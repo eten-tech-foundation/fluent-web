@@ -32,10 +32,12 @@ enabled session, manually clearing an input does not immediately refill it.
 ## Section titles
 
 A group with a source title displays a separate Section title input. Its value is the first
-heading in `markers.headings` on the group's first source-backed verse. Other headings and
-paragraph markers are preserved. The rich text body omits that first heading while the input
-is present, then restores it when passing scripture edits back to the save pipeline. This
-keeps title words out of scripture text and avoids displaying the same title twice.
+top-level section heading (`s` or `s1`) in `markers.headings` on the group's first source-backed
+verse. References, subtitles (`s2` and deeper), other headings and paragraph markers are preserved.
+The rich text body omits only the identified title while the input is present, then restores it
+at its stored position when passing scripture edits back to the save pipeline. Clearing the title
+leaves the input empty instead of promoting a reference or subtitle. A new title uses `s1`.
+This keeps title words out of scripture text and avoids displaying the same title twice.
 
 Only an empty, untouched title receives the generated suggestion. A group without a source
 title requests no heading suggestion. Groups whose scripture was already fully saved when loaded
