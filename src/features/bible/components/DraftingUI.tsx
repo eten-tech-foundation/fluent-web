@@ -1,4 +1,13 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
@@ -102,6 +111,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
   // other views' rows level, and a chapter has no rows to keep level (#397).
   const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
+  const [chapterPlayerMounted, setChapterPlayerMounted] = useState(false);
+  const chapterSourceVerseRefs = useRef<Record<number, HTMLElement | null>>({});
+  const chapterSourceViewportRef = useRef<HTMLDivElement | null>(null);
 
   const addVerseMutation = useAddTranslatedVerse();
   const submitChapterMutation = useSubmitChapter();
@@ -968,6 +980,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const audioRowsJson = JSON.stringify(audioRowDrafts);
   const ttsRows = useMemo(() => JSON.parse(audioRowsJson) as SourceAudioRow[], [audioRowsJson]);
+  const chapterVerseRefs = useMemo(
+    () =>
+      ttsRows
+        .filter(row => row.chapterNumber === projectItem.chapterNumber)
+        .map(row => row.verseRef),
+    [projectItem.chapterNumber, ttsRows]
+  );
 
   // A single engine for the page: a thin seam over the API route (§6.1), no
   // per-verse state, so it must not be rebuilt on every render.
@@ -980,6 +999,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       const [chapter, verse] = verseRef.includes(':')
         ? verseRef.split(':').map(Number)
         : [projectItem.chapterNumber, Number(verseRef)];
+      if (isChapterMode) return chapterSourceVerseRefs.current[verse] ?? undefined;
       if (chapter === projectItem.chapterNumber) return verseRefs.current[verse];
       const group = fullPericopes?.find(group =>
         group.verses.some(ref => ref.chapterNumber === chapter && ref.verseNumber === verse)
@@ -987,9 +1007,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       const current = group?.verses.find(ref => ref.chapterNumber === projectItem.chapterNumber);
       return current ? verseRefs.current[current.verseNumber] : undefined;
     },
-    [verseRefs, projectItem.chapterNumber, fullPericopes]
+    [verseRefs, projectItem.chapterNumber, fullPericopes, isChapterMode]
   );
-  const getTtsViewport = useCallback(() => targetScrollRef.current, [targetScrollRef]);
+  const getTtsViewport = useCallback(
+    () => (isChapterMode ? chapterSourceViewportRef.current : targetScrollRef.current),
+    [isChapterMode, targetScrollRef]
+  );
 
   const tts = useSourceTtsPlayback({
     engine: ttsEngine,
@@ -1022,6 +1045,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   });
 
   const playbackRegistry = usePlaybackRegistry();
+  const audioSurface = isChapterMode ? 'chapter' : isPericopeMode ? 'pericope' : 'verse';
+  const previousAudioSurface = useRef(audioSurface);
+  useLayoutEffect(() => {
+    if (previousAudioSurface.current === audioSurface) return;
+    previousAudioSurface.current = audioSurface;
+    // A view change can replace every visible control while a run is sounding.
+    // Pause it before paint so the new surface never describes audible playback as idle.
+    playbackRegistry.silenceAll();
+  }, [audioSurface, playbackRegistry]);
   // Selection identity only: it does not choose the recording provider. Keep
   // pageKey independent so switching back resumes and chapter continuation survives.
   const sourceSelectionKey = JSON.stringify(
@@ -1041,16 +1073,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // for it rather than assuming a format (T3).
 
   // Use the same source-row membership as the visible pericope controls.
-  const ttsKeyboardGroups = isPericopeMode
-    ? (pericopes ?? []).map(group => {
-        const full =
-          fullPericopes?.find(candidate => candidate.pericopeNumber === group.pericopeNumber) ??
-          group;
-        return orderedPericopeRefs(full).map(ref =>
-          ttsVerseRefFor(ref.verseNumber, ref.chapterNumber)
-        );
-      })
-    : null;
+  const ttsKeyboardGroups = isChapterMode
+    ? [chapterVerseRefs]
+    : isPericopeMode
+      ? (pericopes ?? []).map(group => {
+          const full =
+            fullPericopes?.find(candidate => candidate.pericopeNumber === group.pericopeNumber) ??
+            group;
+          return orderedPericopeRefs(full).map(ref =>
+            ttsVerseRefFor(ref.verseNumber, ref.chapterNumber)
+          );
+        })
+      : null;
   const ttsCaretRef = ttsVerseRefFor(activeVerseId);
   const ttsCaretGroup = ttsKeyboardGroups?.find(refs => refs.includes(ttsCaretRef)) ?? [];
 
@@ -1059,10 +1093,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // that verse; pericope mode acts on its visible player, using the existing
   // scrub seek for a fresh/different caret verse and resuming its saved position.
   //
-  // Chapter view has no audio control yet: never narrate invisibly there.
+  // The lazy chapter chunk may still be loading: shortcuts become live only
+  // after its visible player mounts.
   // Pause is app-wide, including while a clip is still loading.
   useTtsKeyboardShortcuts({
-    enabled: ttsEnabled && !isChapterMode,
+    enabled: ttsEnabled && (!isChapterMode || chapterPlayerMounted),
     onPlay: () =>
       ttsKeyboardGroups
         ? tts.playGroupAtVerse(ttsCaretGroup, ttsCaretRef)
@@ -1284,20 +1319,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               }
             >
               <DraftingChapterView
+                activeAudioVerseRef={ttsEnabled ? tts.activeVerseRef : null}
                 activeBibleTabId={activeBibleTabId}
                 bibleContentError={bibleContentError}
                 bibleContentLoading={bibleContentLoading}
                 bibleVerseMap={bibleVerseMap}
+                chapterVerseRefs={chapterVerseRefs}
                 handleActiveVerseChange={handleActiveVerseChange}
                 handleTextChange={handleTextChangeWithTracking}
+                playback={ttsPericopeGridProps}
                 projectItem={projectItem}
                 readOnly={readOnly}
                 resourceBibleTabs={resourceBibleTabs}
                 selectedPanel={selectedPanel}
+                sourceVerseRefs={chapterSourceVerseRefs}
                 sourceVerses={sourceVerses}
+                sourceViewportRef={chapterSourceViewportRef}
                 verses={verses}
                 onBibleTabClose={handleBibleTabClose}
                 onBibleTabSelect={handleBibleTabSelect}
+                onPlayerMounted={setChapterPlayerMounted}
               />
             </Suspense>
           ) : (

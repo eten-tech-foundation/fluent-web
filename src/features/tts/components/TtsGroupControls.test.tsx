@@ -130,6 +130,37 @@ describe('PericopePlayer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('names a chapter player and keeps its recorded notice and AI fallback truthful', () => {
+    const view: PericopePlaybackView = {
+      ...model(),
+      recordedNotice: {
+        textBibleKey: 'dbl-text',
+        textBibleName: 'Text Bible',
+        recordingKey: 'aq-1',
+        recordingName: 'Recording Bible',
+        recordingProvider: 'aquifer',
+        notice: 'Curated notice',
+      },
+    };
+    const input = { ...props(view), kind: 'chapter' as const, groupLabel: '1' };
+    const h = mount(input);
+    expect(screen.getByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'AI-generated audio' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Recording information for chapter 1' }));
+    expect(input.playback.showRecordedNotice).toHaveBeenCalledWith(view.recordedNotice);
+
+    view.recordedNotice = null;
+    view.isLive = true;
+    view.dynamicAi = true;
+    input.playback.status = 'playing';
+    h.rerender(<PericopePlayer {...input} />);
+    expect(screen.getByRole('button', { name: 'Pause chapter 1' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Recording information for chapter 1' })
+    ).toBeNull();
+    expect(screen.getByRole('img', { name: 'AI-generated audio' })).toBeInTheDocument();
+  });
+
   it('maps live playback, provenance and elapsed independently of the idle registry', () => {
     const view = { ...model(), isLive: true, dynamicAi: true, currentIndex: 1, currentTime: 2 };
     const input = props(view);
