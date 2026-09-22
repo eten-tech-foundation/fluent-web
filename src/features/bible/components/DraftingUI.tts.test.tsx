@@ -10,7 +10,7 @@
  */
 import { useLayoutEffect } from 'react';
 
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,8 +66,8 @@ vi.mock('react-i18next', () => ({
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { error: toastError } }));
-vi.mock('./DraftingChapterView', () => ({
-  DraftingChapterView: () => <div data-testid='chapter-audio-gate-test' />,
+vi.mock('@/features/rte/components/ChapterEditor', () => ({
+  ChapterEditor: () => <div data-testid='chapter-editor' />,
 }));
 
 // ── Drafting-side hooks (same shape as DraftingUI.test.tsx) ─────────────────
@@ -207,6 +207,7 @@ let registry: TtsFeature.PlaybackRegistry;
 let referenceBibleId: string | null;
 let capturedPageKey: string | undefined;
 const elements: FakeClipElement[] = [];
+const playedElements = () => elements.filter(element => element.playCalls.length > 0);
 const initialClaimPause = vi.fn();
 const synthesize = vi.fn<TtsFeature.TtsEngine['synthesize']>();
 
@@ -383,11 +384,16 @@ const RegistryProbe = () => {
   return null;
 };
 
-const renderDrafting = (projectItem: ProjectItem = mockProjectItem) =>
+const renderDrafting = (
+  projectItem: ProjectItem = mockProjectItem,
+  readOnly = false,
+  sourceVerses: Source[] = mockSourceVerses
+) =>
   render(
     <DraftingUI
       projectItem={projectItem}
-      sourceVerses={mockSourceVerses}
+      readOnly={readOnly}
+      sourceVerses={sourceVerses}
       targetVerses={mockTargetVerses}
       userdetail={{ id: 1 } as unknown as User}
     />,
@@ -1147,33 +1153,253 @@ describe('DraftingUI — keyboard shortcuts', () => {
     expect(registry.getRecord(key)?.currentTime).toBe(3);
   });
 
-  it('chapter view has no control yet; shortcuts must not narrate invisibly', async () => {
+  it.each([false, true])(
+    'chapter view has one visible player on %s read-only route',
+    async readOnly => {
+      config.features.rtePericope = true;
+      useAppStore.setState({ displayMode: 'chapter' });
+      renderDrafting(mockProjectItem, readOnly);
+      expect(await screen.findByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+      expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(1);
+      expect(screen.getAllByRole('slider')).toHaveLength(1);
+      expect(screen.queryByRole('button', { name: /pericope/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
+      expect(ttsRows.map(row => row.verseRef)).toEqual(['1', '2', '3']);
+    }
+  );
+
+  it('flag-off Chapter selection adds no chapter player or shortcuts', async () => {
+    config.features.rtePericope = false;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    expect(screen.queryByTestId('tts-group-controls')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chapter-source-viewport')).not.toBeInTheDocument();
+  });
+
+  it('chapter pointer and four shortcuts share the full group, saved position and Restart', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    mockActiveVerseId = 2;
+    renderDrafting();
+    await screen.findByRole('button', { name: 'Play chapter 1' });
+    const refs = ['1', '2', '3'];
+    const key = playback.groupKey(refs)!;
+    const bar = screen.getByRole('slider');
+
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(playback.activeVerseRef).toBe('2');
+    expect(registry.isLive(key)).toBe(true);
+    expect(playback.groupView(refs).segments.map(segment => segment.verseRef)).toEqual(refs);
+    expect(Number(bar.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Pause chapter 1' })).toBeInTheDocument();
+
+    act(() => {
+      elements[0].currentTime = 2.5;
+      elements[0].emit('playing');
+    });
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    expect(registry.getRecord(key)).toMatchObject({ verseRef: '2', currentTime: 2.5 });
+    await userEvent.click(screen.getByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(playedElements()).toHaveLength(2));
+    expect(playedElements()[1].currentTime).toBe(2.5);
+
+    await userEvent.keyboard('{Alt>}r{/Alt}');
+    await waitFor(() => expect(playedElements()).toHaveLength(3));
+    expect(playback.activeVerseRef).toBe('1');
+    await userEvent.keyboard('{Alt>}s{/Alt}');
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    await waitFor(() => expect(playedElements()).toHaveLength(4));
+    expect(registry.isLive(key)).toBe(true);
+    expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(1);
+  });
+
+  it('chapter reference holes keep one usable player with independent text and identity', async () => {
     realPlayback = true;
     config.features.rtePericope = true;
     useAppStore.setState({ displayMode: 'chapter' });
     renderDrafting();
-    expect(await screen.findByTestId('chapter-audio-gate-test')).toBeInTheDocument();
-    expect(screen.queryByTestId('tts-verse-controls')).not.toBeInTheDocument();
-    for (const [code, shiftKey] of [
-      ['KeyP', false],
-      ['KeyP', true],
-      ['KeyS', false],
-      ['KeyR', false],
-    ] as const) {
-      const event = new KeyboardEvent('keydown', {
-        code,
-        shiftKey,
-        altKey: true,
-        cancelable: true,
-      });
-      act(() => {
-        window.dispatchEvent(event);
-      });
-      expect(event.defaultPrevented).toBe(false);
-    }
-    expect(initialClaimPause).not.toHaveBeenCalled();
-    expect(elements).toHaveLength(0);
-    expect(synthesize).not.toHaveBeenCalled();
+    await screen.findByRole('button', { name: 'Play chapter 1' });
+    const sourceKey = playback.groupKey(['1', '2', '3']);
+    await selectReferenceBible();
+    const referenceKey = playback.groupKey(['1', '2', '3']);
+    expect(referenceKey).not.toBe(sourceKey);
+    expect(referenceBibleId).toBe('aq-123');
+    expect(sourceChapter?.role).toBe('referenceBible');
+    expect(sourceChapter?.languageCode).toBe('hin');
+    expect(ttsRows.map(row => row.text)).toEqual(['Hindi verse 1', 'Hindi verse 2', undefined]);
+    expect(playback.groupView(['1', '2', '3']).segments.map(segment => segment.verseRef)).toEqual([
+      '1',
+      '2',
+    ]);
+    expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(registry.isLive(referenceKey!)).toBe(true);
+  });
+
+  it('switching source tabs pauses the old chapter and preserves its own record', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    await userEvent.click(await screen.findByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(playedElements()).toHaveLength(1));
+    const sourceKey = playback.groupKey(['1', '2', '3'])!;
+    act(() => {
+      playedElements()[0].currentTime = 1.25;
+      playedElements()[0].emit('playing');
+    });
+    await selectReferenceBible();
+    const referenceKey = playback.groupKey(['1', '2', '3'])!;
+    expect(referenceKey).not.toBe(sourceKey);
+    expect(registry.isLive(sourceKey)).toBe(false);
+    expect(registry.getRecord(sourceKey)?.currentTime).toBe(1.25);
+    expect(registry.getRecord(referenceKey)).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'WEB' }));
+    expect(playback.groupKey(['1', '2', '3'])).toBe(sourceKey);
+    expect(screen.getByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+  });
+
+  it('chapter scrub parks the selected verse in the same player for keyboard resume', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    await screen.findByRole('button', { name: 'Play chapter 1' });
+    const key = playback.groupKey(['1', '2', '3'])!;
+    const bar = screen.getByRole('slider');
+    fireEvent.keyDown(bar, { key: 'End' });
+    fireEvent.keyUp(bar, { key: 'End' });
+    expect(registry.getRecord(key)).toMatchObject({ verseRef: '3', pendingFraction: 0 });
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(playedElements()).toHaveLength(1));
+    expect(playback.activeVerseRef).toBe('3');
+    expect(registry.isLive(key)).toBe(true);
+  });
+
+  it('chapter offline and impossible states guard pointer and keyboard through the same key', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    await screen.findByRole('button', { name: 'Play chapter 1' });
+    const key = playback.groupKey(['1', '2', '3'])!;
+    act(() => registry.setImpossible(key, 'Chapter unavailable.'));
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    expect(toastError).toHaveBeenLastCalledWith('Chapter unavailable.');
+    expect(screen.getByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+    act(() => registry.setImpossible(key, null));
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
+    expect(toastError).toHaveBeenLastCalledWith("You're offline. Reconnect to play audio.");
+    expect(playedElements()).toHaveLength(0);
+  });
+
+  it('chapter playback highlights and scrolls a source verse without moving the target', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    mockActiveVerseId = 3;
+    renderDrafting();
+    await screen.findByRole('button', { name: 'Play chapter 1' });
+    const viewport = screen.getByTestId('chapter-source-viewport');
+    const target = screen.getByTestId('chapter-editor');
+    const sourceVerse = within(viewport).getByText(
+      'And God said, Let there be light.'
+    ).parentElement!;
+    const scroll = vi.fn();
+    sourceVerse.scrollIntoView = scroll;
+    vi.spyOn(sourceVerse, 'getBoundingClientRect').mockReturnValue({
+      top: 120,
+      bottom: 140,
+    } as DOMRect);
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 100,
+    } as DOMRect);
+
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+    expect(screen.getByTestId('tts-active-chapter-verse')).toBe(sourceVerse);
+    expect(target.contains(sourceVerse)).toBe(false);
+    expect(within(viewport).queryByTestId('tts-group-controls')).not.toBeInTheDocument();
+  });
+
+  it('hiding audio silences the chapter and showing it restores the saved group position', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    await userEvent.click(await screen.findByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    const key = playback.groupKey(['1', '2', '3'])!;
+    act(() => {
+      elements[0].currentTime = 1.75;
+      elements[0].emit('playing');
+      setHideAudio(true);
+    });
+    expect(screen.queryByTestId('tts-group-controls')).not.toBeInTheDocument();
+    expect(registry.isLive(key)).toBe(false);
+    expect(registry.getRecord(key)?.currentTime).toBe(1.75);
+    act(() => setHideAudio(false));
+    expect(await screen.findByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(playedElements()).toHaveLength(2));
+    expect(playedElements()[1].currentTime).toBe(1.75);
+  });
+
+  it('pauses the old run before changing from chapter to verse controls', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    renderDrafting();
+    await userEvent.click(await screen.findByRole('button', { name: 'Play chapter 1' }));
+    await waitFor(() => expect(elements[0]?.playCalls.length).toBeGreaterThan(0));
+    const key = playback.groupKey(['1', '2', '3'])!;
+    act(() => useAppStore.setState({ displayMode: 'verse' }));
+    expect(screen.queryByTestId('tts-group-controls')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('tts-verse-controls')).toHaveLength(3);
+    expect(registry.isLive(key)).toBe(false);
+    expect(registry.getRecord(key)).not.toBeNull();
+    expect(elements[0].paused).toBe(true);
+  });
+
+  it('silences verse playback while the chapter chunk replaces its controls', async () => {
+    realPlayback = true;
+    config.features.rtePericope = true;
+    renderDrafting();
+    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await waitFor(() => expect(playedElements()).toHaveLength(1));
+    const verseKey = playback.verseKey('1')!;
+    act(() => useAppStore.setState({ displayMode: 'chapter' }));
+    expect(registry.isLive(verseKey)).toBe(false);
+    expect(playedElements()[0].paused).toBe(true);
+    expect(await screen.findByRole('button', { name: 'Play chapter 1' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(1);
+  });
+
+  it('keeps the chapter bar outside a long source document viewport', async () => {
+    config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'chapter' });
+    const longChapter = Array.from({ length: 176 }, (_, index) => ({
+      id: index + 1,
+      verseNumber: index + 1,
+      text: `Psalm 119 verse ${index + 1}`,
+    }));
+    renderDrafting({ ...mockProjectItem, totalVerses: 176 }, true, longChapter);
+    const player = await screen.findByTestId('tts-group-controls');
+    const viewport = screen.getByTestId('chapter-source-viewport');
+    expect(within(viewport).getByText('Psalm 119 verse 176')).toBeInTheDocument();
+    expect(viewport.contains(player)).toBe(false);
+    expect(ttsRows).toHaveLength(176);
+    expect(screen.getAllByTestId('audio-segment-boundary')).toHaveLength(175);
+    expect(screen.getByRole('slider')).toBeInTheDocument();
   });
 
   it('Alt+P plays the verse the caret is in, not the one that is playing', async () => {

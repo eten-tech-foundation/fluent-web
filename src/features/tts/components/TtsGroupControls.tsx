@@ -21,6 +21,7 @@ import { PlayableControl, type PlayableControlState } from './TtsVerseControls';
 
 export interface PericopePlayerProps {
   groupLabel: string;
+  kind?: 'pericope' | 'chapter';
   verseRefs: readonly string[];
   playback: Pick<
     SourceTtsPlaybackApi,
@@ -58,8 +59,17 @@ function geometryFor(view: PericopePlaybackView) {
 }
 
 /** Two-channel adapter: registry for idle facts, host-normalized timing for live playback. */
-export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlayerProps) {
+export function PericopePlayer({
+  groupLabel,
+  kind = 'pericope',
+  verseRefs,
+  playback,
+}: PericopePlayerProps) {
   const { t } = useTranslation();
+  const playableLabel =
+    kind === 'chapter'
+      ? t('ttsChapterLabel', 'chapter {{groupLabel}}', { groupLabel })
+      : t('ttsPericopeLabel', 'pericope {{groupLabel}}', { groupLabel });
   const view = playback.groupView(verseRefs);
   const saved = usePlayableState(view.key ?? '');
   const registry = usePlaybackRegistry();
@@ -101,7 +111,7 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
         canRestart={view.isLive || saved.canRestart}
         disabled={view.key === null}
         impossibleReason={impossibleReason ?? undefined}
-        label={t('ttsPericopeLabel', 'pericope {{groupLabel}}', { groupLabel })}
+        label={playableLabel}
         playableKey={view.key ?? ''}
         state={state}
         onPrimary={() => playback.playGroup(verseRefs)}
@@ -124,7 +134,7 @@ export function PericopePlayer({ groupLabel, verseRefs, playback }: PericopePlay
             <TooltipTrigger asChild>
               <Button
                 aria-label={t('recordedAudioInfo', 'Recording information for {{groupLabel}}', {
-                  groupLabel,
+                  groupLabel: kind === 'chapter' ? playableLabel : groupLabel,
                 })}
                 className='text-muted-foreground size-10 shrink-0'
                 size='icon'
