@@ -129,6 +129,93 @@ describe('PericopeEditor', () => {
     editor.setUsj.mockClear();
   });
 
+  it('counts a hidden title before saving and accepts a corrected body edit', () => {
+    const onVersesChange = vi.fn();
+    const headings = Array.from({ length: 4 }, (_, index) => ({
+      marker: 's2',
+      text: 'Body heading ' + (index + 1),
+    }));
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='hidden-title'
+        reservedHeadingSlots={{ 1: 1 }}
+        verses={[{ verseNumber: 1, text: 'Verse.', markers: { headings: headings.slice(0, 3) } }]}
+        onVersesChange={onVersesChange}
+      />
+    );
+
+    act(() =>
+      editor.commit?.(
+        pericopeVersesToUsj(
+          [{ verseNumber: 1, text: 'Edited verse.', markers: { headings } }],
+          CHAPTER,
+          BOOK
+        )
+      )
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Keep at most four headings');
+    expect(onVersesChange).not.toHaveBeenCalled();
+
+    act(() =>
+      editor.commit?.(
+        pericopeVersesToUsj(
+          [{ verseNumber: 1, text: 'Edited verse.', markers: { headings: headings.slice(0, 3) } }],
+          CHAPTER,
+          BOOK
+        )
+      )
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onVersesChange).toHaveBeenCalledWith([
+      {
+        verseNumber: 1,
+        text: 'Edited verse.',
+        markers: {
+          headings: headings.slice(0, 3),
+          paragraphs: [{ marker: 'p', offset: 0 }],
+        },
+      },
+    ]);
+  });
+
+  it('allows four body headings on verses without a hidden title', () => {
+    const onVersesChange = vi.fn();
+    const headings = Array.from({ length: 4 }, (_, index) => ({
+      marker: 's2',
+      text: 'Body heading ' + (index + 1),
+    }));
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='unreserved-verse'
+        reservedHeadingSlots={{ 1: 1 }}
+        verses={EMPTY_PAIR}
+        onVersesChange={onVersesChange}
+      />
+    );
+
+    act(() =>
+      editor.commit?.(
+        pericopeVersesToUsj(
+          [EMPTY_PAIR[0], { verseNumber: 2, text: 'Second verse.', markers: { headings } }],
+          CHAPTER,
+          BOOK
+        )
+      )
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onVersesChange).toHaveBeenCalledWith([
+      {
+        verseNumber: 2,
+        text: 'Second verse.',
+        markers: { headings, paragraphs: [{ marker: 'p', offset: 0 }] },
+      },
+    ]);
+  });
+
   it('shows text the parent wrote into a verse the editor holds empty', () => {
     const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a' };
     const { rerender } = render(
