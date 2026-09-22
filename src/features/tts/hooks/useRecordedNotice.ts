@@ -7,6 +7,7 @@ interface ActualRecording {
   recordingName: string;
   recordingProvider: RecordedNotice['recordingProvider'];
   notice: string | null;
+  noticePending?: boolean;
   playableKey: string;
 }
 
@@ -32,6 +33,7 @@ export function useRecordedNotice({
   const recordingName = recording?.recordingName;
   const recordingProvider = recording?.recordingProvider;
   const recordingNotice = recording?.notice;
+  const noticePending = recording?.noticePending ?? false;
   const playableKey = recording?.playableKey;
   const candidate = useMemo<RecordedNotice | null>(() => {
     if (
@@ -77,8 +79,9 @@ export function useRecordedNotice({
   }, [scopeKey]);
 
   useEffect(() => {
+    if (noticePending) return;
     if (!recordingKey || !playableKey || !candidate) {
-      setDialog(null); // a successful blank or failed/stale fact removes old authority
+      setDialog(null); // a successful blank or failed fact removes old authority
       setRetained(null);
       return;
     }
@@ -97,7 +100,7 @@ export function useRecordedNotice({
       if (!isPlaying || acknowledged) return current;
       return candidate;
     });
-  }, [candidate, candidateKey, isPlaying, playableKey, recordingKey, scopeKey]);
+  }, [candidate, candidateKey, isPlaying, noticePending, playableKey, recordingKey, scopeKey]);
 
   const close = useCallback(() => {
     setDialog(current => {

@@ -34,6 +34,8 @@ const playOne = vi.fn();
 const playFrom = vi.fn();
 const stop = vi.fn();
 const pause = vi.fn<() => PauseSnapshot | null>(() => null);
+const hold = vi.fn(() => false);
+const resumeHeld = vi.fn();
 let itemStates: Record<string, string> = {};
 let status = 'idle';
 let activeVerseRef: string | null = null;
@@ -49,6 +51,8 @@ vi.mock('./useTtsPlaybackQueue', () => ({
       playFrom,
       stop,
       pause,
+      hold,
+      resumeHeld,
       aiMarkedKeys: new Set(),
     };
   },

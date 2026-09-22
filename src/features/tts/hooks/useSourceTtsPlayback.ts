@@ -367,7 +367,10 @@ export const useSourceTtsPlayback = (
       const row = itemsRef.current.find(item => item.verseRef === verseRef);
       const base = latest.current.sourceChapter;
       rememberChapter(base ? { ...base, chapter: row?.chapterNumber ?? base.chapter } : null);
-      setSoundingRecording(null);
+      // Keep the last actual recording through the queue's boundary update. The
+      // next onSourcePlaying replaces it (or clears it for TTS), while a fresh
+      // notice already on screen keeps one stable dialog rather than unmounting
+      // and reopening between adjacent recorded verses.
       const run = runRef.current;
       const key = run?.items.find(item => item.verseRef === verseRef)?.playableKey;
       if (run && key) {
@@ -940,12 +943,20 @@ export const useSourceTtsPlayback = (
             recordingName: currentSounding.recordingName,
             recordingProvider: currentSounding.provider,
             notice: null,
+            noticePending: noticeFacts?.state === 'loading',
             playableKey: currentSounding.playableKey,
           }
         : null,
     isPlaying: queue.status === 'playing',
     enabled,
   });
+  useEffect(() => {
+    if (noticeUi.dialog) {
+      queueRef.current.hold();
+      return;
+    }
+    queueRef.current.resumeHeld();
+  }, [noticeUi.dialog, queue.activeVerseRef, queue.status]);
   const verseKey = useCallback(
     (verseRef: string) => versePlayable(verseRef)?.key ?? null,
     [versePlayable]

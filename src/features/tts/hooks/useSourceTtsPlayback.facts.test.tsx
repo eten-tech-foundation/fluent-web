@@ -123,12 +123,64 @@ const setup = (extra: Partial<UseSourceTtsPlaybackOptions> = {}) => {
   return { ...hook, client, facts, put, synthesize, initial, registry: () => registry };
 };
 afterEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
 describe('shared playback authority and sounding metadata', () => {
+  it('holds a fresh recorded notice open, then resumes that exact run when acknowledged', async () => {
+    const h = setup();
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    const active = elements.at(-1)!;
+    const callsBeforeSound = active.playCalls.length;
+    act(() => active.emit('playing'));
+    await settle();
+
+    expect(h.result.current.recordedNoticeDialog?.notice).toBe('Fresh recording notice');
+    expect(active.paused).toBe(true);
+    expect(active.playCalls).toHaveLength(callsBeforeSound);
+
+    act(() => h.result.current.closeRecordedNotice());
+    await settle();
+    expect(h.result.current.recordedNoticeDialog).toBeNull();
+    expect(active.paused).toBe(false);
+    expect(active.playCalls).toHaveLength(callsBeforeSound + 1);
+  });
+
+  it('keeps retained Info held while a new run loads, then starts it on dismissal', async () => {
+    const h = setup();
+    act(() => h.result.current.playGroup(['1']));
+    await settle();
+    const first = elements.at(-1)!;
+    act(() => first.emit('playing'));
+    await settle();
+    const retained = h.result.current.groupView(['1']).recordedNotice;
+    expect(retained?.notice).toBe('Fresh recording notice');
+    if (!retained) throw new Error('Expected retained recorded notice');
+
+    act(() => h.result.current.closeRecordedNotice());
+    await settle();
+    act(() => h.result.current.pause());
+    act(() => h.result.current.showRecordedNotice(retained));
+    await settle();
+    expect(h.result.current.recordedNoticeDialog).toBe(retained);
+
+    act(() => h.result.current.playGroup(['1']));
+    await settle();
+    const held = elements.at(-1)!;
+    expect(held).not.toBe(first);
+    expect(held.playCalls).toEqual([]);
+    expect(h.result.current.status).toBe('loading');
+
+    act(() => h.result.current.closeRecordedNotice());
+    await settle();
+    expect(held.playCalls).toHaveLength(1);
+    expect(held.paused).toBe(false);
+  });
+
   it('keeps actual recorded notice fresh independently of cached media; edited/blank/error never reuse the media notice', async () => {
     const h = setup();
     act(() => h.result.current.playVerse('1'));
@@ -349,6 +401,8 @@ describe('shared playback authority and sounding metadata', () => {
     await settle();
     act(() => elements[0].emit('playing'));
     expect(h.result.current.recording).toBeUndefined();
+    expect(h.result.current.recordedNoticeDialog).toBeNull();
+    expect(elements[0].paused).toBe(false);
   });
 });
 

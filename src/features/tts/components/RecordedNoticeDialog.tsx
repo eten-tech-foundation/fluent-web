@@ -17,7 +17,7 @@ export interface RecordedNoticeDialogProps {
   onClose: () => void;
 }
 
-/** A courtesy notice for an actual recording. It never pauses or gates playback. */
+/** A courtesy notice for an actual recording. The playback host holds audio while it is open. */
 export function RecordedNoticeDialog({ notice, onClose }: RecordedNoticeDialogProps) {
   const { t } = useTranslation();
   if (!notice?.notice.trim()) return null;
@@ -33,10 +33,7 @@ export function RecordedNoticeDialog({ notice, onClose }: RecordedNoticeDialogPr
         <DialogHeader>
           <DialogTitle>{t('recordedAudioNoticeTitle', 'Recording information')}</DialogTitle>
           <DialogDescription>
-            {t(
-              'recordedAudioNoticeDescription',
-              'Source information for this recording. Audio continues while this notice is open.'
-            )}
+            {t('recordedAudioNoticeDescription', 'Source information for this recording.')}
           </DialogDescription>
         </DialogHeader>
         <div className='max-h-[50vh] space-y-3 overflow-y-auto text-sm'>

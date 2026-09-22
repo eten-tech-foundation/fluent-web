@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { type ClipAudioElement, createClipAudioElement, onClipEvent } from '../lib/audioElement';
-import { supervisePlayback } from '../lib/playbackRecovery';
+import { supervisePlayback, type PlaybackRecovery } from '../lib/playbackRecovery';
 import {
   PlaybackTiming,
   type PlaybackStart,
@@ -76,6 +76,10 @@ export interface TtsPlaybackQueueApi {
   ) => void;
   /** No snapshot while idle or before any source position is known; always cancels the run. */
   pause: () => PauseSnapshot | null;
+  /** Temporarily silence the live element without ending its run or losing its position. */
+  hold: () => boolean;
+  /** Continue a run previously silenced with `hold`. */
+  resumeHeld: () => void;
   stop: () => void;
   setPlaybackRate: (rate: number) => void;
 }
@@ -107,6 +111,7 @@ interface PlaybackSession {
   current?: { segment: Segment; source: Source; startOffset: number };
   prefetches: Map<number, SourceEntry>;
   activeElement?: ClipAudioElement;
+  activePlayback?: PlaybackRecovery;
   clipCleanups: Array<() => void>;
   segmentCleanups: Array<() => void>;
   startOffset?: number;
@@ -126,6 +131,7 @@ const teardownActiveClip = (session: PlaybackSession): void => {
   session.clipCleanups = [];
   session.activeElement?.pause();
   session.activeElement = undefined;
+  session.activePlayback = undefined;
   session.current = undefined;
 };
 
@@ -145,6 +151,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
   const sessionRef = useRef<PlaybackSession | null>(null);
   const rateRef = useRef(1);
   const optionsRef = useRef(options);
+  const holdRequestedRef = useRef(false);
   optionsRef.current = options;
 
   const isCurrent = (session: PlaybackSession): boolean =>
@@ -221,6 +228,21 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
     if (!isCurrent(session)) return;
     goIdle(session);
     optionsRef.current.onError?.(error, segment);
+  };
+
+  const hold = (): boolean => {
+    holdRequestedRef.current = true;
+    const session = sessionRef.current;
+    session?.activePlayback?.hold();
+    session?.activeElement?.pause();
+    return session !== null;
+  };
+
+  const resumeHeld = (): void => {
+    if (!holdRequestedRef.current) return;
+    holdRequestedRef.current = false;
+    const session = sessionRef.current;
+    session?.activePlayback?.resume();
   };
 
   const markAi = (session: PlaybackSession, key: PlayableKey): void => {
@@ -414,6 +436,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       budgets: session.budgets,
       maxRetriesPerClass: optionsRef.current.maxRetriesPerClass ?? 2,
       maxStallPolls: optionsRef.current.maxStallPolls ?? 30,
+      shouldHold: () => holdRequestedRef.current,
       onGiveUp: reason => giveUp(session, new Error(reason), segment),
       onAutoplayRefused: () => {
         if (!isCurrent(session)) return;
@@ -451,6 +474,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       // End-of-file is a physical stop even if the next descriptor looks adjacent.
       onEnded: () => finish(false),
     });
+    session.activePlayback = supervision;
     session.segmentCleanups.push(
       window.detach,
       supervision.detach,
@@ -602,6 +626,8 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
       startSession([segment], 0, startOffset, inheritedRunState),
     playFrom: startSession,
     pause,
+    hold,
+    resumeHeld,
     stop,
     setPlaybackRate,
   };

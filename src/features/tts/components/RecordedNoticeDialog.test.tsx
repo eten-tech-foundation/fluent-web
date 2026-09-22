@@ -24,6 +24,7 @@ describe('RecordedNoticeDialog', () => {
     expect(screen.getByText('Berean Standard Bible text')).toBeInTheDocument();
     expect(screen.getByText('Aquifer: Berean Standard Bible recording')).toBeInTheDocument();
     expect(screen.getByText(notice.notice)).toBeInTheDocument();
+    expect(screen.getByText('Source information for this recording.')).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
     expect(close).toHaveBeenCalledOnce();
