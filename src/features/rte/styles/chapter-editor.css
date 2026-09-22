@@ -25,17 +25,6 @@
   margin: 1em 0 0.4em;
 }
 
-/* Poetry: q1 at the first indent, q2 deeper, so the shape of the verse is visible while editing. */
-.chapter-editor-surface .usfm_q,
-.chapter-editor-surface .usfm_q1 {
-  margin-inline-start: 1.5em;
-  margin-block: 0.15em;
-}
-.chapter-editor-surface .usfm_q2 {
-  margin-inline-start: 3em;
-  margin-block: 0.15em;
-}
-
 .chapter-editor-surface p {
   line-height: 1.75;
   margin: 0 0 0.7em;
@@ -48,4 +37,15 @@
   font-size: 1.6em;
   font-weight: 700;
   margin: 0 0 0.5em;
+}
+
+/* The outline layer never participates in text selection or scripture serialization. */
+.active-verse-outline {
+  pointer-events: none;
+}
+.active-verse-outline > span {
+  position: absolute;
+  outline: 1px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
