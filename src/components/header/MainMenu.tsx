@@ -1,12 +1,12 @@
 import React from 'react';
 
 import { useLocation } from '@tanstack/react-router';
-import { Home, Kanban, Users } from 'lucide-react';
+import { Building2, Home, Kanban, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { canViewUsers, getActiveGrants, isOrgMemberOnly } from '@/lib/grant-utils';
+import { canViewUsers, getActiveGrants, isOrgMemberOnly, isSuperAdmin } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -16,6 +16,7 @@ interface MainMenuProps {
   onDashboardClick: () => void;
   onUsersClick: () => void;
   onProjectsClick: () => void;
+  onOrganizationsClick: () => void;
 }
 
 const MainMenu: React.FC<MainMenuProps> = ({
@@ -23,6 +24,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   onDashboardClick,
   onUsersClick,
   onProjectsClick,
+  onOrganizationsClick,
 }) => {
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
@@ -33,6 +35,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
   const showUsers = canViewUsers(activeRoleGrants);
+  const showOrganizations = isSuperAdmin(userdetail?.grants);
   const orgMemberOnly = isOrgMemberOnly(activeGrants);
 
   if (!isAuthenticated || !user) {
@@ -42,6 +45,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const isDashboardActive = location.pathname === '/';
   const isUsersActive = location.pathname === '/users';
   const isProjectsActive = location.pathname === '/projects';
+  const isOrganizationsActive = location.pathname.startsWith('/organizations');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -82,6 +86,15 @@ const MainMenu: React.FC<MainMenuProps> = ({
                 onClosePopover={() => setOpen(false)}
               />
             </>
+          )}
+          {showOrganizations && (
+            <MenuItem
+              icon={<Building2 size={18} />}
+              isActive={isOrganizationsActive}
+              text={t('organizations')}
+              onClick={onOrganizationsClick}
+              onClosePopover={() => setOpen(false)}
+            />
           )}
         </div>
       </PopoverContent>
