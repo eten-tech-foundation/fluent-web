@@ -60,6 +60,8 @@
   "verse": "Verse",
   "pericope": "Pericope",
   "chapter": "Chapter",
+  "chapterViewDisabled": "Chapter view is not available in this environment.",
+  "chapterViewUnavailable": "Chapter view is available once all verses have content.",
   "mainMenu": "Main menu",
   "userMenu": "User menu",
   "newTab": "New",
