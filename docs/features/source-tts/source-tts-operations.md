@@ -1,12 +1,14 @@
 # Source-TTS operations: deploying it, and proving it works
 
+Playback behavior and recorded-source notices are described in [Audio playback design](../audio-playback/design.md).
+
 **Who this is for:** whoever turns source-TTS on in a real environment. It is the deploy checklist,
 the decisions still owed, and — the part nothing else gives you — **how to tell that the artifact
 store is actually serving**, which is invisible by every ordinary means.
 
 **It deliberately states no configuration values.** Those live in each service's `.env.example`,
 which explains every variable next to its own trade-offs, and in
-[`fluent-ai/docs/source-tts-capacity.md`](../../../../fluent-ai/docs/source-tts-capacity.md) for the
+[`fluent-ai/docs/features/source-tts/source-tts-capacity.md`](https://github.com/eten-tech-foundation/fluent-ai/blob/main/docs/features/source-tts/source-tts-capacity.md) for the
 RAM/length dial. A number repeated in two places drifts.
 
 ---
@@ -24,20 +26,23 @@ None of these block a dark deploy. All of them should be read **before the flag 
 
 ---
 
-## 2. ⚠ The flag defaults to **ON**
+## 2. ⚠ The flag defaults to **ON when AI is wired**
 
-`EN_FEATURE_SOURCE_TTS` unset publishes **true** wherever fluent-ai is wired, because its default is
+`EN_FEATURE_SOURCE_AUDIO` unset publishes **true** wherever fluent-ai is wired, because its default is
 `aiIsWired` — the same contract `repeatedWordCheck` and `aiSuggestions` already use. `.env.example`
 ships the line **blank**, and blank is read as unset.
 
-**So merging this turns TTS on in every AI-wired environment unless someone writes an explicit
+**So merging this turns source audio controls on in every AI-wired environment unless someone writes an explicit
 `false`.** That is deliberate and approved; it is stated here because it is the opposite of what
 "ship dark" usually implies, and it should be a choice rather than a discovery.
+
+The flag covers recorded audio and TTS together. Forcing it on without fluent-ai is unsupported:
+the TTS fallback cannot work.
 
 To ship dark, set it explicitly:
 
 ```bash
-EN_FEATURE_SOURCE_TTS=false      # `false` / `0` / `no` / `off`; BLANK MEANS ON
+EN_FEATURE_SOURCE_AUDIO=false      # `false` / `0` / `no` / `off`; BLANK MEANS ON when AI is wired
 ```
 
 ---
@@ -78,7 +83,7 @@ working.** A deployment that serves every clip from R2 and one that silently re-
 single listen sound _exactly_ the same. The only difference is the bill.
 
 Nothing in the browser reveals it on its own, and this was measured rather than assumed
-(Chrome, 2026-08-20 — see `self-notes .../tools/media_redirect_visibility_check.py`):
+(Chrome, 2026-08-20):
 
 - an `<audio>` element that follows a 302 still reports the **original** URL as `currentSrc`; the
   redirect happens inside its own fetch, below anything the app can observe;
@@ -101,11 +106,12 @@ highlight is colour-coded:
 
 **The check, in three steps:**
 
-1. `/debug` → force `sourceTts` **on**. (Forcing on a flag that is already on is a no-op for
-   everything else, so this is safe in any environment — it is how you say "I am verifying".)
-2. Play a verse. It should be **blue** — nobody had listened to it before, so it was generated now.
-3. Wait a few seconds for the compression tail, then play the **same verse again**. It should be
-   **purple**.
+1. With fluent-ai wired, select **Force on** for `sourceAudio` in `/debug`. This enables the
+   diagnostic serving tint. Use a text-licence-allowed verse that resolves to TTS, since a recorded
+   verse does not exercise the artifact store.
+2. Play a TTS verse whose artifact is not yet stored. It should be **blue** while it streams.
+3. After the clip finishes, allow time for the compression tail, then play the **same verse again**.
+   It should be **purple** for Ogg or **dark purple** for MP3.
 
 **Blue the second time means the artifact store is not serving** — every listen is being paid for.
 Check `TTS_PUBLIC_AUDIO_BASE_URL`, the bucket credentials, and whether the compression tail is
@@ -134,8 +140,9 @@ Set the override back to **Default (from API)** when you are done.
 ## 5. Cost posture, briefly
 
 Synthesis is billed only when someone actually listens: `generate` writes a sidecar and spends
-nothing, so UI affordances nobody uses cost nothing. Content addressing plus conditional PUT keep it
-to one paid synthesis per artifact. R2 storage of compressed clips is cents per month even at
+nothing, so UI affordances nobody uses cost nothing. Content addressing and in-process attachment
+avoid repeat synthesis; simultaneous requests on different instances can still incur duplicate cost,
+while conditional PUT stores one artifact. R2 storage of compressed clips is cents per month even at
 whole-Bible scale, and **R2 egress is free** — which is why the heavy bytes 302 to R2 instead of
 being proxied through service pods. The conscious v1 trade is unbounded-but-tiny storage growth in
 exchange for no lifecycle machinery.
