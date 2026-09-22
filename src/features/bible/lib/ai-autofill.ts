@@ -23,12 +23,9 @@ interface PendingAiAutoFillsArgs {
 /**
  * The AI suggestions that should be written into the draft on this pass.
  *
- * Suggestions stay per verse — the generation side is unchanged (chadw-eten on #400). What differs
- * between the two drafting surfaces is how many verses may receive one at a time: the textarea
- * path shows one verse at a time and fills only the verse in focus, while the pericope rich text
- * surface shows the whole pericope, so it takes every verse of it and populates progressively as
- * each suggestion becomes available. With generation running three verses ahead, that means the
- * first verses appear together and each later one lands as it is ready.
+ * Verse view fills the verse in focus. Both pericope surfaces fill the active group progressively
+ * as each suggestion arrives. The loading hook also prefetches the next group, whose verses only
+ * become candidates when the translator navigates there.
  *
  * A verse is filled only while it is still empty and untouched, so neither text the translator
  * wrote nor a suggestion already delivered is ever overwritten.
