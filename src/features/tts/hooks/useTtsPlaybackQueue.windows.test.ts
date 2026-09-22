@@ -61,6 +61,109 @@ const boundary = async (element: FakeClipElement, time: number, ms = 10_000) => 
 afterEach(() => vi.useRealTimers());
 
 describe('windowed segment queue', () => {
+  it('keeps an idle hold through loading and does not physically play until released', async () => {
+    const h = setup();
+    expect(h.result.current.hold()).toBe(false);
+    await act(async () => h.result.current.playOne(slice(1)));
+    const active = h.elements[0];
+
+    expect(active.playCalls).toEqual([]);
+    expect(h.result.current.status).toBe('loading');
+    act(() => h.result.current.resumeHeld());
+    expect(active.playCalls).toEqual(['chapter']);
+  });
+
+  it('holds a sounding run in place and resumes the same media after dismissal', async () => {
+    const h = setup();
+    await act(async () => h.result.current.playFrom([slice(1), slice(2)], 0));
+    const active = h.elements[0];
+    playing(active);
+    active.currentTime = 15;
+
+    expect(h.result.current.hold()).toBe(true);
+    expect(active.paused).toBe(true);
+    expect(h.result.current.status).toBe('playing');
+    active.currentTime = 20;
+    await tick(10_000);
+    expect(h.result.current.activeVerseRef).toBe('1');
+
+    act(() => h.result.current.resumeHeld());
+    expect(active.paused).toBe(false);
+    expect(active.playCalls).toEqual(['chapter', 'chapter']);
+    playing(active);
+    await boundary(active, 20);
+    expect(h.result.current.activeVerseRef).toBe('2');
+  });
+
+  it('keeps resume rejection under the active segment recovery strategy', async () => {
+    const h = setup();
+    const item = slice(1);
+    await act(async () => h.result.current.playOne(item));
+    const active = h.elements[0];
+    playing(active);
+    expect(h.result.current.hold()).toBe(true);
+    active.playRejection = new DOMException('Media failed', 'NotSupportedError');
+
+    act(() => h.result.current.resumeHeld());
+    await act(async () => active.emit('error'));
+    await tick();
+
+    expect(item.recovery.recover).toHaveBeenCalledOnce();
+    expect(h.onError).not.toHaveBeenCalled();
+    expect(h.result.current.status).toBe('loading');
+  });
+
+  it('keeps a recovery replacement held until the existing hold is released', async () => {
+    const h = setup();
+    const item = slice(1);
+    item.recovery.recover = vi.fn<RecoveryStrategy['recover']>(async (_failure, requests) => {
+      requests.play({ url: 'healed', window: [10, 20], durationIsMeasured: true }, 'replacement');
+    });
+    await act(async () => h.result.current.playOne(item));
+    const active = h.elements[0];
+    playing(active);
+    expect(h.result.current.hold()).toBe(true);
+
+    act(() => active.emit('error'));
+    await tick();
+    expect(active.src).toBe('healed');
+    expect(active.playCalls).toEqual(['chapter']);
+
+    act(() => h.result.current.resumeHeld());
+    expect(active.playCalls).toEqual(['chapter', 'healed']);
+  });
+
+  it('cancels an armed stall watchdog while held and rearms it once on release', async () => {
+    const h = setup();
+    const stallPolicy: RecoveryStrategy = {
+      supervision: { stallWatchdogMs: 10_000 },
+      recover: vi.fn(async () => {}),
+    };
+    const item = { ...slice(1), recovery: stallPolicy };
+    await act(async () => h.result.current.playOne(item));
+    const active = h.elements[0];
+    playing(active);
+    act(() => active.emit('waiting'));
+    expect(vi.getTimerCount()).toBe(1);
+
+    expect(h.result.current.hold()).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await tick(20_000);
+    expect(stallPolicy.recover).not.toHaveBeenCalled();
+
+    act(() => h.result.current.resumeHeld());
+    expect(active.playCalls).toEqual(['chapter', 'chapter']);
+    expect(vi.getTimerCount()).toBe(1);
+    await tick(9_999);
+    expect(stallPolicy.recover).not.toHaveBeenCalled();
+    await tick(1);
+    expect(stallPolicy.recover).toHaveBeenCalledExactlyOnceWith(
+      { on: 'stall', source: item.source, positionMs: active.currentTime * 1000 },
+      expect.anything(),
+      expect.any(AbortSignal)
+    );
+  });
+
   it('plays five adjacent verses as one physical stretch and halts only at its last end', async () => {
     const h = setup();
     await act(async () =>
