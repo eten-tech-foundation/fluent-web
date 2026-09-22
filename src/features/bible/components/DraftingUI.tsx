@@ -40,6 +40,7 @@ import {
   ServerTtsEngine,
   RecordedNoticeDialog,
   type SourceAudioRow,
+  useAudioEnabled,
   usePlaybackRegistry,
   useSourceTtsPlayback,
   useTtsKeyboardShortcuts,
@@ -388,22 +389,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // the leaf components stay flag-agnostic.
   const checksEnabled = useFeatureFlag('repeatedWordCheck');
 
-  // Feature flag: is Source-Text TTS enabled here? Same reasoning as the
-  // Checks flag above — synthesis depends on fluent-ai, which isn't hosted
-  // everywhere, so this ships hidden until the audio path is wired
-  // (source-tts §6.3, T12). Fail-closed by construction: `useFeatureFlag`
-  // returns false while loading and on endpoint error, so no controls render
-  // and no assignment lookup runs until the API positively says yes. Local
-  // overrides are NOT consulted here for GATING — they are applied once inside
-  // `useFeatureFlags`, so a forced-on flag reaches this boolean unchanged.
-  //
-  // `useFeatureFlags` rather than `useFeatureFlag` because the verification
-  // tint below needs the raw override too, and `flagOverrides.ts` permits
-  // exactly ONE site to consult overrides. Taking both from this one call
-  // keeps that invariant; a second `useFlagOverrides()` here would be the
-  // drift it warns about.
-  const { features: ttsFeatures, overrides: ttsOverrides } = useFeatureFlags();
-  const ttsEnabled = ttsFeatures.sourceAudio;
+  // The composed gate is the single source for audio surfaces: the published
+  // feature flag must be on and this device must not have hidden controls.
+  // `useFeatureFlags` remains here only because the verification tint below
+  // needs the raw override; `flagOverrides.ts` permits exactly one direct site.
+  const ttsEnabled = useAudioEnabled();
+  const { overrides: ttsOverrides } = useFeatureFlags();
 
   // Verification affordance, NOT a product feature (§9.2): tint the playback
   // wash when a clip came from the artifact store, so a deployer can see that
