@@ -50,6 +50,9 @@ export {
   type UseTtsKeyboardShortcutsOptions,
 } from './hooks/useTtsKeyboardShortcuts';
 
+export { useAudioEnabled } from './settings/useAudioEnabled';
+export { useHideAudio } from './settings/useHideAudio';
+
 export {
   type SourceTtsPlaybackApi,
   useSourceTtsPlayback,

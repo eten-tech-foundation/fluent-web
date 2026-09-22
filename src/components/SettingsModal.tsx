@@ -6,6 +6,7 @@ import { DisplayModeToggle } from '@/components/DisplayModeToggle';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { AiTranslationSettings } from '@/features/ai-translation/components/AiTranslationSettings';
+import { HideAudioSettings } from '@/features/tts/settings/HideAudioSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {/* Card 2: Light/Dark Mode (sized to the same width as the Display card above) */}
           <ThemeToggle />
+
+          <HideAudioSettings />
 
           <AiTranslationSettings />
         </div>

@@ -1,7 +1,9 @@
 import { type PropsWithChildren, StrictMode } from 'react';
 
 import { act, render, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { refreshHideAudio, setHideAudio } from '../settings/hideAudioStore';
 
 import { type PauseRecord } from './pauseRecord';
 import { PlaybackRegistryProvider } from './PlaybackRegistryProvider';
@@ -19,6 +21,12 @@ const wrapper = ({ children }: PropsWithChildren) => (
     <PlaybackRegistryProvider>{children}</PlaybackRegistryProvider>
   </StrictMode>
 );
+
+beforeEach(() => {
+  localStorage.clear();
+  refreshHideAudio();
+  setHideAudio(false);
+});
 
 function setup() {
   return renderHook(
@@ -134,6 +142,37 @@ describe('PlaybackRegistryProvider', () => {
     result.current.registry.claim(pause);
     unmount();
     expect(pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('silences the live claimant when Hide Audio flips on and retains pause records', () => {
+    const { result } = setup();
+    const pause = vi.fn(() => result.current.registry.setRecord('b', record));
+    act(() => {
+      result.current.registry.setRecord('a', { ...record, currentTime: 12 });
+      result.current.registry.claim(pause);
+      setHideAudio(true);
+    });
+
+    expect(pause).toHaveBeenCalledOnce();
+    expect(result.current.registry.restartLive()).toBe(false);
+    expect(result.current.a.record?.currentTime).toBe(12);
+    expect(result.current.b.record).toEqual(record);
+
+    act(() => setHideAudio(false));
+    expect(pause).toHaveBeenCalledOnce();
+    expect(result.current.a.canRestart).toBe(true);
+    expect(result.current.b.canRestart).toBe(true);
+  });
+
+  it('does not silence on mount when controls were already hidden', () => {
+    setHideAudio(true);
+    const { result } = setup();
+    const pause = vi.fn();
+    result.current.registry.claim(pause);
+    expect(pause).not.toHaveBeenCalled();
+
+    act(() => setHideAudio(false));
+    expect(pause).not.toHaveBeenCalled();
   });
 
   it('displacement can synchronously record the old key before the starter continues', () => {

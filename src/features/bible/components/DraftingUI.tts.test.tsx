@@ -20,6 +20,7 @@ import type * as TtsFeature from '@/features/tts';
 import { PlaybackRegistryProvider, usePlaybackRegistry } from '@/features/tts';
 import type * as AudioModule from '@/features/tts/lib/audioElement';
 import type * as SourceClient from '@/features/tts/resolver/sourceAudioClient';
+import { refreshHideAudio, setHideAudio } from '@/features/tts/settings/hideAudioStore';
 import { FakeClipElement } from '@/features/tts/testing/fakeClipElement';
 import { windowlessChapter } from '@/features/tts/testing/sourceAudioFixtures';
 import { config } from '@/lib/config';
@@ -407,6 +408,9 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  localStorage.clear();
+  refreshHideAudio();
+  setHideAudio(false);
   useAppStore.setState({ displayMode: 'verse' });
   vi.clearAllMocks();
   mockFeatureFlag.mockReturnValue(true);
@@ -464,6 +468,33 @@ describe('DraftingUI — source-TTS gate', () => {
     renderDrafting();
 
     expect(screen.getAllByTestId('tts-verse-controls')).toHaveLength(3);
+  });
+
+  it('removes every control and unregisters shortcuts as soon as audio is hidden', async () => {
+    renderDrafting();
+    expect(screen.getAllByTestId('tts-verse-controls')).toHaveLength(3);
+
+    act(() => setHideAudio(true));
+
+    expect(screen.queryAllByTestId('tts-verse-controls')).toHaveLength(0);
+    await userEvent.keyboard('{Alt>}p{/Alt}');
+    expect(playVerse).not.toHaveBeenCalled();
+    expect(ttsPlaybackEnabled).toBe(false);
+  });
+
+  it('keeps hidden controls absent offline, then shows disabled controls when unhidden', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    setHideAudio(true);
+    renderDrafting();
+    act(() => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    expect(screen.queryAllByTestId('tts-verse-controls')).toHaveLength(0);
+
+    act(() => setHideAudio(false));
+    const primaries = screen.getAllByRole('button', { name: /^Play verse/ });
+    expect(primaries).toHaveLength(3);
+    for (const primary of primaries) expect(primary).toHaveAttribute('aria-disabled', 'true');
   });
 });
 
@@ -587,6 +618,35 @@ describe('DraftingUI — source switch with the real host, queue and registry', 
     await play();
     expect(elements.at(-1)?.currentTime).toBe(3.5);
     expect(capturedPageKey).toBe('1');
+  });
+
+  it('hides during playback, records the sounding verse, and restores resumable controls', async () => {
+    realPlayback = true;
+    renderDrafting();
+    await play();
+    const key = playback.verseKey('1')!;
+    const element = elements.at(-1)!;
+    element.currentTime = 4.25;
+
+    act(() => setHideAudio(true));
+
+    expect(element.paused).toBe(true);
+    expect(playback.status).toBe('idle');
+    expect(registry.getRecord(key)).toMatchObject({
+      verseRef: '1',
+      currentTime: 4.25,
+    });
+    expect(screen.queryAllByTestId('tts-verse-controls')).toHaveLength(0);
+
+    act(() => setHideAudio(false));
+    const primary = screen.getByRole('button', { name: 'Play verse 1' });
+    expect(primary).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restart verse 1' })).toBeEnabled();
+    const priorElementCount = elements.length;
+    await userEvent.click(primary);
+    await waitFor(() => expect(elements.length).toBeGreaterThan(priorElementCount));
+    expect(elements.at(-1)?.playCalls.length).toBeGreaterThan(0);
+    expect(elements.at(-1)?.currentTime).toBe(4.25);
   });
 
   it('separates equal raw IDs in different domains even with identical text and labels', async () => {
@@ -1309,6 +1369,54 @@ describe('DraftingUI — pericope mode TTS (G3a)', () => {
     await waitFor(() => expect(elements[priorCount]?.playCalls.length).toBeGreaterThan(0));
     expect(elements[priorCount].currentTime).toBe(0.5);
   });
+
+  it.each([
+    { role: 'project source', selectReference: false },
+    { role: 'reference Bible', selectReference: true },
+  ])(
+    'Hide Audio pauses the full $role pericope on its group key and restores its offset',
+    async ({ selectReference }) => {
+      enterPericopeMode();
+      realPlayback = true;
+      renderDrafting();
+      if (selectReference) await selectReferenceBible();
+      expect(screen.getAllByTestId('tts-group-controls')).toHaveLength(2);
+
+      const groupKey = playback.groupKey(['1', '2'])!;
+      const verseKey = playback.verseKey('1')!;
+      await userEvent.click(screen.getByRole('button', { name: 'Play pericope 1:1-2' }));
+      await waitFor(() => expect(elements.some(item => item.playCalls.length > 0)).toBe(true));
+      const sounding = elements.find(item => item.playCalls.length > 0)!;
+      act(() => {
+        sounding.currentTime = 2.75;
+        sounding.emit('playing');
+        sounding.emit('timeupdate');
+      });
+
+      act(() => setHideAudio(true));
+
+      expect(sounding.paused).toBe(true);
+      expect(playback.status).toBe('idle');
+      expect(registry.getRecord(groupKey)).toMatchObject({
+        itemIndex: 0,
+        verseRef: '1',
+        currentTime: 2.75,
+      });
+      expect(registry.getRecord(verseKey)).toBeNull();
+      expect(screen.queryAllByTestId('tts-group-controls')).toHaveLength(0);
+
+      act(() => setHideAudio(false));
+      const play = screen.getByRole('button', { name: 'Play pericope 1:1-2' });
+      expect(screen.getByRole('button', { name: 'Restart pericope 1:1-2' })).toBeEnabled();
+      const priorCount = elements.length;
+      await userEvent.click(play);
+      await waitFor(() =>
+        expect(elements.slice(priorCount).some(item => item.playCalls.length > 0)).toBe(true)
+      );
+      const resumed = elements.slice(priorCount).find(item => item.playCalls.length > 0)!;
+      expect(resumed.currentTime).toBe(2.75);
+    }
+  );
 
   it('renders one group control per pericope, and no per-verse controls', () => {
     enterPericopeMode();
