@@ -101,4 +101,60 @@ describe('recorded notice lifecycle', () => {
     expect(h.result.current.dialog).toBeNull();
     expect(h.result.current.infoFor('group-1')?.recordingKey).toBe('aq-replacement-hook');
   });
+
+  it('keeps one pending dialog when the same recording crosses a playable boundary', () => {
+    const props: UseRecordedNoticeOptions = {
+      ...base,
+      textBibleKey: 'dbl-boundary-hook',
+      recording: { ...recording, notice: 'Boundary hook notice.' },
+      isPlaying: true,
+    };
+    const h = renderHook(input => useRecordedNotice(input), { initialProps: props });
+    const pending = h.result.current.dialog;
+
+    h.rerender({
+      ...props,
+      recording: { ...props.recording!, playableKey: 'group-2' },
+    });
+
+    expect(h.result.current.dialog).toBe(pending);
+    expect(recordedNoticeAckStore.isAcknowledged(pending!)).toBe(false);
+    expect(h.result.current.infoFor('group-1')).toBeNull();
+    expect(h.result.current.infoFor('group-2')).toBe(pending);
+  });
+
+  it('keeps a pending dialog mounted during a notice refresh, then honors the result', () => {
+    const props: UseRecordedNoticeOptions = {
+      ...base,
+      textBibleKey: 'dbl-refresh-hook',
+      recording: { ...recording, notice: 'Refresh hook notice.' },
+      isPlaying: true,
+    };
+    const h = renderHook(input => useRecordedNotice(input), { initialProps: props });
+    const pending = h.result.current.dialog;
+
+    h.rerender({
+      ...props,
+      recording: { ...props.recording!, notice: null, noticePending: true },
+    });
+    expect(h.result.current.dialog).toBe(pending);
+
+    h.rerender({
+      ...props,
+      recording: { ...props.recording!, notice: '', noticePending: false },
+    });
+    expect(h.result.current.dialog).toBeNull();
+    expect(recordedNoticeAckStore.isAcknowledged(pending!)).toBe(false);
+  });
+
+  it.each([
+    ['blank notice', { ...recording, notice: '' }],
+    ['TTS or fallback', null],
+  ])('does not open for %s', (_label, nextRecording) => {
+    const h = renderHook(props => useRecordedNotice(props), {
+      initialProps: { ...base, recording: nextRecording, isPlaying: true },
+    });
+    expect(h.result.current.dialog).toBeNull();
+    expect(h.result.current.infoFor('group-1')).toBeNull();
+  });
 });

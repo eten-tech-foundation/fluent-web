@@ -34,15 +34,21 @@ export interface PlaybackRecoveryOptions {
   onEnded?: () => void;
   /** An early element error observed before this controller could subscribe. */
   initialLoadFailed?: boolean;
+  /** A host-owned modal hold may defer every physical play without ending recovery. */
+  shouldHold?: () => boolean;
 }
 
 export interface PlaybackRecovery {
   detach: () => void;
   requests: RecoveryRequests;
+  /** Suspend supervision while the host deliberately holds the media. */
+  hold: () => void;
   /** Initial playback uses the same scheduled path and load identity as retries. */
   start: (startOffset?: number) => void;
   /** Adopt a sounding adjacent slice without seeking, reloading or calling play again. */
   continue: () => void;
+  /** Resume the current load through the same supervised physical-play path. */
+  resume: () => void;
 }
 
 /** Player-owned arbitration: policy receives neither the media element nor budget results. */
@@ -60,6 +66,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   let loadEpoch = 0;
   let replacementEpoch = 0;
   let lastCharge: BudgetKey | undefined;
+  let loadPrepared = false;
   const retries = options.budgets;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let watchdog: ReturnType<typeof setTimeout> | undefined;
@@ -115,7 +122,7 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   const armWatchdog = (): void => {
     disarmWatchdog();
     const timeout = strategy.supervision.stallWatchdogMs;
-    if (timeout === null || playbackStarted || signal.aborted) return;
+    if (timeout === null || playbackStarted || signal.aborted || options.shouldHold?.()) return;
     watchdog = setTimeout(() => {
       if (watchdog !== undefined) timers.delete(watchdog);
       watchdog = undefined;
@@ -145,18 +152,8 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
     schedule(() => beginLoad(resolved, opts.startOffset, true), 0, token);
   };
 
-  const beginLoad = async (
-    next: Source,
-    startOffset: number | undefined,
-    reset: boolean
-  ): Promise<void> => {
-    source = next;
-    recovering = false;
-    const loadToken = ++loadEpoch;
-    playbackStarted = false;
-    if (reset) resetClipElement(element, source.url);
-    element.currentTime = startOffset ?? source.window?.[0] ?? 0;
-    options.onSource?.(source, element.currentTime);
+  const playCurrentLoad = async (loadToken: number): Promise<void> => {
+    if (options.shouldHold?.()) return;
     armWatchdog();
     try {
       await element.play();
@@ -171,6 +168,22 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
       }
       // Load errors also fire the element's error event; that starts recovery.
     }
+  };
+
+  const beginLoad = async (
+    next: Source,
+    startOffset: number | undefined,
+    reset: boolean
+  ): Promise<void> => {
+    source = next;
+    recovering = false;
+    const loadToken = ++loadEpoch;
+    playbackStarted = false;
+    if (reset) resetClipElement(element, source.url);
+    element.currentTime = startOffset ?? source.window?.[0] ?? 0;
+    loadPrepared = true;
+    options.onSource?.(source, element.currentTime);
+    await playCurrentLoad(loadToken);
   };
 
   const makeRequests = (token: number, onWorkRequested: () => void): RecoveryRequests => {
@@ -289,13 +302,20 @@ export const supervisePlayback = (options: PlaybackRecoveryOptions): PlaybackRec
   const playback: PlaybackRecovery = {
     detach,
     requests: makeRequests(epoch, () => {}),
+    hold: disarmWatchdog,
     continue: () => {
+      const continuedWhileHeld = options.shouldHold?.() ?? false;
       schedule(() => {
+        loadPrepared = true;
         playbackStarted = true;
         disarmWatchdog();
         options.onSource?.(source, element.currentTime);
         options.onPlayed?.();
+        if (continuedWhileHeld && !options.shouldHold?.()) void playCurrentLoad(loadEpoch);
       });
+    },
+    resume: () => {
+      if (loadPrepared && !recovering) void playCurrentLoad(loadEpoch);
     },
     start: startOffset => {
       schedule(() => beginLoad(source, startOffset, false));
