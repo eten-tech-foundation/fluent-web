@@ -22,6 +22,11 @@
   color: inherit;
 }
 
+/* Chapter numbers use the same Inter stack as the source pane and pericope headings. */
+.rte-editor .chapter {
+  font-family: var(--font-sans);
+}
+
 /* Verse numbers stay visible but recede: they are landmarks, not content. */
 .rte-editor .verse {
   color: inherit;
