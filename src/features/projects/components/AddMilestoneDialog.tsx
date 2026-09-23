@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
-import { useCreateMilestone } from '@/features/projects/hooks/useMilestones';
+import { useCreateMilestone, useGetMilestones } from '@/features/projects/hooks/useMilestones';
 
 interface AddMilestoneDialogProps {
   isOpen: boolean;
@@ -28,7 +28,19 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
   const [books, setBooks] = useState<number[]>([]);
 
   const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(sourceBible ?? null);
+  const { data: milestones } = useGetMilestones(projectId);
   const createMilestone = useCreateMilestone(projectId);
+
+  const bookMilestoneMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    if (!milestones) return map;
+    for (const milestone of milestones) {
+      for (const bookId of milestone.bookIds) {
+        map[bookId] = milestone.name;
+      }
+    }
+    return map;
+  }, [milestones]);
 
   const handleSubmit = async () => {
     if (!name.trim() || books.length === 0 || !sourceBible) return;
@@ -77,6 +89,7 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
               </div>
             ) : (
               <BibleBookMultiSelectPopover
+                bookMilestoneMap={bookMilestoneMap}
                 books={availableBooks ?? []}
                 disabled={!sourceBible}
                 value={books}
