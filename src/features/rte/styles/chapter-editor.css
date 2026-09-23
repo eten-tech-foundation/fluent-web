@@ -37,7 +37,7 @@
 }
 
 .chapter-editor-surface p {
-  line-height: 1.75;
+  line-height: var(--leading-relaxed);
   margin: 0 0 0.7em;
 }
 
