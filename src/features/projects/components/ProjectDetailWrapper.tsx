@@ -8,7 +8,7 @@ import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import { ProjectHubPage } from './ProjectHubPage';
+import { ProjectDetailPage } from './ProjectDetailPage';
 
 const routeApi = getRouteApi('/_authenticated/projects/$projectId/');
 
@@ -24,7 +24,7 @@ export const ProjectDetailWrapper: React.FC = () => {
   } = useProjectDetails(projectId);
 
   useChapterAssignments(projectId);
-  useProjectBooks(projectId);
+  const { data: books } = useProjectBooks(projectId);
 
   const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
 
@@ -84,7 +84,8 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   return (
     <>
-      <ProjectHubPage
+      <ProjectDetailPage
+        books={books}
         isAddUserOpen={modal === 'add'}
         isManager={true}
         milestones={milestones}

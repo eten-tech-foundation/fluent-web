@@ -14,7 +14,6 @@ const EMPTY_FORM: ProjectFormData = {
   targetLanguage: null,
   sourceLanguage: null,
   sourceBible: null,
-  connectivityProfile: null,
   pericopeSetId: null,
 };
 

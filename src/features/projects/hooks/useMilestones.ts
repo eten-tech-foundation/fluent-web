@@ -1,34 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
-import type { ChapterStatusCounts } from '@/lib/types';
 
-export type ProjectUnitStatus = 'not_started' | 'active' | 'completed' | 'archived';
+export type ProjectUnitStatus = 'not_started' | 'in_progress' | 'completed';
+export type MilestoneType = 'text' | 'audio';
 
 export interface Milestone {
   id: number;
-  projectId: number;
   name: string;
-  type: string;
-  connectivityProfile: string | null;
   status: ProjectUnitStatus;
-  createdAt: string | null;
-  updatedAt: string | null;
-  bookCount?: number;
-  chapterStatusCounts?: ChapterStatusCounts;
+  type: MilestoneType;
+  projectId: number;
+  projectName: string;
+  milestoneCount: number;
+  bookCount: number;
+  bookIds: number[];
+  chapterStatusCounts: Record<string, number>;
+  updatedAt?: string;
 }
 
 export interface CreateMilestoneInput {
   name: string;
-  type: string;
+  type?: MilestoneType;
   status?: ProjectUnitStatus;
-  bibleId: number;
   bookIds: number[];
 }
 
 export interface UpdateMilestoneInput {
   name?: string;
-  type?: string;
+  type?: MilestoneType;
   status?: ProjectUnitStatus;
   bibleId?: number;
   addBooks?: number[];
@@ -59,8 +59,12 @@ const createMilestone = async (
   return (await res.json()) as Milestone;
 };
 
-const updateMilestone = async (id: number, input: UpdateMilestoneInput): Promise<Milestone> => {
-  const res = await fetch(`${config.api.url}/milestones/${id}`, {
+const updateMilestone = async (
+  projectId: string | number,
+  id: number,
+  input: UpdateMilestoneInput
+): Promise<Milestone> => {
+  const res = await fetch(`${config.api.url}/projects/${projectId}/milestones/${id}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -70,8 +74,8 @@ const updateMilestone = async (id: number, input: UpdateMilestoneInput): Promise
   return (await res.json()) as Milestone;
 };
 
-const deleteMilestone = async (id: number): Promise<void> => {
-  const res = await fetch(`${config.api.url}/milestones/${id}`, {
+const deleteMilestone = async (projectId: string | number, id: number): Promise<void> => {
+  const res = await fetch(`${config.api.url}/projects/${projectId}/milestones/${id}`, {
     method: 'DELETE',
     credentials: 'include',
   });
@@ -100,7 +104,7 @@ export const useUpdateMilestone = (projectId: string | number) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...input }: { id: number } & UpdateMilestoneInput) =>
-      updateMilestone(id, input),
+      updateMilestone(projectId, id, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
     },
@@ -110,7 +114,7 @@ export const useUpdateMilestone = (projectId: string | number) => {
 export const useDeleteMilestone = (projectId: string | number) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: deleteMilestone,
+    mutationFn: (id: number) => deleteMilestone(projectId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
     },

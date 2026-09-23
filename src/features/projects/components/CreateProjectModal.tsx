@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
-import { type ConnectivityProfile } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
@@ -19,7 +18,6 @@ export interface CreateProjectData {
   targetLanguage: number;
   sourceLanguage: number;
   sourceBible: number;
-  connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number;
 }
 
@@ -46,7 +44,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     targetLanguage: null,
     sourceLanguage: null,
     sourceBible: null,
-    connectivityProfile: null,
     pericopeSetId: null,
   });
 
@@ -61,7 +58,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: null,
         sourceLanguage: null,
         sourceBible: null,
-        connectivityProfile: null,
         pericopeSetId: null,
       });
     }
@@ -98,7 +94,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: formData.targetLanguage,
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
-        connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
       });
     } catch (error) {

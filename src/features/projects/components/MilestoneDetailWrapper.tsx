@@ -12,7 +12,7 @@ import { useAppStore } from '@/store/store';
 
 import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
 import { ExportProjectDialog } from './ExportProjectDialog';
-import { MilestoneDetailPage } from './ProjectDetailPage';
+import { MilestoneDetailPage } from './MilestoneDetailPage';
 
 const routeApi = getRouteApi('/_authenticated/projects/$projectId/milestones/$milestoneId');
 
@@ -90,24 +90,6 @@ export const MilestoneDetailWrapper: React.FC = () => {
     });
   };
 
-  const handleOpenAddUser = () => {
-    void navigate({
-      to: '/projects/$projectId/milestones/$milestoneId',
-      params: { projectId, milestoneId },
-      search: { modal: 'add' as const },
-      state: location.state,
-    });
-  };
-
-  const handleCloseAddUser = () => {
-    void navigate({
-      to: '/projects/$projectId/milestones/$milestoneId',
-      params: { projectId, milestoneId },
-      search: {},
-      state: location.state,
-    });
-  };
-
   const projectUnitId = useMemo(() => Number(milestoneId) || null, [milestoneId]);
 
   const exportBooks = useMemo(() => {
@@ -168,21 +150,16 @@ export const MilestoneDetailWrapper: React.FC = () => {
   return (
     <>
       <MilestoneDetailPage
-        isAddUserOpen={modal === 'add'}
         milestoneId={Number(milestoneId)}
         milestoneName={currentMilestone?.name}
-        projectConnectivityProfile={project.metadata.connectivityProfile}
+        milestoneUpdatedAt={currentMilestone?.updatedAt}
         projectId={project.id}
-        projectLastActivityAt={project.lastActivityAt}
         projectSource={project.sourceName}
         projectSourceBibleId={project.sourceBibleId}
-        projectSourceLanguageName={project.sourceLanguageName}
         projectTargetLanguageName={project.targetLanguageName}
         projectTitle={project.name}
         projectWorkflowConfig={project.workflowConfig}
-        onAddUser={handleOpenAddUser}
         onBack={handleBack}
-        onCloseAddUser={handleCloseAddUser}
         onEditMetadata={handleOpenMetadata}
         onExport={handleOpenExport}
       />

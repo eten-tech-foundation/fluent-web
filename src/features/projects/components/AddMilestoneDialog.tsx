@@ -36,8 +36,6 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
     try {
       await createMilestone.mutateAsync({
         name: name.trim(),
-        type: 'translation', // Default type
-        bibleId: sourceBible,
         bookIds: books,
       });
       toast.success('Milestone created successfully');

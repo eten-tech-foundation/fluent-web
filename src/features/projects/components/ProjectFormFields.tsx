@@ -1,8 +1,6 @@
-import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { SearchableSelect } from '@/components/SearchableSelect';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -12,15 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePericopeSets } from '@/features/pericopes/hooks/usePericopeSets';
 import { SourceBiblePicker } from '@/features/projects/components/SourceBiblePicker';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
-import {
-  CONNECTIVITY_PROFILE_NONE,
-  CONNECTIVITY_PROFILE_OPTIONS,
-  type ConnectivityProfile,
-} from '@/lib/constants/connectivityProfiles';
 
 /** The fields both the New and the Import tab collect. */
 export interface ProjectFormData {
@@ -28,7 +20,6 @@ export interface ProjectFormData {
   targetLanguage: number | null;
   sourceLanguage: number | null;
   sourceBible: number | null;
-  connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number | null;
 }
 
@@ -94,57 +85,6 @@ export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFields
           value={formData.targetLanguage?.toString() ?? ''}
           onChange={value => onFieldChange('targetLanguage', parseInt(value, 10))}
         />
-      </div>
-
-      <div className='space-y-2'>
-        <div className='flex items-center gap-1'>
-          <Label htmlFor='connectivityProfile'>{t('connectivityProfile')}</Label>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label={t('connectivityProfileInfo')}
-                  className='text-muted-foreground hover:text-foreground h-6 w-6 p-0'
-                  size='sm'
-                  type='button'
-                  variant='ghost'
-                >
-                  <Info className='h-4 w-4' />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className='max-w-xs' side='top'>
-                <ul className='space-y-1'>
-                  {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
-                    <li key={option.value}>{t(option.descKey)}</li>
-                  ))}
-                </ul>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <Select
-          value={formData.connectivityProfile ?? ''}
-          onValueChange={value =>
-            onFieldChange(
-              'connectivityProfile',
-              value === CONNECTIVITY_PROFILE_NONE ? null : (value as ConnectivityProfile)
-            )
-          }
-        >
-          <SelectTrigger className='w-full' id='connectivityProfile'>
-            <SelectValue placeholder={t('connectivityProfilePlaceholder')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={CONNECTIVITY_PROFILE_NONE}>
-              {t('connectivityProfileNone')}
-            </SelectItem>
-            {CONNECTIVITY_PROFILE_OPTIONS.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {t(option.labelKey)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className='space-y-2'>

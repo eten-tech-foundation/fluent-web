@@ -1,464 +1,123 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
+import { useState } from 'react';
 
-import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Loader2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { Loader2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
-import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
-import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
-import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { useUsers } from '@/hooks/useUsers';
-import { getConnectivityProfileDisplay, getLastActivityDisplay } from '@/lib/formatters';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
-import { Logger } from '@/lib/services/logger';
-import {
-  ChapterAssignmentStatus,
-  ROLES,
-  type ChapterAssignmentProgress,
-  type ChapterAssignmentStatus as ChapterAssignmentStatusType,
-  type ChapterStatusCounts,
-  type ProjectItem,
-  type WorkflowStep,
-} from '@/lib/types';
-import { useAppStore } from '@/store/store';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { getConnectivityProfileDisplay } from '@/lib/formatters';
 
+import { type BibleBook } from '../hooks/useBibleBooks';
+import { type Milestone } from '../hooks/useMilestones';
+
+import { AddMilestoneDialog } from './AddMilestoneDialog';
 import { AssignProjectUsers } from './AssignProjectUsers';
-import { AssignUsersDialog } from './AssignUsersDialog';
 import { CardProgressBar } from './CardProgressBar';
-import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
-import { ManageMilestoneBooksDialog } from './ManageMilestoneBooksDialog';
 import { TruncatedCardText } from './TruncatedText';
+import { ViewPageHeader } from './ViewPageHeader';
 
-interface MilestoneDetailPageProps {
-  projectId?: number | null;
-  milestoneId?: number | null;
-  milestoneName?: string;
-  projectTitle: string;
-  projectSourceLanguageName: string;
-  projectTargetLanguageName: string;
-  projectSource: string;
-  projectSourceBibleId: number;
-  projectConnectivityProfile?: string | null;
-  projectLastActivityAt?: string | null;
-  projectWorkflowConfig: WorkflowStep[];
-  isAddUserOpen?: boolean;
-  onBack?: () => void;
-  onExport?: () => void;
-  onEditMetadata?: () => void;
-  onAddUser?: () => void;
-  onCloseAddUser?: () => void;
+interface ProjectDetailPageProps {
+  project: any;
+  isManager: boolean;
+  users: any[];
+  usersLoading: boolean;
+  isAddUserOpen: boolean;
+  onAddUser: () => void;
+  onCloseAddUser: () => void;
+  onBack: () => void;
+  milestones: any[] | undefined;
+  milestonesLoading: boolean;
+  books?: any[];
 }
 
-export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
-  projectId,
-  milestoneId,
-  milestoneName,
-  projectTitle,
-  projectSourceLanguageName,
-  projectTargetLanguageName,
-  projectSource,
-  projectSourceBibleId,
-  projectConnectivityProfile,
-  projectLastActivityAt,
-  projectWorkflowConfig,
-  isAddUserOpen = false,
-  onBack,
-  onExport,
-  onEditMetadata,
+export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
+  project,
+  isManager,
+  users,
+  usersLoading,
+  isAddUserOpen,
   onAddUser,
   onCloseAddUser,
-}) => {
-  const { t } = useTranslation();
-  const { userdetail } = useAppStore();
+  onBack,
+  milestones,
+  milestonesLoading,
+  books,
+}: any) => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  // useTranslation is not used here
 
-  const [selectedBook, setSelectedBook] = useState<string>('all');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isManageBooksOpen, setIsManageBooksOpen] = useState(false);
-  const [selectedDrafter, setSelectedDrafter] = useState<string>('');
-  const [selectedPeerChecker, setSelectedPeerChecker] = useState<string>('');
-  const [selectedAssignments, setSelectedAssignments] = useState<number[]>([]);
-  const [selectedAssignmentsStatuses, setSelectedAssignmentsStatuses] = useState<string[]>([]);
-  const [isRefreshingAfterAssignment, setIsRefreshingAfterAssignment] = useState(false);
-
-  const {
-    data: chapterAssignments,
-    isLoading: assignmentsLoading,
-    isFetching: assignmentsFetching,
-  } = useChapterAssignments(projectId ? projectId.toString() : '0');
-
-  const { data: books, isLoading: booksLoading } = useProjectBooks(
-    projectId ? projectId.toString() : '0'
-  );
-
-  const milestoneFilteredAssignments = useMemo(() => {
-    if (!chapterAssignments) return [];
-    if (milestoneId) {
-      return chapterAssignments.filter(a => a.projectUnitId === milestoneId);
-    }
-    return chapterAssignments;
-  }, [chapterAssignments, milestoneId]);
-
-  const milestoneBooks = useMemo(() => {
-    if (!books) return [];
-    if (milestoneId) {
-      const validBookIds = new Set(milestoneFilteredAssignments.map(a => a.bookId));
-      return books.filter(b => validBookIds.has(b.bookId));
-    }
-    return books;
-  }, [books, milestoneFilteredAssignments, milestoneId]);
-
-  const computedChapterStatusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const a of milestoneFilteredAssignments) {
-      counts[a.status] = (counts[a.status] || 0) + 1;
-    }
-    return counts as ChapterStatusCounts;
-  }, [milestoneFilteredAssignments]);
-
-  const memoizedSelectedBookIds = useMemo(() => {
-    return milestoneFilteredAssignments.map(a => a.bookId).filter((v, i, a) => a.indexOf(v) === i);
-  }, [milestoneFilteredAssignments]);
-
-  const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
-
-  const isManager = useMemo(
-    () => isProjectManager(activeGrants, projectId),
-    [activeGrants, projectId]
-  );
-
-  const { data: users, isLoading: usersLoading } = useUsers(isManager);
-
-  const { data: projectUsers, isLoading: projectUsersLoading } = useProjectUsers(projectId ?? 0, {
-    enabled: isManager && !!projectId,
-  });
-
-  const projectTranslators = useMemo(() => {
-    if (!projectUsers) return [];
-    return projectUsers.filter(
-      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
-    );
-  }, [projectUsers, selectedPeerChecker]);
-
-  const availablePeerCheckers = useMemo(() => {
-    if (!projectUsers) return [];
-    return projectUsers.filter(
-      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedDrafter
-    );
-  }, [projectUsers, selectedDrafter]);
-
-  const getSelectedUserFullName = useCallback(
-    (userId: string) => {
-      if (!userId || !projectUsers) return '';
-      const pu = projectUsers.find(p => p.userId.toString() === userId);
-      return pu?.displayName ?? '';
-    },
-    [projectUsers]
-  );
-
-  const detailsCardRef = useRef<HTMLDivElement>(null);
-  const [detailsHeight, setDetailsHeight] = useState<number>();
-
-  useLayoutEffect(() => {
-    const updateHeight = () => {
-      if (window.innerWidth >= 1024) {
-        setDetailsHeight(undefined);
-        return;
-      }
-
-      setDetailsHeight(detailsCardRef.current?.offsetHeight);
-    };
-
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-
-    if (detailsCardRef.current) {
-      observer.observe(detailsCardRef.current);
-    }
-
-    window.addEventListener('resize', updateHeight);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateHeight);
-    };
-  }, []);
-
-  const assignChapterMutation = useAssignChapters(
-    projectId ? projectId.toString() : '0',
-    getSelectedUserFullName(selectedDrafter),
-    getSelectedUserFullName(selectedPeerChecker)
-  );
-
-  const filteredAssignments = useMemo(() => {
-    if (!selectedBook || selectedBook === 'all') return milestoneFilteredAssignments;
-
-    const selectedBookData = milestoneBooks.find(book => book.bookId.toString() === selectedBook);
-    if (!selectedBookData) return milestoneFilteredAssignments;
-
-    return milestoneFilteredAssignments.filter(
-      assignment => assignment.bookNameEng === selectedBookData.engDisplayName
-    );
-  }, [milestoneFilteredAssignments, selectedBook, milestoneBooks]);
-
-  const handleChapterRowClick = useCallback(
-    (assignment: ChapterAssignmentProgress) => {
-      if (!userdetail) return;
-
-      const status = assignment.status as ChapterAssignmentStatusType;
-      const isAssignedDrafter = assignment.assignedUser?.id === userdetail.id;
-      const isAssignedPeerChecker = assignment.peerChecker?.id === userdetail.id;
-
-      const canEdit =
-        (isAssignedDrafter && status === ChapterAssignmentStatus.DRAFT) ||
-        (isAssignedPeerChecker && status === ChapterAssignmentStatus.PEER_CHECK) ||
-        status === ChapterAssignmentStatus.COMMUNITY_REVIEW ||
-        status === ChapterAssignmentStatus.LINGUIST_CHECK ||
-        status === ChapterAssignmentStatus.THEOLOGICAL_CHECK ||
-        status === ChapterAssignmentStatus.CONSULTANT_CHECK;
-
-      const route = canEdit
-        ? '/translation/$bookId/$chapterNumber'
-        : '/view/$bookId/$chapterNumber';
-
-      const projectItem: ProjectItem = {
-        chapterAssignmentId: assignment.assignmentId,
-        projectId: projectId ?? 0,
-        projectName: projectTitle,
-        projectUnitId: assignment.projectUnitId,
-        bibleId: assignment.bibleId,
-        bibleName: projectSource,
-        targetLanguage: projectTargetLanguageName,
-        // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
-        // the progress endpoint now surfaces this so the PM path no longer
-        // sends "<unknown>".
-        targetLangCode: assignment.targetLangCode,
-        bookId: assignment.bookId,
-        book: assignment.bookNameEng,
-        chapterStatus: assignment.status,
-        chapterNumber: assignment.chapterNumber,
-        totalVerses: assignment.totalVerses,
-        completedVerses: assignment.completedVerses,
-        submittedTime: assignment.submittedTime ? assignment.submittedTime.toString() : null,
-        bookCode: assignment.bookCode,
-        sourceLangCode: assignment.sourceLangCode,
-      };
-
-      void navigate({
-        to: route,
-        params: {
-          bookId: assignment.bookId.toString(),
-          chapterNumber: assignment.chapterNumber.toString(),
-        },
-        search: { t: Date.now().toString() },
-        state: { projectItem },
-      });
-    },
-    [userdetail, projectId, projectTitle, projectSource, projectTargetLanguageName, navigate]
-  );
-
-  const handleAddBook = useCallback(() => {
-    if (selectedAssignments.length > 0) {
-      const firstSelectedAssignment = milestoneFilteredAssignments.find(
-        assignment => assignment.assignmentId === selectedAssignments[0]
-      );
-
-      const statuses = milestoneFilteredAssignments
-        .filter(assignment => selectedAssignments.includes(assignment.assignmentId))
-        .map(assignment => assignment.status);
-
-      setSelectedAssignmentsStatuses(statuses);
-
-      if (firstSelectedAssignment) {
-        const drafterUser = projectUsers?.find(
-          pu => pu.displayName === firstSelectedAssignment.assignedUser?.displayName
-        );
-        const peerCheckerUser = projectUsers?.find(
-          pu => pu.displayName === firstSelectedAssignment.peerChecker?.displayName
-        );
-
-        setSelectedDrafter(drafterUser ? drafterUser.userId.toString() : '');
-        setSelectedPeerChecker(peerCheckerUser ? peerCheckerUser.userId.toString() : '');
-      }
-
-      setIsDialogOpen(true);
-    }
-  }, [selectedAssignments, milestoneFilteredAssignments, projectUsers]);
-
-  const handleAssignUser = useCallback(async () => {
-    const drafterId = selectedDrafter === '' ? null : parseInt(selectedDrafter);
-    const peerCheckerId = selectedPeerChecker === '' ? null : parseInt(selectedPeerChecker);
-    const isUnassigning = drafterId === null && peerCheckerId === null;
-    const canProceed =
-      (drafterId !== null || isUnassigning) && selectedAssignments.length > 0 && projectId;
-
-    if (!canProceed) return;
-
-    try {
-      await assignChapterMutation.mutateAsync({
-        projectId: projectId.toString(),
-        assignments: selectedAssignments.map(id => ({
-          chapterAssignmentId: id,
-          drafterId,
-          peerCheckerId,
-        })),
-      });
-
-      setIsRefreshingAfterAssignment(true);
-      setSelectedDrafter('');
-      await queryClient.invalidateQueries({
-        queryKey: ['chapterAssignments', projectId ? projectId.toString() : '0'],
-      });
-      setIsDialogOpen(false);
-      toast.success('Assignment updated successfully');
-    } catch (error) {
-      Logger.logException(error);
-      toast.error('Failed to assign user');
-    }
-  }, [
-    selectedDrafter,
-    selectedPeerChecker,
-    selectedAssignments,
-    projectId,
-    assignChapterMutation,
-    queryClient,
-  ]);
-
-  useEffect(() => {
-    if (isRefreshingAfterAssignment && !assignmentsFetching) {
-      setIsRefreshingAfterAssignment(false);
-    }
-  }, [isRefreshingAfterAssignment, assignmentsFetching]);
-
-  const handleCheckboxChange = useCallback((assignmentId: number, checked: boolean) => {
-    setSelectedAssignments(prev => {
-      if (checked) {
-        return prev.includes(assignmentId) ? prev : [...prev, assignmentId];
-      } else {
-        return prev.filter(id => id !== assignmentId);
-      }
-    });
-  }, []);
-
-  if (!projectId) {
-    return (
-      <div className='flex h-full items-center justify-center'>
-        <span>Project not found</span>
-      </div>
-    );
-  }
-
-  const displayTitle = milestoneName ?? projectTitle;
-  const headerTitle = `${projectTargetLanguageName} - ${displayTitle}`;
-  const isLoadingData = assignmentsLoading || assignChapterMutation.isPending;
-  const isDisabled = booksLoading || !milestoneBooks.length || !milestoneFilteredAssignments.length;
+  const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
-        rightContent={
-          <div className='flex items-center gap-2'>
-            {isManager && (
-              <>
-                <Button
-                  className='border-primary text-primary hover flex items-center gap-2 border-2'
-                  disabled={isDisabled}
-                  size='sm'
-                  variant={'outline'}
-                  onClick={onEditMetadata}
-                >
-                  {t('editProjectMetadata')}
-                </Button>
-                <Button
-                  className='border-primary text-primary hover flex items-center gap-2 border-2'
-                  size='sm'
-                  variant='outline'
-                  onClick={() => setIsManageBooksOpen(true)}
-                >
-                  Manage Books
-                </Button>
-              </>
-            )}
-            <Button
-              className='border-primary text-primary hover flex items-center gap-2 border-2'
-              disabled={isDisabled}
-              size='sm'
-              variant={'outline'}
-              onClick={onExport}
-            >
-              Export Project
-            </Button>
-          </div>
-        }
-        title={headerTitle}
+        rightContent={<div className='flex items-center gap-2'></div>}
+        title={`${project.targetLanguageName} - ${project.name}`}
         onBack={onBack}
       />
 
       <div className='flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row lg:gap-6'>
-        {/* Meta + Users Pane - side by side below 1024px, stacked column at 1024px+ */}
+        {/* Left Column: Meta Card & Users */}
         <div className='flex shrink-0 flex-row gap-4 lg:w-1/4 lg:flex-col lg:overflow-y-auto'>
-          {/* Project Details Card */}
-          <Card ref={detailsCardRef} className='h-fit flex-1 lg:flex-none'>
+          <Card className='h-fit flex-1 lg:flex-none'>
             <CardContent className='space-y-4 py-4'>
               <div className='grid grid-cols-2 gap-2'>
-                <label className='text-base font-bold'>Title</label>
-                <TruncatedCardText text={projectTitle} />
-
-                <label className='text-base font-bold'>Target Language</label>
-                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectTargetLanguageName}
-                </p>
+                <label className='text-base font-bold'>Project</label>
+                <TruncatedCardText text={project.name} />
 
                 <label className='text-base font-bold'>Source Language</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectSourceLanguageName}
+                  {project.sourceLanguageName}
                 </p>
 
                 <label className='text-base font-bold'>Source Bible</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectSource}
+                  {project.sourceName}
                 </p>
 
+                <label className='text-base font-bold'>Target Language</label>
+                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
+                  {project.targetLanguageName}
+                </p>
                 <label className='text-base font-bold'>Connectivity Profile</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {getConnectivityProfileDisplay(projectConnectivityProfile)}
+                  {getConnectivityProfileDisplay(project.metadata?.connectivityProfile)}
                 </p>
 
-                <label className='text-base font-bold'>Last Activity</label>
+                <label className='text-base font-bold'>Milestones</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {getLastActivityDisplay(projectLastActivityAt)}
+                  {milestones?.length ?? 0}
                 </p>
               </div>
-              <CardProgressBar
-                chapterStatusCounts={computedChapterStatusCounts}
-                workflowConfig={projectWorkflowConfig}
-              />
+
+              <div>
+                <label className='text-base font-bold'>Project Progress</label>
+                <div className='mt-2'>
+                  <CardProgressBar
+                    chapterStatusCounts={project.chapterStatusCounts}
+                    workflowConfig={project.workflowConfig}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Project Users Section - Managers only */}
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
-                chapterAssignments={milestoneFilteredAssignments}
+                chapterAssignments={[]}
                 isAddUserOpen={isAddUserOpen}
-                projectId={projectId}
-                referenceHeight={detailsHeight}
+                projectId={project.id}
+                referenceHeight={undefined}
                 users={users}
                 usersLoading={usersLoading}
                 onAddUser={onAddUser}
@@ -468,84 +127,167 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
           )}
         </div>
 
-        {/* Table Section */}
+        {/* Right Column: Milestones Table */}
         <div className='flex min-h-0 w-full flex-1 flex-col lg:w-3/4 lg:grow'>
-          <div className='shrink-0 pb-4 pl-[3px]'>
-            <div className='flex items-center gap-3'>
-              <Select value={selectedBook} onValueChange={setSelectedBook}>
-                <SelectTrigger className='my-0.5 w-[200px] lg:w-[250px]'>
-                  <SelectValue placeholder={booksLoading ? 'Loading books...' : 'Book'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>Books</SelectItem>
-                  {milestoneBooks.map(book => (
-                    <SelectItem key={book.bookId} value={book.bookId.toString()}>
-                      {book.engDisplayName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {isManager && (
-                <Button
-                  className='flex items-center gap-2'
-                  disabled={
-                    selectedAssignments.length === 0 ||
-                    booksLoading ||
-                    isLoadingData ||
-                    (projectUsers?.filter(pu => pu.roleName === ROLES.PROJECT_TRANSLATOR).length ??
-                      0) < 2
-                  }
-                  size='sm'
-                  onClick={handleAddBook}
-                >
-                  {assignChapterMutation.isPending && (
-                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                  )}
-                  Assign
-                </Button>
-              )}
-            </div>
+          <div className='flex shrink-0 items-center justify-between pb-4'>
+            <h2 className='text-xl font-bold'>Milestones</h2>
+            {isManager && (
+              <Button
+                className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+                onClick={() => setIsAddMilestoneOpen(true)}
+              >
+                <Plus className='h-4 w-4' /> Add Milestone
+              </Button>
+            )}
           </div>
 
-          <ChapterAssignmentsTable
-            assignments={filteredAssignments}
-            isLoading={assignmentsLoading}
-            isManager={isManager}
-            isRowActionsDisabled={isLoadingData}
-            selectedAssignments={selectedAssignments}
-            selectedBook={selectedBook}
-            onCheckboxChange={handleCheckboxChange}
-            onRowClick={handleChapterRowClick}
-          />
+          <div className='flex-1 overflow-hidden rounded-lg border shadow'>
+            {milestonesLoading ? (
+              <div className='flex h-full items-center justify-center gap-2'>
+                <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
+                <span className='text-gray-500'>Loading milestones...</span>
+              </div>
+            ) : milestones?.length === 0 ? (
+              <div className='flex h-full items-center justify-center'>
+                <span className='text-gray-500'>No milestones found.</span>
+              </div>
+            ) : (
+              <div className='flex h-full flex-col overflow-y-auto'>
+                <Table className='table-fixed'>
+                  <TableHeader className='sticky top-0 z-10'>
+                    <TableRow>
+                      <TableHead className='w-[35%] px-6 py-3 text-left text-sm font-semibold'>
+                        Milestone
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        Scope
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        Progress
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        Status
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className='divide-border divide-y'>
+                    {milestones?.map((milestone: Milestone) => {
+                      const totalChapters = Object.values(milestone.chapterStatusCounts).reduce(
+                        (acc: number, curr: any) => acc + Number(curr),
+                        0
+                      );
+
+                      // Derive status
+                      let displayStatus = null;
+                      if (totalChapters === 0) {
+                        displayStatus = {
+                          label: 'Not Assigned',
+                          bg: 'var(--popover)',
+                          text: 'var(--foreground)',
+                        };
+                      } else if (milestone.status === 'completed') {
+                        displayStatus = {
+                          label: 'Completed',
+                          bg: 'var(--primary)',
+                          text: 'var(--primary-foreground)',
+                        };
+                      } else if (milestone.updatedAt) {
+                        const diffDays =
+                          (Date.now() - new Date(milestone.updatedAt).getTime()) /
+                          (1000 * 60 * 60 * 24);
+                        if (diffDays > 10) {
+                          displayStatus = {
+                            label: 'Potentially Stalled',
+                            bg: 'var(--warning)',
+                            text: 'var(--warning-foreground)',
+                          };
+                        } else {
+                          displayStatus = {
+                            label: 'Active',
+                            bg: 'var(--primary)',
+                            text: 'var(--primary-foreground)',
+                          };
+                        }
+                      } else {
+                        displayStatus = {
+                          label: 'Not Started',
+                          bg: 'var(--muted)',
+                          text: 'var(--muted-foreground)',
+                        };
+                      }
+
+                      return (
+                        <TableRow
+                          key={milestone.id}
+                          className='cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
+                          onClick={() =>
+                            navigate({
+                              to: '/projects/$projectId/milestones/$milestoneId',
+                              params: {
+                                projectId: project.id,
+                                milestoneId: milestone.id.toString(),
+                              },
+                            })
+                          }
+                        >
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            <div className='flex flex-col gap-1'>
+                              <span className='text-foreground font-medium'>{milestone.name}</span>
+                              {milestone.bookIds.length > 0 && books && (
+                                <span className='text-xs text-gray-500'>
+                                  {(() => {
+                                    const bookNames = milestone.bookIds
+                                      .map((id: number) => {
+                                        const b = books?.find((bk: BibleBook) => bk.bookId === id);
+                                        return b ? String(b.engDisplayName) : undefined;
+                                      })
+                                      .filter(Boolean);
+                                    if (bookNames.length <= 4) return bookNames.join(', ');
+                                    return `${bookNames.slice(0, 4).join(', ')} ...`;
+                                  })()}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            {milestone.bookCount} books &middot; {totalChapters} chapters
+                          </TableCell>
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            <CardProgressBar
+                              chapterStatusCounts={milestone.chapterStatusCounts}
+                              variant='mini'
+                              workflowConfig={project.workflowConfig}
+                            />
+                          </TableCell>
+                          <TableCell className='px-6 py-4'>
+                            <span
+                              className='inline-block rounded-full px-2 py-1 text-[10px] font-semibold capitalize'
+                              style={{
+                                backgroundColor: displayStatus.bg,
+                                color: displayStatus.text,
+                                border: '1px solid var(--border)',
+                              }}
+                            >
+                              {displayStatus.label}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <AssignUsersDialog
-        allProjectUsers={projectUsers ?? []}
-        availablePeerCheckers={availablePeerCheckers}
-        isAssigning={assignChapterMutation.isPending}
-        isOpen={isDialogOpen}
-        projectUsers={projectTranslators}
-        selectedAssignmentsStatuses={selectedAssignmentsStatuses}
-        selectedDrafter={selectedDrafter}
-        selectedPeerChecker={selectedPeerChecker}
-        usersLoading={projectUsersLoading}
-        onAssign={handleAssignUser}
-        onClose={() => setIsDialogOpen(false)}
-        onDrafterChange={setSelectedDrafter}
-        onPeerCheckerChange={setSelectedPeerChecker}
+      <AddMilestoneDialog
+        isOpen={isAddMilestoneOpen}
+        projectId={project.id}
+        sourceBible={project.sourceBibleId}
+        onClose={() => setIsAddMilestoneOpen(false)}
       />
-      {isManageBooksOpen && milestoneId && projectId && (
-        <ManageMilestoneBooksDialog
-          initialSelectedBookIds={memoizedSelectedBookIds}
-          isOpen={isManageBooksOpen}
-          milestoneId={milestoneId}
-          projectId={Number(projectId)}
-          sourceBibleId={projectSourceBibleId}
-          onClose={() => setIsManageBooksOpen(false)}
-        />
-      )}
     </div>
   );
 };

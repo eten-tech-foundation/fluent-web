@@ -8,15 +8,42 @@ interface CardProgressBarProps {
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
   hideLegend?: boolean;
+  variant?: 'default' | 'mini';
 }
 
 export const CardProgressBar: React.FC<CardProgressBarProps> = ({
   chapterStatusCounts,
   workflowConfig,
   hideLegend,
+  variant = 'default',
 }) => {
-  const { legendItems, calculateProgressSegments } = useProgressBar(workflowConfig);
+  const { legendItems, calculateProgressSegments, calculateOverallProgress } =
+    useProgressBar(workflowConfig);
   const segments = calculateProgressSegments(chapterStatusCounts);
+
+  const totalProgressPercentage = calculateOverallProgress(chapterStatusCounts);
+
+  if (variant === 'mini') {
+    return (
+      <div className='flex items-center gap-2'>
+        <div className='flex h-1.5 w-16 overflow-hidden rounded-full bg-slate-100'>
+          {segments.map((segment, index) => (
+            <div
+              key={`${segment.status}-${index}`}
+              className='h-full first:rounded-l-full last:rounded-r-full hover:brightness-110'
+              style={{
+                width: `${segment.widthPercentage}%`,
+                backgroundColor: segment.color,
+              }}
+            />
+          ))}
+        </div>
+        <span className='text-xs font-medium text-slate-500'>
+          {Math.round(totalProgressPercentage)}%
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className='flex w-full flex-col gap-3'>
@@ -37,7 +64,7 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
                 {segment.subSegments && segment.subSegments.length > 0 ? (
                   <div className='flex flex-col gap-1'>
                     <p className='mb-1 border-b pb-1 font-bold'>
-                      {segment.count} {segment.displayName}
+                      {Math.round(segment.widthPercentage)}% {segment.displayName}
                     </p>
                     {segment.subSegments.map((sub, idx) => (
                       <p key={idx} className='text-xs'>
@@ -47,7 +74,7 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
                   </div>
                 ) : (
                   <p>
-                    {segment.count} {segment.displayName}
+                    {Math.round(segment.widthPercentage)}% {segment.displayName}
                   </p>
                 )}
               </TooltipContent>
