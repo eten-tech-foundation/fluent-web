@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
@@ -34,13 +35,32 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   const location = useLocation();
   const { userdetail } = useAppStore();
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const targetProjectId = Number(projectId);
+
+  const hasProjectGrant = useMemo(() => {
+    if (!targetProjectId || !userdetail) return true;
+    const isOrgManager = activeGrants.some(
+      g =>
+        (g.projectId === null || g.projectId === undefined) &&
+        ([ROLES.ORG_MANAGER, ROLES.SUPER_ADMIN] as string[]).includes(g.roleName)
+    );
+    if (isOrgManager) return true;
+    return activeGrants.some(
+      g => g.projectId === targetProjectId || g.projectId === Number(targetProjectId)
+    );
+  }, [activeGrants, targetProjectId, userdetail]);
+
+  useEffect(() => {
+    if (targetProjectId && !hasProjectGrant) {
+      toast.error('You have been removed from this project.');
+      void navigate({ to: '/', replace: true });
+    }
+  }, [hasProjectGrant, targetProjectId, navigate]);
 
   // Same check the page uses to show the button, repeated here so `?modal=metadata`
   // typed straight into the URL cannot open the editor for a non-manager.
-  const isManager = isProjectManager(
-    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
-    project?.id
-  );
+  const isManager = isProjectManager(activeGrants, project?.id);
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
