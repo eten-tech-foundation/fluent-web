@@ -4,6 +4,14 @@
 
 **Historical review context:** This proposal was revised after the third engineering review round (PR #356, kaseywright, 2026-07-28). Its playback decisions have since been superseded by the audio playback design above.
 
+## TL;DR
+
+- This is the detailed synthesis and artifact-store proposal. Use the [audio playback design](../audio-playback/design.md) for the current controls, recorded-source selection, provenance, and licence fence.
+- `generate` writes an immutable request sidecar without buying speech; on a cache miss, `get-audio` streams a newly generated clip through the authenticated API path.
+- A finished clip is compressed into recipe-addressed R2 storage, so later listens can use a cached artifact. The recipe includes byte-affecting choices such as format; admission and clip limits bound memory use.
+- fluent-ai owns synthesis and storage, fluent-api fronts the routes, and the frontend supplies only text cleared for synthesis. Deployment sizing and rollout checks live in the [capacity guide](https://github.com/eten-tech-foundation/fluent-ai/blob/main/docs/features/source-tts/source-tts-capacity.md) and [operations guide](source-tts-operations.md).
+- This historical proposal also records earlier review trade-offs and future engines and recording ideas; its older playback details do not override the current design.
+
 **Reviewer shortcut:** A condensed, stands-on-its-own summary lives in [`source-tts-summary.md`](source-tts-summary.md).
 
 **Scope:** Add source-text listening to Fluent, beginning in the drafting grid. The user-facing controls belong to fluent-web; synthesis, artifact storage, and audio delivery belong to **fluent-ai**, with fluent-api acting as the authenticated front door for both generation and audio fetches — fluent-ai itself stays an internal service. **This proposal intentionally lives in fluent-web only even though endpoints are implemented in fluent-ai and fluent-api**, so reviewers can evaluate the interaction and its supporting contract as one design.

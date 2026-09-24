@@ -2,6 +2,14 @@
 
 Fluent's audio controls let a translator hear the source text or resource they are reading. A playable may use a recorded source, synthesized speech, or both. This document describes the shared playback design, the drafting controls delivered for source and reference Bibles, and the decisions that guide later resource controls. The [source-TTS proposal](../source-tts/source-tts-suggestion.md) retains the synthesis contract and artifact-store detail; this design governs playback, provenance, visibility, and the licence fence.
 
+## TL;DR
+
+- Drafting offers verse, pericope, and chapter players for source and reference Bibles; the chapter is one playable whose verses resolve as playback advances.
+- The exact selected recording plays when it has usable verse windows. Otherwise, speech is available only when the exact text edition has whole-edition synthesis clearance; native YouVersion recordings remain future work.
+- One shared player handles seeking, pause and restart, keyboard controls, provenance, recorded-audio notices, and Hide Audio across the integrated drafting surfaces.
+- Speech is generated lazily from text and reused as a recipe-addressed R2 artifact; recorded provider files stay with their providers.
+- Translation resources and the native FIA player have further integration work. The final section lists the product and rights decisions still open for review.
+
 ## 1. The problem
 
 A recorded Bible is commonly one chapter file with verse timestamps. A generated reading is a sequence of text-addressed clips whose durations are unknown on the first listen. Verse, pericope, chapter, note, question, and article controls should behave consistently despite those different media shapes. The player therefore works with logical segments and leaves provider selection to a resolver.
