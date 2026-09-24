@@ -62,9 +62,11 @@ export class ProviderFactsAccess {
     const state = this.client.getQueryState<ProviderFacts>(
       providerFactsOptions(this.projectId, key).queryKey
     );
+    // A retry can retain status:error alongside cached data while fetching.
+    // The recording gate must wait for that in-flight answer before play.
+    if (waitForRefresh && state?.fetchStatus === 'fetching') return { state: 'loading' };
     if (state?.status === 'error') return { state: 'error' };
     if (
-      (waitForRefresh && state?.fetchStatus === 'fetching') ||
       !state?.data ||
       state.isInvalidated ||
       Date.now() - state.dataUpdatedAt >= PROVIDER_FACTS_STALE_MS

@@ -183,6 +183,67 @@ describe('shared playback authority and sounding metadata', () => {
     expect(elements).toHaveLength(1);
   });
 
+  it('refreshes an expired recording fact before releasing a mid-run hold', async () => {
+    const h = setup();
+    h.put(row('aq-20', 'unknown', ''));
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    const active = elements[0];
+    expect(active.playCalls).toHaveLength(1);
+    act(() => active.emit('playing'));
+    await settle();
+
+    let resolveFacts!: (response: Response) => void;
+    const fetchFacts = vi.fn(
+      async () => new Promise<Response>(resolve => (resolveFacts = resolve))
+    );
+    vi.stubGlobal('fetch', fetchFacts);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.now() + 60_001));
+    h.rerender(h.initial);
+    await settle();
+
+    expect(active.paused).toBe(true);
+    expect(fetchFacts).toHaveBeenCalledOnce();
+    expect(h.facts.read('aq-20', true).state).toBe('loading');
+    await act(async () => {
+      resolveFacts(new Response(JSON.stringify(row('aq-20', 'unknown', ''))));
+    });
+    await settle();
+    expect(h.result.current.recordedNoticeDialog).toBeNull();
+    expect(active.playCalls).toHaveLength(2);
+    expect(active.paused).toBe(false);
+  });
+
+  it('waits through a cached-error retry before deciding the recording notice', async () => {
+    const h = setup();
+    const key = providerFactsOptions(1, 'aq-20').queryKey;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 503 }))
+    );
+    await act(async () => h.client.refetchQueries({ queryKey: key }));
+    expect(h.facts.read('aq-20')).toEqual({ state: 'error' });
+
+    let resolveFacts!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Promise<Response>(resolve => (resolveFacts = resolve)))
+    );
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    expect(h.client.getQueryState(key)).toMatchObject({ status: 'error', fetchStatus: 'fetching' });
+    expect(h.facts.read('aq-20', true)).toEqual({ state: 'loading' });
+    expect(elements[0].playCalls).toEqual([]);
+
+    await act(async () => {
+      resolveFacts(new Response(JSON.stringify(row('aq-20', 'unknown', 'Retry notice'))));
+    });
+    await settle();
+    expect(h.result.current.recordedNoticeDialog?.notice).toBe('Retry notice');
+    expect(elements[0].playCalls).toEqual([]);
+  });
+
   it.each(['blank', 'acknowledged'])(
     'keeps adjacent %s recorded verses on one uninterrupted physical play',
     async noticeState => {
@@ -506,13 +567,13 @@ it('staleness and an in-flight refresh do not masquerade as an observed policy d
   act(() => elements[0].emit('playing'));
   await settle();
   vi.setSystemTime(Date.now() + 60_001);
-  let finish!: (response: Response) => void;
+  const finish = new Map<string, (response: Response) => void>();
   vi.stubGlobal(
     'fetch',
     vi.fn(
-      () =>
+      (url: string) =>
         new Promise<Response>(resolve => {
-          finish = resolve;
+          finish.set(decodeURIComponent(url.split('/').at(-1)!), resolve);
         })
     )
   );
@@ -522,7 +583,10 @@ it('staleness and an in-flight refresh do not masquerade as an observed policy d
   await settle();
   expect(h.facts.status('aq-1')).toBe('unknown');
   expect(h.result.current.status).toBe('playing');
-  finish(new Response(JSON.stringify(row('aq-1'))));
+  finish.get('aq-1')?.(new Response(JSON.stringify(row('aq-1'))));
+  finish.get('aq-20')?.(
+    new Response(JSON.stringify(row('aq-20', 'unknown', 'Fresh recording notice')))
+  );
   await settle();
   expect(h.result.current.status).toBe('playing');
   expect(h.facts.status('aq-1')).toBe('allowed');

@@ -989,12 +989,14 @@ export const useSourceTtsPlayback = (
     enabled,
   });
   useEffect(() => {
-    if (
-      noticeUi.dialog ||
-      noticeUi.needsAcknowledgment ||
-      (queue.status !== 'idle' && currentSounding && facts && noticeFacts?.state === 'loading')
-    ) {
+    const awaitingFacts =
+      queue.status !== 'idle' && currentSounding && facts && noticeFacts?.state === 'loading';
+    if (noticeUi.dialog || noticeUi.needsAcknowledgment || awaitingFacts) {
       queueRef.current.hold();
+      // A cached fact can expire after playback begins. In that case read()
+      // says loading even though no query is fetching; start the refresh that
+      // will eventually release this hold (or surface an error).
+      if (awaitingFacts) void facts.ensure(currentSounding.recordingKey);
       return;
     }
     queueRef.current.resumeHeld();
