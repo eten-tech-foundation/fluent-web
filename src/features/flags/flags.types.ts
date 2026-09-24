@@ -64,8 +64,8 @@ export const failClosedFeatures = (): Features => ({
   // `FeatureName` above. This is the second of the two places a merge conflict
   // will land when that flag is finally wired up; the resolution is additive.
   repeatedWordCheck: false,
-  // Source Audio — recorded OR synthesized (source-tts proposal T12/§6.3;
-  // renamed from `sourceTts` per Q11, since one gate covers both provenances).
+  // Source Audio — recorded OR synthesized (source-tts proposal T12/§6.3).
+  // The name reflects that one gate covers both provenances.
   // Off by default like every flag here: the controls must not appear before the
   // API confirms the feature.
   sourceAudio: false,
