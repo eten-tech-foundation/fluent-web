@@ -345,6 +345,7 @@ export enum ChapterAssignmentStatus {
 }
 export const ROLES = {
   SUPER_ADMIN: 'SuperAdmin',
+  ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
@@ -359,6 +360,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.PROJECT_MANAGER]: 'Project Manager',
   [ROLES.PROJECT_TRANSLATOR]: 'Translator',
   [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
   [ROLES.ORG_MEMBER]: 'Organization Member',

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
-import { getActiveGrants } from '@/lib/grant-utils';
+import { getActiveGrants, hasGrantForProject, ORG_LEVEL_ROLES } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -61,8 +61,7 @@ const DraftingPage: React.FC = () => {
     // 1. Org-level managers are never restricted to observer read-only
     const isOrgManager = activeGrants.some(
       g =>
-        (g.projectId === null || g.projectId === undefined) &&
-        ([ROLES.ORG_MANAGER, ROLES.SUPER_ADMIN] as string[]).includes(g.roleName)
+        (g.projectId === null || g.projectId === undefined) && ORG_LEVEL_ROLES.includes(g.roleName)
     );
     if (isOrgManager) return false;
 
@@ -80,15 +79,7 @@ const DraftingPage: React.FC = () => {
 
   const hasProjectGrant = useMemo(() => {
     if (!targetProjectId || !userdetail) return true;
-    const isOrgManager = activeGrants.some(
-      g =>
-        (g.projectId === null || g.projectId === undefined) &&
-        ([ROLES.ORG_MANAGER, ROLES.SUPER_ADMIN] as string[]).includes(g.roleName)
-    );
-    if (isOrgManager) return true;
-    return activeGrants.some(
-      g => g.projectId === targetProjectId || g.projectId === Number(targetProjectId)
-    );
+    return hasGrantForProject(activeGrants, targetProjectId);
   }, [activeGrants, targetProjectId, userdetail]);
 
   // Observer view or explicit /view route is ALWAYS read-only
@@ -104,12 +95,8 @@ const DraftingPage: React.FC = () => {
       return;
     }
 
-    if (!!translationMatch) {
-      if (isObserverForProject) {
-        setRoleChangeWarning(true);
-      } else {
-        setRoleChangeWarning(false);
-      }
+    if (!!translationMatch && isObserverForProject) {
+      setRoleChangeWarning(true);
     }
   }, [
     translationMatch,

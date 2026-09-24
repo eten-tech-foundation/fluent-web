@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
+import { getActiveGrants, hasGrantForProject, isProjectManager } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -34,29 +34,23 @@ export const ProjectDetailWrapper: React.FC = () => {
   const { data: books, isLoading: booksLoading } = useProjectUnitBooks(projectId);
 
   const location = useLocation();
-  const { userdetail } = useAppStore();
+  const userdetail = useAppStore(state => state.userdetail);
+  const setRoleChangeWarning = useAppStore(state => state.setRoleChangeWarning);
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const targetProjectId = Number(projectId);
 
   const hasProjectGrant = useMemo(() => {
     if (!targetProjectId || !userdetail) return true;
-    const isOrgManager = activeGrants.some(
-      g =>
-        (g.projectId === null || g.projectId === undefined) &&
-        ([ROLES.ORG_MANAGER, ROLES.SUPER_ADMIN] as string[]).includes(g.roleName)
-    );
-    if (isOrgManager) return true;
-    return activeGrants.some(
-      g => g.projectId === targetProjectId || g.projectId === Number(targetProjectId)
-    );
+    return hasGrantForProject(activeGrants, targetProjectId);
   }, [activeGrants, targetProjectId, userdetail]);
 
   useEffect(() => {
     if (targetProjectId && !hasProjectGrant) {
       toast.error('You have been removed from this project.');
+      setRoleChangeWarning(false);
       void navigate({ to: '/', replace: true });
     }
-  }, [hasProjectGrant, targetProjectId, navigate]);
+  }, [hasProjectGrant, targetProjectId, navigate, setRoleChangeWarning]);
 
   // Same check the page uses to show the button, repeated here so `?modal=metadata`
   // typed straight into the URL cannot open the editor for a non-manager.
