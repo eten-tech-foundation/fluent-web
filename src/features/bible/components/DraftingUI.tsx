@@ -258,6 +258,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     sourceVerses,
     targetVerses,
     readOnly,
+    displayMode,
     onSave: saveVerse,
   });
 
