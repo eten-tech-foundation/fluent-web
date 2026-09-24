@@ -95,8 +95,13 @@ export class ProviderFactsAccess {
     }
   }
 
-  observe(key: string, listener: () => void): () => void {
-    const observer = new QueryObserver(this.client, providerFactsOptions(this.projectId, key));
+  observe(key: string, listener: () => void, refreshOnMount = true): () => void {
+    const observer = new QueryObserver(this.client, {
+      ...providerFactsOptions(this.projectId, key),
+      // The recording host has already called ensure before physical play.
+      // Its observer must not start a second background refresh afterward.
+      refetchOnMount: refreshOnMount ? 'always' : false,
+    });
     return observer.subscribe(listener);
   }
 
