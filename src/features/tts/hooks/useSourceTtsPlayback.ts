@@ -368,7 +368,7 @@ export const useSourceTtsPlayback = (
       const base = latest.current.sourceChapter;
       rememberChapter(base ? { ...base, chapter: row?.chapterNumber ?? base.chapter } : null);
       // Keep the last actual recording through the queue's boundary update. The
-      // next onSourcePlaying replaces it (or clears it for TTS), while a fresh
+      // next onSourceReady replaces it (or clears it for TTS), while a fresh
       // notice already on screen keeps one stable dialog rather than unmounting
       // and reopening between adjacent recorded verses.
       const run = runRef.current;
@@ -471,6 +471,25 @@ export const useSourceTtsPlayback = (
   );
 
   const queue = useTtsPlaybackQueue({
+    onSourceReady: (source, segment) => {
+      const provenance = recordingProvenance(source);
+      if (provenance && latest.current.facts) {
+        // This callback runs inside beginLoad before audio.play(). The fact can
+        // finish after the media URL resolves, so silence first and let the
+        // notice decision release the hold once it has authority.
+        queueRef.current.hold();
+        void latest.current.facts.ensure(provenance.recordingKey);
+      }
+      setSoundingRecording(
+        provenance
+          ? {
+              ...provenance,
+              playableKey: segment.playableKey,
+              selectionKey: latest.current.selectionKey,
+            }
+          : null
+      );
+    },
     onSourcePlaying: (source, segment) => {
       const provenance = recordingProvenance(source);
       setSoundingRecording(
@@ -947,16 +966,28 @@ export const useSourceTtsPlayback = (
             playableKey: currentSounding.playableKey,
           }
         : null,
-    isPlaying: queue.status === 'playing',
+    isPlaying: queue.status !== 'idle',
     enabled,
   });
   useEffect(() => {
-    if (noticeUi.dialog) {
+    if (
+      noticeUi.dialog ||
+      noticeUi.needsAcknowledgment ||
+      (queue.status !== 'idle' && currentSounding && facts && noticeFacts?.state === 'loading')
+    ) {
       queueRef.current.hold();
       return;
     }
     queueRef.current.resumeHeld();
-  }, [noticeUi.dialog, queue.activeVerseRef, queue.status]);
+  }, [
+    currentSounding,
+    facts,
+    noticeFacts?.state,
+    noticeUi.dialog,
+    noticeUi.needsAcknowledgment,
+    queue.activeVerseRef,
+    queue.status,
+  ]);
   const verseKey = useCallback(
     (verseRef: string) => versePlayable(verseRef)?.key ?? null,
     [versePlayable]

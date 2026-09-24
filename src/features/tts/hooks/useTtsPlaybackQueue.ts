@@ -51,6 +51,8 @@ export interface UseTtsPlaybackQueueOptions {
   /** Final latch values, synchronously reported before the host handles termination. */
   onRunEnd?: (aiMarkedKeys: ReadonlySet<PlayableKey>) => void;
   onScrollRequest?: (verseRef: string) => void;
+  /** Reports the resolved source before the first physical play, including replacements. */
+  onSourceReady?: (source: Source, segment: Segment) => void;
   /** Reports the sounding source without interpreting its resource metadata. */
   onSourcePlaying?: (source: Source, segment: Segment) => void;
   onTiming?: (report: PlaybackTimingReport) => void;
@@ -449,6 +451,7 @@ export const useTtsPlaybackQueue = (options: UseTtsPlaybackQueueOptions): TtsPla
         segment.recovery = recovery;
       },
       onSource: (source, offset) => {
+        optionsRef.current.onSourceReady?.(source, segment);
         // A healed chapter can change every window, even under the same URL.
         // Drop speculative descriptors; their lazy resolvers consult the healed cache.
         if (

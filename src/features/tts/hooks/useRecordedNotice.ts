@@ -117,5 +117,12 @@ export function useRecordedNotice({
     [retained, scopeKey]
   );
 
-  return { dialog, close, show, infoFor };
+  return {
+    dialog,
+    close,
+    show,
+    infoFor,
+    needsAcknowledgment:
+      isPlaying && candidate !== null && !recordedNoticeAckStore.isAcknowledged(candidate),
+  };
 }

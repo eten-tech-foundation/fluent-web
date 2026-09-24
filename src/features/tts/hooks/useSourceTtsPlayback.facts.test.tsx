@@ -135,19 +135,51 @@ describe('shared playback authority and sounding metadata', () => {
     act(() => h.result.current.playVerse('1'));
     await settle();
     const active = elements.at(-1)!;
-    const callsBeforeSound = active.playCalls.length;
-    act(() => active.emit('playing'));
-    await settle();
 
     expect(h.result.current.recordedNoticeDialog?.notice).toBe('Fresh recording notice');
     expect(active.paused).toBe(true);
-    expect(active.playCalls).toHaveLength(callsBeforeSound);
+    expect(active.playCalls).toEqual([]);
 
     act(() => h.result.current.closeRecordedNotice());
     await settle();
     expect(h.result.current.recordedNoticeDialog).toBeNull();
     expect(active.paused).toBe(false);
-    expect(active.playCalls).toHaveLength(callsBeforeSound + 1);
+    expect(active.playCalls).toHaveLength(1);
+  });
+
+  it('keeps media silent when recording facts arrive after media resolution', async () => {
+    const h = setup();
+    h.client.removeQueries({ queryKey: providerFactsOptions(1, 'aq-20').queryKey });
+    let resolveFacts!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const key = decodeURIComponent(url.split('/').at(-1)!);
+        if (key === 'aq-20') return new Promise<Response>(resolve => (resolveFacts = resolve));
+        return new Response(JSON.stringify(row(key)));
+      })
+    );
+
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    const active = elements.at(-1)!;
+    expect(active).toBeDefined(); // The media URL already resolved.
+    expect(active.playCalls).toEqual([]);
+    expect(h.result.current.recordedNoticeDialog).toBeNull();
+
+    await act(async () => {
+      resolveFacts(new Response(JSON.stringify(row('aq-20', 'unknown', 'Delayed notice'))));
+    });
+    await settle();
+    expect(h.result.current.recordedNoticeDialog?.notice).toBe('Delayed notice');
+    expect(active.playCalls).toEqual([]);
+
+    act(() => h.result.current.closeRecordedNotice());
+    await settle();
+    expect(h.result.current.recordedNoticeDialog).toBeNull();
+    expect(active.playCalls).toHaveLength(1);
+    expect(active.paused).toBe(false);
+    expect(elements).toHaveLength(1);
   });
 
   it('keeps retained Info held while a new run loads, then starts it on dismissal', async () => {
