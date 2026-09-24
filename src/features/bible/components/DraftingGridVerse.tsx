@@ -171,7 +171,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                 </div>
               ) : (
                 <div className={getPericopeStyle(verse.verseNumber, false, 'bg-muted')}>
-                  {bibleVerseMap.has(verse.verseNumber) ? (
+                  {bibleVerseMap.get(verse.verseNumber)?.trim() ? (
                     <p className='min-h-12 leading-relaxed'>
                       {bibleVerseMap.get(verse.verseNumber)}
                     </p>

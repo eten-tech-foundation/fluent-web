@@ -100,9 +100,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
 
-  // The source tab is permanent; every Resources Bible keeps its own keyed
-  // content so selecting another one cannot replace either the source or a
-  // previously opened resource Bible (#471).
+  // The source tab is permanent. Resources reuses the second tab, and keyed
+  // content updates cannot restore a Bible that has been replaced (#471).
   const [activeBibleTabId, setActiveBibleTabId] = useState(SOURCE_BIBLE_TAB_ID);
   const [resourceBibleTabs, setResourceBibleTabs] = useState<ResourceBibleTab[]>([]);
   const [resourcePanelSelectedBibleId, setResourcePanelSelectedBibleId] = useState<string | null>(
@@ -784,10 +783,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         if (existing) {
           if (existing.label === bible.label && existing.language === bible.language)
             return currentTabs;
-          return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
+          return [{ ...existing, ...bible }];
         }
 
-        return [...currentTabs, { ...bible, verses: [], isLoading: true, isError: false }];
+        return [{ ...bible, verses: [], isLoading: true, isError: false }];
       });
       setActiveBibleTabId(bible.id);
     },

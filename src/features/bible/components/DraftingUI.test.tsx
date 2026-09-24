@@ -177,6 +177,7 @@ vi.mock('@/features/resources/components/ResourcePanel', async importOriginal =>
         activeVerseId,
         initialResource,
         selectedBibleId,
+        onBibleErrorChange,
         onBibleLoadingChange,
         onBibleSelect,
         onBibleVersesChange,
@@ -214,9 +215,27 @@ vi.mock('@/features/resources/components/ResourcePanel', async importOriginal =>
           <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
           <span data-testid='mock-current-resource'>{initialResource?.id ?? 'none'}</span>
           <button onClick={handleSelectBible}>Select Alternative Bible</button>
+          <button
+            onClick={() =>
+              onBibleSelect?.({ id: 'aq-alternative', label: 'Alternative Bible', language: 'eng' })
+            }
+          >
+            Reselect Alternative Bible
+          </button>
           <button onClick={handleSelectSecondBible}>Select Second Bible</button>
           <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
           <button onClick={handleSelectLoadingBible}>Select Loading Bible</button>
+          <button
+            onClick={() => {
+              onBibleVersesChange?.('aq-loading', [
+                { verseNumber: 1, text: 'Replaced Bible response' },
+              ]);
+              onBibleLoadingChange?.('aq-loading', false);
+              onBibleErrorChange?.('aq-loading', true);
+            }}
+          >
+            Finish Replaced Bible Request
+          </button>
           <button onClick={() => onResourceChange?.({ id: 'UWTranslationNotes', name: 'TN' })}>
             Select Notes Resource
           </button>
@@ -475,6 +494,34 @@ describe('DraftingUI', () => {
       expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
     });
 
+    it.each([undefined, '', '   '])(
+      'shows the missing-content message for an unavailable verse (%s)',
+      async missingText => {
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, () =>
+            HttpResponse.json({
+              chapters: [
+                {
+                  number: 1,
+                  verses: [
+                    { number: 1, text: 'Available resource verse' },
+                    ...(missingText === undefined ? [] : [{ number: 2, text: missingText }]),
+                  ],
+                },
+              ],
+            })
+          )
+        );
+        const user = await openResources();
+        await selectLanguage(user, 'English');
+        await user.click(await screen.findByText('ENG — English Bible'));
+
+        expect(await screen.findByText('Available resource verse')).toBeInTheDocument();
+        expect(screen.getByText('noContentAvailable')).toBeInTheDocument();
+        expect(screen.queryByText(mockSourceVerses[1].text)).not.toBeInTheDocument();
+      }
+    );
+
     it('keeps cached Aquifer text visible after a failed refetch', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
@@ -598,7 +645,7 @@ describe('DraftingUI', () => {
         }
       }
     );
-    it('keeps both Bible tabs and their cached verses when resources are hidden and shown', async () => {
+    it('keeps the source and current Bible when resources are hidden and shown', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
       await user.click(await screen.findByText('ENG — English Bible'));
@@ -606,19 +653,98 @@ describe('DraftingUI', () => {
       await selectLanguage(user, 'Spanish');
       await user.click(await screen.findByText('SPA — Spanish Bible'));
       expect(await screen.findByText('Bible 2 verse content')).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: '', pressed: true }));
       expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
       expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
       expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
-      await user.click(screen.getByRole('tab', { name: 'ENG' }));
-      expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(screen.getByText(mockSourceVerses[0].text)).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: '', pressed: false }));
-      expect(await screen.findByRole('combobox')).toHaveTextContent('English');
-      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(await screen.findByRole('combobox')).toHaveTextContent('Spanish');
       await user.click(screen.getByRole('tab', { name: 'SPA' }));
       expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Close SPA' }));
+      expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByText(mockSourceVerses[0].text)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '', pressed: true }));
+      await user.click(screen.getByRole('button', { name: '', pressed: false }));
+      expect(screen.queryByRole('tab', { name: 'SPA' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('tablist', { name: 'Bible versions' })).getAllByRole('tab')
+      ).toHaveLength(2);
     });
+
+    it('restores cached content when the same Bible is closed and reopened', async () => {
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Close ENG' }));
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+      await user.click(screen.getByText('ENG — English Bible'));
+
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.queryByText('No content available')).not.toBeInTheDocument();
+    });
+
+    it.each(['success', 'error'] as const)(
+      'keeps the replacement Bible after the previous request finishes with %s',
+      async result => {
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        let requested = false;
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/2/texts`, async () => {
+            requested = true;
+            await pendingText;
+            if (result === 'error') return new HttpResponse(null, { status: 503 });
+            return HttpResponse.json({
+              chapters: [{ number: 1, verses: [{ number: 1, text: 'Replaced Spanish content' }] }],
+            });
+          })
+        );
+        try {
+          const user = await openResources();
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+          await selectLanguage(user, 'Spanish');
+          await user.click(await screen.findByText('SPA — Spanish Bible'));
+          await waitFor(() => expect(requested).toBe(true));
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+
+          releaseText();
+          await waitFor(() => {
+            expect(queryClient.getQueryState(['aquifer-bible-text', 2, 'GEN', 1])?.status).toBe(
+              result
+            );
+          });
+          expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+          expect(screen.queryByRole('tab', { name: 'SPA' })).not.toBeInTheDocument();
+          expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+          expect(screen.queryByText('Replaced Spanish content')).not.toBeInTheDocument();
+          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+        } finally {
+          releaseText();
+        }
+      }
+    );
 
     it.each(['resources', 'checks', 'hidden'])(
       'finishes an interrupted Bible request after changing language through %s',
@@ -643,8 +769,7 @@ describe('DraftingUI', () => {
         await waitFor(() => expect(requested).toBe(true));
         if (panel === 'resources') {
           await selectLanguage(user, 'English');
-          await user.click(await screen.findByText('ENG — English Bible'));
-          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+          await screen.findByText('ENG — English Bible');
         }
         await user.click(screen.getByRole('button', { name: 'TN' }));
         await selectLanguage(user, 'English');
@@ -844,9 +969,55 @@ describe('DraftingUI', () => {
     expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('none');
   });
 
-  it('keeps each opened resource Bible beside the source with its own content', async () => {
-    const user = userEvent.setup();
+  it.each(['verse', 'pericope'] as const)(
+    'reuses the second Bible tab through repeated selections in %s mode',
+    async mode => {
+      const user = userEvent.setup();
+      useAppStore.setState({ displayMode: mode });
+      mockUsePericope.mockReturnValue(
+        defaultPericopeHookResult({ isPericopeMode: mode === 'pericope' })
+      );
 
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+      expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+
+      for (const [label, content] of [
+        ['Second Bible', 'Second Bible verse 1 text'],
+        ['Alternative Bible', 'Alternative verse 1 text'],
+        ['Second Bible', 'Second Bible verse 1 text'],
+      ]) {
+        await user.click(screen.getByRole('button', { name: `Select ${label}` }));
+        const tabs = within(screen.getByRole('tablist', { name: 'Bible versions' }));
+        expect(tabs.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB', label]);
+        expect(tabs.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByText(content)).toBeInTheDocument();
+      }
+      expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('yv-second');
+      expect(screen.queryByRole('button', { name: 'Close WEB' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(
+        screen.getByText('In the beginning God created the heaven and the earth.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Second Bible' }));
+      expect(screen.getByText('Second Bible verse 1 text')).toBeInTheDocument();
+    }
+  );
+
+  it('preserves loaded content when the same resource Bible is selected again', async () => {
+    const user = userEvent.setup();
     render(
       <DraftingUI
         projectItem={mockProjectItem}
@@ -855,29 +1026,45 @@ describe('DraftingUI', () => {
         userdetail={{ id: 1 } as unknown as User}
       />
     );
-
     await user.click(screen.getByRole('button', { pressed: false }));
     await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
-    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
-
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
-      'Resources',
-      'Checks',
-      'WEB',
-      'Alternative Bible',
-      'Second Bible',
-    ]);
-    expect(screen.getByText('Second Bible verse 1 text')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('tab', { name: 'Alternative Bible' }));
-    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-alternative');
-
     await user.click(screen.getByRole('tab', { name: 'WEB' }));
+    await user.click(screen.getByRole('button', { name: 'Reselect Alternative Bible' }));
+
+    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
     expect(
-      screen.getByText('In the beginning God created the heaven and the earth.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
+      within(screen.getByRole('tablist', { name: 'Bible versions' })).getAllByRole('tab')
+    ).toHaveLength(2);
+  });
+
+  it('ignores late content, loading, and error updates from a replaced Bible', async () => {
+    const user = userEvent.setup();
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+    await user.click(screen.getByRole('button', { pressed: false }));
+    await user.click(screen.getByRole('button', { name: 'Select Loading Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Select Empty Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Finish Replaced Bible Request' }));
+
+    expect(screen.getByText('No content available')).toBeInTheDocument();
+    expect(screen.queryByText('Replaced Bible response')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Loading Bible' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Empty Bible' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-empty');
   });
 
   it('returns to Resources and Bibles when an interrupted tab is reactivated', async () => {
@@ -894,7 +1081,6 @@ describe('DraftingUI', () => {
 
     await user.click(screen.getByRole('button', { pressed: false }));
     await user.click(screen.getByRole('button', { name: 'Select Loading Bible' }));
-    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
     await user.click(screen.getByRole('button', { name: 'Select Notes Resource' }));
     await user.click(screen.getByRole('tab', { name: 'Checks' }));
     expect(screen.queryByTestId('mock-resource-panel')).not.toBeInTheDocument();

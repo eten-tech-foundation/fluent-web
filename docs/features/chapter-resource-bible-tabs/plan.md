@@ -1,5 +1,15 @@
 # Chapter Resource Bible Tabs Implementation Plan
 
+## QA correction, 2026-09-24
+
+The [QA feedback on #471](https://github.com/eten-tech-foundation/fluent-web/issues/471#issuecomment-5809993641) supersedes the multiple-resource-tab behavior in the original plan below. The source remains first and non-closable. Selecting another resource replaces the second tab, including its content and loading/error state; reselecting the same resource preserves its loaded content. Late responses for a replaced resource must not restore it.
+
+Chapter, Verse and Pericope share `BibleTabList`. Long labels truncate without adding a resource-tab scrollbar. An empty chapter, or a missing verse within a partially available chapter, displays `This Bible verse doesn't have content for this passage.` Loading and request failures remain distinct from an empty passage.
+
+Regression coverage includes repeated replacement, source selection, same-resource selection, closing the resource, hiding/reopening Resources, interrupted requests, late success/error responses and switching drafting views. This correction is independent of PR #508; shared RTE validation before main and Roslin's QA acceptance remain required.
+
+## Original implementation plan
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Keep the source Bible named and reachable in Chapter View while each selected Resources Bible opens as an additional tab with its own loading, content, and empty state.
