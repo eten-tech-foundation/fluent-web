@@ -14,7 +14,7 @@ RAM/length dial. A number repeated in two places drifts.
 ## TL;DR
 
 - Confirm fluent-ai hosting, the R2 bucket and public domain, the stable hash secret, available container memory, and one worker per container before enabling speech. If there are multiple instances, arrange stable `get-audio` routing to avoid duplicate synthesis.
-- `EN_FEATURE_SOURCE_AUDIO` covers recorded and generated audio and defaults on when fluent-ai is wired; set it explicitly to `false` for a dark deploy. An explicit on setting without fluent-ai is unsupported.
+- `EN_FEATURE_SOURCE_AUDIO` covers recorded and generated audio and ships dark: unset or blank publishes `false`, even when fluent-ai is wired. Set it explicitly to `true` only after the deployment checklist is satisfied.
 - To prove stored speech is serving, force `sourceAudio` on in `/debug`: a new TTS clip shows a blue wash, while a replay after compression should show purple for Ogg or dark purple for MP3. Listening alone cannot reveal a broken artifact store.
 - Hosting, real memory size, instance routing, and Safari/iOS first-listen behavior still need deployment verification. Recorded provider files are outside this generated-artifact check.
 
@@ -33,31 +33,30 @@ None of these block a dark deploy. All of them should be read **before the flag 
 
 ---
 
-## 2. ⚠ The flag defaults to **ON when AI is wired**
+## 2. The flag defaults to **OFF**
 
-`EN_FEATURE_SOURCE_AUDIO` unset publishes **true** wherever fluent-ai is wired, because its default is
-`aiIsWired` — the same contract `repeatedWordCheck` and `aiSuggestions` already use. `.env.example`
-ships the line **blank**, and blank is read as unset.
+`EN_FEATURE_SOURCE_AUDIO` unset or blank publishes **false**, regardless of whether fluent-ai is wired.
+This default is intentionally different from `repeatedWordCheck` and `aiSuggestions`: merging the code
+does not publish the audio controls in any environment.
 
-**So merging this turns source audio controls on in every AI-wired environment unless someone writes an explicit
-`false`.** That is deliberate and approved; it is stated here because it is the opposite of what
-"ship dark" usually implies, and it should be a choice rather than a discovery.
+The flag covers recorded audio and TTS together. Enable it only after the dependencies in the deploy
+checklist are ready. Explicit-on without fluent-ai is unsupported because the TTS fallback cannot work.
 
-The flag covers recorded audio and TTS together. Forcing it on without fluent-ai is unsupported:
-the TTS fallback cannot work.
-
-To ship dark, set it explicitly:
+To enable the feature in a hosted environment, set it explicitly:
 
 ```bash
-EN_FEATURE_SOURCE_AUDIO=false      # `false` / `0` / `no` / `off`; BLANK MEANS ON when AI is wired
+EN_FEATURE_SOURCE_AUDIO=true       # `true` / `1` / `yes` / `on`; blank remains dark
 ```
+
+For a local demo, the browser-local `/debug` override can force `sourceAudio` on without changing the
+published server flag. The deployment still needs working fluent-ai configuration for TTS fallback.
 
 ---
 
 ## 3. Deploy checklist
 
 - [ ] **fluent-ai is hosted** in this environment, and reachable from fluent-api as `FLUENT_AI_URL`
-      with a matching `FLUENT_AI_KEY`. (Both are also what makes the flag default on.)
+      with a matching `FLUENT_AI_KEY`.
 - [ ] **R2 bucket exists**, one per environment. The team's convention is one bucket per purpose;
       upstream's own `.env.example` already reserves `fluent-tts-{dev,qa,prod}` for this feature.
 - [ ] **Bucket jurisdiction matches** `R2_JURISDICTION`. The S3 endpoint is _derived_ from the
