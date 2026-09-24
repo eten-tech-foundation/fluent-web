@@ -182,7 +182,10 @@ export function useProtectedVerseMarkers(containerRef: RefObject<HTMLElement | n
         hasStructuralPayload(event.dataTransfer) ||
         (range &&
           (touchesMarker(range, root) ||
-            (/^delete.*(?:Backward|Forward)$/.test(event.inputType) &&
+            // Lexical treats the directionless deleteContent intent as a forward deletion.
+            // It can arrive without a keydown or a native target range.
+            ((event.inputType === 'deleteContent' ||
+              /^delete.*(?:Backward|Forward)$/.test(event.inputType)) &&
               deletesAdjacentMarker(
                 range,
                 root,

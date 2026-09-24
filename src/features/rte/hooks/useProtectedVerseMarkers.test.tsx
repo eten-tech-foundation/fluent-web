@@ -269,6 +269,23 @@ describe('useProtectedVerseMarkers', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('protects directionless beforeinput deletion at a marker without blocking text deletion', () => {
+    render(<Fixture />);
+    const remove = () => {
+      const event = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'deleteContent',
+      });
+      screen.getByTestId('first').dispatchEvent(event);
+      return event;
+    };
+    select(text('first'), text('first').length);
+    expect(remove().defaultPrevented).toBe(true);
+    select(text('first'), 3);
+    expect(remove().defaultPrevented).toBe(false);
+  });
+
   it('blocks cut, paste and drag operations that would replace or move a marker', () => {
     render(<Fixture />);
     select(text('first'), 3, text('second'), 3);
