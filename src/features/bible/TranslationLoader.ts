@@ -4,7 +4,7 @@ import { redirect } from '@tanstack/react-router';
 import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
 import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
-import { hydrationPromise, useAppStore } from '@/store/store';
+import { hydrationPromise, isSameProjectAssignment, useAppStore } from '@/store/store';
 
 interface SourceVerseData {
   id: number;
@@ -52,9 +52,13 @@ export const translationLoader = async ({
     throw redirect({ to: '/' });
   }
   const locationStateItem = location.state?.projectItem;
-  // Explicit navigation carries the assignment just selected by the user. Persisted IDs can
-  // be reused after a database reset, so the stored item's matching ID does not make it current.
-  const projectItem = locationStateItem ?? currentProjectItem;
+  let projectItem = currentProjectItem;
+  // A selected assignment wins when its project/source context differs, even if a local DB reset
+  // reused its numeric assignment ID. For the same assignment, the store may have newer metadata
+  // than a browser-history snapshot (for example, an updated isAiEnabled value).
+  if (locationStateItem && !isSameProjectAssignment(locationStateItem, currentProjectItem)) {
+    projectItem = locationStateItem;
+  }
 
   if (!projectItem) {
     throw redirect({ to: '/' });
