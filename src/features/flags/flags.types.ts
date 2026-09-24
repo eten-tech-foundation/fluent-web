@@ -39,8 +39,7 @@
  * key AND `sourceAudio`; the union is additive and the two changes do not
  * conflict semantically even when git says they do. Delete this whole comment
  * block once `aiSuggestions` is present and actually gating something.
- * *(gap found 2026-08-06 while implementing source-TTS; see the source-tts
- * harness note for the fuller write-up.)*
+ * *(gap found 2026-08-06 while implementing source-TTS.)*
  */
 export type FeatureName = 'repeatedWordCheck' | 'sourceAudio';
 
