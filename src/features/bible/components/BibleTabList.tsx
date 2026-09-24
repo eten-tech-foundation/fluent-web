@@ -1,5 +1,3 @@
-import { Fragment } from 'react';
-
 import { X } from 'lucide-react';
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,8 +30,8 @@ const tabClassName = (active: boolean) =>
 /**
  * Source-first Bible navigation shared by every drafting view.
  *
- * Resource tabs may outgrow the source column on smaller screens. Only that
- * resource section scrolls, keeping the permanent source tab visible.
+ * The source is permanent. Resources reuses the second tab; long labels truncate
+ * within the column instead of adding a horizontal scrollbar.
  */
 export function BibleTabList({
   sourceLabel,
@@ -50,10 +48,11 @@ export function BibleTabList({
       >
         <TabsTrigger
           aria-controls={undefined}
-          className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} shrink-0`}
+          className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} min-w-0 ${resourceTabs.length ? 'max-w-1/2' : 'max-w-full'}`}
+          title={sourceLabel}
           value={SOURCE_BIBLE_TAB_ID}
         >
-          {sourceLabel}
+          <span className='truncate'>{sourceLabel}</span>
         </TabsTrigger>
 
         {resourceTabs.length > 0 && (
@@ -64,50 +63,37 @@ export function BibleTabList({
             >
               |
             </span>
-            <div
-              aria-label='Open resource Bibles'
-              className='min-w-0 flex-1 overflow-x-auto'
-              role='group'
-            >
-              <div className='flex w-max items-center gap-1'>
-                {resourceTabs.map((tab, index) => {
+            <div aria-label='Open resource Bibles' className='min-w-0 flex-1' role='group'>
+              <div className='flex min-w-0 items-center gap-1'>
+                {resourceTabs.map(tab => {
                   const isActive = activeTabId === tab.id;
 
                   return (
-                    <Fragment key={tab.id}>
-                      {index > 0 && (
-                        <span
-                          aria-hidden='true'
-                          className='dark:text-foreground mx-2 text-2xl font-bold text-slate-800 select-none'
-                        >
-                          |
-                        </span>
-                      )}
-                      <div className='flex items-center'>
-                        <TabsTrigger
-                          aria-controls={undefined}
-                          className={tabClassName(isActive)}
-                          value={tab.id}
-                          onKeyDown={event => {
-                            if (isActive && (event.key === 'Enter' || event.key === ' '))
-                              onSelect(tab.id);
-                          }}
-                          onMouseDown={event => {
-                            if (isActive && event.button === 0 && !event.ctrlKey) onSelect(tab.id);
-                          }}
-                        >
-                          {tab.label}
-                        </TabsTrigger>
-                        <button
-                          aria-label={`Close ${tab.label}`}
-                          className='text-muted-foreground hover:text-foreground ml-1 cursor-pointer transition-colors'
-                          type='button'
-                          onClick={() => onClose(tab.id)}
-                        >
-                          <X aria-hidden='true' className='h-4 w-4' />
-                        </button>
-                      </div>
-                    </Fragment>
+                    <div key={tab.id} className='flex min-w-0 items-center'>
+                      <TabsTrigger
+                        aria-controls={undefined}
+                        className={`${tabClassName(isActive)} min-w-0 shrink`}
+                        title={tab.label}
+                        value={tab.id}
+                        onKeyDown={event => {
+                          if (isActive && (event.key === 'Enter' || event.key === ' '))
+                            onSelect(tab.id);
+                        }}
+                        onMouseDown={event => {
+                          if (isActive && event.button === 0 && !event.ctrlKey) onSelect(tab.id);
+                        }}
+                      >
+                        <span className='truncate'>{tab.label}</span>
+                      </TabsTrigger>
+                      <button
+                        aria-label={`Close ${tab.label}`}
+                        className='text-muted-foreground hover:text-foreground ml-1 shrink-0 cursor-pointer transition-colors'
+                        type='button'
+                        onClick={() => onClose(tab.id)}
+                      >
+                        <X aria-hidden='true' className='h-4 w-4' />
+                      </button>
+                    </div>
                   );
                 })}
               </div>

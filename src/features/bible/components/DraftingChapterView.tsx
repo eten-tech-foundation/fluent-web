@@ -55,7 +55,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   handleTextChange,
   handleActiveVerseChange,
 }) => {
-  const hasBibleContent = [...bibleVerseMap.values()].some(text => text.trim());
+  const hasBibleContent = sourceVerses.some(verse => bibleVerseMap.get(verse.verseNumber)?.trim());
 
   const editorVerses = useMemo<PericopeVerseText[]>(
     () =>
@@ -118,9 +118,15 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
                     {verse.verseNumber}
                   </span>
                   <span className='mr-3'>
-                    {selectedPanel === 1
-                      ? verse.text
-                      : (bibleVerseMap.get(verse.verseNumber) ?? '')}
+                    {selectedPanel === 1 ? (
+                      verse.text
+                    ) : (
+                      <PericopeText
+                        content={bibleVerseMap.get(verse.verseNumber)}
+                        isError={bibleContentError}
+                        isLoading={bibleContentLoading}
+                      />
+                    )}
                   </span>
                 </React.Fragment>
               ))}
