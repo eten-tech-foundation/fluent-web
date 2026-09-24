@@ -19,6 +19,7 @@ export interface PlaybackRegistry {
   /** True if a claimant exists, even if it has no Restart control. */
   restartLive: () => boolean;
   setPageKey: (key: string) => void;
+  endPage: (key: string) => void;
   getRecord: (key: PlayableKey) => PauseRecord | null;
   setRecord: (key: PlayableKey, record: PauseRecord) => void;
   clearRecord: (key: PlayableKey) => void;
@@ -96,6 +97,16 @@ export class PlaybackRegistryStore implements PlaybackRegistry {
     this.pageKey = key;
     // The page's host stops/releases its run; dropping data must not write an
     // old-page pause record back into the new page's store.
+    this.dispatch({ type: 'dropAll' });
+  };
+
+  endPage = (key: string): void => {
+    // A route can leave and later return to the same assignment. Stop any
+    // remaining claimant before discarding records so its pause cannot restore
+    // data belonging to the departed page. Ignore a stale page's cleanup.
+    if (this.pageKey !== key) return;
+    this.silenceAll();
+    this.pageKey = undefined;
     this.dispatch({ type: 'dropAll' });
   };
 
