@@ -18,6 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
+import { recordedNoticeAckStore, type RecordedNotice } from '../lib/ackStore';
 import { isPlayableRow } from '../lib/buildTtsQueueItems';
 import { pressPrimary, pressRestart, unavailableReason } from '../lib/controlActions';
 import {
@@ -55,7 +56,6 @@ import {
   useTtsPlaybackQueue,
 } from './useTtsPlaybackQueue';
 
-import type { RecordedNotice } from '../lib/ackStore';
 import type { ProviderFactsAccess } from '../resolver/providerFacts';
 
 export interface UseSourceTtsPlaybackOptions {
@@ -474,11 +474,31 @@ export const useSourceTtsPlayback = (
     onSourceReady: (source, segment) => {
       const provenance = recordingProvenance(source);
       if (provenance && latest.current.facts) {
-        // This callback runs inside beginLoad before audio.play(). The fact can
-        // finish after the media URL resolves, so silence first and let the
-        // notice decision release the hold once it has authority.
-        queueRef.current.hold();
-        void latest.current.facts.ensure(provenance.recordingKey);
+        const { facts: authority, sourceChapter: chapter } = latest.current;
+        const textBibleKey =
+          chapter?.textBibleKey ??
+          (chapter?.role === 'projectSource' ? `local-source:${chapter.bibleId}` : null);
+        if (textBibleKey) {
+          void authority.ensure(provenance.recordingKey);
+          const result = authority.read(provenance.recordingKey, true);
+          const notice = result.state === 'ready' ? result.facts.licenseNotice : null;
+          // The callback runs before audio.play(). Hold only while authority is
+          // unresolved or this exact recording notice has not been accepted;
+          // a continuous acknowledged/blank chapter must keep its one play.
+          if (
+            result.state === 'loading' ||
+            (notice?.trim() &&
+              !recordedNoticeAckStore.isAcknowledged({
+                textBibleKey,
+                textBibleName: textBibleName || textBibleKey,
+                recordingKey: provenance.recordingKey,
+                recordingName: provenance.recordingName,
+                recordingProvider: provenance.provider,
+                notice,
+              }))
+          )
+            queueRef.current.hold();
+        }
       }
       setSoundingRecording(
         provenance
@@ -646,12 +666,11 @@ export const useSourceTtsPlayback = (
     if (!facts || !textKey || !enabled) return;
     return facts.observe(textKey, () => refreshFacts(version => version + 1));
   }, [facts, textKey, enabled]);
+  const soundingRecordingKey = soundingRecording?.recordingKey;
   useEffect(() => {
-    if (!facts || !soundingRecording) return;
-    return facts.observe(soundingRecording.recordingKey, () =>
-      refreshFacts(version => version + 1)
-    );
-  }, [facts, soundingRecording]);
+    if (!facts || !soundingRecordingKey) return;
+    return facts.observe(soundingRecordingKey, () => refreshFacts(version => version + 1), false);
+  }, [facts, soundingRecordingKey]);
   const previousPolicy = useRef({ selectionKey, observedStatus });
   const selectionKeys = useRef(new Map<string, Set<string>>());
   const slotSelections = useRef(new Map<string, string>());
