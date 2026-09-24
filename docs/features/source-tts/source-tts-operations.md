@@ -1,0 +1,157 @@
+# Source-TTS operations: deploying it, and proving it works
+
+Playback behavior and recorded-source notices are described in [Audio playback design](../audio-playback/design.md).
+
+**Who this is for:** whoever turns source-TTS on in a real environment. It is the deploy checklist,
+the decisions still owed, and — the part nothing else gives you — **how to tell that the artifact
+store is actually serving**, which is invisible by every ordinary means.
+
+**It deliberately states no configuration values.** Those live in each service's `.env.example`,
+which explains every variable next to its own trade-offs, and in
+[`fluent-ai/docs/features/source-tts/source-tts-capacity.md`](https://github.com/eten-tech-foundation/fluent-ai/blob/main/docs/features/source-tts/source-tts-capacity.md) for the
+RAM/length dial. A number repeated in two places drifts.
+
+## TL;DR
+
+- Confirm fluent-ai hosting, the R2 bucket and public domain, the stable hash secret, available container memory, and one worker per container before enabling speech. If there are multiple instances, arrange stable `get-audio` routing to avoid duplicate synthesis.
+- `EN_FEATURE_SOURCE_AUDIO` covers recorded and generated audio and ships dark: unset or blank publishes `false`, even when fluent-ai is wired. Set it explicitly to `true` only after the deployment checklist is satisfied.
+- To prove stored speech is serving, force `sourceAudio` on in `/debug`: a new TTS clip shows a blue wash, while a replay after compression should show purple for Ogg or dark purple for MP3. Listening alone cannot reveal a broken artifact store.
+- Hosting, real memory size, instance routing, and Safari/iOS first-listen behavior still need deployment verification. Recorded provider files are outside this generated-artifact check.
+
+---
+
+## 1. Before you start: four things that are not settled
+
+None of these block a dark deploy. All of them should be read **before the flag goes on for real**.
+
+|                       | What is open                                                                                                                                                                                                                                      | What it costs if you skip it                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hosting**           | Whether fluent-ai is actually deployed in this environment. `deploy/azure/env/*.env` carries `AI_IMAGE=fluent-ai:latest`, which _suggests_ yes — but the feature-flag work exists precisely because it was not hosted. **Verify, do not assume.** | The feature cannot work at all.                                                                                                                                         |
+| **Container memory**  | `TTS_MAX_BUFFERED_BYTES` defaults to a budget that was **asserted, not derived** — the real container limit is not in any repo. §8.4 wants the budget at roughly ⅔ of the container.                                                              | If the container is smaller than assumed, a busy minute is an OOM — and an OOM kills **every in-flight stream**, not one request.                                       |
+| **Instance topology** | `--workers 1` is already pinned in fluent-ai's Dockerfile (do not "optimize" it away — see the comment there). Still open: a **single replica**, or static routing of `get-audio` by hash-on-path.                                                | Duplicate synthesis, so a doubled provider bill. Never a wrong artifact: the sidecar lets any instance regenerate, and the conditional PUT collapses duplicate uploads. |
+| **Safari / iOS**      | Untested. §6.1 names it a platform risk: the streaming first listen is chunked with no `Content-Length`, which Safari may stall on **without firing `error`**. The stall watchdog's wait-for-compressed recovery is built for exactly this.       | Affected users get a longer first-listen spinner — or, if the watchdog is wrong, silence. §11.3 step 3 makes this the make-or-break verification target.                |
+
+---
+
+## 2. The flag defaults to **OFF**
+
+`EN_FEATURE_SOURCE_AUDIO` unset or blank publishes **false**, regardless of whether fluent-ai is wired.
+This default is intentionally different from `repeatedWordCheck` and `aiSuggestions`: merging the code
+does not publish the audio controls in any environment.
+
+The flag covers recorded audio and TTS together. Enable it only after the dependencies in the deploy
+checklist are ready. Explicit-on without fluent-ai is unsupported because the TTS fallback cannot work.
+
+To enable the feature in a hosted environment, set it explicitly:
+
+```bash
+EN_FEATURE_SOURCE_AUDIO=true       # `true` / `1` / `yes` / `on`; blank remains dark
+```
+
+For a local demo, the browser-local `/debug` override can force `sourceAudio` on without changing the
+published server flag. The deployment still needs working fluent-ai configuration for TTS fallback.
+
+---
+
+## 3. Deploy checklist
+
+- [ ] **fluent-ai is hosted** in this environment, and reachable from fluent-api as `FLUENT_AI_URL`
+      with a matching `FLUENT_AI_KEY`.
+- [ ] **R2 bucket exists**, one per environment. The team's convention is one bucket per purpose;
+      upstream's own `.env.example` already reserves `fluent-tts-{dev,qa,prod}` for this feature.
+- [ ] **Bucket jurisdiction matches** `R2_JURISDICTION`. The S3 endpoint is _derived_ from the
+      account id and jurisdiction, so an unpinned host fails `HeadBucket` against buckets that
+      genuinely exist — a confusing failure, and the reason there is no endpoint variable.
+- [ ] **A custom public domain is attached to the bucket** and set as `TTS_PUBLIC_AUDIO_BASE_URL`.
+      **Not `r2.dev`** (§7.3). This is the 302 target; blank makes redirects fail cleanly rather
+      than emit a broken URL.
+- [ ] **The bucket is not listable**, and ideally `requests/*` is blocked at the edge. Artifact URLs
+      are capability-secured (unguessable, HMAC-keyed), which only holds if the space cannot be
+      enumerated (§11.2).
+- [ ] **`TTS_HASH_SECRET` is set to a long random value and will stay stable.** Changing it renames
+      every future artifact — old ones are orphaned, not broken. Never commit the real one.
+- [ ] **Memory budget sized against the real container limit** — see the capacity doc, and the
+      open item in §1.
+- [ ] **`--workers 1` still pinned** in the deployed image.
+- [ ] **ffmpeg is present.** Already handled: both Dockerfiles install it, because `imageio-ffmpeg`
+      publishes **no musl wheel** and the bundled binary therefore does not exist on the Alpine base
+      (found by running the real container, not by any test). `TTS_FFMPEG_BINARY` is the escape
+      hatch if you need to supply your own build — the bundled one is GPL and large.
+- [ ] **Flag decided explicitly** (§2 above).
+
+---
+
+## 4. Proving it works — including the part you cannot hear
+
+Deploying dark and then forcing the flag on locally verifies most of the feature: controls appear,
+audio plays, continuous mode advances. **It does not tell you whether the artifact store is
+working.** A deployment that serves every clip from R2 and one that silently re-synthesizes every
+single listen sound _exactly_ the same. The only difference is the bill.
+
+Nothing in the browser reveals it on its own, and this was measured rather than assumed
+(Chrome, 2026-08-20):
+
+- an `<audio>` element that follows a 302 still reports the **original** URL as `currentSrc`; the
+  redirect happens inside its own fetch, below anything the app can observe;
+- cross-origin resource timing hides the redirect entirely unless the bucket sends
+  `Timing-Allow-Origin`, so "no redirect recorded" and "served from the bucket" look identical.
+
+So the app says it out loud instead.
+
+### The wash tells you
+
+`generate` names the compressed object directly when one already exists (§7.1), so the browser can
+read the container off the clip URL. While the flag is **forced on** in `/debug`, the playback
+highlight is colour-coded:
+
+| Wash                              | Meaning                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Blue** (the ordinary highlight) | This listen paid for a fresh synthesis — streaming `.wav` from the generation heap.                              |
+| **Purple**                        | Served from the bucket: a compressed `.ogg` artifact.                                                            |
+| **Dark purple**                   | Served from the bucket as `.mp3` (whichever `TTS_DEFAULT_FORMAT` is set to, or a browser that cannot play Opus). |
+
+**The check, in three steps:**
+
+1. With fluent-ai wired, select **Force on** for `sourceAudio` in `/debug`. This enables the
+   diagnostic serving tint. Use a text-licence-allowed verse that resolves to TTS, since a recorded
+   verse does not exercise the artifact store.
+2. Play a TTS verse whose artifact is not yet stored. It should be **blue** while it streams.
+3. After the clip finishes, allow time for the compression tail, then play the **same verse again**.
+   It should be **purple** for Ogg or **dark purple** for MP3.
+
+**Blue the second time means the artifact store is not serving** — every listen is being paid for.
+Check `TTS_PUBLIC_AUDIO_BASE_URL`, the bucket credentials, and whether the compression tail is
+failing (an encoder that cannot run leaves the clip attachable and regenerable, so playback keeps
+working and only the cost goes wrong — which is exactly why this needs looking at rather than
+listening for).
+
+Set the override back to **Default (from API)** when you are done.
+
+> **One deliberate inaccuracy.** If compression finishes _between_ `generate` and the first GET, the
+> clip is reported blue while actually being served from the bucket. The error only ever runs that
+> way — you can under-report a cache hit, never over-report one — so a purple wash is always true,
+> and reality is never worse than the colour suggests.
+
+### What else to look at
+
+- **`tts generate authorized`** logs carry `sidecar_written`. `False` means this artifact had been
+  authorized before.
+- **`tts audio attach`** logs carry `rung` — `heap` (attached to a live generation, one bill for two
+  listeners), `spawned` (this request started the synthesis), `draining`. There is deliberately **no
+  log line for the 302**, so a healthy cached deployment gets _quieter_ here, not louder. Absence of
+  `spawned` lines under real usage is the server-side version of a purple wash.
+
+---
+
+## 5. Cost posture, briefly
+
+Synthesis is billed only when someone actually listens: `generate` writes a sidecar and spends
+nothing, so UI affordances nobody uses cost nothing. Content addressing and in-process attachment
+avoid repeat synthesis; simultaneous requests on different instances can still incur duplicate cost,
+while conditional PUT stores one artifact. R2 storage of compressed clips is cents per month even at
+whole-Bible scale, and **R2 egress is free** — which is why the heavy bytes 302 to R2 instead of
+being proxied through service pods. The conscious v1 trade is unbounded-but-tiny storage growth in
+exchange for no lifecycle machinery.
+
+This is also why §4 matters: a broken artifact store does not fail, it just quietly moves every
+listen back onto the paid path.

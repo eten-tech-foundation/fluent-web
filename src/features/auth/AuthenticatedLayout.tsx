@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SettingsModal } from '@/components/SettingsModal';
+import { FlagOverrideChip } from '@/features/flags';
 import Header from '@/features/header/components/index';
 import { EditProfile } from '@/features/profile/components/EditProfile';
 import { useAuth } from '@/hooks/useAuth';
@@ -115,6 +116,9 @@ export function AuthenticatedLayout(): React.JSX.Element {
             </div>
           )}
           <Outlet />
+          {/* Renders only when a local feature-flag override is active (see
+              features/flags/flagOverrides.ts); otherwise it is `null`. */}
+          <FlagOverrideChip />
           <SettingsModal isOpen={modal === 'settings'} onClose={handleModalClose} />
           <EditProfile isOpen={modal === 'profile'} onClose={handleModalClose} />
         </main>
