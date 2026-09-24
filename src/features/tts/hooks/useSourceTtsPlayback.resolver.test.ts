@@ -1,6 +1,10 @@
 /** Host → real resolver/cache/strategies → real queue; only transport/media are faked. */
-import { act, renderHook } from '@testing-library/react';
+import { createElement, StrictMode } from 'react';
+
+import { act, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DraftingAudioPageBoundary } from '@/features/bible/components/DraftingAudioPageBoundary';
 
 import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
 import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
@@ -501,6 +505,63 @@ describe('useSourceTtsPlayback — pause records and Restart', () => {
     expect(otherPause).toHaveBeenCalledTimes(1);
     expect(registry.isLive('other')).toBe(true);
     expect(registry.getRecord(key)).toBeNull();
+  });
+
+  it('drops an older pause record and silences a live run when the drafting route leaves and returns', async () => {
+    let host!: ReturnType<typeof useSourceTtsPlayback>;
+    const Observe = () => {
+      registry = usePlaybackRegistry();
+      return null;
+    };
+    const Host = () => {
+      host = useSourceTtsPlayback(props());
+      return null;
+    };
+    const page = (shown: boolean) =>
+      createElement(
+        StrictMode,
+        null,
+        createElement(
+          PlaybackRegistryProvider,
+          null,
+          createElement(Observe),
+          shown
+            ? createElement(
+                DraftingAudioPageBoundary,
+                { pageKey: 'assignment-1' },
+                createElement(Host)
+              )
+            : null
+        )
+      );
+
+    const view = render(page(true));
+    const firstKey = host.verseKey('row-1')!;
+    const secondKey = host.verseKey('row-2')!;
+    await start(() => host.playVerse('row-1'));
+    elements[0].currentTime = 8;
+    act(() => host.pause());
+    expect(registry.getRecord(firstKey)?.currentTime).toBe(8);
+    await start(() => host.playVerse('row-1'));
+    expect(elements[1].currentTime).toBe(8);
+    elements[1].currentTime = 10;
+    await start(() => host.playVerse('row-2'));
+    expect(registry.getRecord(firstKey)?.currentTime).toBe(10);
+    expect(registry.isLive(secondKey)).toBe(true);
+    expect(elements[2].paused).toBe(false);
+
+    view.rerender(page(false)); // The root Provider remains mounted across navigation.
+    expect(elements[2].paused).toBe(true);
+    expect(registry.getRecord(firstKey)).toBeNull();
+    expect(registry.canRestart(firstKey)).toBe(false);
+    expect(registry.restartLive()).toBe(false);
+
+    view.rerender(page(true)); // Same assignment and playable keys on return.
+    expect(host.verseKey('row-1')).toBe(firstKey);
+    expect(registry.getRecord(firstKey)).toBeNull();
+    expect(registry.canRestart(firstKey)).toBe(false);
+    expect(registry.canRestart(secondKey)).toBe(false);
+    expect(host.status).toBe('idle');
   });
 });
 

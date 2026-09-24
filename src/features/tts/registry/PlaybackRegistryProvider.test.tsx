@@ -144,6 +144,26 @@ describe('PlaybackRegistryProvider', () => {
     expect(pause).toHaveBeenCalledTimes(1);
   });
 
+  it('ends a route page after pausing claimants and ignores cleanup from an older page', () => {
+    const { result } = setup();
+    const { registry } = result.current;
+    registry.setPageKey('first');
+    registry.setRecord('a', record);
+    const pause = vi.fn(() => registry.setRecord('b', record));
+    registry.claim(pause);
+    act(() => registry.endPage('first'));
+    expect(pause).toHaveBeenCalledOnce();
+    expect(registry.getRecord('a')).toBeNull();
+    expect(registry.getRecord('b')).toBeNull();
+    expect(registry.restartLive()).toBe(false);
+
+    registry.setPageKey('second');
+    act(() => registry.setRecord('b', record));
+    act(() => registry.endPage('first'));
+    expect(registry.getRecord('b')).toEqual(record);
+    expect(pause).toHaveBeenCalledOnce();
+  });
+
   it('silences the live claimant when Hide Audio flips on and retains pause records', () => {
     const { result } = setup();
     const pause = vi.fn(() => result.current.registry.setRecord('b', record));
