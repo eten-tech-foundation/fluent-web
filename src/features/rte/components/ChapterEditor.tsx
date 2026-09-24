@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useHeadingEnter } from '../hooks/useHeadingEnter';
+import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
@@ -15,6 +17,7 @@ import {
 } from '../lib/pericope-usj';
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 
+import { ActiveVerseOutline } from './ActiveVerseOutline';
 import { FormatBar } from './FormatBar';
 import { HeadingValidationMessage } from './HeadingValidationMessage';
 import { SectionHeadingDialog } from './SectionHeadingDialog';
@@ -68,6 +71,9 @@ export function ChapterEditor({
   onActiveVerseChange,
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useProtectedVerseMarkers(containerRef);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
   const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);
   const loadedKeyRef = useRef(contentKey);
@@ -163,6 +169,7 @@ export function ChapterEditor({
   );
 
   const activeVerseRef = useRef<number | undefined>(undefined);
+  const [activeVerse, setActiveVerse] = useState<number | undefined>();
   /**
    * The editor's ScriptureReferencePlugin only mounts when `scrRef` is passed alongside
    * `onScrRefChange` — a callback alone is never called. Held as state so the pair forms the
@@ -179,19 +186,27 @@ export function ChapterEditor({
 
   useEffect(() => {
     activeVerseRef.current = undefined;
+    setActiveVerse(undefined);
     cancelRestore();
     setScrRef({ book: bookCode ?? '', chapterNum: chapterNumber, verseNum: 1 });
   }, [bookCode, cancelRestore, chapterNumber, contentKey]);
 
+  const trackActiveVerse = useCallback(
+    (verseNumber: number | undefined) => {
+      if (activeVerseRef.current === verseNumber) return;
+      activeVerseRef.current = verseNumber;
+      setActiveVerse(verseNumber);
+      if (verseNumber !== undefined) onActiveVerseChange?.(verseNumber);
+    },
+    [onActiveVerseChange]
+  );
+
   const handleScrRefChange = useCallback(
     (nextRef: SerializedVerseRef) => {
       setScrRef(nextRef);
-      if (nextRef.verseNum > 0) {
-        activeVerseRef.current = nextRef.verseNum;
-        onActiveVerseChange?.(nextRef.verseNum);
-      }
+      if (nextRef.verseNum > 0) trackActiveVerse(nextRef.verseNum);
     },
-    [onActiveVerseChange]
+    [trackActiveVerse]
   );
 
   const handleStateChange = useCallback((snapshot: StateChangeSnapshot) => {
@@ -289,6 +304,7 @@ export function ChapterEditor({
   };
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
+  const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
 
   return (
     <>
@@ -300,10 +316,13 @@ export function ChapterEditor({
         />
       )}
       <div
+        ref={containerRef}
         className='chapter-editor flex h-full min-h-0 min-w-0 flex-col'
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
-        onKeyDownCapture={handleEditorKeys}
+        onKeyDownCapture={event => {
+          if (!handleHeadingEnter(event)) handleEditorKeys(event);
+        }}
         onPasteCapture={handleEditorPaste}
       >
         <div className='border-border bg-background z-10 flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-2'>
@@ -317,9 +336,9 @@ export function ChapterEditor({
             <FormatBar
               blockMarker={blockMarker}
               canAddHeading={
-                activeVerseRef.current !== undefined &&
-                (knownVersesRef.current.find(row => row.verseNumber === activeVerseRef.current)
-                  ?.markers?.headings?.length ?? 0) < 4
+                activeVerse !== undefined &&
+                (knownVersesRef.current.find(row => row.verseNumber === activeVerse)?.markers
+                  ?.headings?.length ?? 0) < 4
               }
               disabled={Boolean(headingError)}
               onFormat={handleFormat}
@@ -327,7 +346,10 @@ export function ChapterEditor({
           )}
         </div>
         <HeadingValidationMessage error={headingError} />
-        <div className='chapter-editor-surface rte-editor min-h-0 flex-1 overflow-y-auto px-6 py-4'>
+        <div
+          ref={surfaceRef}
+          className='chapter-editor-surface rte-editor relative min-h-0 flex-1 overflow-y-auto px-6 py-4'
+        >
           <Editorial
             ref={editorRef}
             defaultUsj={initialUsj}
@@ -341,6 +363,12 @@ export function ChapterEditor({
             onScrRefChange={handleScrRefChange}
             onStateChange={handleStateChange}
             onUsjChange={handleUsjChange}
+          />
+          <ActiveVerseOutline
+            contentKey={contentKey}
+            readOnly={readOnly}
+            surfaceRef={surfaceRef}
+            onActiveVerseChange={trackActiveVerse}
           />
         </div>
       </div>

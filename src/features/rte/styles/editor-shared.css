@@ -44,6 +44,33 @@
   user-select: none;
 }
 
+/* Poetry stays inside its editor column. The vendored hanging indents use viewport units and
+   only compensate them for an explicit ltr/rtl direction; our editors use dir="auto". Reset both
+   inline margins so explicit directions also work, then indent relative to the local font size.
+   Match the vendored direction selectors' specificity, including in pericope boxes. Imported
+   q3/q4 paragraphs need the same reset even though the format bar only authors q1/q2. */
+.rte-editor .text-spacing :is(.usfm_q, .usfm_q1, .usfm_q2, .usfm_q3, .usfm_q4) {
+  --para-indent: 1.5em;
+  --verse-text-start: 0px;
+  text-indent: 0;
+  margin-inline: 0;
+  margin-inline-start: var(--para-indent);
+  margin-block: 0.15em;
+  overflow-wrap: anywhere;
+}
+
+.rte-editor .text-spacing .usfm_q2 {
+  --para-indent: 3em;
+}
+
+.rte-editor .text-spacing .usfm_q3 {
+  --para-indent: 4.5em;
+}
+
+.rte-editor .text-spacing .usfm_q4 {
+  --para-indent: 6em;
+}
+
 .dark .rte-editor .editor-input {
   color: var(--color-slate-200);
 }
