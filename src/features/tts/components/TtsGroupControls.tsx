@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -144,9 +145,11 @@ export function PericopePlayer({
                 <Info aria-hidden='true' className='size-4' />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>
-              {t('recordedAudioNoticeTitle', 'Recording information')}
-            </TooltipContent>
+            <TooltipPrimitive.Portal>
+              <TooltipContent className='z-20' side='bottom'>
+                {t('recordedAudioNoticeTitle', 'Recording information')}
+              </TooltipContent>
+            </TooltipPrimitive.Portal>
           </Tooltip>
         </TooltipProvider>
       )}
