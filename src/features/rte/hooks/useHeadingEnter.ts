@@ -87,6 +87,9 @@ export function useHeadingEnter(editorRef: RefObject<EditorRef | null>, readOnly
             start: { jsonPath: `$.content[${nextIndex}].content[${verseIndex + 1}]`, offset: 0 },
           });
         } else editor.setSelection({ start });
+        // Commit the selection-only transaction before immediate typing can join it. Editorial
+        // excludes selection-tagged updates from onUsjChange, even when they also contain text.
+        editor.getSelection();
         return true;
       }
       // Malformed imported titles without a following verse must not create unsaveable body text.

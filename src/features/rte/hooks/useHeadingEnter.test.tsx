@@ -2,7 +2,7 @@ import { createRef, type RefObject } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   pericopeVersesToUsj,
@@ -15,6 +15,21 @@ import { useHeadingEnter } from './useHeadingEnter';
 import type { EditorRef, StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 
+// Enable the browser's beforeinput path before Editorial initializes in jsdom.
+const originalTargetRanges = vi.hoisted(() => {
+  const original = Object.getOwnPropertyDescriptor(InputEvent.prototype, 'getTargetRanges');
+  Object.defineProperty(InputEvent.prototype, 'getTargetRanges', {
+    configurable: true,
+    value: () => [],
+  });
+  return original;
+});
+
+afterAll(() => {
+  if (originalTargetRanges)
+    Object.defineProperty(InputEvent.prototype, 'getTargetRanges', originalTargetRanges);
+  else Reflect.deleteProperty(InputEvent.prototype, 'getTargetRanges');
+});
 const rows: PericopeVerseText[] = [
   { verseNumber: 1, text: 'First verse.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
   {
@@ -213,6 +228,37 @@ describe('Enter from a heading in the real editor', () => {
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(saved);
   });
 
+  it.each(['p', 'q2'])('saves typing immediately after leaving a heading for %s', async marker => {
+    const verses = rows.map(row =>
+      row.verseNumber === 2
+        ? { ...row, markers: { ...row.markers, paragraphs: [{ marker, offset: 0 }] } }
+        : row
+    );
+    const { editorRef, input, container, onUsjChange } = await setup(verses);
+    const prefix = 'નવું ';
+    onUsjChange.mockClear();
+    // Do not await or read the selection between these events: the selection-only update
+    // must commit before an immediate text input can join it and lose the save callback.
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+      fireEvent(
+        input,
+        new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertReplacementText',
+          data: prefix,
+        })
+      );
+    });
+    expect(container.querySelectorAll('[data-marker="p"]')[1]).toHaveTextContent(prefix.trim());
+    await waitFor(() => expect(onUsjChange).toHaveBeenCalled());
+    const saved = usjToPericopeVerses(onUsjChange.mock.lastCall![0]);
+    expect(saved[0]).toEqual(verses[0]);
+    expect(saved[1].text).toBe(prefix + verses[1].text);
+    expect(saved[1].markers?.headings).toEqual(verses[1].markers?.headings);
+    expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(saved);
+  });
   it('enters an empty verse without changing the document', async () => {
     const verses = rows.map(row => (row.verseNumber === 2 ? { ...row, text: '' } : row));
     const { editorRef, input } = await setup(verses);
@@ -235,6 +281,27 @@ describe('Enter from a heading in the real editor', () => {
     const setSelection = vi.spyOn(editorRef.current!, 'setSelection');
     fireEvent.keyDown(input, event);
     expect(setSelection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { key: 'Enter', isComposing: true },
+    { key: 'Enter', keyCode: 229, isComposing: false },
+  ])('preserves an active composition and heading on Enter: %j', async event => {
+    const { editorRef, input, container } = await setup();
+    // A keydown alone does not establish the editor's composition state. Start composition
+    // before simulating its confirmation key; this does not exercise a native OS IME.
+    fireEvent.compositionStart(input);
+    const usj = editorRef.current!.getUsj();
+    const selection = editorRef.current!.getSelection();
+    const setSelection = vi.spyOn(editorRef.current!, 'setSelection');
+    await act(async () => {
+      fireEvent.keyDown(input, event);
+    });
+    expect(setSelection).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('[data-marker="s1"]')).toHaveLength(1);
+    expect(editorRef.current!.getUsj()).toEqual(usj);
+    expect(editorRef.current!.getSelection()).toEqual(selection);
+    fireEvent.compositionEnd(input, { data: '' });
   });
 
   it('does not create unsaveable text after an orphan heading', async () => {
