@@ -67,7 +67,7 @@ export interface TtsRequest {
  * it: a media element that follows a 302 still reports the ORIGINAL URL as
  * `currentSrc`, and cross-origin resource timing hides the redirect entirely
  * unless the bucket sends `Timing-Allow-Origin` — both measured in Chrome on
- * 2026-08-20, see `self-notes .../tools/media_redirect_visibility_check.py`.
+ * 2026-08-20.
  *
  * One-directional inaccuracy, by design: an artifact compressed BETWEEN
  * `generate` and the first GET still reads `wav`, so this can under-report a
