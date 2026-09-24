@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DisplayModeToggle } from '@/components/DisplayModeToggle';
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
 import type { SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
@@ -1912,7 +1913,35 @@ describe('DraftingUI', () => {
       config.features.rtePericope = false;
     });
 
+    it('returns a saved Chapter preference to Verse for incomplete content', () => {
+      config.features.rtePericope = true;
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      render(
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue(
+        mockTargetVerses[0].content
+      );
+      expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+    });
+
     it('holds the pane open while the chapter chunk is still on the wire', async () => {
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Translated text' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
       config.features.rtePericope = true;
       useAppStore.setState({ displayMode: 'chapter' });
 
@@ -1933,6 +1962,38 @@ describe('DraftingUI', () => {
 
       expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
       expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+    });
+
+    it('uses live edits for Chapter and preserves them when clearing a verse disables it', async () => {
+      config.features.rtePericope = true;
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Local translation' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      chapterChunk.deliver();
+      const ui = () => (
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      const { rerender } = render(ui());
+      expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Chapter' })).not.toHaveAttribute('aria-disabled');
+      const edited = [complete[0], { ...complete[1], content: '' }];
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: edited }));
+      rerender(ui());
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('Local translation');
     });
   });
 });

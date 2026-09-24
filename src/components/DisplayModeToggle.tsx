@@ -1,7 +1,10 @@
 import React, { useId, useRef } from 'react';
 
+import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { useTranslation } from 'react-i18next';
 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { config } from '@/lib/config';
 import { useAppStore, type DisplayMode } from '@/store/store';
 
 /**
@@ -39,14 +42,26 @@ export const DisplayModeToggle: React.FC = () => {
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
   const setDisplayMode = useAppStore(state => state.setDisplayMode);
+  const chapterAvailable = useAppStore(
+    state =>
+      state.chapterViewAvailability?.available === true &&
+      state.chapterViewAvailability.chapterAssignmentId ===
+        state.currentProjectItem?.chapterAssignmentId
+  );
   const labelId = useId();
+  const explanationId = useId();
+  const explanation = config.features.rtePericope
+    ? t('chapterViewUnavailable', 'Chapter view is available once all verses have content.')
+    : t('chapterViewDisabled', 'Chapter view is not available in this environment.');
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Roving tabindex: the whole group is one tab stop, and Tab enters it at the checked option.
   // Falling back to the first option keeps a tab stop even if the store ever holds a mode this
   // toggle does not offer, which would otherwise strand keyboard users outside the control.
   const checkedIndex = DISPLAY_MODES.findIndex(option => option.mode === displayMode);
-  const tabStopIndex = checkedIndex === -1 ? 0 : checkedIndex;
+  const isDisabled = (index: number) =>
+    DISPLAY_MODES[index].mode === 'chapter' && !chapterAvailable;
+  const tabStopIndex = checkedIndex === -1 || isDisabled(checkedIndex) ? 0 : checkedIndex;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const step = ARROW_STEPS.get(event.key);
@@ -54,48 +69,77 @@ export const DisplayModeToggle: React.FC = () => {
       return;
     }
 
-    // Selection follows focus in a radio group, so an arrow both moves and chooses, and the ends
-    // wrap. preventDefault stops the vertical arrows from scrolling the settings dialog instead.
+    // Enabled options follow focus. The ends wrap, and preventDefault stops vertical arrows
+    // from scrolling the settings dialog.
     event.preventDefault();
     const nextIndex = (index + step + DISPLAY_MODES.length) % DISPLAY_MODES.length;
-    setDisplayMode(DISPLAY_MODES[nextIndex].mode);
+    // Disabled Chapter stays reachable so keyboard users can read its tooltip.
+    if (!isDisabled(nextIndex)) setDisplayMode(DISPLAY_MODES[nextIndex].mode);
     optionRefs.current[nextIndex]?.focus();
   };
 
   return (
-    <div className='border-primary bg-background flex w-full items-center justify-between rounded-[12px] border p-4 shadow-sm'>
-      <span className='text-foreground text-sm font-semibold' id={labelId}>
-        {t('display', 'Display')}
-      </span>
-      <div
-        aria-labelledby={labelId}
-        className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
-        role='radiogroup'
-      >
-        {DISPLAY_MODES.map((option, index) => (
-          <React.Fragment key={option.mode}>
-            {index > 0 && <div className='bg-primary h-full w-px' />}
-            <button
-              ref={element => {
-                optionRefs.current[index] = element;
-              }}
-              aria-checked={displayMode === option.mode}
-              className={`flex h-full items-center justify-center px-5 text-xs font-semibold transition-all hover:cursor-pointer ${
-                displayMode === option.mode
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-primary hover:bg-primary/10 bg-background'
-              }`}
-              role='radio'
-              tabIndex={index === tabStopIndex ? 0 : -1}
-              type='button'
-              onClick={() => setDisplayMode(option.mode)}
-              onKeyDown={event => handleKeyDown(event, index)}
-            >
-              {t(option.labelKey, option.fallback)}
-            </button>
-          </React.Fragment>
-        ))}
+    <TooltipProvider delayDuration={300}>
+      <div className='border-primary bg-background flex w-full items-center justify-between rounded-[12px] border p-4 shadow-sm'>
+        <span className='text-foreground text-sm font-semibold' id={labelId}>
+          {t('display', 'Display')}
+        </span>
+        <div
+          aria-describedby={!chapterAvailable ? explanationId : undefined}
+          aria-labelledby={labelId}
+          className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
+          role='radiogroup'
+        >
+          {DISPLAY_MODES.map((option, index) => {
+            const disabled = isDisabled(index);
+            const button = (
+              <button
+                ref={element => {
+                  optionRefs.current[index] = element;
+                }}
+                aria-checked={displayMode === option.mode}
+                aria-disabled={disabled || undefined}
+                className={`flex h-full items-center justify-center px-5 text-xs font-semibold transition-all ${
+                  disabled
+                    ? 'text-muted-foreground bg-muted cursor-not-allowed opacity-50'
+                    : displayMode === option.mode
+                      ? 'bg-primary text-primary-foreground cursor-pointer'
+                      : 'text-primary hover:bg-primary/10 bg-background cursor-pointer'
+                }`}
+                role='radio'
+                tabIndex={index === tabStopIndex ? 0 : -1}
+                type='button'
+                onClick={() => {
+                  if (!disabled) setDisplayMode(option.mode);
+                }}
+                onKeyDown={event => handleKeyDown(event, index)}
+              >
+                {t(option.labelKey, option.fallback)}
+              </button>
+            );
+            return (
+              <React.Fragment key={option.mode}>
+                {index > 0 && <div className='bg-primary h-full w-px' />}
+                {disabled ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipPortal>
+                      <TooltipContent>{explanation}</TooltipContent>
+                    </TooltipPortal>
+                  </Tooltip>
+                ) : (
+                  button
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+        {!chapterAvailable && (
+          <span className='sr-only' id={explanationId}>
+            {explanation}
+          </span>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 };

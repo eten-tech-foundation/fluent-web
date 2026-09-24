@@ -1,4 +1,13 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +20,7 @@ import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiS
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
+import { useChapterViewAvailability } from '@/features/bible/hooks/useChapterViewAvailability';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
@@ -87,9 +97,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
   const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
-  // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
-  // other views' rows level, and a chapter has no rows to keep level (#397).
-  const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
+  const setDisplayMode = useAppStore(state => state.setDisplayMode);
 
   const addVerseMutation = useAddTranslatedVerse();
   const submitChapterMutation = useSubmitChapter();
@@ -260,6 +268,17 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     readOnly,
     onSave: saveVerse,
   });
+
+  const chapterViewAvailable = useChapterViewAvailability({ projectItem, sourceVerses, verses });
+  const isChapterMode = displayMode === 'chapter' && chapterViewAvailable;
+
+  // A saved preference cannot open an incomplete chapter. Local edits remain in useDrafting
+  // when clearing a verse returns the translator to the verse surface.
+  useLayoutEffect(() => {
+    if (displayMode === 'chapter' && !chapterViewAvailable) {
+      setDisplayMode('verse');
+    }
+  }, [displayMode, chapterViewAvailable, setDisplayMode]);
 
   const verseMapping = useMemo(() => {
     const mapping: Record<number, number> = {};
