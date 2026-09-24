@@ -104,6 +104,49 @@ describe('translationLoader without in-app navigation state', () => {
     expect(useAppStore.getState().currentProjectItem).toEqual(projectItem);
   });
 
+  it('uses a selected assignment even when its ID matches a stale persisted assignment', async () => {
+    const staleItem: ProjectItem = {
+      ...projectItem,
+      projectId: 12,
+      projectName: 'Old Gujarati Project',
+      projectUnitId: 13,
+      bibleId: 14,
+      bibleName: 'IRV Gujarati',
+      bookId: 15,
+      book: 'Exodus',
+      bookCode: 'EXO',
+      chapterNumber: 1,
+    };
+    useAppStore.setState({
+      userdetail: { id: 2, email: 't@fluent.local' } as never,
+      currentProjectItem: staleItem,
+    });
+
+    const result = await translationLoader({
+      context: { queryClient },
+      location: { state: { projectItem } },
+    });
+
+    expect(requests.sort()).toEqual(['source', 'target']);
+    expect(result.projectItem).toEqual(projectItem);
+    expect(result.sourceVerses[0].text).toBe('in the beginning');
+    expect(result.targetVerses[0].content).toBe('शुरुआत में');
+    expect(useAppStore.getState().currentProjectItem).toEqual(projectItem);
+  });
+
+  it('uses the persisted assignment when a reload has no navigation state', async () => {
+    useAppStore.setState({
+      userdetail: { id: 2, email: 't@fluent.local' } as never,
+      currentProjectItem: projectItem,
+    });
+
+    const result = await translationLoader({ context: { queryClient }, location: {} });
+
+    expect(requests.sort()).toEqual(['source', 'target']);
+    expect(result.projectItem).toEqual(projectItem);
+    expect(useAppStore.getState().currentProjectItem).toEqual(projectItem);
+  });
+
   /**
    * `location.search` is typed optional, so the loader has to survive its absence rather than
    * assert it away — reading `search.t` off an absent `search` threw a TypeError before.

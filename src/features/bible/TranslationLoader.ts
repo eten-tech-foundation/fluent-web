@@ -52,17 +52,9 @@ export const translationLoader = async ({
     throw redirect({ to: '/' });
   }
   const locationStateItem = location.state?.projectItem;
-  let projectItem = currentProjectItem;
-
-  // Only use the location state if it's a different assignment than what we have in the store
-  if (
-    locationStateItem &&
-    locationStateItem.chapterAssignmentId !== currentProjectItem?.chapterAssignmentId
-  ) {
-    projectItem = locationStateItem;
-  } else if (!projectItem && locationStateItem) {
-    projectItem = locationStateItem;
-  }
+  // Explicit navigation carries the assignment just selected by the user. Persisted IDs can
+  // be reused after a database reset, so the stored item's matching ID does not make it current.
+  const projectItem = locationStateItem ?? currentProjectItem;
 
   if (!projectItem) {
     throw redirect({ to: '/' });
