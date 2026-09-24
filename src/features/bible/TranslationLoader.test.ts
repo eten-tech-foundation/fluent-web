@@ -134,6 +134,28 @@ describe('translationLoader without in-app navigation state', () => {
     expect(useAppStore.getState().currentProjectItem).toEqual(projectItem);
   });
 
+  it('keeps newer store metadata when history replays a snapshot of the same assignment', async () => {
+    const updatedItem: ProjectItem = {
+      ...projectItem,
+      isAiEnabled: true,
+      ttsLicenseStatus: 'allowed',
+      selectedRecordingKey: 'current-recording',
+    };
+    useAppStore.setState({
+      userdetail: { id: 2, email: 't@fluent.local' } as never,
+      currentProjectItem: updatedItem,
+    });
+
+    const result = await translationLoader({
+      context: { queryClient },
+      location: { state: { projectItem: { ...projectItem, isAiEnabled: false } } },
+    });
+
+    expect(requests.sort()).toEqual(['source', 'target']);
+    expect(result.projectItem).toEqual(updatedItem);
+    expect(useAppStore.getState().currentProjectItem).toEqual(updatedItem);
+  });
+
   it('uses the persisted assignment when a reload has no navigation state', async () => {
     useAppStore.setState({
       userdetail: { id: 2, email: 't@fluent.local' } as never,
