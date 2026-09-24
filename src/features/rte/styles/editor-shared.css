@@ -27,10 +27,32 @@
   color: inherit;
 }
 
-/* Verse numbers stay visible but recede: they are landmarks, not content. */
+/* Use the same theme tokens as the source column's text-base and text-slate-* utilities.
+   Keep the bundled scripture font stack from fonts.css for the text itself. */
+.rte-editor .editor-input {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-slate-800);
+}
+
+/* Verse numbers match the source column in both views, including the numeral font. Override
+   the vendored .formatted-font .verse superscript without changing scripture's sup/sub marks. */
 .rte-editor .verse {
-  color: inherit;
-  opacity: 0.65;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  font-variant-position: normal;
+  vertical-align: baseline;
+  color: var(--color-slate-900);
+  opacity: 1;
+  background: none;
   user-select: none;
+}
+
+.dark .rte-editor .editor-input {
+  color: var(--color-slate-200);
+}
+
+.dark .rte-editor .verse {
+  color: var(--color-slate-100);
 }
