@@ -10,6 +10,11 @@
  * Keyed on `.rte-editor`, which each wrapper puts on the element the editor mounts inside.
  */
 
+/* Chapter numbers use the same Inter stack as the source pane and pericope headings. */
+.rte-editor .chapter {
+  font-family: var(--font-sans);
+}
+
 /* `.editor-container` has to be in this list, not only the elements below it: the vendored
    stylesheet paints it `color: #000` for its white standalone page, and everything inside the
    editor inherits from it. Left out, the whole surface stays black text whatever the theme is,
