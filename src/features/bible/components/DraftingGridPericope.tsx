@@ -15,6 +15,7 @@ import {
   pericopeHeading,
 } from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
+import { canSetPericopeTitle, getPericopeTitle } from '@/features/bible/lib/pericope-title';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -24,6 +25,8 @@ import {
   type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+
+import { PericopeTitleInput } from './PericopeTitleInput';
 
 import '../styles/source-fonts.css';
 
@@ -36,6 +39,7 @@ const PericopeRteGroup = lazy(() =>
 );
 
 interface DraftingGridPericopeProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
   fullPericopes?: PericopeGroup[];
   contextChapters?: Map<number, PericopeContextChapter>;
   resourceBibleId?: string;
@@ -251,6 +255,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 };
 
 interface PericopeTargetGroupProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
   fullGroup?: PericopeGroup;
   contextChapters?: Map<number, PericopeContextChapter>;
   pericopes: PericopeGroup[];
@@ -303,6 +308,7 @@ const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }
  * stands in for it while the resource panel loads render the same editor (#400 review).
  */
 export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
+  handleTitleChange,
   fullGroup,
   contextChapters,
   pericopes,
@@ -354,13 +360,39 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
         side='after'
       />
     ) : undefined;
+  const hasTitle = !!pericopes[groupIndex]?.pericopeTitle?.trim();
+  const firstVerse = groupVerses[0];
+  const firstTarget = verses.find(verse => verse.verseNumber === firstVerse.verseNumber);
+  const title = getPericopeTitle(firstTarget?.markers)?.text ?? '';
+  const titleContent =
+    hasTitle && handleTitleChange ? (
+      <PericopeTitleInput
+        maxHeadingsReached={!canSetPericopeTitle(firstTarget?.markers)}
+        readOnly={readOnly}
+        value={title}
+        verseNumber={firstVerse.verseNumber}
+        onChange={handleTitleChange}
+        onFocus={() => {
+          if (!groupVerses.some(verse => verse.verseNumber === activeVerseId)) {
+            handleActiveVerseChange(firstVerse.verseNumber);
+          }
+        }}
+      />
+    ) : undefined;
+  const beforeContentWithTitle =
+    beforeContent || titleContent ? (
+      <>
+        {beforeContent}
+        {titleContent}
+      </>
+    ) : undefined;
 
   if (config.features.rtePericope) {
     return (
       <Suspense
         fallback={
           <>
-            {beforeContent}
+            {beforeContentWithTitle}
             <PericopeEditorSkeleton verseCount={groupVerses.length} />
             {afterContent}
           </>
@@ -370,7 +402,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
           activeVerseId={activeVerseId}
           afterContent={afterContent}
           aiSuggestions={aiSuggestions}
-          beforeContent={beforeContent}
+          beforeContent={beforeContentWithTitle}
           bookCode={projectItem.bookCode}
           chapterAssignmentId={projectItem.chapterAssignmentId}
           chapterNumber={projectItem.chapterNumber}
@@ -381,6 +413,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
           hasNextPericope={pericopes
             .slice(groupIndex + 1)
             .some(later => hasSourceBackedVerse(later, sourceVerses))}
+          hasTitle={hasTitle && !!handleTitleChange}
           isAiActive={isAiActive}
           isAiThresholdMet={isAiThresholdMet}
           isTranslationComplete={isTranslationComplete}
@@ -397,7 +430,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
       activeVerseId={activeVerseId}
       afterContent={afterContent}
       aiSuggestions={aiSuggestions}
-      beforeContent={beforeContent}
+      beforeContent={beforeContentWithTitle}
       globalNextUntouchedVerse={globalNextUntouchedVerse}
       groupVerses={groupVerses}
       handleActiveVerseChange={handleActiveVerseChange}
@@ -417,6 +450,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 };
 
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
+  handleTitleChange,
   fullPericopes,
   contextChapters,
   resourceBibleId,
@@ -615,6 +649,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                     handleNextClick={handleNextClick}
                     handleNextPericopeClick={handleNextPericopeClick}
                     handleTextChange={handleTextChange}
+                    handleTitleChange={handleTitleChange}
                     isAiActive={isAiActive}
                     isAiThresholdMet={isAiThresholdMet}
                     isTranslationComplete={isTranslationComplete}
