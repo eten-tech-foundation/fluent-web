@@ -99,7 +99,7 @@ Play-from-here is a run across the visible verse or pericope playables to page e
 
 ## 10. Visibility
 
-The `sourceAudio` feature gate covers recorded audio and TTS together because recorded playback's recovery path can require TTS. An unset `EN_FEATURE_SOURCE_AUDIO` follows whether fluent-ai is wired; an explicit flag value takes precedence, including the `/debug` override. **Explicit-on without fluent-ai is unsupported:** controls may appear but their TTS fallback cannot work. A Bible with a disallowed text licence can still have recorded-only playback; that is distinct from publishing the whole feature without a TTS service.
+The `sourceAudio` feature gate covers recorded audio and TTS together because recorded playback's recovery path can require TTS. It ships dark: an unset or blank `EN_FEATURE_SOURCE_AUDIO` publishes `false`, even when fluent-ai is wired. An operator must set the flag to `true` to publish the controls. The browser-local `/debug` override can still force the UI on or off for verification. **Explicit-on without fluent-ai is unsupported:** controls may appear but their TTS fallback cannot work. A Bible with a disallowed text licence can still have recorded-only playback; that is distinct from publishing the whole feature without a TTS service.
 
 Next, the per-device Hide Audio setting hides controls, silences playback, and unregisters shortcuts immediately. The setting is in `localStorage`, independent of the server's full-replacement user-settings endpoint. Every future audio surface must honor the same setting. Finally, offline disables controls that remain visible. The Hide Audio switch itself is absent when the feature gate is off.
 
