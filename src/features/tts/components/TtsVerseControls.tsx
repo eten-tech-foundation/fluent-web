@@ -1,5 +1,6 @@
 import { useId } from 'react';
 
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { Loader2, Pause, Play, PlayOff, RotateCcw, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -114,7 +115,11 @@ export function PlayableControl({
               )}
             </span>
           </TooltipTrigger>
-          <TooltipContent>{primaryHelp}</TooltipContent>
+          <TooltipPrimitive.Portal>
+            <TooltipContent className='z-20' side='bottom'>
+              {primaryHelp}
+            </TooltipContent>
+          </TooltipPrimitive.Portal>
         </Tooltip>
         {/* Restart tooltip/aria registration: hooks/useTtsKeyboardShortcuts.ts. */}
         <Tooltip>
@@ -138,11 +143,13 @@ export function PlayableControl({
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>
-            {offline
-              ? t('ttsOffline', 'Offline')
-              : `${restart} (${TTS_KEYBOARD_SHORTCUTS.restart})`}
-          </TooltipContent>
+          <TooltipPrimitive.Portal>
+            <TooltipContent className='z-20' side='bottom'>
+              {offline
+                ? t('ttsOffline', 'Offline')
+                : `${restart} (${TTS_KEYBOARD_SHORTCUTS.restart})`}
+            </TooltipContent>
+          </TooltipPrimitive.Portal>
         </Tooltip>
         {disabledReason && (
           <span className='sr-only' id={reasonId}>
