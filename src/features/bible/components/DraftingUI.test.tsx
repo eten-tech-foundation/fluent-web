@@ -494,6 +494,34 @@ describe('DraftingUI', () => {
       expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
     });
 
+    it.each([undefined, '', '   '])(
+      'shows the missing-content message for an unavailable verse (%s)',
+      async missingText => {
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, () =>
+            HttpResponse.json({
+              chapters: [
+                {
+                  number: 1,
+                  verses: [
+                    { number: 1, text: 'Available resource verse' },
+                    ...(missingText === undefined ? [] : [{ number: 2, text: missingText }]),
+                  ],
+                },
+              ],
+            })
+          )
+        );
+        const user = await openResources();
+        await selectLanguage(user, 'English');
+        await user.click(await screen.findByText('ENG — English Bible'));
+
+        expect(await screen.findByText('Available resource verse')).toBeInTheDocument();
+        expect(screen.getByText('noContentAvailable')).toBeInTheDocument();
+        expect(screen.queryByText(mockSourceVerses[1].text)).not.toBeInTheDocument();
+      }
+    );
+
     it('keeps cached Aquifer text visible after a failed refetch', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
