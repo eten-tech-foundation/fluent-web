@@ -28,6 +28,8 @@ import { useAppStore } from '@/store/store';
 
 import { PericopeTitleInput } from './PericopeTitleInput';
 
+import '../styles/source-fonts.css';
+
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
 const PericopeRteGroup = lazy(() =>
@@ -515,7 +517,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               className='grid w-full items-start py-4'
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
-              <div className='flex w-full flex-col space-y-2 px-6'>
+              <div className='source-scripture flex w-full flex-col space-y-2 px-6'>
                 <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
                   {heading}
                 </h4>
