@@ -34,6 +34,8 @@ export interface PericopeEditorProps {
   readOnly?: boolean;
   /** Reloads the editor from `verses` when this changes, e.g. on chapter navigation. */
   contentKey: string;
+  /** Heading slots held by content edited outside this surface, keyed by verse number. */
+  reservedHeadingSlots?: Record<number, number>;
   /** Called with only the verses whose text or paragraph markers changed. */
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
@@ -58,6 +60,7 @@ export function PericopeEditor({
   bookCode,
   readOnly = false,
   contentKey,
+  reservedHeadingSlots,
   onVersesChange,
   onActiveVerseChange,
 }: PericopeEditorProps) {
@@ -120,7 +123,12 @@ export function PericopeEditor({
       suppressedJsonRef.current = json;
 
       const derived = usjToPericopeVerses(usj);
-      const error = headingErrorIn(derived);
+      const error = headingErrorIn(
+        derived.map(verse => ({
+          ...verse,
+          reservedHeadingSlots: reservedHeadingSlots?.[verse.verseNumber],
+        }))
+      );
       setHeadingError(error);
       if (error) return;
       const changed = changedVerses(knownVersesRef.current, derived);
@@ -132,7 +140,7 @@ export function PericopeEditor({
       });
       onVersesChange(changed);
     },
-    [onVersesChange]
+    [onVersesChange, reservedHeadingSlots]
   );
 
   const handleScrRefChange = useCallback(

@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import {
   blockKindOf,
@@ -41,15 +42,28 @@ const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string; icon: 
 
 const HEADING_ICONS = { 1: Heading1, 2: Heading2, 3: Heading3, 4: Heading4 };
 
-/** Disabled buttons ignore pointer events, so their wrapper owns the hover tooltip. */
+/** Disabled controls still expose their explanation to pointer and keyboard users. */
 function FormatButton({ title, ...props }: ButtonProps & { title: string }) {
   return (
-    <span
-      className={props.disabled ? 'inline-flex cursor-not-allowed' : 'inline-flex'}
-      title={title}
-    >
-      <Button {...props} title={title} />
-    </span>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {props.disabled ? (
+            <span
+              aria-label={props['aria-label']}
+              className='focus-visible:ring-ring inline-flex cursor-not-allowed rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+              role='group'
+              tabIndex={0}
+            >
+              <Button {...props} />
+            </span>
+          ) : (
+            <Button {...props} />
+          )}
+        </TooltipTrigger>
+        <TooltipContent>{title}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
