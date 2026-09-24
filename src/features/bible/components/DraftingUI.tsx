@@ -13,12 +13,19 @@ import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
+import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
 import {
   type LeftTab,
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
 import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
+import {
+  canSetPericopeTitle,
+  getPericopeTitle,
+  withPericopeTitle,
+} from '@/features/bible/lib/pericope-title';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -26,6 +33,7 @@ import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
+import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -39,10 +47,11 @@ import {
 import { useAppStore } from '@/store/store';
 
 import { BibleTabList, type ResourceBibleTab, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
-import { DraftingGridPericope, PericopeTargetGroup } from './DraftingGridPericope';
+import { DraftingGridPericope } from './DraftingGridPericope';
 import { DraftingGridVerse, DraftingTargetColumn } from './DraftingGridVerse';
 import { DraftingHeader } from './DraftingHeader';
 import { DraftingResourceSidebar } from './DraftingResourceSidebar';
+import { PericopeText } from './PericopeText';
 
 const DraftingChapterView = lazy(() =>
   import('./DraftingChapterView').then(module => ({ default: module.DraftingChapterView }))
@@ -77,6 +86,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 }) => {
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
   // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
   // other views' rows level, and a chapter has no rows to keep level (#397).
   const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
@@ -103,6 +113,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
   const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
   const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
+  const bibleContentError = activeResourceBibleTab?.isError ?? false;
 
   // Which left-panel tab is showing (Resources | Checks). Persisted in the
   // editor-state blob as `activeLeftTab` (W11, §6.6).
@@ -156,6 +167,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [editorName, setPresenceWarning]);
 
   const trackAiUsageMutation = useTrackAiUsage();
+  const trackAiUsage = trackAiUsageMutation.mutate;
+
+  // Only scripture actually filled from AI can be recorded as an accepted verse draft.
+  const aiFilledVersesRef = useRef(new Set<string>());
+  const aiUsageInFlightRef = useRef(new Set<string>());
 
   const saveVerse = useCallback(
     async (verse: number, payload: SavePayload) => {
@@ -169,24 +185,41 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       // one past the end of the content. The textarea path carries no offsets and keeps its trim.
       const content = payload.markers === undefined ? payload.content.trim() : payload.content;
 
-      await addVerseMutation.mutateAsync({
-        verseData: {
-          projectUnitId: projectItem.projectUnitId,
-          content,
-          bibleTextId: sourceVerse.id,
-          assignedUserId: userdetail.id,
-          // Only when the caller derived markers (the RTE): the API overwrites stored markers
-          // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
-          ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
-        },
-      });
-
-      if (projectItem.isAiEnabled) {
-        trackAiUsageMutation.mutate({
-          bibleTextId: sourceVerse.id,
-          projectUnitId: projectItem.projectUnitId,
-          wasUsed: true,
+      try {
+        await addVerseMutation.mutateAsync({
+          verseData: {
+            projectUnitId: projectItem.projectUnitId,
+            content,
+            bibleTextId: sourceVerse.id,
+            assignedUserId: userdetail.id,
+            // Only when the caller derived markers (the RTE): the API overwrites stored markers
+            // with whatever the upsert says, and an omitted field nulls them (fluent-api#264).
+            ...(payload.markers !== undefined ? { markers: payload.markers } : {}),
+          },
         });
+      } catch (err: unknown) {
+        throw err;
+      }
+
+      const aiFillKey = `${projectItem.chapterAssignmentId}/${verse}`;
+      if (!content.trim()) {
+        aiFilledVersesRef.current.delete(aiFillKey);
+      } else if (
+        aiFilledVersesRef.current.has(aiFillKey) &&
+        !aiUsageInFlightRef.current.has(aiFillKey)
+      ) {
+        aiUsageInFlightRef.current.add(aiFillKey);
+        void trackAiUsageMutation
+          .mutateAsync({
+            bibleTextId: sourceVerse.id,
+            projectUnitId: projectItem.projectUnitId,
+            wasUsed: true,
+          })
+          .then(() => aiFilledVersesRef.current.delete(aiFillKey))
+          .catch(() => {
+            // The mutation logs the error; retain the marker so a later save can retry.
+          })
+          .finally(() => aiUsageInFlightRef.current.delete(aiFillKey));
       }
 
       // Bump on the successful auto-save event so the Repeated Word Check
@@ -197,9 +230,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [
       addVerseMutation,
       projectItem.projectUnitId,
+      projectItem.chapterAssignmentId,
       sourceVerses,
       userdetail,
-      projectItem.isAiEnabled,
       trackAiUsageMutation,
     ]
   );
@@ -237,38 +270,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [sourceVerses]);
 
   const {
-    suggestions: aiSuggestions,
-    isAiThresholdMet,
-    suggestionStatus,
-  } = useAiSuggestions(
-    projectItem.projectUnitId,
-    projectItem.bibleId,
-    projectItem.bookCode,
-    projectItem.chapterNumber,
-    verseMapping,
-    activeVerseId,
-    projectItem.isAiEnabled && isDraft
-  );
-
-  const fireToast = useAiSuggestionToast();
-
-  useEffect(() => {
-    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
-      fireToast(projectItem.targetLanguage);
-    }
-  }, [
-    isAiThresholdMet,
-    fireToast,
-    projectItem.targetLanguage,
-    projectItem.isAiEnabled,
-    isDraft,
-    readOnly,
-  ]);
-
-  const {
     pericopes,
+    fullPericopes,
     isPericopeMode,
     isPericopeLoading,
+    isPericopeError,
+    refetchPericopes,
     getPericopeStyle,
     currentPericopeGroup,
     globalNextUntouchedVerse,
@@ -289,6 +296,73 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     saveImmediately,
     handleActiveVerseChange,
     revealNextVerse,
+  });
+
+  const aiScope = useMemo(
+    () =>
+      isPericopeMode && pericopes
+        ? pericopeSuggestionScope(pericopes, activeVerseId, sourceVerses, targetVerses)
+        : undefined,
+    [isPericopeMode, pericopes, activeVerseId, sourceVerses, targetVerses]
+  );
+
+  // Remember translator-owned inputs even when they are intentionally cleared, so AI does not
+  // immediately request and refill them while the translator is still working.
+  const userTouchedVersesRef = useRef<Set<number>>(new Set());
+  const touchedTitlesRef = useRef(new Set<number>());
+  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
+  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+
+  const {
+    suggestions: aiSuggestions,
+    headingSuggestions = {},
+    isAiThresholdMet,
+    suggestionStatus,
+  } = useAiSuggestions(
+    projectItem.projectUnitId,
+    projectItem.bibleId,
+    projectItem.bookCode,
+    projectItem.chapterNumber,
+    verseMapping,
+    activeVerseId,
+    projectItem.isAiEnabled && isDraft && !readOnly,
+    {
+      pericope: aiScope,
+      canSuggest: isDraft && !readOnly && !(displayMode === 'pericope' && isPericopeLoading),
+      titledVerseNumbers: verses
+        .filter(
+          verse => Boolean(getPericopeTitle(verse.markers)) || !canSetPericopeTitle(verse.markers)
+        )
+        .map(verse => verse.verseNumber),
+      touchedTitleVerseNumbers: isAiJustEnabled ? [] : [...touchedTitlesRef.current],
+      draftedVerseNumbers: verses
+        .filter(verse => verse.content.trim())
+        .map(verse => verse.verseNumber),
+    }
+  );
+
+  const fireToast = useAiSuggestionToast();
+
+  useEffect(() => {
+    if (isAiThresholdMet && !projectItem.isAiEnabled && isDraft && !readOnly) {
+      fireToast(projectItem.targetLanguage);
+    }
+  }, [
+    isAiThresholdMet,
+    fireToast,
+    projectItem.targetLanguage,
+    projectItem.isAiEnabled,
+    isDraft,
+    readOnly,
+  ]);
+  // Pericope mode handles missing resource content inside each group, so a crossing
+  // group can still show its available neighboring chapter.
+  const showResourceBiblePlaceholder =
+    selectedPanel === 2 && !isPericopeMode && !bibleVerses.some(verse => verse.text.trim());
+  const pericopeContext = usePericopeContext({
+    projectItem,
+    pericopes: fullPericopes,
+    enabled: isPericopeMode,
   });
 
   // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
@@ -384,6 +458,23 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
+  // Reset assignment-local state without remounting and discarding pending verse saves.
+  useEffect(() => {
+    setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
+    setResourceBibleTabs([]);
+    setResourcePanelSelectedBibleId(null);
+    setCurrentResource(RESOURCE_NAMES[0]);
+    setCurrentLanguage('');
+    setShowResources(false);
+    setActiveLeftTab('resources');
+    setOccurrenceRules({});
+    isInitializedRef.current = false;
+    lastSavedStateRef.current = null;
+    userTouchedVersesRef.current.clear();
+    touchedTitlesRef.current.clear();
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  }, [projectItem.chapterAssignmentId]);
+
   // Initialize resource state from saved data
   useEffect(() => {
     if (!isFetched || isInitializedRef.current) return;
@@ -433,6 +524,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [
     isFetched,
     savedResourceState,
+    projectItem.chapterAssignmentId,
     projectItem.sourceLangCode,
     projectItem.book,
     projectItem.chapterNumber,
@@ -522,19 +614,24 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const handleSubmit = useCallback(async () => {
     if (!isTranslationComplete) return;
 
-    const savePromises = verses
-      .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
-      .map(verse =>
-        saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
-      );
+    try {
+      const savePromises = verses
+        .filter(verse => getSaveStatus(verse.verseNumber).hasUnsavedChanges)
+        .map(verse =>
+          saveImmediately(verse.verseNumber, { content: verse.content, markers: verse.markers })
+        );
 
-    await Promise.all(savePromises);
+      await Promise.all(savePromises);
 
-    await submitChapterMutation.mutateAsync({
-      chapterAssignmentId: projectItem.chapterAssignmentId,
-    });
-    clearCurrentProjectItem();
-    router.history.back();
+      await submitChapterMutation.mutateAsync({
+        chapterAssignmentId: projectItem.chapterAssignmentId,
+      });
+      clearCurrentProjectItem();
+      router.history.back();
+    } catch {
+      // Permission errors (403/401/404) are handled centrally
+      // by useBibleTarget.ts mutation onError handlers.
+    }
   }, [
     isTranslationComplete,
     verses,
@@ -546,10 +643,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router,
   ]);
 
-  // Keep track of verses that the user has manually typed in or that have been
-  // auto-populated, so we never auto-populate a verse the user is working on.
-  const userTouchedVersesRef = useRef<Set<number>>(new Set());
-
   const handleTextChangeWithTracking = useCallback(
     (verseNumber: number, text: string, markers?: VerseMarkers | null) => {
       userTouchedVersesRef.current.add(verseNumber);
@@ -558,35 +651,112 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     [handleTextChange]
   );
 
+  const handleTitleChange = useCallback(
+    (verseNumber: number, title: string) => {
+      touchedTitlesRef.current.add(verseNumber);
+      if (title.trim() && !isValidHeadingText(title)) return;
+      const target = verses.find(verse => verse.verseNumber === verseNumber);
+      if (!target || readOnly || (title.trim() && !canSetPericopeTitle(target.markers))) return;
+      handleTextChange(verseNumber, target.content, withPericopeTitle(target.markers, title));
+    },
+    [verses, readOnly, handleTextChange]
+  );
+
   useEffect(() => {
+    const justEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+    wasAiEnabledRef.current = projectItem.isAiEnabled;
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
-    // Which verses a suggestion may land in. The textarea path shows one verse at a time, so it
-    // fills the verse in focus. The pericope editor shows the whole pericope at once, so the
-    // pericope populates progressively, verse by verse, as each suggestion arrives (#314).
-    const candidateVerseNumbers =
-      config.features.rtePericope && currentPericopeGroup
-        ? currentPericopeGroup.verses.map(verse => verse.verseNumber)
-        : [activeVerseId];
+    // An explicit opt-in is a new request for every empty input. While AI stays
+    // on, clearing a verse still leaves it alone so the drafter can type.
+    if (justEnabled) {
+      verses.forEach(verse => {
+        if (!verse.content.trim()) userTouchedVersesRef.current.delete(verse.verseNumber);
+        if (!getPericopeTitle(verse.markers)) touchedTitlesRef.current.delete(verse.verseNumber);
+      });
+    }
 
-    pendingAiAutoFills({
+    // Both pericope surfaces display the whole group, independent of cursor focus.
+    const candidateVerseNumbers = currentPericopeGroup
+      ? sourceVerses
+          .filter(source =>
+            currentPericopeGroup.verses.some(
+              verse =>
+                verse.chapterNumber === projectItem.chapterNumber &&
+                verse.verseNumber === source.verseNumber
+            )
+          )
+          .map(verse => verse.verseNumber)
+      : [activeVerseId];
+
+    const fills = pendingAiAutoFills({
       candidateVerseNumbers,
       verses,
       suggestions: aiSuggestions,
       touchedVerseNumbers: userTouchedVersesRef.current,
-    }).forEach(fill => {
+    });
+    const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
+    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
+    const titleFill =
+      currentPericopeGroup?.pericopeTitle?.trim() &&
+      firstTarget &&
+      firstSource &&
+      !getPericopeTitle(firstTarget.markers) &&
+      canSetPericopeTitle(firstTarget.markers) &&
+      !touchedTitlesRef.current.has(firstTarget.verseNumber) &&
+      heading?.bibleTextId === firstSource.id &&
+      isValidHeadingText(heading.suggestedText)
+        ? {
+            verseNumber: firstTarget.verseNumber,
+            markers: withPericopeTitle(firstTarget.markers, heading.suggestedText),
+          }
+        : undefined;
+    if (titleFill) touchedTitlesRef.current.add(titleFill.verseNumber);
+
+    fills.forEach(fill => {
+      aiFilledVersesRef.current.add(`${projectItem.chapterAssignmentId}/${fill.verseNumber}`);
       userTouchedVersesRef.current.add(fill.verseNumber);
       // The verse's own markers ride along: a fill that dropped them would null the paragraph
       // structure of a verse the translator laid out and left empty (#400 review).
-      handleTextChange(fill.verseNumber, fill.text, fill.markers);
+      handleTextChange(
+        fill.verseNumber,
+        fill.text,
+        titleFill?.verseNumber === fill.verseNumber ? titleFill.markers : fill.markers
+      );
+      const source = sourceVerses.find(verse => verse.verseNumber === fill.verseNumber);
+      if (source) {
+        trackAiUsage({
+          bibleTextId: source.id,
+          projectUnitId: projectItem.projectUnitId,
+          wasUsed: false,
+        });
+      }
     });
+    if (titleFill && firstTarget && firstSource && currentPericopeGroup) {
+      if (!fills.some(fill => fill.verseNumber === titleFill.verseNumber)) {
+        handleTextChange(titleFill.verseNumber, firstTarget.content, titleFill.markers);
+      }
+      trackAiUsage({
+        bibleTextId: firstSource.id,
+        projectUnitId: projectItem.projectUnitId,
+        pericopeNumber: currentPericopeGroup.pericopeNumber,
+        wasUsed: false,
+      });
+    }
   }, [
     activeVerseId,
+    headingSuggestions,
     currentPericopeGroup,
     aiSuggestions,
     verses,
     handleTextChange,
     projectItem.isAiEnabled,
+    projectItem.projectUnitId,
+    projectItem.chapterAssignmentId,
+    projectItem.chapterNumber,
+    sourceVerses,
+    trackAiUsage,
     isDraft,
     readOnly,
   ]);
@@ -617,7 +787,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
           return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
         }
 
-        return [...currentTabs, { ...bible, verses: [], isLoading: true }];
+        return [...currentTabs, { ...bible, verses: [], isLoading: true, isError: false }];
       });
       setActiveBibleTabId(bible.id);
     },
@@ -653,6 +823,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     );
   }, []);
 
+  const handleBibleErrorChange = useCallback((bibleId: string, isError: boolean) => {
+    setResourceBibleTabs(currentTabs =>
+      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isError } : tab))
+    );
+  }, []);
+
   const toggleResources = useCallback(() => {
     setShowResources(prev => !prev);
   }, []);
@@ -679,83 +855,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const renderPanelTwoPlaceholder = useCallback(
     (middleContent: React.ReactNode, isCenter = true) => {
-      if (isPericopeMode && pericopes) {
-        return (
-          <div className='grid h-full items-start py-4' style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div className={`flex h-full justify-center px-6 ${isCenter ? 'items-center' : ''}`}>
-              <div
-                className={`bg-muted flex h-full w-full justify-center rounded-lg border-2 ${isCenter ? 'items-center' : 'pt-10'}`}
-              >
-                {middleContent}
-              </div>
-            </div>
-            <div className='flex flex-col space-y-4 px-6'>
-              {pericopes.map((group, groupIndex) => {
-                const groupVerses = sourceVerses.filter(sv =>
-                  group.verses.some(gv => gv.verseNumber === sv.verseNumber)
-                );
-                if (groupVerses.length === 0) return null;
-                const verseNumbers = groupVerses.map(gv => gv.verseNumber);
-                const minVerse = Math.min(...verseNumbers);
-                const maxVerse = Math.max(...verseNumbers);
-                const heading =
-                  minVerse === maxVerse
-                    ? `${projectItem.chapterNumber}:${minVerse}`
-                    : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
-
-                const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-                return (
-                  <div key={group.pericopeNumber} className='flex w-full flex-col space-y-2'>
-                    <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                      {heading}
-                    </h4>
-                    <div
-                      className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                        isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                      }`}
-                      onClick={e => {
-                        if (e.target === e.currentTarget) {
-                          const isGroupAlreadyActive = groupVerses.some(
-                            gv => gv.verseNumber === activeVerseId
-                          );
-                          if (!isGroupAlreadyActive) {
-                            handleActiveVerseChange(groupVerses[0].verseNumber);
-                          }
-                        }
-                      }}
-                    >
-                      <PericopeTargetGroup
-                        activeVerseId={activeVerseId}
-                        aiSuggestions={aiSuggestions}
-                        globalNextUntouchedVerse={globalNextUntouchedVerse}
-                        groupIndex={groupIndex}
-                        groupVerses={groupVerses}
-                        handleActiveVerseChange={handleActiveVerseChange}
-                        handleKeyDown={handleKeyDown}
-                        handleNextClick={handleNextClick}
-                        handleNextPericopeClick={handleNextPericopeClick}
-                        handleTextChange={handleTextChangeWithTracking}
-                        isAiActive={!!(projectItem.isAiEnabled && isDraft)}
-                        isAiThresholdMet={isAiThresholdMet ?? false}
-                        isTranslationComplete={isTranslationComplete}
-                        pericopes={pericopes}
-                        projectItem={projectItem}
-                        readOnly={readOnly}
-                        sourceVerses={sourceVerses}
-                        suggestionStatus={suggestionStatus}
-                        textareaRefs={textareaRefs}
-                        verses={verses}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
       return (
         <div
           className='grid h-full items-start py-4'
@@ -800,18 +899,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       );
     },
     [
-      isPericopeMode,
-      pericopes,
       sourceVerses,
       projectItem,
       activeVerseId,
-      globalNextUntouchedVerse,
       handleActiveVerseChange,
       handleKeyDown,
-      handleNextClick,
-      handleNextPericopeClick,
       handleTextChangeWithTracking,
-      isTranslationComplete,
       isDraft,
       readOnly,
       textareaRefs,
@@ -846,6 +939,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       <div ref={containerRef} className='flex h-full overflow-hidden'>
         {showResources && isInitializedRef.current && (
           <DraftingResourceSidebar
+            key={projectItem.chapterAssignmentId}
             activeFindingsCount={activeFindingsCount}
             activeLeftTab={effectiveActiveLeftTab}
             checksContent={
@@ -871,6 +965,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
             showChecksTab={checksEnabled}
+            onBibleErrorChange={handleBibleErrorChange}
             onBibleLoadingChange={handleBibleLoadingChange}
             onBibleSelect={handleBibleSelect}
             onBibleVersesChange={handleBibleVersesChange}
@@ -892,6 +987,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             >
               <DraftingChapterView
                 activeBibleTabId={activeBibleTabId}
+                bibleContentError={bibleContentError}
                 bibleContentLoading={bibleContentLoading}
                 bibleVerseMap={bibleVerseMap}
                 handleActiveVerseChange={handleActiveVerseChange}
@@ -941,24 +1037,43 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                   style={{ scrollbarGutter: 'stable' }}
                   onScroll={() => !readOnly && updateButtonPosition()}
                 >
-                  {selectedPanel === 2 &&
+                  {displayMode === 'pericope' && (isPericopeError || pericopeContext.isError) && (
+                    <div className='flex items-center gap-3 px-6 py-3 text-sm' role='alert'>
+                      <span>
+                        {t('pericopeContextLoadError', 'Could not load the complete pericope.')}
+                      </span>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => {
+                          if (isPericopeError) void refetchPericopes();
+                          if (pericopeContext.isError) void pericopeContext.refetch();
+                        }}
+                      >
+                        {t('retry', 'Retry')}
+                      </Button>
+                    </div>
+                  )}
+                  {isPericopeMode && pericopeContext.isLoading && (
+                    <p className='text-muted-foreground px-6 py-2 text-sm' role='status'>
+                      {t('pericopeContextLoading', 'Loading the rest of the pericope...')}
+                    </p>
+                  )}
+                  {showResourceBiblePlaceholder &&
                     bibleContentLoading &&
                     renderPanelTwoPlaceholder(
                       <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />,
                       true
                     )}
 
-                  {selectedPanel === 2 &&
+                  {showResourceBiblePlaceholder &&
                     !bibleContentLoading &&
-                    bibleVerses.length === 0 &&
                     renderPanelTwoPlaceholder(
-                      <p className='text-muted-foreground px-6 text-center text-sm'>
-                        {t('noContentAvailable')}
-                      </p>,
+                      <PericopeText className='px-6 text-center' isError={bibleContentError} />,
                       false
                     )}
 
-                  {!(selectedPanel === 2 && (bibleContentLoading || bibleVerses.length === 0)) && (
+                  {!showResourceBiblePlaceholder && (
                     <>
                       {displayMode === 'pericope' && isPericopeLoading ? (
                         <div className='flex h-full items-center justify-center py-12'>
@@ -969,18 +1084,23 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
                           bibleVerseMap={bibleVerseMap}
+                          contextChapters={pericopeContext.chapters}
+                          fullPericopes={fullPericopes}
                           globalNextUntouchedVerse={globalNextUntouchedVerse}
                           handleActiveVerseChange={handleActiveVerseChange}
                           handleKeyDown={handleKeyDown}
                           handleNextClick={handleNextClick}
                           handleNextPericopeClick={handleNextPericopeClick}
                           handleTextChange={handleTextChangeWithTracking}
+                          handleTitleChange={handleTitleChange}
                           isAiActive={!!(projectItem.isAiEnabled && isDraft)}
                           isAiThresholdMet={isAiThresholdMet ?? false}
                           isTranslationComplete={isTranslationComplete}
                           pericopes={pericopes}
                           projectItem={projectItem}
                           readOnly={readOnly}
+                          resourceBibleId={activeResourceBibleTab?.id}
+                          resourceBibleLoading={bibleContentLoading}
                           selectedPanel={selectedPanel}
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}
@@ -1022,11 +1142,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                             <TooltipTrigger asChild>
                               <Button
                                 className={`bg-primary flex items-center gap-2 px-6 py-2 font-medium shadow-lg transition-all ${
-                                  isNextButtonEnabled
+                                  isNextButtonEnabled && !roleChangeWarning
                                     ? 'hover:bg-primary-hover cursor-pointer text-white'
                                     : 'cursor-not-allowed bg-gray-300 text-gray-500'
                                 }`}
-                                disabled={!isNextButtonEnabled}
+                                disabled={!isNextButtonEnabled || roleChangeWarning}
                                 onClick={handleNextClick}
                               >
                                 {t('nextVerse', 'Next Verse')}

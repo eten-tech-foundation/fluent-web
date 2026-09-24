@@ -70,6 +70,9 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
             formatPara: (marker: string) => {
               editor.formatPara(marker);
             },
+            getSelection: () => ({ start: { jsonPath: '$.content[1].content[0]', offset: 0 } }),
+            getUsj: () => editor.usj,
+            setSelection: vi.fn(),
             undo: editor.undo,
             redo: editor.redo,
           }),
@@ -320,28 +323,52 @@ describe('ChapterEditor', () => {
       expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
     });
 
-    it('keeps names and tooltips on icon controls', () => {
+    it('keeps accessible names on contextual icon controls', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
-      for (const name of ['Paragraph', 'Poetry Line']) {
-        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+      for (const name of ['Paragraph', 'Poetry Line', 'Section Heading']) {
+        expect(screen.getByRole('button', { name })).toBeVisible();
       }
-      expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
-        'title',
-        'Section headings are not available yet'
-      );
+      expect(screen.getByRole('button', { name: 'Section Heading' })).toBeDisabled();
 
       reportBlock('q2');
       for (const name of ['Decrease indent', 'Increase indent']) {
-        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+        expect(screen.getByRole('button', { name })).toBeVisible();
       }
       expect(screen.getByRole('button', { name: 'Increase indent' })).toBeDisabled();
 
       reportBlock('s2');
       for (const level of [1, 2, 3, 4]) {
         const label = `Level ${level}`;
-        expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', label);
+        expect(screen.getByRole('button', { name: label })).toBeVisible();
       }
+    });
+
+    it('keeps invalid heading edits visible and resumes saving after correction', async () => {
+      const onVersesChange = vi.fn();
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={onVersesChange} />);
+      const document = (text: string): Usj => ({
+        type: 'USJ',
+        version: '3.1',
+        content: [
+          { type: 'para', marker: 's1', content: [text] },
+          ...pericopeVersesToUsj(A_PAIR, CHAPTER, BOOK).content,
+        ],
+      });
+      act(() => editor.commit?.(document('x'.repeat(301))));
+      expect(screen.getByRole('alert')).toHaveTextContent('300');
+      expect(onVersesChange).not.toHaveBeenCalled();
+      act(() => editor.commit?.(document('Valid title')));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        {
+          ...A_PAIR[0],
+          markers: {
+            paragraphs: [{ marker: 'p', offset: 0 }],
+            headings: [{ marker: 's1', text: 'Valid title' }],
+          },
+        },
+      ]);
     });
 
     it('applies the block the translator picks to the editor', async () => {
@@ -354,31 +381,79 @@ describe('ChapterEditor', () => {
       expect(editor.formatPara).toHaveBeenCalledWith('q1');
     });
 
-    it('does not author a section heading while the model cannot hold one', async () => {
+    it('adds a heading with its own words before the selected verse', async () => {
       const user = userEvent.setup();
-      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
-
+      const onVersesChange = vi.fn();
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={onVersesChange} />);
+      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 2 }));
       reportBlock('p');
-      const heading = screen.getByRole('button', { name: 'Section Heading' });
-      expect(heading).toBeDisabled();
-
-      await user.click(heading);
+      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+      expect(screen.getByRole('button', { name: 'Add heading' })).toBeDisabled();
+      await user.type(screen.getByRole('textbox', { name: 'Heading text' }), 'The Creation');
+      await user.click(screen.getByRole('button', { name: 'Add heading' }));
       expect(editor.formatPara).not.toHaveBeenCalled();
+      expect(documentVerses()).toEqual([
+        { ...A_PAIR[0], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+        {
+          ...A_PAIR[1],
+          markers: {
+            headings: [{ marker: 's1', text: 'The Creation' }],
+            paragraphs: [{ marker: 'p', offset: 0 }],
+          },
+        },
+      ]);
+      expect(onVersesChange).toHaveBeenLastCalledWith([documentVerses()[1]]);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('cancels heading insertion without changing scripture', async () => {
+      const user = userEvent.setup();
+      const onVersesChange = vi.fn();
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={onVersesChange} />);
+      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 1 }));
+      reportBlock('p');
+      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+      await user.type(screen.getByRole('textbox', { name: 'Heading text' }), 'Draft title');
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onVersesChange).not.toHaveBeenCalled();
+      expect(editor.setUsj).not.toHaveBeenCalled();
+    });
+
+    it('changes a heading level without applying it to the previous verse', async () => {
+      const user = userEvent.setup();
+      const onVersesChange = vi.fn();
+      const rows = [
+        { ...A_PAIR[0], markers: { headings: [{ marker: 's1', text: 'Title' }] } },
+        A_PAIR[1],
+      ];
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={rows} onVersesChange={onVersesChange} />);
+      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 1 }));
+      reportBlock('s1');
+      await user.click(screen.getByRole('button', { name: 'Level 3' }));
+      expect(editor.formatPara).not.toHaveBeenCalled();
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        {
+          ...rows[0],
+          markers: {
+            paragraphs: [{ marker: 'p', offset: 0 }],
+            headings: [{ marker: 's3', text: 'Title' }],
+          },
+        },
+      ]);
     });
 
     it('still reports a heading the cursor is already in', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
-      // Disabling authoring must not make the bar lie about where the cursor is. An imported
-      // heading still reads as one, and the other two blocks remain the way out of it.
+      // A heading owns its text. Converting it to body prose would merge its words into a verse.
       reportBlock('s1');
       expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
         'aria-pressed',
         'true'
       );
       expect(screen.queryByTestId('other-block')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Paragraph' })).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Poetry Line' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Paragraph' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Poetry Line' })).toBeDisabled();
     });
 
     it('keeps the level and indent controls with the block they belong to', () => {

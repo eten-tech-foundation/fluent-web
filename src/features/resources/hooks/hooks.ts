@@ -18,10 +18,8 @@ import {
 } from '@/features/resources/hooks/useAquiferResources';
 import {
   useYouVersionBibles,
-  useYouVersionChapterMeta,
   useYouVersionChapterText,
   type YouVersionBible,
-  type YouVersionChapterResponse,
 } from '@/features/resources/hooks/useYouVersion';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -508,36 +506,35 @@ export const useBibleResources = (
 
   const isAquifer = selectedBible?.source === 'aquifer';
 
-  const { data: aquiferBibleText, isLoading: loadingAquiferText } = useAquiferBibleText(
+  const {
+    data: aquiferBibleText,
+    isLoading: loadingAquiferText,
+    isError: aquiferTextError,
+  } = useAquiferBibleText(
     isAquifer ? selectedBible.rawId : null,
     bookCode,
     chapterNumber,
     isAquifer
   );
 
-  // YouVersion content
-  // Step 1: fetch chapter meta to get the ordered verse passage_id list.
-  // Step 2: fan out one passage fetch per verse via useYouVersionChapterText.
+  // YouVersion content — single request to the fluent-api batch endpoint.
+  // The server fans out per-verse passage fetches internally using the server-held key.
 
   const isYouVersion = selectedBible?.source === 'youversion';
-  const youVersionChapterId = chapterNumber;
 
-  const { data: yvChapterMeta, isLoading: loadingYVMeta } = useYouVersionChapterMeta(
+  const {
+    data: yvChapterText,
+    isLoading: loadingYVText,
+    isError: yvTextError,
+  } = useYouVersionChapterText(
     isYouVersion ? selectedBible.rawId : null,
     bookCode,
-    youVersionChapterId,
+    chapterNumber,
     isYouVersion
   );
 
-  const yvPassageResults = useYouVersionChapterText(
-    isYouVersion ? selectedBible.rawId : null,
-    yvChapterMeta,
-    isYouVersion && !loadingYVMeta
-  );
-
-  const loadingYVText = loadingYVMeta || yvPassageResults.some(r => r.isLoading);
-
-  const loadingBibleContent = loadingAquiferText || loadingYVText;
+  const loadingBibleContent = isAquifer ? loadingAquiferText : isYouVersion && loadingYVText;
+  const bibleContentError = isAquifer ? aquiferTextError : isYouVersion && yvTextError;
 
   // Normalise to a flat verse list
 
@@ -555,28 +552,16 @@ export const useBibleResources = (
       }));
     }
 
-    if (isYouVersion && yvChapterMeta && yvPassageResults.length > 0) {
-      const verses: BibleVerse[] = [];
-
-      yvPassageResults.forEach((result, index) => {
-        if (result.data) {
-          const verseMeta = (yvChapterMeta as YouVersionChapterResponse).verses[index];
-          const passageId = verseMeta.passage_id;
-          // passage_id format: "GEN.1.5" — verse number is the third segment
-          const verseNumber = parseInt(passageId.split('.')[2] ?? '0', 10);
-
-          if (verseNumber > 0) {
-            verses.push({ verseNumber, text: result.data.content });
-          }
-        }
-      });
-
-      // Sort ascending by verse number — fan-out results may arrive out of order
-      return verses.sort((a, b) => a.verseNumber - b.verseNumber);
+    if (isYouVersion && yvChapterText && yvChapterText.verses.length > 0) {
+      // Server returns verses ordered by verse number — no sort needed.
+      return yvChapterText.verses.map(v => ({
+        verseNumber: v.verseNumber,
+        text: v.content,
+      }));
     }
 
     return [];
-  }, [isAquifer, isYouVersion, aquiferBibleText, yvChapterMeta, yvPassageResults, chapterNumber]);
+  }, [isAquifer, isYouVersion, aquiferBibleText, yvChapterText, chapterNumber]);
 
   // Handlers
 
@@ -598,6 +583,7 @@ export const useBibleResources = (
     unifiedBibles,
     loadingBibles,
     loadingBibleContent,
+    bibleContentError,
     selectedBible,
     handleBibleChange,
     clearSelectedBible,

@@ -198,9 +198,8 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeDisabled();
   });
 
-  // Unreachable through the UI, since Source Bible is gated on Source Language and neither
-  // select can be cleared back to empty. Asserted anyway because the modal's submit guard checks
-  // it, so the enable rule has to name it or the two can drift apart.
+  // The source picker sets the Bible and its language together. Assert this incomplete state
+  // anyway because the modal's submit guard checks it too.
   it('keeps Create Project disabled without a source language', async () => {
     renderTab({ formData: { ...COMPLETE_FORM, sourceLanguage: null } });
     drop([usfmFile('gen.usfm', GEN)]);
@@ -222,6 +221,26 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeEnabled();
   });
 
+  it('does not fetch the book picker data for detected import books', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      renderTab({ formData: COMPLETE_FORM });
+      drop([usfmFile('gen.usfm', GEN)]);
+      await screen.findByTestId('detected-books');
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/bibles/search?q='),
+          expect.anything()
+        )
+      );
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/bible-books/bible/'))).toBe(
+        false
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('submits through the parent when Create Project is clicked', async () => {
     const onSubmit = vi.fn();
     renderTab({ formData: COMPLETE_FORM, onSubmit });
@@ -231,5 +250,9 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'createProject' }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+    // The files go with the submit, text included, so nothing has to be read again (#419).
+    expect(onSubmit).toHaveBeenCalledWith([
+      expect.objectContaining({ bookCode: 'GEN', usfm: GEN }),
+    ]);
   });
 });

@@ -43,7 +43,14 @@
   "formatBar": "Formatting",
   "blockParagraph": "Paragraph",
   "blockSectionHeading": "Section Heading",
-  "blockSectionHeadingUnavailable": "Section headings are not available yet",
+  "headingBeforeVerse": "Before verse {{verseNumber}}",
+  "headingText": "Heading text",
+  "addHeading": "Add heading",
+  "headingInvalidText": "Use up to 300 characters without backslashes or line breaks.",
+  "headingOwnText": "Headings keep their text separate from verses.",
+  "headingSelectVerse": "Select a verse with fewer than four headings.",
+  "headingCountError": "Keep at most four headings before a verse to save your changes.",
+  "headingTextError": "To save your changes, keep each heading within 300 characters and remove backslashes or line breaks.",
   "blockPoetryLine": "Poetry Line",
   "blockOther": "Other",
   "headingLevel": "Level",
@@ -75,5 +82,7 @@
   "noBooksInProject": "No books found in this project",
   "bookDetailsSaveFailed": "Failed to save changes",
   "close": "Close",
-  "usfmFilesValidated": "USFM file(s) validated"
+  "usfmFilesValidated": "USFM file(s) validated",
+  "pericopeSectionTitle": "Section title",
+  "pericopeTitleInvalid": "Use a single line of up to 300 characters without backslashes."
 }

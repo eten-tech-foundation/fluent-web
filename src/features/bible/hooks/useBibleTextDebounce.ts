@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { VerseMarkers, VerseParagraph } from '@/lib/types';
+import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 /**
  * What one verse save carries. `markers` undefined means the caller has no opinion (the textarea
@@ -28,12 +29,24 @@ const sameParagraphs = (left: VerseParagraph[] | null, right: VerseParagraph[] |
   );
 };
 
+const sameHeadings = (left: VerseHeading[] | null, right: VerseHeading[] | null): boolean => {
+  if (left === null || right === null) return left === right;
+  return (
+    left.length === right.length &&
+    left.every(
+      (heading, index) =>
+        heading.marker === right[index].marker && heading.text === right[index].text
+    )
+  );
+};
+
 const samePayload = (a: SavePayload | undefined, b: SavePayload | undefined): boolean => {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
   return (
     a.content === b.content &&
-    sameParagraphs(a.markers?.paragraphs ?? null, b.markers?.paragraphs ?? null)
+    sameParagraphs(a.markers?.paragraphs ?? null, b.markers?.paragraphs ?? null) &&
+    sameHeadings(a.markers?.headings ?? null, b.markers?.headings ?? null)
   );
 };
 
@@ -48,12 +61,22 @@ export const useBibleTextDebounce = ({
   debounceMs = 2000,
   retryDelayMs = 10000,
 }: UseBibleTextDebounceProps) => {
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
+
   const debounceTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const activeSaves = useRef<Map<number, Promise<void>>>(new Map());
   const retryTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const lastSavedContent = useRef<Map<number, SavePayload>>(new Map());
   const currentContent = useRef<Map<number, SavePayload>>(new Map());
   const saveSequence = useRef<Map<number, number>>(new Map());
+
+  // Helper to cancel all pending timers
+  const cancelAllTimers = useCallback(() => {
+    debounceTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    debounceTimeouts.current.clear();
+    retryTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    retryTimeouts.current.clear();
+  }, []);
 
   useEffect(() => {
     const debounceTimeoutsRef = debounceTimeouts.current;
@@ -65,9 +88,22 @@ export const useBibleTextDebounce = ({
     };
   }, []);
 
+  // Clear queued timers when roleChangeWarning becomes active
+  useEffect(() => {
+    if (roleChangeWarning) {
+      cancelAllTimers();
+    }
+  }, [roleChangeWarning, cancelAllTimers]);
+
   // Core save function that handles race conditions and retries
   const executeSave = useCallback(
     async (verseId: number, payload: SavePayload, sequenceNumber: number): Promise<void> => {
+      // Don't execute save if role warning is active
+      if (useAppStore.getState().roleChangeWarning) {
+        activeSaves.current.delete(verseId);
+        return;
+      }
+
       // Check if this is still the latest save attempt
       const currentSequence = saveSequence.current.get(verseId) ?? 0;
       if (sequenceNumber < currentSequence) {
@@ -96,25 +132,37 @@ export const useBibleTextDebounce = ({
           }
         }
       } catch (error) {
+        const errStatus = (error as { status?: number } | null | undefined)?.status;
+        const isForbidden = errStatus === 403 || errStatus === 401 || errStatus === 404;
+
+        if (isForbidden) {
+          useAppStore.getState().setRoleChangeWarning(true);
+          cancelAllTimers();
+        }
+
         // Only handle error if this is still the latest sequence
         if (sequenceNumber === (saveSequence.current.get(verseId) ?? 0)) {
           activeSaves.current.delete(verseId);
 
-          // Schedule a single retry after 10 seconds
-          const retryTimeout = setTimeout(() => {
-            retryTimeouts.current.delete(verseId);
-            const retryPayload = currentContent.current.get(verseId);
-            if (
-              retryPayload !== undefined &&
-              !samePayload(retryPayload, lastSavedContent.current.get(verseId))
-            ) {
-              const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
-              saveSequence.current.set(verseId, newSequence);
-              activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
-            }
-          }, retryDelayMs);
+          if (!isForbidden) {
+            // Schedule a single retry after 10 seconds for transient errors
+            const retryTimeout = setTimeout(() => {
+              retryTimeouts.current.delete(verseId);
+              if (useAppStore.getState().roleChangeWarning) return;
 
-          retryTimeouts.current.set(verseId, retryTimeout);
+              const retryPayload = currentContent.current.get(verseId);
+              if (
+                retryPayload !== undefined &&
+                !samePayload(retryPayload, lastSavedContent.current.get(verseId))
+              ) {
+                const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
+                saveSequence.current.set(verseId, newSequence);
+                activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
+              }
+            }, retryDelayMs);
+
+            retryTimeouts.current.set(verseId, retryTimeout);
+          }
         } else {
           // If this is an outdated sequence that failed, still clean it up
           activeSaves.current.delete(verseId);
@@ -123,11 +171,13 @@ export const useBibleTextDebounce = ({
         throw error;
       }
     },
-    [onSave, retryDelayMs]
+    [onSave, retryDelayMs, cancelAllTimers]
   );
 
   const debouncedSave = useCallback(
     (verseId: number, payload: SavePayload) => {
+      if (useAppStore.getState().roleChangeWarning) return;
+
       currentContent.current.set(verseId, payload);
 
       // Clear existing debounce timeout
@@ -150,6 +200,7 @@ export const useBibleTextDebounce = ({
         saveSequence.current.set(verseId, sequenceNumber);
 
         const savePromise = executeSave(verseId, payload, sequenceNumber);
+        savePromise.catch(() => {});
         activeSaves.current.set(verseId, savePromise);
       }, debounceMs);
 
@@ -161,6 +212,8 @@ export const useBibleTextDebounce = ({
   // Immediate save - cancels debounce and saves immediately
   const saveImmediately = useCallback(
     async (verseId: number, payload: SavePayload): Promise<void> => {
+      if (useAppStore.getState().roleChangeWarning) return;
+
       // Update current content
       currentContent.current.set(verseId, payload);
 

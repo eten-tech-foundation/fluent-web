@@ -15,6 +15,7 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const presenceWarning = useAppStore(state => state.presenceWarning);
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
   const isOnTranslationPage = location.pathname.startsWith('/translation/');
 
   const onNavigateToDashboard = () => {
@@ -83,13 +84,23 @@ const Header: React.FC = () => {
           </div>
 
           <div className='flex min-w-0 flex-1 justify-center px-4'>
-            {isOnTranslationPage && presenceWarning && (
+            {isOnTranslationPage && roleChangeWarning ? (
+              <div className='bg-destructive text-destructive-foreground flex max-w-xl min-w-0 items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium'>
+                <TriangleAlert className='h-4 w-4 shrink-0' />
+                <span className='truncate'>
+                  {t(
+                    'roleChangedError',
+                    'Your role has changed. You no longer have permission to edit this chapter.'
+                  )}
+                </span>
+              </div>
+            ) : isOnTranslationPage && presenceWarning ? (
               <div className='flex max-w-md min-w-0 items-center gap-2 rounded-lg bg-yellow-300 px-4 py-1.5 text-sm font-medium text-black'>
                 <TriangleAlert className='h-4 w-4 shrink-0' />
                 <span className='max-w-[150px] truncate'>{presenceWarning}</span>
                 <span className='shrink-0 whitespace-nowrap'>is editing this resource.</span>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className='flex shrink-0 items-center gap-2 pr-[18px]'>

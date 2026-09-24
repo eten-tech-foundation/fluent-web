@@ -4,11 +4,20 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import {
+  canSetPericopeTitle,
+  getPericopeTitle,
+  restorePericopeTitle,
+  withoutPericopeTitle,
+} from '@/features/bible/lib/pericope-title';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
+  hasTitle?: boolean;
+  beforeContent?: React.ReactNode;
+  afterContent?: React.ReactNode;
   groupVerses: Source[];
   verses: TargetVerse[];
   /** Identifies the chapter being drafted, so the editor reloads when the assignment changes. */
@@ -39,6 +48,9 @@ interface PericopeRteGroupProps {
  * (chadw-eten on #400). Enter is left to the editor as a paragraph break and advances nothing.
  */
 export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
+  hasTitle = false,
+  beforeContent,
+  afterContent,
   groupVerses,
   verses,
   chapterAssignmentId,
@@ -65,10 +77,13 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         return {
           verseNumber: source.verseNumber,
           text: target?.content ?? '',
-          markers: target?.markers ?? null,
+          markers:
+            hasTitle && source.verseNumber === groupVerses[0]?.verseNumber
+              ? withoutPericopeTitle(target?.markers)
+              : (target?.markers ?? null),
         };
       }),
-    [groupVerses, verses]
+    [groupVerses, verses, hasTitle]
   );
 
   // Reload only when the pericope's identity changes, not on every keystroke: the editor owns the
@@ -80,47 +95,74 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     [chapterAssignmentId, chapterNumber, groupVerses]
   );
 
+  const titleVerseNumber = groupVerses[0]?.verseNumber;
+  const hiddenTitle = hasTitle
+    ? getPericopeTitle(verses.find(verse => verse.verseNumber === titleVerseNumber)?.markers)
+    : undefined;
+  const reservedHeadingSlots =
+    hiddenTitle && groupVerses.length > 0 ? { [titleVerseNumber]: 1 } : undefined;
+
   const handleVersesChange = useCallback(
     (changed: PericopeVerseText[]) => {
-      changed.forEach(verse => handleTextChange(verse.verseNumber, verse.text, verse.markers));
+      changed.forEach(verse => {
+        handleTextChange(
+          verse.verseNumber,
+          verse.text,
+          hasTitle && verse.verseNumber === groupVerses[0]?.verseNumber
+            ? restorePericopeTitle(
+                verse.markers,
+                verses.find(target => target.verseNumber === verse.verseNumber)?.markers
+              )
+            : verse.markers
+        );
+      });
     },
-    [handleTextChange]
+    [handleTextChange, hasTitle, groupVerses, verses]
   );
 
-  const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
-  const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-  // The pericope-level reading of the verse button's "don't advance from an empty verse" rule:
-  // the whole pericope is on screen, so all of it has to be drafted before moving past it.
   const isPericopeDrafted = groupVerses.every(gv =>
     verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
   );
+  const hasPendingTitle =
+    !isPericopeDrafted &&
+    hasTitle &&
+    canSetPericopeTitle(
+      verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers
+    ) &&
+    !getPericopeTitle(
+      verses.find(verse => verse.verseNumber === groupVerses[0]?.verseNumber)?.markers
+    );
+  const hasPendingSuggestion =
+    hasPendingTitle ||
+    groupVerses.some(
+      verse =>
+        !aiSuggestions[verse.verseNumber] &&
+        !verses.find(target => target.verseNumber === verse.verseNumber)?.content.trim()
+    );
 
   const showNextPericopeButton =
     !readOnly && isGroupActive && !isTranslationComplete && hasNextPericope;
 
   const aiNotice =
-    !readOnly &&
-    isGroupActive &&
-    isAiActive &&
-    isAiThresholdMet &&
-    !aiSuggestions[activeVerseId] &&
-    isActiveVerseEmpty
+    !readOnly && isGroupActive && isAiActive && isAiThresholdMet && hasPendingSuggestion
       ? suggestionStatus
       : undefined;
 
   return (
     <div className='flex w-full flex-col gap-2'>
+      {beforeContent}
       <PericopeEditor
         bookCode={bookCode}
         chapterNumber={chapterNumber}
         contentKey={contentKey}
         readOnly={readOnly}
+        reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
         onActiveVerseChange={handleActiveVerseChange}
         onVersesChange={handleVersesChange}
       />
+      {afterContent}
 
       {/*
         The textarea path says this in the empty verse's placeholder. The editor holds a document

@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import {
+  isRemovableAssignmentForUser,
   useAddProjectUsers,
   useProjectUsers,
   useRemoveProjectUser,
@@ -83,6 +84,12 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
   const [removeTarget, setRemoveTarget] = useState<ProjectUser | null>(null);
   const [removeBlockedReason, setRemoveBlockedReason] = useState<string | null>(null);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{
+    userId: number;
+    roleName: string;
+    displayName: string;
+  } | null>(null);
+  const [updatingRoleUserIds, setUpdatingRoleUserIds] = useState<Set<number>>(new Set());
 
   const {
     data: projectUsers,
@@ -105,6 +112,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [projectUsers]
   );
 
+  const getActiveAssignmentCount = useCallback(
+    (userId: number) => {
+      if (!chapterAssignments) return 0;
+      return chapterAssignments.filter(a => isRemovableAssignmentForUser(a, userId).isRemovable)
+        .length;
+    },
+    [chapterAssignments]
+  );
+
   const handleRoleChange = useCallback(
     async (userId: number, roleName: string) => {
       setEditingUserId(null);
@@ -120,15 +136,57 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         );
         return;
       }
+
+      if (
+        roleName === ROLES.PROJECT_OBSERVER &&
+        getActiveAssignmentCount(userId) > 0 &&
+        targetUser
+      ) {
+        setRemoveTarget(null);
+        setRemoveBlockedReason(null);
+        setRoleChangeTarget({
+          userId,
+          roleName,
+          displayName: targetUser.displayName,
+        });
+        return;
+      }
+
+      setUpdatingRoleUserIds(prev => new Set(prev).add(userId));
       try {
         await updateRoleMutation.mutateAsync({ userId, roleName });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update user role';
         setError(message);
+      } finally {
+        setUpdatingRoleUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
       }
     },
-    [updateRoleMutation, projectUsers, projectManagerCount]
+    [updateRoleMutation, projectUsers, projectManagerCount, getActiveAssignmentCount]
   );
+
+  const handleConfirmRoleChange = useCallback(async () => {
+    if (!roleChangeTarget) return;
+    const target = roleChangeTarget;
+    setUpdatingRoleUserIds(prev => new Set(prev).add(target.userId));
+    try {
+      await updateRoleMutation.mutateAsync({ userId: target.userId, roleName: target.roleName });
+      setRoleChangeTarget(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update user role';
+      setError(message);
+    } finally {
+      setUpdatingRoleUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(target.userId);
+        return next;
+      });
+    }
+  }, [roleChangeTarget, updateRoleMutation]);
 
   const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
 
@@ -270,10 +328,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       try {
         await removeProjectUserMutation.mutateAsync({ userId });
       } catch (err: unknown) {
-        const message =
-          err instanceof Error && err.message.includes('User has content')
-            ? 'Error: User still has assigned content.'
-            : 'Error: User not removed.';
+        const message = err instanceof Error ? err.message : 'Error: User not removed.';
         setError(message);
       } finally {
         setRemovingUserIds(prev => {
@@ -286,22 +341,13 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     [removeProjectUserMutation]
   );
 
-  const getActiveAssignmentCount = useCallback(
-    (userId: number) => {
-      if (!chapterAssignments) return 0;
-      return chapterAssignments.filter(
-        a => a.assignedUser?.id === userId || a.peerChecker?.id === userId
-      ).length;
-    },
-    [chapterAssignments]
-  );
-
   const handleRequestRemove = useCallback(
     (pu: ProjectUser) => {
       setError(null);
 
       if (pu.roleName === ROLES.PROJECT_MANAGER && projectManagerCount <= 1) {
         setRemoveTarget(null);
+        setRoleChangeTarget(null);
         setRemoveBlockedReason(
           `${pu.displayName} is the only Project Manager on this project. Assign another Project Manager before removing them.`
         );
@@ -309,19 +355,16 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       }
 
       if (chapterAssignments === undefined) {
+        setError('Assignment data is still loading. Please try again in a moment.');
         return;
       }
 
-      if (getActiveAssignmentCount(pu.userId) > 0) {
-        setRemoveTarget(null);
-        setRemoveBlockedReason(`${pu.displayName} still has assigned work.`);
-        return;
-      }
-
+      // Only show the latest banner – clear role-change banner when opening remove banner
+      setRoleChangeTarget(null);
       setRemoveBlockedReason(null);
       setRemoveTarget(pu);
     },
-    [projectManagerCount, chapterAssignments, getActiveAssignmentCount]
+    [projectManagerCount, chapterAssignments]
   );
 
   const handleConfirmRemove = useCallback(async () => {
@@ -371,13 +414,22 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     return projectUsers.map(pu => {
       const isOwnRow = pu.userId === userdetail?.id;
       const isEditingThisRow = editingUserId === pu.userId;
+      const isBusy = updatingRoleUserIds.has(pu.userId) || removingUserIds.has(pu.userId);
 
       return (
-        <TableRow key={pu.userId} className='hover:bg-muted/50'>
+        <TableRow
+          key={pu.userId}
+          className={`hover:bg-muted/50 ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
+        >
           <TableCell className='text-foreground py-2.5 pl-3 text-sm'>{pu.displayName}</TableCell>
           <TableCell className='text-foreground relative py-2.5 pr-3 text-sm'>
             {isOwnRow ? (
               <span>{getDisplayRole(pu.roleName)}</span>
+            ) : updatingRoleUserIds.has(pu.userId) ? (
+              <div className='text-muted-foreground flex items-center gap-1.5 text-sm font-medium'>
+                <Loader2 className='text-primary h-3.5 w-3.5 animate-spin' />
+                <span>{getDisplayRole(pu.roleName)}</span>
+              </div>
             ) : (
               <Popover
                 open={isEditingThisRow}
@@ -427,8 +479,9 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      aria-label='Remove user from project'
                       className='h-7 w-7 p-0 hover:text-red-500'
-                      disabled={removingUserIds.has(pu.userId)}
+                      disabled={isBusy}
                       size='sm'
                       variant='ghost'
                       onClick={() => handleRequestRemove(pu)}
@@ -503,21 +556,20 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30'>
-            <span className='text-sm text-red-700 dark:text-red-400'>
-              Remove {removeTarget.displayName} from this project?
-            </span>
-            <div className='flex shrink-0 gap-2'>
+          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
+            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+              {getActiveAssignmentCount(removeTarget.userId) > 0 ? (
+                <>
+                  <span>Remove {removeTarget.displayName} from this project?</span>
+                  <span>Their chapter assignments will be removed.</span>
+                </>
+              ) : (
+                <span>Remove {removeTarget.displayName} from this project?</span>
+              )}
+            </div>
+            <div className='flex shrink-0 flex-col gap-1.5'>
               <Button
-                className='h-7 px-2.5 text-xs'
-                size='sm'
-                variant='outline'
-                onClick={() => setRemoveTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className='h-7 bg-red-500 px-2.5 text-xs text-white hover:bg-red-600'
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
                 disabled={removingUserIds.has(removeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRemove}
@@ -527,6 +579,46 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 ) : (
                   'Remove'
                 )}
+              </Button>
+              <Button
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
+                size='sm'
+                variant='outline'
+                onClick={() => setRemoveTarget(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Role-change confirmation banner */}
+        {roleChangeTarget && (
+          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
+            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+              <span>Change {roleChangeTarget.displayName}'s role to Observer?</span>
+              <span>Their chapter assignments will be removed.</span>
+            </div>
+            <div className='flex shrink-0 flex-col gap-1.5'>
+              <Button
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
+                disabled={updatingRoleUserIds.has(roleChangeTarget.userId)}
+                size='sm'
+                onClick={handleConfirmRoleChange}
+              >
+                {updatingRoleUserIds.has(roleChangeTarget.userId) ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  'Confirm'
+                )}
+              </Button>
+              <Button
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
+                size='sm'
+                variant='outline'
+                onClick={() => setRoleChangeTarget(null)}
+              >
+                Cancel
               </Button>
             </div>
           </div>

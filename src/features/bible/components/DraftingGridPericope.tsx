@@ -1,10 +1,21 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useMemo } from 'react';
 
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
+import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
+import { PericopeText } from '@/features/bible/components/PericopeText';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
+import {
+  chapterGroupSources,
+  orderedPericopeRefs,
+  pericopeHeading,
+} from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
+import { canSetPericopeTitle, getPericopeTitle } from '@/features/bible/lib/pericope-title';
 import { config } from '@/lib/config';
 import {
   type PericopeGroup,
@@ -13,6 +24,9 @@ import {
   type TargetVerse,
   type VerseMarkers,
 } from '@/lib/types';
+import { useAppStore } from '@/store/store';
+
+import { PericopeTitleInput } from './PericopeTitleInput';
 
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
@@ -23,6 +37,11 @@ const PericopeRteGroup = lazy(() =>
 );
 
 interface DraftingGridPericopeProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
+  fullPericopes?: PericopeGroup[];
+  contextChapters?: Map<number, PericopeContextChapter>;
+  resourceBibleId?: string;
+  resourceBibleLoading?: boolean;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -47,6 +66,8 @@ interface DraftingGridPericopeProps {
 }
 
 interface TargetVersesGroupProps {
+  beforeContent?: React.ReactNode;
+  afterContent?: React.ReactNode;
   groupVerses: Source[];
   verses: TargetVerse[];
   activeVerseId: number;
@@ -66,6 +87,8 @@ interface TargetVersesGroupProps {
 }
 
 export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
+  beforeContent,
+  afterContent,
   groupVerses,
   verses,
   activeVerseId,
@@ -84,6 +107,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
   const activeTargetVerse = verses.find(tv => tv.verseNumber === activeVerseId);
   const isActiveVerseEmpty = !activeTargetVerse?.content.trim();
 
@@ -109,6 +133,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
   return (
     <>
+      {beforeContent}
       {groupVerses.map(v => {
         const currentTargetVerse = verses.find(tv => tv.verseNumber === v.verseNumber);
         const isButtonRow = !readOnly && buttonVerseNumber === v.verseNumber;
@@ -171,8 +196,8 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 
                 {isButtonRow && (
                   <Button
-                    className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all'
-                    disabled={isActiveVerseEmpty}
+                    className='bg-primary hover:bg-primary-hover absolute top-1/2 right-0 z-10 flex h-6 -translate-y-1/2 cursor-not-allowed cursor-pointer items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white shadow-xs transition-all disabled:opacity-50'
+                    disabled={isActiveVerseEmpty || roleChangeWarning}
                     onClick={handleNextClick}
                   >
                     {t('nextVerse', 'Next Verse')}
@@ -211,6 +236,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
           </div>
         );
       })}
+      {afterContent}
       {showOutOfBoxButton && (
         <div className='flex justify-end pt-2'>
           <Button
@@ -227,6 +253,9 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
 };
 
 interface PericopeTargetGroupProps {
+  handleTitleChange?: (verseNumber: number, title: string) => void;
+  fullGroup?: PericopeGroup;
+  contextChapters?: Map<number, PericopeContextChapter>;
   pericopes: PericopeGroup[];
   groupIndex: number;
   sourceVerses: Source[];
@@ -277,6 +306,9 @@ const PericopeEditorSkeleton: React.FC<{ verseCount: number }> = ({ verseCount }
  * stands in for it while the resource panel loads render the same editor (#400 review).
  */
 export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
+  handleTitleChange,
+  fullGroup,
+  contextChapters,
   pericopes,
   groupIndex,
   sourceVerses,
@@ -298,12 +330,77 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   isAiActive,
   suggestionStatus,
 }) => {
+  const { t } = useTranslation();
+  const hasContext = fullGroup?.verses.some(v => v.chapterNumber !== projectItem.chapterNumber);
+  const beforeContent =
+    hasContext && fullGroup ? (
+      <>
+        <PericopeContextText
+          chapters={contextChapters}
+          currentChapter={projectItem.chapterNumber}
+          group={fullGroup}
+          side='before'
+        />
+        <p className='text-muted-foreground text-sm font-medium'>
+          {t('pericopeCurrentChapter', {
+            defaultValue: 'Chapter {{chapter}}',
+            chapter: projectItem.chapterNumber,
+          })}
+        </p>
+      </>
+    ) : undefined;
+  const afterContent =
+    hasContext && fullGroup ? (
+      <PericopeContextText
+        chapters={contextChapters}
+        currentChapter={projectItem.chapterNumber}
+        group={fullGroup}
+        side='after'
+      />
+    ) : undefined;
+  const hasTitle = !!pericopes[groupIndex]?.pericopeTitle?.trim();
+  const firstVerse = groupVerses[0];
+  const firstTarget = verses.find(verse => verse.verseNumber === firstVerse.verseNumber);
+  const title = getPericopeTitle(firstTarget?.markers)?.text ?? '';
+  const titleContent =
+    hasTitle && handleTitleChange ? (
+      <PericopeTitleInput
+        maxHeadingsReached={!canSetPericopeTitle(firstTarget?.markers)}
+        readOnly={readOnly}
+        value={title}
+        verseNumber={firstVerse.verseNumber}
+        onChange={handleTitleChange}
+        onFocus={() => {
+          if (!groupVerses.some(verse => verse.verseNumber === activeVerseId)) {
+            handleActiveVerseChange(firstVerse.verseNumber);
+          }
+        }}
+      />
+    ) : undefined;
+  const beforeContentWithTitle =
+    beforeContent || titleContent ? (
+      <>
+        {beforeContent}
+        {titleContent}
+      </>
+    ) : undefined;
+
   if (config.features.rtePericope) {
     return (
-      <Suspense fallback={<PericopeEditorSkeleton verseCount={groupVerses.length} />}>
+      <Suspense
+        fallback={
+          <>
+            {beforeContentWithTitle}
+            <PericopeEditorSkeleton verseCount={groupVerses.length} />
+            {afterContent}
+          </>
+        }
+      >
         <PericopeRteGroup
           activeVerseId={activeVerseId}
+          afterContent={afterContent}
           aiSuggestions={aiSuggestions}
+          beforeContent={beforeContentWithTitle}
           bookCode={projectItem.bookCode}
           chapterAssignmentId={projectItem.chapterAssignmentId}
           chapterNumber={projectItem.chapterNumber}
@@ -314,6 +411,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
           hasNextPericope={pericopes
             .slice(groupIndex + 1)
             .some(later => hasSourceBackedVerse(later, sourceVerses))}
+          hasTitle={hasTitle && !!handleTitleChange}
           isAiActive={isAiActive}
           isAiThresholdMet={isAiThresholdMet}
           isTranslationComplete={isTranslationComplete}
@@ -328,7 +426,9 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   return (
     <TargetVersesGroup
       activeVerseId={activeVerseId}
+      afterContent={afterContent}
       aiSuggestions={aiSuggestions}
+      beforeContent={beforeContentWithTitle}
       globalNextUntouchedVerse={globalNextUntouchedVerse}
       groupVerses={groupVerses}
       handleActiveVerseChange={handleActiveVerseChange}
@@ -348,6 +448,11 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 };
 
 export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
+  handleTitleChange,
+  fullPericopes,
+  contextChapters,
+  resourceBibleId,
+  resourceBibleLoading = false,
   pericopes,
   sourceVerses,
   verses,
@@ -371,133 +476,195 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  const displayGroups = useMemo(() => {
+    const fullGroups = new Map(fullPericopes?.map(group => [group.pericopeNumber, group]));
+    return pericopes.map((group, groupIndex) => {
+      const fullGroup = fullGroups.get(group.pericopeNumber) ?? group;
+      const refs = orderedPericopeRefs(fullGroup);
+      return {
+        group,
+        groupIndex,
+        fullGroup,
+        groupVerses: chapterGroupSources(group, sourceVerses, projectItem.chapterNumber),
+        refs,
+        chapters: [...new Set(refs.map(ref => ref.chapterNumber))],
+        heading: pericopeHeading(fullGroup),
+      };
+    });
+  }, [pericopes, fullPericopes, sourceVerses, projectItem.chapterNumber]);
 
   return (
     <>
-      {pericopes.map((group, groupIndex) => {
-        const groupVerses = sourceVerses.filter(sv =>
-          group.verses.some(gv => gv.verseNumber === sv.verseNumber)
-        );
-        if (groupVerses.length === 0) return null;
-        const verseNumbers = groupVerses.map(gv => gv.verseNumber);
-        const minVerse = Math.min(...verseNumbers);
-        const maxVerse = Math.max(...verseNumbers);
-        const heading =
-          minVerse === maxVerse
-            ? `${projectItem.chapterNumber}:${minVerse}`
-            : `${projectItem.chapterNumber}:${minVerse}-${maxVerse}`;
+      {displayGroups.map(
+        ({ group, groupIndex, fullGroup, groupVerses, refs, chapters, heading }) => {
+          if (groupVerses.length === 0) return null;
+          const showResourcePlaceholder =
+            selectedPanel === 2 &&
+            chapters.length === 1 &&
+            !refs.some(ref => bibleVerseMap.get(ref.verseNumber)?.trim());
+          const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
 
-        const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
-
-        return (
-          <div
-            key={group.pericopeNumber}
-            ref={el => {
-              groupVerses.forEach(gv => {
-                verseRefs.current[gv.verseNumber] = el;
-              });
-            }}
-            className='grid w-full items-start py-4'
-            style={{ gridTemplateColumns: '1fr 1fr' }}
-          >
-            <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
-              <div
-                className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
-                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                }`}
-                role='button'
-                tabIndex={0}
-                onClick={() => {
-                  const isGroupAlreadyActive = groupVerses.some(
-                    gv => gv.verseNumber === activeVerseId
-                  );
-                  if (!isGroupAlreadyActive) {
-                    handleActiveVerseChange(groupVerses[0].verseNumber);
-                  }
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const isGroupAlreadyActive = groupVerses.some(
-                      gv => gv.verseNumber === activeVerseId
-                    );
-                    if (!isGroupAlreadyActive) {
-                      handleActiveVerseChange(groupVerses[0].verseNumber);
+          return (
+            <div
+              key={group.pericopeNumber}
+              ref={el => {
+                groupVerses.forEach(gv => {
+                  verseRefs.current[gv.verseNumber] = el;
+                });
+              }}
+              className='grid w-full items-start py-4'
+              style={{ gridTemplateColumns: '1fr 1fr' }}
+            >
+              <div className='flex w-full flex-col space-y-2 px-6'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                {showResourcePlaceholder ? (
+                  <div className='bg-muted flex min-h-32 w-full items-center justify-center rounded-lg border-2 p-5'>
+                    {resourceBibleLoading ? (
+                      <Loader2
+                        aria-label={t('loading', 'Loading...')}
+                        className='text-muted-foreground h-6 w-6 animate-spin'
+                      />
+                    ) : (
+                      <p className='text-muted-foreground text-center text-sm'>
+                        {t('noContentAvailable', 'No content available')}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`focus-visible:ring-primary dark:bg-card w-full cursor-pointer rounded-[12px] border-2 bg-[#f0f4f9] p-5 shadow-xs transition-all focus:outline-hidden focus-visible:ring-2 ${
+                      isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                    }`}
+                    role='button'
+                    tabIndex={0}
+                    onClick={() => {
+                      const isGroupAlreadyActive = groupVerses.some(
+                        gv => gv.verseNumber === activeVerseId
+                      );
+                      if (!isGroupAlreadyActive) {
+                        handleActiveVerseChange(groupVerses[0].verseNumber);
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const isGroupAlreadyActive = groupVerses.some(
+                          gv => gv.verseNumber === activeVerseId
+                        );
+                        if (!isGroupAlreadyActive) {
+                          handleActiveVerseChange(groupVerses[0].verseNumber);
+                        }
+                      }
+                    }}
+                  >
+                    <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                      {chapters.map(chapter => {
+                        const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
+                        if (
+                          selectedPanel === 2 &&
+                          chapter !== projectItem.chapterNumber &&
+                          resourceBibleId
+                        ) {
+                          return (
+                            <PericopeReferenceVerses
+                              key={chapter}
+                              bibleId={resourceBibleId}
+                              bookCode={projectItem.bookCode}
+                              chapterNumber={chapter}
+                              showChapter={true}
+                              verses={chapterRefs}
+                            />
+                          );
+                        }
+                        const context = contextChapters?.get(chapter);
+                        const isCurrentChapter = chapter === projectItem.chapterNumber;
+                        const sources = isCurrentChapter ? sourceVerses : context?.sourceVerses;
+                        return chapterRefs.map(ref => {
+                          const content =
+                            selectedPanel === 1
+                              ? sources?.find(v => v.verseNumber === ref.verseNumber)?.text
+                              : isCurrentChapter
+                                ? bibleVerseMap.get(ref.verseNumber)
+                                : undefined;
+                          const loading =
+                            selectedPanel === 1
+                              ? !isCurrentChapter && context?.sourceIsLoading
+                              : resourceBibleLoading;
+                          const failed =
+                            selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
+                          return (
+                            <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
+                              <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                                {chapters.length > 1
+                                  ? `${chapter}:${ref.verseNumber}`
+                                  : ref.verseNumber}
+                              </span>
+                              <PericopeText
+                                className='mr-3'
+                                content={content}
+                                isError={!!failed}
+                                isLoading={!!loading}
+                              />
+                            </React.Fragment>
+                          );
+                        });
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className='flex w-full flex-col space-y-2 px-6'>
+                <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
+                  {heading}
+                </h4>
+                <div
+                  className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
+                    isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                  }`}
+                  onClick={e => {
+                    if (e.target === e.currentTarget) {
+                      const isGroupAlreadyActive = groupVerses.some(
+                        gv => gv.verseNumber === activeVerseId
+                      );
+                      if (!isGroupAlreadyActive) {
+                        handleActiveVerseChange(groupVerses[0].verseNumber);
+                      }
                     }
-                  }
-                }}
-              >
-                <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
-                  {groupVerses.map(v => {
-                    const textToRender =
-                      selectedPanel === 1
-                        ? v.text
-                        : (bibleVerseMap.get(v.verseNumber) ?? t('noContentAvailable'));
-                    return (
-                      <React.Fragment key={v.verseNumber}>
-                        <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
-                          {v.verseNumber}
-                        </span>
-                        <span
-                          className={`mr-3 ${selectedPanel === 2 && !bibleVerseMap.has(v.verseNumber) ? 'text-muted-foreground text-sm' : ''}`}
-                        >
-                          {textToRender}
-                        </span>
-                      </React.Fragment>
-                    );
-                  })}
-                </p>
+                  }}
+                >
+                  <PericopeTargetGroup
+                    activeVerseId={activeVerseId}
+                    aiSuggestions={aiSuggestions}
+                    contextChapters={contextChapters}
+                    fullGroup={fullGroup}
+                    globalNextUntouchedVerse={globalNextUntouchedVerse}
+                    groupIndex={groupIndex}
+                    groupVerses={groupVerses}
+                    handleActiveVerseChange={handleActiveVerseChange}
+                    handleKeyDown={handleKeyDown}
+                    handleNextClick={handleNextClick}
+                    handleNextPericopeClick={handleNextPericopeClick}
+                    handleTextChange={handleTextChange}
+                    handleTitleChange={handleTitleChange}
+                    isAiActive={isAiActive}
+                    isAiThresholdMet={isAiThresholdMet}
+                    isTranslationComplete={isTranslationComplete}
+                    pericopes={pericopes}
+                    projectItem={projectItem}
+                    readOnly={readOnly}
+                    sourceVerses={sourceVerses}
+                    suggestionStatus={suggestionStatus}
+                    textareaRefs={textareaRefs}
+                    verses={verses}
+                  />
+                </div>
               </div>
             </div>
-            <div className='flex w-full flex-col space-y-2 px-6'>
-              <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
-                {heading}
-              </h4>
-              <div
-                className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                  isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
-                }`}
-                onClick={e => {
-                  if (e.target === e.currentTarget) {
-                    const isGroupAlreadyActive = groupVerses.some(
-                      gv => gv.verseNumber === activeVerseId
-                    );
-                    if (!isGroupAlreadyActive) {
-                      handleActiveVerseChange(groupVerses[0].verseNumber);
-                    }
-                  }
-                }}
-              >
-                <PericopeTargetGroup
-                  activeVerseId={activeVerseId}
-                  aiSuggestions={aiSuggestions}
-                  globalNextUntouchedVerse={globalNextUntouchedVerse}
-                  groupIndex={groupIndex}
-                  groupVerses={groupVerses}
-                  handleActiveVerseChange={handleActiveVerseChange}
-                  handleKeyDown={handleKeyDown}
-                  handleNextClick={handleNextClick}
-                  handleNextPericopeClick={handleNextPericopeClick}
-                  handleTextChange={handleTextChange}
-                  isAiActive={isAiActive}
-                  isAiThresholdMet={isAiThresholdMet}
-                  isTranslationComplete={isTranslationComplete}
-                  pericopes={pericopes}
-                  projectItem={projectItem}
-                  readOnly={readOnly}
-                  sourceVerses={sourceVerses}
-                  suggestionStatus={suggestionStatus}
-                  textareaRefs={textareaRefs}
-                  verses={verses}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })}
+          );
+        }
+      )}
     </>
   );
 };

@@ -38,14 +38,19 @@ interface ProjectFormFieldsProps {
 export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
-
+  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(
+    detectedBookCodes ? null : formData.sourceBible
+  );
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =
-    languages?.map(lang => ({
-      value: lang.id.toString(),
-      label: `${lang.langName} (${lang.langCodeIso6393})`,
-    })) ?? [];
+    languages
+      ?.slice()
+      .sort((a, b) => a.langName.localeCompare(b.langName))
+      .map(lang => ({
+        value: lang.id.toString(),
+        label: `${lang.langName} (${lang.langCodeIso6393})`,
+      })) ?? [];
 
   return (
     <>
@@ -81,9 +86,12 @@ export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFields
         <SearchableSelect
           disabled={languagesLoading}
           options={languageOptions}
-          placeholder={languagesLoading ? 'Loading languages...' : 'Select Target Language'}
+          placeholder={
+            languagesLoading ? 'Loading languages...' : 'Search by language name or code'
+          }
           value={formData.targetLanguage?.toString() ?? ''}
           onChange={value => onFieldChange('targetLanguage', parseInt(value, 10))}
+          onClear={() => onFieldChange('targetLanguage', null)}
         />
       </div>
 

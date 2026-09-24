@@ -7,26 +7,14 @@ const envSchema = z.object({
   API_URL: z.string().url({
     message: 'API_URL must be a valid URL (include http:// or https://)',
   }),
-  AQUIFER_API_URL: z.string().url({
-    message: 'AQUIFER_API_URL must be a valid URL (include http:// or https://)',
-  }),
   ENVIRONMENT: z.enum(['local', 'development', 'staging', 'production'], {
     errorMap: () => ({
       message: 'ENVIRONMENT must be one of: local, development, staging, production',
     }),
   }),
   APPINSIGHTS_CONNECTION_STRING: z.string().optional(),
-  AQUIFER_API_KEY: z.string().min(1, {
-    message: 'AQUIFER_API_KEY is required',
-  }),
   BETTER_AUTH_URL: z.string().url({
     message: 'BETTER_AUTH_URL must be a valid URL',
-  }),
-  YOUVERSION_API_URL: z.string().url({
-    message: 'YOUVERSION_API_URL must be a valid URL (include http:// or https://)',
-  }),
-  YOUVERSION_API_KEY: z.string().min(1, {
-    message: 'YOUVERSION_API_KEY is required',
   }),
   // Rich text editing in the pericope view (#314). Off by default: paragraph breaks the editor
   // lets translators author cannot be persisted yet (fluent-api#263). The preprocess reads an
@@ -54,12 +42,8 @@ type Env = z.infer<typeof envSchema>;
  */
 const processEnv = {
   API_URL: import.meta.env.VITE_API_URL as string,
-  AQUIFER_API_URL: import.meta.env.VITE_AQUIFER_API_URL as string,
   ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT as string,
   APPINSIGHTS_CONNECTION_STRING: import.meta.env.VITE_APP_INSIGHTS_CONNECTION_STRING as string,
-  AQUIFER_API_KEY: import.meta.env.VITE_AQUIFER_API_KEY as string,
-  YOUVERSION_API_URL: import.meta.env.VITE_YOUVERSION_API_URL as string,
-  YOUVERSION_API_KEY: import.meta.env.VITE_YOUVERSION_API_KEY as string,
   BETTER_AUTH_URL: import.meta.env.VITE_BETTER_AUTH_URL as string,
   RTE_PERICOPE: import.meta.env.VITE_RTE_PERICOPE as string | undefined,
   USFM_IMPORT: import.meta.env.VITE_USFM_IMPORT as string | undefined,
@@ -96,10 +80,6 @@ const validatedEnv = validateEnv();
 export const config = {
   api: {
     url: validatedEnv.API_URL,
-    aquifer_url: validatedEnv.AQUIFER_API_URL,
-    youversion_url: validatedEnv.YOUVERSION_API_URL,
-    aquifer_key: validatedEnv.AQUIFER_API_KEY,
-    youversion_key: validatedEnv.YOUVERSION_API_KEY,
     auth_url: validatedEnv.BETTER_AUTH_URL,
   },
   environment: {
@@ -120,18 +100,4 @@ export const config = {
     /** The USFM import tab on the project creation dialog (#418). */
     usfmImport: validatedEnv.USFM_IMPORT === 'true',
   },
-};
-
-// Returns headers required for Aquifer API requests
-export const getApiHeaders = (): HeadersInit => {
-  return {
-    'api-key': config.api.aquifer_key,
-  };
-};
-
-// Returns headers required for YouVersion API requests
-export const getYouVersionApiHeaders = (): HeadersInit => {
-  return {
-    'x-yvp-app-key': config.api.youversion_key,
-  };
 };
