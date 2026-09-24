@@ -10,6 +10,12 @@
  * Keyed on `.rte-editor`, which each wrapper puts on the element the editor mounts inside.
  */
 
+/* Let drags over numbers followed by editable text reach the paragraph.
+   Empty or wrapped markers keep their native hit target to avoid typing in another verse. */
+.rte-editor .verse[contenteditable='false']:not(.psc-empty-text):has(+ [data-lexical-text]) {
+  pointer-events: none;
+}
+
 /* `.editor-container` has to be in this list, not only the elements below it: the vendored
    stylesheet paints it `color: #000` for its white standalone page, and everything inside the
    editor inherits from it. Left out, the whole surface stays black text whatever the theme is,
