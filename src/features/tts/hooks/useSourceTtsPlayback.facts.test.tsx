@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { recordedNoticeAckStore } from '../lib/ackStore';
 import { PlaybackRegistryProvider } from '../registry/PlaybackRegistryProvider';
 import { usePlaybackRegistry } from '../registry/usePlaybackRegistry';
 import {
@@ -180,6 +181,65 @@ describe('shared playback authority and sounding metadata', () => {
     expect(active.playCalls).toHaveLength(1);
     expect(active.paused).toBe(false);
     expect(elements).toHaveLength(1);
+  });
+
+  it.each(['blank', 'acknowledged'])(
+    'keeps adjacent %s recorded verses on one uninterrupted physical play',
+    async noticeState => {
+      vi.useFakeTimers();
+      const h = setup({
+        rows: [
+          { verseNumber: 1, verseRef: '1', chapterNumber: 3, text: 'First', langCode: 'eng' },
+          { verseNumber: 2, verseRef: '2', chapterNumber: 3, text: 'Second', langCode: 'eng' },
+        ],
+      });
+      const notice = noticeState === 'blank' ? '' : 'Already acknowledged boundary notice';
+      h.put(row('aq-20', 'unknown', notice));
+      if (notice) {
+        recordedNoticeAckStore.acknowledge({
+          textBibleKey: 'aq-1',
+          textBibleName: 'Text Bible',
+          recordingKey: 'aq-20',
+          recordingName: 'Recording',
+          recordingProvider: 'aquifer',
+          notice,
+        });
+      }
+
+      act(() => h.result.current.playFromVerse('1'));
+      await settle();
+      const active = elements[0];
+      expect(active.playCalls).toHaveLength(1);
+      expect(h.result.current.recordedNoticeDialog).toBeNull();
+      act(() => active.emit('playing'));
+      active.currentTime = 10.32;
+      await act(async () => vi.advanceTimersByTimeAsync(6_000));
+      await settle();
+
+      expect(h.result.current.activeVerseRef).toBe('2');
+      expect(active.playCalls).toHaveLength(1);
+      expect(active.pauseCalls).toBe(0);
+      expect(active.paused).toBe(false);
+      expect(h.result.current.recordedNoticeDialog).toBeNull();
+    }
+  );
+
+  it('holds a changed notice even when the same recording had an earlier acknowledgment', async () => {
+    const h = setup();
+    recordedNoticeAckStore.acknowledge({
+      textBibleKey: 'aq-1',
+      textBibleName: 'Text Bible',
+      recordingKey: 'aq-20',
+      recordingName: 'Recording',
+      recordingProvider: 'aquifer',
+      notice: 'Earlier notice',
+    });
+    h.put(row('aq-20', 'unknown', 'Changed notice'));
+
+    act(() => h.result.current.playVerse('1'));
+    await settle();
+    expect(h.result.current.recordedNoticeDialog?.notice).toBe('Changed notice');
+    expect(elements[0].playCalls).toEqual([]);
   });
 
   it('keeps retained Info held while a new run loads, then starts it on dismissal', async () => {
