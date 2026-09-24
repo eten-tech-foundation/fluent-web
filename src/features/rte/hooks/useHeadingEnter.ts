@@ -35,6 +35,7 @@ export function useHeadingEnter(editorRef: RefObject<EditorRef | null>, readOnly
         event.metaKey ||
         event.altKey ||
         event.nativeEvent.isComposing ||
+        event.nativeEvent.keyCode === 229 ||
         !(event.target instanceof HTMLElement) ||
         !event.target.closest('.editor-input')
       )

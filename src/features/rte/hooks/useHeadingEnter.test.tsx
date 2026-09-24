@@ -225,6 +225,7 @@ describe('Enter from a heading in the real editor', () => {
 
   it.each([
     { key: 'Enter', isComposing: true },
+    { key: 'Enter', keyCode: 229, isComposing: false },
     { key: 'Enter', ctrlKey: true },
     { key: 'Enter', metaKey: true },
     { key: 'Enter', altKey: true },
