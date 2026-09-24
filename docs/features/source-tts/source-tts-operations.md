@@ -11,6 +11,13 @@ which explains every variable next to its own trade-offs, and in
 [`fluent-ai/docs/features/source-tts/source-tts-capacity.md`](https://github.com/eten-tech-foundation/fluent-ai/blob/main/docs/features/source-tts/source-tts-capacity.md) for the
 RAM/length dial. A number repeated in two places drifts.
 
+## TL;DR
+
+- Confirm fluent-ai hosting, the R2 bucket and public domain, the stable hash secret, available container memory, and one worker per container before enabling speech. If there are multiple instances, arrange stable `get-audio` routing to avoid duplicate synthesis.
+- `EN_FEATURE_SOURCE_AUDIO` covers recorded and generated audio and defaults on when fluent-ai is wired; set it explicitly to `false` for a dark deploy. An explicit on setting without fluent-ai is unsupported.
+- To prove stored speech is serving, force `sourceAudio` on in `/debug`: a new TTS clip shows a blue wash, while a replay after compression should show purple for Ogg or dark purple for MP3. Listening alone cannot reveal a broken artifact store.
+- Hosting, real memory size, instance routing, and Safari/iOS first-listen behavior still need deployment verification. Recorded provider files are outside this generated-artifact check.
+
 ---
 
 ## 1. Before you start: four things that are not settled

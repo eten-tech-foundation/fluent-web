@@ -4,6 +4,13 @@
 
 **Historical review context:** This summary reflects the proposal revised after the third engineering review round (PR #356, 2026-07-28). Its playback decisions have since been superseded by the audio playback design above.
 
+## TL;DR
+
+- This is the short review map for the original source-text synthesis proposal. The [audio playback design](../audio-playback/design.md) now governs controls, recording fallback, provenance, and text-licence checks.
+- `generate` records a request without synthesizing; a cache miss at `get-audio` streams speech, then compression stores a reusable R2 artifact. fluent-ai performs that work behind fluent-api's authenticated routes.
+- Artifact identity comes from a versioned, HMAC-protected recipe. The generation-heap budget and clip ceiling bound concurrent work, while admission wait controls how long excess requests queue; current sizing belongs in the [capacity guide](https://github.com/eten-tech-foundation/fluent-ai/blob/main/docs/features/source-tts/source-tts-capacity.md).
+- The original review leaves deployment choices and Safari/iOS first-listen behavior to verify; the [operations guide](source-tts-operations.md) gives the rollout and artifact-serving checks.
+
 **Purpose:** Reviewer orientation for the original source-text synthesis proposal in Fluent. Its full synthesis design lives in [`source-tts-suggestion.md`](source-tts-suggestion.md) (decisions **T1–T26**, §§1–15; a revision-history block near the top lists what changed in response to each review round). Target-side recording is future work related to [fluent-web#84](https://github.com/eten-tech-foundation/fluent-web/issues/84).
 
 **Document location:** The proposal pair intentionally lives in **fluent-web only**, even though synthesis and audio serving are implemented in fluent-ai with fluent-api as the authenticated front door. One review surface presents the interaction and the contract that supports it; implementation later splits by repo.
