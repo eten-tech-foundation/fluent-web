@@ -228,6 +228,8 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                               <span
                                 aria-label='Audio conflict'
                                 className='inline-flex items-center'
+                                role='img'
+                                tabIndex={0}
                               >
                                 <TriangleAlert className='h-4 w-4 shrink-0 text-amber-500' />
                               </span>

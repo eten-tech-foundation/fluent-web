@@ -48,6 +48,34 @@ describe('ChapterAssignmentsTable', () => {
     expect(screen.getByLabelText('Audio conflict')).toBeInTheDocument();
   });
 
+  it('conflict indicator has role="img" and accessible name for AT users', () => {
+    const assignmentsWithConflict = [{ ...mockAssignment, hasConflict: true }];
+    renderWithProviders(
+      <ChapterAssignmentsTable
+        {...defaultProps}
+        assignments={assignmentsWithConflict}
+        isManager={true}
+      />
+    );
+
+    const indicator = screen.getByRole('img', { name: 'Audio conflict' });
+    expect(indicator).toBeInTheDocument();
+  });
+
+  it('conflict indicator is keyboard-focusable (tabIndex=0)', () => {
+    const assignmentsWithConflict = [{ ...mockAssignment, hasConflict: true }];
+    renderWithProviders(
+      <ChapterAssignmentsTable
+        {...defaultProps}
+        assignments={assignmentsWithConflict}
+        isManager={true}
+      />
+    );
+
+    const indicator = screen.getByRole('img', { name: 'Audio conflict' });
+    expect(indicator).toHaveAttribute('tabindex', '0');
+  });
+
   it('does NOT render conflict indicator icon for translator when chapter has conflict', () => {
     const assignmentsWithConflict = [{ ...mockAssignment, hasConflict: true }];
     renderWithProviders(
