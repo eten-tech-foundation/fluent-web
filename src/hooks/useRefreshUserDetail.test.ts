@@ -20,6 +20,7 @@ vi.mock('@/hooks/useUsers', () => ({
 describe('useRefreshUserDetail', () => {
   beforeEach(() => {
     useAppStore.setState({
+      roleChangeWarning: true,
       userdetail: {
         id: 1,
         email: 'test@example.com',
@@ -66,5 +67,6 @@ describe('useRefreshUserDetail', () => {
     const updatedUserdetail = useAppStore.getState().userdetail;
     expect(updatedUserdetail).not.toBeNull();
     expect(updatedUserdetail!.role).toBe(ROLES.PROJECT_TRANSLATOR);
+    expect(useAppStore.getState().roleChangeWarning).toBe(false);
   });
 });

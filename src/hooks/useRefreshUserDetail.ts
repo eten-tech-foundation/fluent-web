@@ -12,7 +12,7 @@ import { useAppStore } from '@/store/store';
  */
 export function useRefreshUserDetail() {
   const { user: authUser } = useAuth();
-  const { userdetail, setUserDetail } = useAppStore();
+  const { userdetail, setUserDetail, setRoleChangeWarning } = useAppStore();
   const { mutate: fetchUserDetails, mutateAsync: fetchUserDetailsAsync } =
     useGetUserDetailsMutation();
 
@@ -54,6 +54,10 @@ export function useRefreshUserDetail() {
       const activeGrant =
         savedGrant ?? functionalGrant ?? (orgGrants.length > 0 ? orgGrants[0] : undefined);
 
+      if (editingGrant !== undefined) {
+        setRoleChangeWarning(false);
+      }
+
       setUserDetail({
         id: freshUser.id,
         email: freshUser.email,
@@ -66,7 +70,7 @@ export function useRefreshUserDetail() {
         status: freshUser.status,
       });
     },
-    [setUserDetail, userdetail?.role]
+    [setUserDetail, setRoleChangeWarning, userdetail?.role]
   );
 
   const refresh = useCallback(() => {
