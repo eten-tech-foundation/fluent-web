@@ -1,470 +1,173 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
-import useProgressBar from '@/features/projects/hooks/useProgressBar';
-import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
-import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
-import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { useUsers } from '@/hooks/useUsers';
-import { getConnectivityProfileDisplay, getLastActivityDisplay } from '@/lib/formatters';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
-import { Logger } from '@/lib/services/logger';
-import {
-  ChapterAssignmentStatus,
-  ROLES,
-  type ChapterAssignmentProgress,
-  type ChapterAssignmentStatus as ChapterAssignmentStatusType,
-  type ChapterStatusCounts,
-  type ProjectItem,
-  type WorkflowStep,
-} from '@/lib/types';
-import { useAppStore } from '@/store/store';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { getConnectivityProfileDisplay } from '@/lib/formatters';
+import { type Book, type ChapterAssignmentProgress, type User } from '@/lib/types';
 
+import { type Milestone } from '../hooks/useMilestones';
+import { type ProjectDetails } from '../hooks/useProjectDetails';
+
+import { AddMilestoneDialog } from './AddMilestoneDialog';
 import { AssignProjectUsers } from './AssignProjectUsers';
-import { AssignUsersDialog } from './AssignUsersDialog';
-import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
+import { CardProgressBar } from './CardProgressBar';
 import { TruncatedCardText } from './TruncatedText';
+import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectDetailPageProps {
-  projectId?: number | null;
-  projectTitle: string;
-  projectSourceLanguageName: string;
-  projectTargetLanguageName: string;
-  projectSource: string;
-  projectConnectivityProfile?: string | null;
-  projectLastActivityAt?: string | null;
-  projectChapterStatusCounts: ChapterStatusCounts;
-  projectWorkflowConfig: WorkflowStep[];
-  isAddUserOpen?: boolean;
-  onBack?: () => void;
-  onExport?: () => void;
-  onEditMetadata?: () => void;
-  onAddUser?: () => void;
-  onCloseAddUser?: () => void;
+  project: ProjectDetails;
+  isManager: boolean;
+  users: User[] | undefined;
+  usersLoading: boolean;
+  isAddUserOpen: boolean;
+  onAddUser: () => void;
+  onCloseAddUser: () => void;
+  onBack: () => void;
+  milestones: Milestone[] | undefined;
+  milestonesLoading: boolean;
+  books?: Book[];
+  chapterAssignments: ChapterAssignmentProgress[] | undefined;
 }
 
-const CardProgressBar: React.FC<{
-  chapterStatusCounts: ChapterStatusCounts;
-  workflowConfig: WorkflowStep[];
-}> = ({ chapterStatusCounts, workflowConfig }) => {
-  const { legendItems, calculateProgressSegments } = useProgressBar(workflowConfig);
-  const segments = calculateProgressSegments(chapterStatusCounts);
+interface DisplayStatus {
+  label: string;
+  bg: string;
+  text: string;
+}
 
-  return (
-    <div className='space-y-2'>
-      <TooltipProvider delayDuration={100}>
-        <div className='flex h-[10px] w-full overflow-hidden rounded-full'>
-          {segments.length === 0 ? (
-            <div className='bg-primary/10 h-full w-full' />
-          ) : (
-            segments.map((segment, index) => (
-              <Tooltip key={`${segment.status}-${index}`}>
-                <TooltipTrigger asChild>
-                  <div
-                    className='h-full cursor-default hover:brightness-95'
-                    style={{
-                      width: `${segment.widthPercentage}%`,
-                      backgroundColor: segment.color,
-                    }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent
-                  className='bg-popover text-popover-foreground border-border rounded-md border px-2.5 py-1 text-xs font-semibold shadow-md'
-                  side='top'
-                >
-                  {segment.subSegments ? (
-                    <div className='space-y-0.5'>
-                      {segment.subSegments.map(sub => (
-                        <div key={sub.label}>
-                          {sub.label}: {sub.percentage}%
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    `${segment.displayName}: ${Math.round(segment.widthPercentage)}%`
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            ))
-          )}
-        </div>
-      </TooltipProvider>
-
-      <div className='grid grid-cols-2 gap-x-8 gap-y-2 pt-1'>
-        {legendItems.map(item => (
-          <div key={item.key} className='flex items-center gap-2'>
-            <div
-              className='h-4 w-4 shrink-0 rounded-none'
-              style={{ backgroundColor: item.color }}
-            />
-            <span className='text-muted-foreground text-xs'>{item.displayName}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+function getMilestoneDisplayStatus(
+  chapterStatusCounts: Record<string, number>,
+  t: (key: string) => string
+): DisplayStatus {
+  const totalChapters = Object.values(chapterStatusCounts).reduce(
+    (acc, curr) => acc + Number(curr),
+    0
   );
-};
+  const completedChapters = chapterStatusCounts.complete;
+  const percentComplete = totalChapters === 0 ? 0 : (completedChapters / totalChapters) * 100;
+
+  if (percentComplete >= 100) {
+    return {
+      label: t('milestoneStatusComplete'),
+      bg: 'var(--primary)',
+      text: 'var(--primary-foreground)',
+    };
+  }
+  if (percentComplete > 0) {
+    return {
+      label: t('milestoneStatusInProgress'),
+      bg: 'var(--warning)',
+      text: 'var(--warning-foreground)',
+    };
+  }
+  return {
+    label: t('milestoneStatusNotStarted'),
+    bg: 'var(--muted)',
+    text: 'var(--muted-foreground)',
+  };
+}
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
-  projectId,
-  projectTitle,
-  projectSourceLanguageName,
-  projectTargetLanguageName,
-  projectSource,
-  projectConnectivityProfile,
-  projectLastActivityAt,
-  projectChapterStatusCounts,
-  projectWorkflowConfig,
-  isAddUserOpen = false,
-  onBack,
-  onExport,
-  onEditMetadata,
+  project,
+  isManager,
+  users,
+  usersLoading,
+  isAddUserOpen,
   onAddUser,
   onCloseAddUser,
+  onBack,
+  milestones,
+  milestonesLoading,
+  books,
+  chapterAssignments,
 }) => {
-  const { t } = useTranslation();
-  const { userdetail } = useAppStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
-  const [selectedBook, setSelectedBook] = useState<string>('all');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDrafter, setSelectedDrafter] = useState<string>('');
-  const [selectedPeerChecker, setSelectedPeerChecker] = useState<string>('');
-  const [selectedAssignments, setSelectedAssignments] = useState<number[]>([]);
-  const [selectedAssignmentsStatuses, setSelectedAssignmentsStatuses] = useState<string[]>([]);
-  const [isRefreshingAfterAssignment, setIsRefreshingAfterAssignment] = useState(false);
-
-  const {
-    data: chapterAssignments,
-    isLoading: assignmentsLoading,
-    isFetching: assignmentsFetching,
-  } = useChapterAssignments(projectId ? projectId.toString() : '0');
-
-  const { data: books, isLoading: booksLoading } = useProjectUnitBooks(
-    projectId ? projectId.toString() : '0'
-  );
-
-  const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
-
-  const isManager = useMemo(
-    () => isProjectManager(activeGrants, projectId),
-    [activeGrants, projectId]
-  );
-
-  const { data: users, isLoading: usersLoading } = useUsers(isManager);
-
-  const { data: projectUsers, isLoading: projectUsersLoading } = useProjectUsers(projectId ?? 0, {
-    enabled: isManager && !!projectId,
-  });
-
-  const projectTranslators = useMemo(() => {
-    if (!projectUsers) return [];
-    return projectUsers.filter(
-      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedPeerChecker
-    );
-  }, [projectUsers, selectedPeerChecker]);
-
-  const availablePeerCheckers = useMemo(() => {
-    if (!projectUsers) return [];
-    return projectUsers.filter(
-      pu => pu.roleName === ROLES.PROJECT_TRANSLATOR && pu.userId.toString() !== selectedDrafter
-    );
-  }, [projectUsers, selectedDrafter]);
-
-  const getSelectedUserFullName = useCallback(
-    (userId: string) => {
-      if (!userId || !projectUsers) return '';
-      const pu = projectUsers.find(p => p.userId.toString() === userId);
-      return pu?.displayName ?? '';
-    },
-    [projectUsers]
-  );
-
-  const detailsCardRef = useRef<HTMLDivElement>(null);
-  const [detailsHeight, setDetailsHeight] = useState<number>();
-
-  useLayoutEffect(() => {
-    const updateHeight = () => {
-      if (window.innerWidth >= 1024) {
-        setDetailsHeight(undefined);
-        return;
-      }
-
-      setDetailsHeight(detailsCardRef.current?.offsetHeight);
-    };
-
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-
-    if (detailsCardRef.current) {
-      observer.observe(detailsCardRef.current);
-    }
-
-    window.addEventListener('resize', updateHeight);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateHeight);
-    };
-  }, []);
-
-  const assignChapterMutation = useAssignChapters(
-    projectId ? projectId.toString() : '0',
-    getSelectedUserFullName(selectedDrafter),
-    getSelectedUserFullName(selectedPeerChecker)
-  );
-
-  const filteredAssignments = useMemo(() => {
-    if (!chapterAssignments) return [];
-    if (!selectedBook || selectedBook === 'all') return chapterAssignments;
-
-    const selectedBookData = books?.find(book => book.bookId.toString() === selectedBook);
-    if (!selectedBookData) return chapterAssignments;
-
-    return chapterAssignments.filter(
-      assignment => assignment.bookNameEng === selectedBookData.engDisplayName
-    );
-  }, [chapterAssignments, selectedBook, books]);
-
-  const handleChapterRowClick = useCallback(
-    (assignment: ChapterAssignmentProgress) => {
-      if (!userdetail) return;
-
-      const status = assignment.status as ChapterAssignmentStatusType;
-      const isAssignedDrafter = assignment.assignedUser?.id === userdetail.id;
-      const isAssignedPeerChecker = assignment.peerChecker?.id === userdetail.id;
-
-      const canEdit =
-        (isAssignedDrafter && status === ChapterAssignmentStatus.DRAFT) ||
-        (isAssignedPeerChecker && status === ChapterAssignmentStatus.PEER_CHECK) ||
-        status === ChapterAssignmentStatus.COMMUNITY_REVIEW ||
-        status === ChapterAssignmentStatus.LINGUIST_CHECK ||
-        status === ChapterAssignmentStatus.THEOLOGICAL_CHECK ||
-        status === ChapterAssignmentStatus.CONSULTANT_CHECK;
-
-      const route = canEdit
-        ? '/translation/$bookId/$chapterNumber'
-        : '/view/$bookId/$chapterNumber';
-
-      const projectItem: ProjectItem = {
-        chapterAssignmentId: assignment.assignmentId,
-        projectId: projectId ?? 0,
-        projectName: projectTitle,
-        projectUnitId: assignment.projectUnitId,
-        bibleId: assignment.bibleId,
-        bibleName: projectSource,
-        targetLanguage: projectTargetLanguageName,
-        // ISO 639-3 code for the repeated-words check's `lang_code` (BUG #3):
-        // the progress endpoint now surfaces this so the PM path no longer
-        // sends "<unknown>".
-        targetLangCode: assignment.targetLangCode,
-        bookId: assignment.bookId,
-        book: assignment.bookNameEng,
-        chapterStatus: assignment.status,
-        chapterNumber: assignment.chapterNumber,
-        totalVerses: assignment.totalVerses,
-        completedVerses: assignment.completedVerses,
-        submittedTime: assignment.submittedTime ? assignment.submittedTime.toString() : null,
-        bookCode: assignment.bookCode,
-        sourceLangCode: assignment.sourceLangCode,
-      };
-
-      void navigate({
-        to: route,
-        params: {
-          bookId: assignment.bookId.toString(),
-          chapterNumber: assignment.chapterNumber.toString(),
-        },
-        search: { t: Date.now().toString() },
-        state: { projectItem },
-      });
-    },
-    [userdetail, projectId, projectTitle, projectSource, projectTargetLanguageName, navigate]
-  );
-
-  const handleAddBook = useCallback(() => {
-    if (selectedAssignments.length > 0) {
-      const firstSelectedAssignment = chapterAssignments?.find(
-        assignment => assignment.assignmentId === selectedAssignments[0]
-      );
-
-      const statuses =
-        chapterAssignments
-          ?.filter(assignment => selectedAssignments.includes(assignment.assignmentId))
-          .map(assignment => assignment.status) ?? [];
-
-      setSelectedAssignmentsStatuses(statuses);
-
-      if (firstSelectedAssignment) {
-        const drafterUser = projectUsers?.find(
-          pu => pu.displayName === firstSelectedAssignment.assignedUser?.displayName
-        );
-        const peerCheckerUser = projectUsers?.find(
-          pu => pu.displayName === firstSelectedAssignment.peerChecker?.displayName
-        );
-
-        setSelectedDrafter(drafterUser ? drafterUser.userId.toString() : '');
-        setSelectedPeerChecker(peerCheckerUser ? peerCheckerUser.userId.toString() : '');
-      }
-
-      setIsDialogOpen(true);
-    }
-  }, [selectedAssignments, chapterAssignments, projectUsers]);
-
-  const handleAssignUser = useCallback(async () => {
-    const drafterId = selectedDrafter === '' ? null : parseInt(selectedDrafter);
-    const peerCheckerId = selectedPeerChecker === '' ? null : parseInt(selectedPeerChecker);
-    const isUnassigning = drafterId === null && peerCheckerId === null;
-    const canProceed =
-      (drafterId !== null || isUnassigning) && selectedAssignments.length > 0 && projectId;
-
-    if (!canProceed) return;
-
-    try {
-      await assignChapterMutation.mutateAsync({
-        projectId: projectId.toString(),
-        assignments: selectedAssignments.map(id => ({
-          chapterAssignmentId: id,
-          drafterId,
-          peerCheckerId,
-        })),
-      });
-
-      setIsRefreshingAfterAssignment(true);
-      setSelectedDrafter('');
-      setSelectedPeerChecker('');
-      setSelectedAssignments([]);
-      setSelectedAssignmentsStatuses([]);
-      setIsDialogOpen(false);
-    } catch (error) {
-      Logger.logException(error, { context: 'Error Assigning/Unassigning Chapters' });
-      setIsRefreshingAfterAssignment(false);
-    }
-  }, [selectedDrafter, selectedPeerChecker, selectedAssignments, projectId, assignChapterMutation]);
-
-  const handleCheckboxChange = useCallback((assignmentId: number, checked: boolean) => {
-    setSelectedAssignments(prev => {
-      if (checked) {
-        return prev.includes(assignmentId) ? prev : [...prev, assignmentId];
-      } else {
-        return prev.filter(id => id !== assignmentId);
-      }
-    });
-  }, []);
-
-  if (isRefreshingAfterAssignment && !assignmentsFetching) {
-    setIsRefreshingAfterAssignment(false);
-  }
-
-  if (!projectId) {
-    return (
-      <div className='flex h-full items-center justify-center'>
-        <span>Project not found</span>
-      </div>
-    );
-  }
-
-  const headerTitle = `${projectTargetLanguageName} - ${projectTitle}`;
-  const isLoadingData = assignmentsLoading || assignChapterMutation.isPending;
-  const isDisabled = booksLoading || !books?.length || !chapterAssignments?.length;
+  const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
-          <>
-            {isManager && (
-              <Button
-                className='border-primary text-primary hover flex items-center gap-2 border-2'
-                disabled={isDisabled}
-                size='sm'
-                variant={'outline'}
-                onClick={onEditMetadata}
-              >
-                {t('editProjectMetadata')}
-              </Button>
-            )}
+          isManager ? (
             <Button
-              className='border-primary text-primary hover flex items-center gap-2 border-2'
-              disabled={isDisabled}
-              size='sm'
-              variant={'outline'}
-              onClick={onExport}
+              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+              onClick={() => setIsAddMilestoneOpen(true)}
             >
-              Export Project
+              <Plus className='h-4 w-4' /> {t('addMilestone')}
             </Button>
-          </>
+          ) : undefined
         }
-        title={headerTitle}
+        title={project.name}
         onBack={onBack}
       />
 
       <div className='flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row lg:gap-6'>
-        {/* Meta + Users Pane - side by side below 1024px, stacked column at 1024px+ */}
+        {/* Left Column: Meta Card & Users */}
         <div className='flex shrink-0 flex-row gap-4 lg:w-1/4 lg:flex-col lg:overflow-y-auto'>
-          {/* Project Details Card */}
-          <Card ref={detailsCardRef} className='h-fit flex-1 lg:flex-none'>
+          <Card className='h-fit flex-1 lg:flex-none'>
             <CardContent className='space-y-4 py-4'>
               <div className='grid grid-cols-2 gap-2'>
-                <label className='text-base font-bold'>Title</label>
-                <TruncatedCardText text={projectTitle} />
+                <label className='text-base font-bold'>{t('project')}</label>
+                <TruncatedCardText text={project.name} />
 
-                <label className='text-base font-bold'>Target Language</label>
+                <label className='text-base font-bold'>{t('sourceLanguage')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectTargetLanguageName}
+                  {project.sourceLanguageName}
                 </p>
 
-                <label className='text-base font-bold'>Source Language</label>
+                <label className='text-base font-bold'>{t('sourceBible')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectSourceLanguageName}
+                  {project.sourceName}
                 </p>
 
-                <label className='text-base font-bold'>Source Bible</label>
+                <label className='text-base font-bold'>{t('targetLanguage')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {projectSource}
+                  {project.targetLanguageName}
+                </p>
+                <label className='text-base font-bold'>{t('connectivityProfile')}</label>
+                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
+                  {getConnectivityProfileDisplay(project.metadata.connectivityProfile)}
                 </p>
 
-                <label className='text-base font-bold'>Connectivity Profile</label>
+                <label className='text-base font-bold'>{t('milestones')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {getConnectivityProfileDisplay(projectConnectivityProfile)}
-                </p>
-
-                <label className='text-base font-bold'>Last Activity</label>
-                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {getLastActivityDisplay(projectLastActivityAt)}
+                  {milestones?.length ?? 0}
                 </p>
               </div>
-              <CardProgressBar
-                chapterStatusCounts={projectChapterStatusCounts}
-                workflowConfig={projectWorkflowConfig}
-              />
+
+              <div>
+                <label className='text-base font-bold'>{t('projectProgress')}</label>
+                <div className='mt-2'>
+                  <CardProgressBar
+                    chapterStatusCounts={project.chapterStatusCounts}
+                    workflowConfig={project.workflowConfig}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Project Users Section - Managers only */}
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
                 chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
-                projectId={projectId}
-                referenceHeight={detailsHeight}
+                projectId={project.id}
+                referenceHeight={undefined}
                 users={users}
                 usersLoading={usersLoading}
                 onAddUser={onAddUser}
@@ -474,73 +177,126 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           )}
         </div>
 
-        {/* Table Section */}
+        {/* Right Column: Milestones Table */}
         <div className='flex min-h-0 w-full flex-1 flex-col lg:w-3/4 lg:grow'>
-          <div className='shrink-0 pb-4 pl-[3px]'>
-            <div className='flex items-center gap-3'>
-              <Select value={selectedBook} onValueChange={setSelectedBook}>
-                <SelectTrigger className='my-0.5 w-[200px] lg:w-[250px]'>
-                  <SelectValue placeholder={booksLoading ? 'Loading books...' : 'Book'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>Books</SelectItem>
-                  {books?.map(book => (
-                    <SelectItem key={book.bookId} value={book.bookId.toString()}>
-                      {book.engDisplayName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {isManager && (
-                <Button
-                  className='flex items-center gap-2'
-                  disabled={
-                    selectedAssignments.length === 0 ||
-                    booksLoading ||
-                    isLoadingData ||
-                    (projectUsers?.filter(pu => pu.roleName === ROLES.PROJECT_TRANSLATOR).length ??
-                      0) < 2
-                  }
-                  size='sm'
-                  onClick={handleAddBook}
-                >
-                  {assignChapterMutation.isPending && (
-                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                  )}
-                  Assign
-                </Button>
-              )}
-            </div>
+          <div className='flex shrink-0 items-center justify-between pb-4'>
+            <h2 className='text-xl font-bold'>{t('milestones')}</h2>
           </div>
 
-          <ChapterAssignmentsTable
-            assignments={filteredAssignments}
-            isLoading={assignmentsLoading}
-            isManager={isManager}
-            isRowActionsDisabled={isLoadingData}
-            selectedAssignments={selectedAssignments}
-            selectedBook={selectedBook}
-            onCheckboxChange={handleCheckboxChange}
-            onRowClick={handleChapterRowClick}
-          />
+          <div className='flex-1 overflow-hidden rounded-lg border shadow'>
+            {milestonesLoading ? (
+              <div className='flex h-full items-center justify-center gap-2'>
+                <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
+                <span className='text-gray-500'>{t('loadingMilestones')}</span>
+              </div>
+            ) : milestones?.length === 0 ? (
+              <div className='flex h-full items-center justify-center'>
+                <span className='text-gray-500'>{t('noMilestonesFound')}</span>
+              </div>
+            ) : (
+              <div className='flex h-full flex-col overflow-y-auto'>
+                <Table className='table-fixed'>
+                  <TableHeader className='sticky top-0 z-10'>
+                    <TableRow>
+                      <TableHead className='w-[35%] px-6 py-3 text-left text-sm font-semibold'>
+                        {t('milestoneColumnMilestone')}
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        {t('milestoneColumnScope')}
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        {t('milestoneColumnProgress')}
+                      </TableHead>
+                      <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
+                        {t('milestoneColumnStatus')}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className='divide-border divide-y'>
+                    {milestones?.map(milestone => {
+                      const totalChapters = Object.values(milestone.chapterStatusCounts).reduce(
+                        (acc, curr) => acc + Number(curr),
+                        0
+                      );
+                      const displayStatus = getMilestoneDisplayStatus(
+                        milestone.chapterStatusCounts,
+                        t
+                      );
+
+                      return (
+                        <TableRow
+                          key={milestone.id}
+                          className='cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
+                          onClick={() =>
+                            navigate({
+                              to: '/projects/$projectId/milestones/$milestoneId',
+                              params: {
+                                projectId: project.id.toString(),
+                                milestoneId: milestone.id.toString(),
+                              },
+                            })
+                          }
+                        >
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            <div className='flex flex-col gap-1'>
+                              <span className='text-foreground font-medium'>{milestone.name}</span>
+                              {milestone.bookIds.length > 0 && books && (
+                                <span className='text-xs text-gray-500'>
+                                  {(() => {
+                                    const bookNames = milestone.bookIds
+                                      .map(id => {
+                                        const b = books.find(bk => bk.bookId === id);
+                                        return b ? b.engDisplayName : undefined;
+                                      })
+                                      .filter((name): name is string => Boolean(name));
+                                    if (bookNames.length <= 4) return bookNames.join(', ');
+                                    return `${bookNames.slice(0, 4).join(', ')} ...`;
+                                  })()}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            {t('milestoneScopeSummary', {
+                              bookCount: milestone.bookCount,
+                              chapterCount: totalChapters,
+                            })}
+                          </TableCell>
+                          <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
+                            <CardProgressBar
+                              chapterStatusCounts={milestone.chapterStatusCounts}
+                              variant='mini'
+                              workflowConfig={project.workflowConfig}
+                            />
+                          </TableCell>
+                          <TableCell className='px-6 py-4'>
+                            <span
+                              className='inline-block rounded-full px-2 py-1 text-[10px] font-semibold capitalize'
+                              style={{
+                                backgroundColor: displayStatus.bg,
+                                color: displayStatus.text,
+                                border: '1px solid var(--border)',
+                              }}
+                            >
+                              {displayStatus.label}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <AssignUsersDialog
-        allProjectUsers={projectUsers ?? []}
-        availablePeerCheckers={availablePeerCheckers}
-        isAssigning={assignChapterMutation.isPending}
-        isOpen={isDialogOpen}
-        projectUsers={projectTranslators}
-        selectedAssignmentsStatuses={selectedAssignmentsStatuses}
-        selectedDrafter={selectedDrafter}
-        selectedPeerChecker={selectedPeerChecker}
-        usersLoading={projectUsersLoading}
-        onAssign={handleAssignUser}
-        onClose={() => setIsDialogOpen(false)}
-        onDrafterChange={setSelectedDrafter}
-        onPeerCheckerChange={setSelectedPeerChecker}
+      <AddMilestoneDialog
+        isOpen={isAddMilestoneOpen}
+        projectId={project.id}
+        sourceBible={project.sourceBibleId}
+        onClose={() => setIsAddMilestoneOpen(false)}
       />
     </div>
   );

@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { config } from '@/lib/config';
 import { type Book } from '@/lib/types';
 
-const fetchProjectUnitBooks = async (projectUnitId: string): Promise<Book[]> => {
-  const res = await fetch(`${config.api.url}/projects/${projectUnitId}/books`, {
+const fetchProjectBooks = async (projectId: string): Promise<Book[]> => {
+  const res = await fetch(`${config.api.url}/projects/${projectId}/books`, {
     method: 'GET',
     credentials: 'include',
     headers: {
@@ -17,10 +17,10 @@ const fetchProjectUnitBooks = async (projectUnitId: string): Promise<Book[]> => 
   return data;
 };
 
-export const useProjectUnitBooks = (projectUnitId: string) => {
+export const useProjectBooks = (projectId: string) => {
   return useQuery<Book[]>({
-    queryKey: ['project-unit-books', projectUnitId],
-    queryFn: () => fetchProjectUnitBooks(projectUnitId),
-    enabled: !!projectUnitId,
+    queryKey: ['project-unit-books', projectId], // keeping queryKey the same for cache hit, but parameter name updated
+    queryFn: () => fetchProjectBooks(projectId),
+    enabled: !!projectId,
   });
 };

@@ -24,6 +24,7 @@ interface BibleBookMultiSelectPopoverProps {
   disabled?: boolean;
   placeholder?: string;
   maxVisibleNames?: number;
+  bookMilestoneMap?: Record<number, string>;
 }
 
 export function BibleBookMultiSelectPopover({
@@ -33,6 +34,7 @@ export function BibleBookMultiSelectPopover({
   disabled = false,
   placeholder = 'Select book(s)',
   maxVisibleNames = 3,
+  bookMilestoneMap = {},
 }: BibleBookMultiSelectPopoverProps) {
   const [open, setOpen] = useState(false);
 
@@ -144,7 +146,14 @@ export function BibleBookMultiSelectPopover({
                       onCheckedChange={() => toggleBook(book.book.id.toString())}
                     />
                     <div className='flex flex-1 items-center justify-between gap-2 overflow-hidden'>
-                      <span className='truncate'>{book.book.eng_display_name}</span>
+                      <div className='flex items-center gap-2 overflow-hidden'>
+                        <span className='truncate'>{book.book.eng_display_name}</span>
+                        {bookMilestoneMap[book.book.id] && (
+                          <span className='text-muted-foreground truncate text-xs font-normal'>
+                            (in {bookMilestoneMap[book.book.id]})
+                          </span>
+                        )}
+                      </div>
                       {book.hasAudio && (
                         <Badge
                           className='bg-success/15 text-success hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
