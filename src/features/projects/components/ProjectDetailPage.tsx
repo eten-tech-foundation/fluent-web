@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 import { useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,9 +15,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getConnectivityProfileDisplay } from '@/lib/formatters';
+import { type Book, type ChapterAssignmentProgress, type User } from '@/lib/types';
 
-import { type BibleBook } from '../hooks/useBibleBooks';
 import { type Milestone } from '../hooks/useMilestones';
+import { type ProjectDetails } from '../hooks/useProjectDetails';
 
 import { AddMilestoneDialog } from './AddMilestoneDialog';
 import { AssignProjectUsers } from './AssignProjectUsers';
@@ -26,17 +27,56 @@ import { TruncatedCardText } from './TruncatedText';
 import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectDetailPageProps {
-  project: any;
+  project: ProjectDetails;
   isManager: boolean;
-  users: any[];
+  users: User[] | undefined;
   usersLoading: boolean;
   isAddUserOpen: boolean;
   onAddUser: () => void;
   onCloseAddUser: () => void;
   onBack: () => void;
-  milestones: any[] | undefined;
+  milestones: Milestone[] | undefined;
   milestonesLoading: boolean;
-  books?: any[];
+  books?: Book[];
+  chapterAssignments: ChapterAssignmentProgress[] | undefined;
+}
+
+interface DisplayStatus {
+  label: string;
+  bg: string;
+  text: string;
+}
+
+function getMilestoneDisplayStatus(
+  chapterStatusCounts: Record<string, number>,
+  t: (key: string) => string
+): DisplayStatus {
+  const totalChapters = Object.values(chapterStatusCounts).reduce(
+    (acc, curr) => acc + Number(curr),
+    0
+  );
+  const completedChapters = chapterStatusCounts.complete;
+  const percentComplete = totalChapters === 0 ? 0 : (completedChapters / totalChapters) * 100;
+
+  if (percentComplete >= 100) {
+    return {
+      label: t('milestoneStatusComplete'),
+      bg: 'var(--primary)',
+      text: 'var(--primary-foreground)',
+    };
+  }
+  if (percentComplete > 0) {
+    return {
+      label: t('milestoneStatusInProgress'),
+      bg: 'var(--warning)',
+      text: 'var(--warning-foreground)',
+    };
+  }
+  return {
+    label: t('milestoneStatusNotStarted'),
+    bg: 'var(--muted)',
+    text: 'var(--muted-foreground)',
+  };
 }
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
@@ -51,17 +91,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   milestones,
   milestonesLoading,
   books,
-}: any) => {
+  chapterAssignments,
+}) => {
   const navigate = useNavigate();
-  // useTranslation is not used here
+  const { t } = useTranslation();
 
   const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
-        rightContent={<div className='flex items-center gap-2'></div>}
-        title={`${project.targetLanguageName} - ${project.name}`}
+        rightContent={
+          isManager ? (
+            <Button
+              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+              onClick={() => setIsAddMilestoneOpen(true)}
+            >
+              <Plus className='h-4 w-4' /> {t('addMilestone')}
+            </Button>
+          ) : undefined
+        }
+        title={project.name}
         onBack={onBack}
       />
 
@@ -71,36 +121,36 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           <Card className='h-fit flex-1 lg:flex-none'>
             <CardContent className='space-y-4 py-4'>
               <div className='grid grid-cols-2 gap-2'>
-                <label className='text-base font-bold'>Project</label>
+                <label className='text-base font-bold'>{t('project')}</label>
                 <TruncatedCardText text={project.name} />
 
-                <label className='text-base font-bold'>Source Language</label>
+                <label className='text-base font-bold'>{t('sourceLanguage')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {project.sourceLanguageName}
                 </p>
 
-                <label className='text-base font-bold'>Source Bible</label>
+                <label className='text-base font-bold'>{t('sourceBible')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {project.sourceName}
                 </p>
 
-                <label className='text-base font-bold'>Target Language</label>
+                <label className='text-base font-bold'>{t('targetLanguage')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {project.targetLanguageName}
                 </p>
-                <label className='text-base font-bold'>Connectivity Profile</label>
+                <label className='text-base font-bold'>{t('connectivityProfile')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {getConnectivityProfileDisplay(project.metadata?.connectivityProfile)}
+                  {getConnectivityProfileDisplay(project.metadata.connectivityProfile)}
                 </p>
 
-                <label className='text-base font-bold'>Milestones</label>
+                <label className='text-base font-bold'>{t('milestones')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {milestones?.length ?? 0}
                 </p>
               </div>
 
               <div>
-                <label className='text-base font-bold'>Project Progress</label>
+                <label className='text-base font-bold'>{t('projectProgress')}</label>
                 <div className='mt-2'>
                   <CardProgressBar
                     chapterStatusCounts={project.chapterStatusCounts}
@@ -114,7 +164,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {isManager && (
             <div className='flex-1 lg:flex-none'>
               <AssignProjectUsers
-                chapterAssignments={[]}
+                chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
                 projectId={project.id}
                 referenceHeight={undefined}
@@ -130,26 +180,18 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         {/* Right Column: Milestones Table */}
         <div className='flex min-h-0 w-full flex-1 flex-col lg:w-3/4 lg:grow'>
           <div className='flex shrink-0 items-center justify-between pb-4'>
-            <h2 className='text-xl font-bold'>Milestones</h2>
-            {isManager && (
-              <Button
-                className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
-                onClick={() => setIsAddMilestoneOpen(true)}
-              >
-                <Plus className='h-4 w-4' /> Add Milestone
-              </Button>
-            )}
+            <h2 className='text-xl font-bold'>{t('milestones')}</h2>
           </div>
 
           <div className='flex-1 overflow-hidden rounded-lg border shadow'>
             {milestonesLoading ? (
               <div className='flex h-full items-center justify-center gap-2'>
                 <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
-                <span className='text-gray-500'>Loading milestones...</span>
+                <span className='text-gray-500'>{t('loadingMilestones')}</span>
               </div>
             ) : milestones?.length === 0 ? (
               <div className='flex h-full items-center justify-center'>
-                <span className='text-gray-500'>No milestones found.</span>
+                <span className='text-gray-500'>{t('noMilestonesFound')}</span>
               </div>
             ) : (
               <div className='flex h-full flex-col overflow-y-auto'>
@@ -157,64 +199,29 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <TableHeader className='sticky top-0 z-10'>
                     <TableRow>
                       <TableHead className='w-[35%] px-6 py-3 text-left text-sm font-semibold'>
-                        Milestone
+                        {t('milestoneColumnMilestone')}
                       </TableHead>
                       <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
-                        Scope
+                        {t('milestoneColumnScope')}
                       </TableHead>
                       <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
-                        Progress
+                        {t('milestoneColumnProgress')}
                       </TableHead>
                       <TableHead className='px-6 py-3 text-left text-sm font-semibold'>
-                        Status
+                        {t('milestoneColumnStatus')}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody className='divide-border divide-y'>
-                    {milestones?.map((milestone: Milestone) => {
+                    {milestones?.map(milestone => {
                       const totalChapters = Object.values(milestone.chapterStatusCounts).reduce(
-                        (acc: number, curr: any) => acc + Number(curr),
+                        (acc, curr) => acc + Number(curr),
                         0
                       );
-
-                      // Derive status
-                      let displayStatus = null;
-                      if (totalChapters === 0) {
-                        displayStatus = {
-                          label: 'Not Assigned',
-                          bg: 'var(--popover)',
-                          text: 'var(--foreground)',
-                        };
-                      } else if (milestone.status === 'completed') {
-                        displayStatus = {
-                          label: 'Completed',
-                          bg: 'var(--primary)',
-                          text: 'var(--primary-foreground)',
-                        };
-                      } else if (milestone.updatedAt) {
-                        const diffDays =
-                          (Date.now() - new Date(milestone.updatedAt).getTime()) /
-                          (1000 * 60 * 60 * 24);
-                        if (diffDays > 10) {
-                          displayStatus = {
-                            label: 'Potentially Stalled',
-                            bg: 'var(--warning)',
-                            text: 'var(--warning-foreground)',
-                          };
-                        } else {
-                          displayStatus = {
-                            label: 'Active',
-                            bg: 'var(--primary)',
-                            text: 'var(--primary-foreground)',
-                          };
-                        }
-                      } else {
-                        displayStatus = {
-                          label: 'Not Started',
-                          bg: 'var(--muted)',
-                          text: 'var(--muted-foreground)',
-                        };
-                      }
+                      const displayStatus = getMilestoneDisplayStatus(
+                        milestone.chapterStatusCounts,
+                        t
+                      );
 
                       return (
                         <TableRow
@@ -224,7 +231,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             navigate({
                               to: '/projects/$projectId/milestones/$milestoneId',
                               params: {
-                                projectId: project.id,
+                                projectId: project.id.toString(),
                                 milestoneId: milestone.id.toString(),
                               },
                             })
@@ -237,11 +244,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                 <span className='text-xs text-gray-500'>
                                   {(() => {
                                     const bookNames = milestone.bookIds
-                                      .map((id: number) => {
-                                        const b = books?.find((bk: BibleBook) => bk.bookId === id);
-                                        return b ? String(b.engDisplayName) : undefined;
+                                      .map(id => {
+                                        const b = books.find(bk => bk.bookId === id);
+                                        return b ? b.engDisplayName : undefined;
                                       })
-                                      .filter(Boolean);
+                                      .filter((name): name is string => Boolean(name));
                                     if (bookNames.length <= 4) return bookNames.join(', ');
                                     return `${bookNames.slice(0, 4).join(', ')} ...`;
                                   })()}
@@ -250,7 +257,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             </div>
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
-                            {milestone.bookCount} books &middot; {totalChapters} chapters
+                            {t('milestoneScopeSummary', {
+                              bookCount: milestone.bookCount,
+                              chapterCount: totalChapters,
+                            })}
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
                             <CardProgressBar

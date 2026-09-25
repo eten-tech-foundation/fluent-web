@@ -5,6 +5,8 @@ import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { useUsers } from '@/hooks/useUsers';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -23,13 +25,19 @@ export const ProjectDetailWrapper: React.FC = () => {
     error: projectError,
   } = useProjectDetails(projectId);
 
-  useChapterAssignments(projectId);
+  const { userdetail } = useAppStore();
+  const isManager = isProjectManager(
+    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
+    project?.id
+  );
+
+  const { data: chapterAssignments } = useChapterAssignments(projectId);
   const { data: books } = useProjectBooks(projectId);
+  const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
   const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
 
   const location = useLocation();
-  const { userdetail } = useAppStore();
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
@@ -86,13 +94,14 @@ export const ProjectDetailWrapper: React.FC = () => {
     <>
       <ProjectDetailPage
         books={books}
+        chapterAssignments={chapterAssignments}
         isAddUserOpen={modal === 'add'}
-        isManager={true}
+        isManager={isManager}
         milestones={milestones}
         milestonesLoading={milestonesLoading}
         project={project}
-        users={[]}
-        usersLoading={false}
+        users={users}
+        usersLoading={usersLoading}
         onAddUser={handleOpenAddUser}
         onBack={handleBack}
         onCloseAddUser={handleCloseAddUser}

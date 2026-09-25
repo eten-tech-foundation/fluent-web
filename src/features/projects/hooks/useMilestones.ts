@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
@@ -35,6 +37,9 @@ export interface UpdateMilestoneInput {
   removeBooks?: number[];
   moveBooks?: Array<{ bookId: number; targetMilestoneId: number }>;
 }
+
+export const milestonesKey = (projectId: string | number) =>
+  ['milestones', String(projectId)] as const;
 
 const fetchMilestones = async (projectId: string | number): Promise<Milestone[]> => {
   const res = await fetch(`${config.api.url}/projects/${projectId}/milestones`, {
@@ -74,17 +79,9 @@ const updateMilestone = async (
   return (await res.json()) as Milestone;
 };
 
-const deleteMilestone = async (projectId: string | number, id: number): Promise<void> => {
-  const res = await fetch(`${config.api.url}/projects/${projectId}/milestones/${id}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to delete milestone');
-};
-
 export const useGetMilestones = (projectId: string | number) => {
   return useQuery({
-    queryKey: ['milestones', projectId],
+    queryKey: milestonesKey(projectId),
     queryFn: () => fetchMilestones(projectId),
     enabled: !!projectId,
   });
@@ -95,7 +92,7 @@ export const useCreateMilestone = (projectId: string | number) => {
   return useMutation({
     mutationFn: (input: CreateMilestoneInput) => createMilestone(projectId, input),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
+      void queryClient.invalidateQueries({ queryKey: milestonesKey(projectId) });
     },
   });
 };
@@ -106,17 +103,24 @@ export const useUpdateMilestone = (projectId: string | number) => {
     mutationFn: ({ id, ...input }: { id: number } & UpdateMilestoneInput) =>
       updateMilestone(projectId, id, input),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
+      void queryClient.invalidateQueries({ queryKey: milestonesKey(projectId) });
     },
   });
 };
 
-export const useDeleteMilestone = (projectId: string | number) => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => deleteMilestone(projectId, id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
-    },
-  });
+export const useBookMilestoneMap = (
+  milestones: Milestone[] | undefined,
+  excludeMilestoneId?: number
+) => {
+  return useMemo(() => {
+    const map: Record<number, string> = {};
+    if (!milestones) return map;
+    for (const m of milestones) {
+      if (m.id === excludeMilestoneId) continue;
+      for (const bookId of m.bookIds) {
+        map[bookId] = m.name;
+      }
+    }
+    return map;
+  }, [milestones, excludeMilestoneId]);
 };

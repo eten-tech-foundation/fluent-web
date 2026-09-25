@@ -67,7 +67,7 @@ export const ProjectsWrapper: React.FC = () => {
         bookId: [],
         organization: activeOrgId,
         createdBy: Number(userdetail.id),
-        metadata: buildProjectMetadata(),
+        metadata: buildProjectMetadata(projectData.connectivityProfile),
         pericopeSetId: projectData.pericopeSetId,
         ...(projectData.usfmFiles && { usfmFiles: projectData.usfmFiles }),
       };

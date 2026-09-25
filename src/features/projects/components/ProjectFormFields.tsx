@@ -38,9 +38,6 @@ interface ProjectFormFieldsProps {
 export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
-  const { data: availableBooks, isLoading: booksLoading } = useBibleBooks(
-    detectedBookCodes ? null : formData.sourceBible
-  );
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
 
   const languageOptions =

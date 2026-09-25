@@ -159,6 +159,26 @@ export function UsfmImportTab({
         ))}
       </ul>
 
+      {/*
+        Book codes come straight from what was already parsed out of each file (#418) — no
+        picker, no per-bible book fetch. The server resolves each code to a bookId itself when
+        the project is created from usfmFiles, so this is read-only confirmation of what was
+        detected, not a selection the user can change here.
+      */}
+      <div data-testid='detected-books'>
+        <p className='text-muted-foreground text-sm font-medium'>{t('detectedBooks')}</p>
+        <ul className='mt-1 flex flex-wrap gap-2'>
+          {accepted.map(item => (
+            <li
+              key={item.bookCode}
+              className='bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium'
+            >
+              {item.bookCode}
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <ProjectFormFields formData={formData} onFieldChange={onFieldChange} />
 
       <div className='flex items-center justify-between pt-4'>

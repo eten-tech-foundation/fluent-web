@@ -40,6 +40,7 @@ const renderTab = (overrides: Partial<Parameters<typeof UsfmImportTab>[0]> = {})
       onFieldChange={vi.fn()}
       onSubmit={vi.fn()}
       {...overrides}
+      onBooksChange={overrides.onBooksChange ?? vi.fn()}
     />
   );
 

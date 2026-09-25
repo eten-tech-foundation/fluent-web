@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Headphones, Loader2, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { BibleBookMultiSelectPopover } from '@/components/BookSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +32,11 @@ interface ManageMilestoneBooksDialogProps {
   sourceBibleId: number;
 }
 
+interface PendingRemoval {
+  bookId: number;
+  bookName: string;
+}
+
 export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProps> = ({
   isOpen,
   onClose,
@@ -39,10 +44,10 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
   milestoneId,
   sourceBibleId,
 }) => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [pendingBookId, setPendingBookId] = useState<number | null>(null);
-  const [booksToAdd, setBooksToAdd] = useState<number[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
 
   const { data: books, isLoading: booksLoading } = useBookDetails(milestoneId, isOpen);
   const { data: bibleBooks } = useBibleBooks(isOpen ? sourceBibleId : null);
@@ -56,25 +61,6 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
   }, [bibleBooks]);
 
   const otherMilestones = (milestones ?? []).filter(m => m.id !== milestoneId);
-
-  const bookMilestoneMap = useMemo(() => {
-    const map: Record<number, string> = {};
-    if (!milestones) return map;
-    for (const m of milestones) {
-      if (m.id === milestoneId) continue;
-      for (const bookId of m.bookIds) {
-        map[bookId] = m.name;
-      }
-    }
-    return map;
-  }, [milestones, milestoneId]);
-
-  // Exclude books already in THIS milestone from the available list
-  const availableBooks = useMemo(() => {
-    if (!bibleBooks || !books) return [];
-    const currentBookIds = new Set(books.map(b => b.bookId));
-    return bibleBooks.filter(b => !currentBookIds.has(b.bookId));
-  }, [bibleBooks, books]);
 
   const invalidateRelated = () => {
     void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
@@ -90,104 +76,50 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
         moveBooks: [{ bookId, targetMilestoneId }],
       });
       invalidateRelated();
-      toast.success(`${bookName} moved to the selected milestone`);
+      toast.success(t('milestoneBookMoved', { bookName }));
     } catch {
-      toast.error(`Failed to move ${bookName}`);
+      toast.error(t('milestoneBookMoveFailed', { bookName }));
     } finally {
       setPendingBookId(null);
     }
   };
 
-  const handleRemove = async (bookId: number, bookName: string) => {
-    if (
-      !window.confirm(
-        `Remove "${bookName}" from this milestone? Its translation progress is kept and isn't deleted — you can add it back later if needed.`
-      )
-    ) {
-      return;
-    }
+  const confirmRemove = async () => {
+    if (!pendingRemoval) return;
+    const { bookId, bookName } = pendingRemoval;
 
+    setPendingRemoval(null);
     setPendingBookId(bookId);
     try {
       await updateMilestone.mutateAsync({ id: milestoneId, removeBooks: [bookId] });
       invalidateRelated();
-      toast.success(`${bookName} removed from milestone`);
+      toast.success(t('milestoneBookRemoved', { bookName }));
     } catch {
-      toast.error(`Failed to remove ${bookName}`);
+      toast.error(t('milestoneBookRemoveFailed', { bookName }));
     } finally {
       setPendingBookId(null);
     }
   };
 
-  const handleAddBooks = async () => {
-    if (booksToAdd.length === 0) return;
-    setIsAdding(true);
-
-    try {
-      const moveBooksPayload: Array<{ bookId: number; targetMilestoneId: number }> = [];
-      const addBooksPayload: number[] = [];
-
-      for (const bookId of booksToAdd) {
-        // If the book is in another milestone, it's a move. Otherwise, it's an add.
-        const existingMilestoneName = bookMilestoneMap[bookId];
-        if (existingMilestoneName) {
-          moveBooksPayload.push({ bookId, targetMilestoneId: milestoneId });
-        } else {
-          addBooksPayload.push(bookId);
-        }
-      }
-
-      await updateMilestone.mutateAsync({
-        id: milestoneId,
-        bibleId: sourceBibleId,
-        addBooks: addBooksPayload.length > 0 ? addBooksPayload : undefined,
-        moveBooks: moveBooksPayload.length > 0 ? moveBooksPayload : undefined,
-      });
-
-      invalidateRelated();
-      setBooksToAdd([]);
-      toast.success('Books added successfully');
-    } catch {
-      toast.error('Failed to add books');
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-[500px]'>
-        <DialogHeader className='border-border border-b px-6 py-4'>
-          <DialogTitle>Manage Books</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-[500px]'>
+          <DialogHeader className='border-border border-b px-6 py-4'>
+            <DialogTitle>{t('manageBooks')}</DialogTitle>
+          </DialogHeader>
 
-        <div className='space-y-4 px-6 py-4'>
-          <div className='flex items-center gap-2'>
-            <BibleBookMultiSelectPopover
-              bookMilestoneMap={bookMilestoneMap}
-              books={availableBooks}
-              disabled={!sourceBibleId}
-              placeholder='Add books...'
-              value={booksToAdd}
-              onChange={setBooksToAdd}
-            />
-            <Button disabled={booksToAdd.length === 0 || isAdding} onClick={handleAddBooks}>
-              {isAdding && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-              Add
-            </Button>
-          </div>
-
-          <div className='space-y-2'>
-            <p className='text-foreground text-sm font-bold'>Books in this Milestone</p>
+          <div className='space-y-3 px-6 py-4'>
+            <p className='text-foreground text-sm font-bold'>{t('booksInThisMilestone')}</p>
 
             <div className='divide-border border-border max-h-[400px] divide-y overflow-y-auto rounded-lg border'>
               {booksLoading ? (
                 <div className='text-muted-foreground flex items-center gap-2 p-4 text-sm'>
                   <Loader2 className='h-4 w-4 animate-spin' />
-                  <span>Loading books...</span>
+                  <span>{t('loadingBooks')}</span>
                 </div>
               ) : !books || books.length === 0 ? (
-                <p className='text-muted-foreground p-4 text-sm'>No books in this milestone.</p>
+                <p className='text-muted-foreground p-4 text-sm'>{t('noBooksInMilestone')}</p>
               ) : (
                 books.map(book => {
                   const isRowPending = pendingBookId === book.bookId && updateMilestone.isPending;
@@ -196,7 +128,7 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                   return (
                     <div
                       key={book.bookId}
-                      className='bg-background flex items-center justify-between gap-3 p-4'
+                      className='bg-card flex items-center justify-between gap-3 p-4'
                     >
                       <div className='flex items-center gap-2 overflow-hidden'>
                         <span className='text-foreground truncate text-base'>{book.bookName}</span>
@@ -206,7 +138,7 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                             variant='outline'
                           >
                             <Headphones className='h-3 w-3' />
-                            Audio
+                            {t('audio')}
                           </Badge>
                         )}
                       </div>
@@ -215,14 +147,18 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              className='data-[state=open]:border-primary data-[state=open]:ring-ring flex items-center gap-1 data-[state=open]:ring-1'
+                              className='data-[state=open]:border-primary data-[state=open]:ring-ring flex items-center gap-1 data-[state=open]:ring-2 data-[state=open]:ring-offset-1'
                               disabled={
                                 otherMilestones.length === 0 || pendingBookId === book.bookId
                               }
                               size='sm'
                               variant='outline'
                             >
-                              {isRowPending ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Move'}
+                              {isRowPending ? (
+                                <Loader2 className='h-4 w-4 animate-spin' />
+                              ) : (
+                                t('move')
+                              )}
                               <ChevronDown className='h-3.5 w-3.5 opacity-70' />
                             </Button>
                           </DropdownMenuTrigger>
@@ -241,12 +177,16 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                         </DropdownMenu>
 
                         <Button
-                          aria-label={`Remove ${book.bookName} from milestone`}
+                          aria-label={t('milestoneRemoveBookAriaLabel', {
+                            bookName: book.bookName,
+                          })}
                           className='text-muted-foreground hover:text-destructive h-9 w-9'
                           disabled={pendingBookId === book.bookId}
                           size='icon'
                           variant='ghost'
-                          onClick={() => void handleRemove(book.bookId, book.bookName)}
+                          onClick={() =>
+                            setPendingRemoval({ bookId: book.bookId, bookName: book.bookName })
+                          }
                         >
                           <Trash2 className='h-4 w-4' />
                         </Button>
@@ -257,14 +197,37 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
               )}
             </div>
           </div>
-        </div>
 
-        <DialogFooter className='border-border border-t px-6 py-4 sm:justify-end'>
-          <Button variant='outline' onClick={onClose}>
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className='border-border border-t px-6 py-4 sm:justify-end'>
+            <Button variant='outline' onClick={onClose}>
+              {t('done')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingRemoval !== null}
+        onOpenChange={open => !open && setPendingRemoval(null)}
+      >
+        <DialogContent className='sm:max-w-[420px]'>
+          <DialogHeader>
+            <DialogTitle>{t('removeBookConfirmTitle')}</DialogTitle>
+          </DialogHeader>
+          <p className='text-muted-foreground text-sm'>
+            {pendingRemoval &&
+              t('removeBookConfirmDescription', { bookName: pendingRemoval.bookName })}
+          </p>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setPendingRemoval(null)}>
+              {t('cancel')}
+            </Button>
+            <Button variant='destructive' onClick={() => void confirmRemove()}>
+              {t('remove')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
