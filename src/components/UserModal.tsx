@@ -169,7 +169,7 @@ export const UserModal: React.FC<UserModalProps> = ({
               <span style={{ color: 'red' }}>*</span> {t('username')}
             </Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='username'
               value={formData.username}
               onChange={e => updateFormData('username', e.target.value)}
@@ -180,7 +180,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           <div className='grid gap-3'>
             <Label htmlFor='firstName'>{t('firstName')}</Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='firstName'
               value={formData.firstName}
               onChange={e => updateFormData('firstName', e.target.value)}
@@ -190,7 +190,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           <div className='grid gap-3'>
             <Label htmlFor='lastName'>{t('lastName')}</Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='lastName'
               value={formData.lastName}
               onChange={e => updateFormData('lastName', e.target.value)}
@@ -202,7 +202,10 @@ export const UserModal: React.FC<UserModalProps> = ({
               <span style={{ color: 'red' }}>*</span> {t('role')}
             </Label>
             <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
-              <SelectTrigger className='w-full bg-white' disabled={disableRoleSelection}>
+              <SelectTrigger
+                className='bg-background text-foreground border-input w-full'
+                disabled={disableRoleSelection}
+              >
                 <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
               </SelectTrigger>
               <SelectContent>

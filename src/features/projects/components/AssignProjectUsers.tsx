@@ -4,7 +4,7 @@ import { Check, ChevronDown, Loader2, Plus, Trash2, TriangleAlert, X } from 'luc
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -503,24 +503,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     });
   };
 
-  const selectedRoleLabel = useMemo(
-    () => PROJECT_ROLE_OPTIONS.find(r => r.value === selectedRole)?.label ?? 'Select role',
-    [selectedRole]
-  );
-
-  const inviteRoleLabel = useMemo(
-    () => PROJECT_ROLE_OPTIONS.find(r => r.value === inviteRole)?.label ?? 'Select role',
-    [inviteRole]
-  );
-
   return (
     <>
       <div
-        className='flex flex-col overflow-hidden rounded-lg border lg:overflow-visible lg:rounded-none lg:border-0'
+        className='bg-background text-foreground border-border flex flex-col overflow-hidden rounded-xl border shadow-sm'
         style={referenceHeight ? { height: referenceHeight } : undefined}
       >
         {/* Title row */}
-        <div className='flex shrink-0 items-center justify-between p-3 pb-3'>
+        <div className='flex shrink-0 items-center justify-between p-4 pb-3'>
           <h3 className='text-lg font-bold'>Project Users</h3>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -540,7 +530,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Error banner — fetch failure */}
         {projectUsersError && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
+          <div className='mx-4 mb-3 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
             <TriangleAlert className='h-4 w-4 shrink-0' />
             <span>Error: Loading users failed.</span>
           </div>
@@ -548,7 +538,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Generic error banner */}
         {error && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
+          <div className='mx-4 mb-3 flex shrink-0 items-center gap-1.5 text-sm text-red-500'>
             <TriangleAlert className='h-4 w-4 shrink-0' />
             <span>{error}</span>
           </div>
@@ -556,8 +546,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
-            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+          <div className='border-warning-border bg-warning mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
+            <div className='text-warning-foreground flex flex-col text-[14px] leading-snug font-semibold'>
               {getActiveAssignmentCount(removeTarget.userId) > 0 ? (
                 <>
                   <span>Remove {removeTarget.displayName} from this project?</span>
@@ -569,7 +559,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
             </div>
             <div className='flex shrink-0 flex-col gap-1.5'>
               <Button
-                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-sm px-3 text-[13px] font-semibold'
                 disabled={removingUserIds.has(removeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRemove}
@@ -581,7 +571,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 )}
               </Button>
               <Button
-                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-sm border px-3 text-[13px] font-semibold'
                 size='sm'
                 variant='outline'
                 onClick={() => setRemoveTarget(null)}
@@ -594,14 +584,14 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Role-change confirmation banner */}
         {roleChangeTarget && (
-          <div className='mx-3 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-[#FCD34D] bg-[#FFF6D6] px-3.5 py-2 dark:border-amber-700/60 dark:bg-amber-950/40'>
-            <div className='flex flex-col text-[14px] leading-snug font-semibold text-[#7C2D12] dark:text-amber-300'>
+          <div className='border-warning-border bg-warning mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
+            <div className='text-warning-foreground flex flex-col text-[14px] leading-snug font-semibold'>
               <span>Change {roleChangeTarget.displayName}'s role to Observer?</span>
               <span>Their chapter assignments will be removed.</span>
             </div>
             <div className='flex shrink-0 flex-col gap-1.5'>
               <Button
-                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-md px-3 text-[13px] font-semibold'
+                className='bg-destructive text-destructive-foreground hover:bg-destructive/90 h-7 rounded-sm px-3 text-[13px] font-semibold'
                 disabled={updatingRoleUserIds.has(roleChangeTarget.userId)}
                 size='sm'
                 onClick={handleConfirmRoleChange}
@@ -613,7 +603,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 )}
               </Button>
               <Button
-                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-md border px-3 text-[13px] font-semibold'
+                className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-sm border px-3 text-[13px] font-semibold'
                 size='sm'
                 variant='outline'
                 onClick={() => setRoleChangeTarget(null)}
@@ -626,7 +616,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Blocked-removal banner */}
         {removeBlockedReason && (
-          <div className='mx-3 mb-2 flex shrink-0 items-start justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 dark:bg-amber-950/30'>
+          <div className='mx-4 mb-3 flex shrink-0 items-start justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 dark:bg-amber-950/30'>
             <div className='flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400'>
               <TriangleAlert className='mt-0.5 h-4 w-4 shrink-0' />
               <span>{removeBlockedReason}</span>
@@ -644,19 +634,19 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Users table */}
         <div
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-t lg:mx-3 lg:flex-none lg:rounded-lg lg:border lg:shadow-sm ${
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden border-t ${
             error || projectUsersError || removeTarget || removeBlockedReason
-              ? 'lg:max-h-[165px]'
-              : 'lg:max-h-[188px]'
+              ? 'max-h-[165px] lg:max-h-[165px]'
+              : 'max-h-[188px] lg:max-h-[188px]'
           }`}
         >
-          <div className='min-h-0 flex-1 overflow-y-auto lg:rounded-lg'>
+          <div className='min-h-0 flex-1 overflow-y-auto'>
             <Table>
-              <TableHeader className='sticky top-0 z-10'>
+              <TableHeader className='bg-muted sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
-                  <TableHead className='py-2 pl-3 text-sm font-semibold'>Name</TableHead>
-                  <TableHead className='py-2 pr-3 text-sm font-semibold'>Role</TableHead>
-                  <TableHead className='w-10 py-2 pr-3' />
+                  <TableHead className='py-2.5 pl-4 text-sm font-semibold'>Name</TableHead>
+                  <TableHead className='py-2.5 pr-4 text-sm font-semibold'>Role</TableHead>
+                  <TableHead className='w-10 py-2.5 pr-4' />
                 </TableRow>
               </TableHeader>
               <TableBody className='bg-background'>{renderTableBody()}</TableBody>
@@ -675,12 +665,13 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         }}
       >
         <DialogContent
+          aria-describedby={undefined}
           className='w-[420px] max-w-[90vw] gap-0 p-0 [&>button]:hidden'
           onInteractOutside={e => e.preventDefault()}
         >
           {/* Header */}
           <div className='flex items-center justify-between px-5 pt-5 pb-3'>
-            <h2 className='text-lg font-bold'>Add Project User</h2>
+            <DialogTitle className='text-lg font-bold'>Add Project User</DialogTitle>
             <button
               aria-label='Close'
               className='text-muted-foreground hover:text-foreground'
@@ -736,8 +727,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   Role
                 </Label>
                 <Select value={selectedRole ?? ''} onValueChange={value => setSelectedRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
-                    <SelectValue placeholder='Select a role'>{selectedRoleLabel}</SelectValue>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
+                    <SelectValue placeholder='Select a role' />
                   </SelectTrigger>
                   <SelectContent>
                     {PROJECT_ROLE_OPTIONS.map(role => (
@@ -775,7 +766,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Email Address
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-email'
                   placeholder='user@example.com'
                   type='email'
@@ -799,7 +790,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Display Name
                 </Label>
                 <Input
-                  className='bg-white'
+                  className='bg-background text-foreground border-input'
                   id='invite-display-name'
                   placeholder='Display Name'
                   value={inviteDisplayName}
@@ -812,8 +803,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Role
                 </Label>
                 <Select value={inviteRole ?? ''} onValueChange={value => setInviteRole(value)}>
-                  <SelectTrigger className='w-full bg-white'>
-                    <SelectValue placeholder='Select a role'>{inviteRoleLabel}</SelectValue>
+                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
+                    <SelectValue placeholder='Select a role' />
                   </SelectTrigger>
                   <SelectContent>
                     {PROJECT_ROLE_OPTIONS.map(role => (
