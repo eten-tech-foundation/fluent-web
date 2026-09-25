@@ -128,6 +128,7 @@ export interface ChapterAssignmentProgress {
   updatedAt?: Date | null;
   isSubmitted?: boolean;
   submittedTime?: Date | null;
+  hasConflict?: boolean;
 }
 
 export interface Book {

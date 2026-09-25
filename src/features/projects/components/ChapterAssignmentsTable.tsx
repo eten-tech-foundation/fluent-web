@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, TriangleAlert } from 'lucide-react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   type ChapterAssignmentProgress,
@@ -218,9 +218,26 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                       <TruncatedTableText text={assignment.peerChecker?.displayName ?? ''} />
                     </TableCell>
                     <TableCell className='text-popover-foreground px-3 py-3 text-xs whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
-                      <TruncatedTableText
-                        text={getStatusDisplay(assignment.status as ChapterAssignmentStatusType)}
-                      />
+                      <div className='flex items-center gap-1.5'>
+                        <TruncatedTableText
+                          text={getStatusDisplay(assignment.status as ChapterAssignmentStatusType)}
+                        />
+                        {isManager && assignment.hasConflict && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                aria-label='Audio conflict'
+                                className='inline-flex items-center'
+                                role='img'
+                                tabIndex={0}
+                              >
+                                <TriangleAlert className='h-4 w-4 shrink-0 text-amber-500' />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Audio conflict</TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
                       <TruncatedTableText
