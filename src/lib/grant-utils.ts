@@ -9,7 +9,13 @@
  * create projects, view users, and see all projects in the org.
  */
 
-import type { UserGrant } from '@/lib/types';
+import { ROLES, type UserGrant } from '@/lib/types';
+
+export const ORG_LEVEL_ROLES = [
+  ROLES.ORG_MANAGER,
+  ROLES.ORG_OWNER,
+  ROLES.SUPER_ADMIN,
+] as readonly string[];
 
 /** All roles that carry management privileges (project create, user view, etc). */
 const MANAGER_ROLES = ['Project Manager', 'Org Manager', 'Org Owner', 'SuperAdmin'];
@@ -24,6 +30,20 @@ export function getActiveGrants(
 ): UserGrant[] {
   if (!grants) return [];
   return grants.filter(g => g.orgId === activeOrgId || g.orgId === null);
+}
+
+/**
+ * True if the user holds a grant for this project, or an org-level manager role.
+ */
+export function hasGrantForProject(
+  activeGrants: UserGrant[],
+  projectId: number | string | null | undefined
+): boolean {
+  if (!projectId) return false;
+  const targetId = Number(projectId);
+  return activeGrants.some(g =>
+    g.projectId == null ? ORG_LEVEL_ROLES.includes(g.roleName) : g.projectId === targetId
+  );
 }
 
 /**

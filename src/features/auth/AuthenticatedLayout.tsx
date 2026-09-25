@@ -20,11 +20,25 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
     useGetUserDetailsMutation();
-  const { applyUser } = useRefreshUserDetail();
+  const { applyUser, refresh: refreshUserDetail } = useRefreshUserDetail();
   const updateUserMutation = useUpdateUser();
 
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
+
+  // Automatically refresh user details when tab regains focus (e.g., after role change in another browser window)
+  useEffect(() => {
+    if (!isAuthenticated || !user?.email) return;
+
+    const handleFocus = () => {
+      refreshUserDetail();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isAuthenticated, user?.email, refreshUserDetail]);
 
   const handleModalClose = (): void => {
     void navigate({

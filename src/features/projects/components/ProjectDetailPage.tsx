@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
@@ -19,6 +19,7 @@ import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { useProjectUnitBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useUsers } from '@/hooks/useUsers';
 import { getConnectivityProfileDisplay, getLastActivityDisplay } from '@/lib/formatters';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
@@ -138,7 +139,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const { userdetail } = useAppStore();
+  const { refresh: refreshUserDetail } = useRefreshUserDetail();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    refreshUserDetail();
+  }, [refreshUserDetail, projectId]);
 
   const [selectedBook, setSelectedBook] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
