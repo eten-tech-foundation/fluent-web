@@ -104,11 +104,16 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
                 <TooltipTrigger asChild>
                   <Button
                     aria-pressed={showResources}
-                    className='bg-primary relative flex cursor-pointer items-center gap-2'
+                    className={`relative flex cursor-pointer items-center gap-2 ${
+                      !showResources
+                        ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary'
+                        : ''
+                    }`}
                     type='button'
+                    variant={showResources ? 'default' : 'outline'}
                     onClick={onToggleResources}
                   >
-                    <BookText color='#ffffff' />
+                    <BookText />
                     {activeFindingsCount !== undefined && activeFindingsCount > 0 && (
                       <span className='absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 ring-2 ring-white'></span>
                     )}
