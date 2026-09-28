@@ -46,6 +46,12 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
     return map;
   }, [milestones]);
 
+  const handleClose = () => {
+    setName('');
+    setBooks([]);
+    onClose();
+  };
+
   const handleSubmit = async () => {
     if (!name.trim() || books.length === 0 || !sourceBible) return;
 
@@ -55,16 +61,14 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
         bookIds: books,
       });
       toast.success(t('milestoneCreated'));
-      setName('');
-      setBooks([]);
-      onClose();
+      handleClose();
     } catch {
       toast.error(t('milestoneCreateFailed'));
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
       <DialogContent className='sm:max-w-[425px]'>
         <DialogHeader>
           <DialogTitle>{t('addMilestone')}</DialogTitle>
@@ -111,7 +115,7 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
           </div>
         </div>
         <div className='flex justify-end gap-3'>
-          <Button disabled={createMilestone.isPending} variant='outline' onClick={onClose}>
+          <Button disabled={createMilestone.isPending} variant='outline' onClick={handleClose}>
             {t('cancel')}
           </Button>
           <Button

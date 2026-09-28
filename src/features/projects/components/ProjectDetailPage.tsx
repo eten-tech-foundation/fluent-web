@@ -15,7 +15,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getConnectivityProfileDisplay } from '@/lib/formatters';
-import { type Book, type ChapterAssignmentProgress, type User } from '@/lib/types';
+import {
+  ChapterAssignmentStatus,
+  type Book,
+  type ChapterAssignmentProgress,
+  type ChapterStatusCounts,
+  type User,
+} from '@/lib/types';
 
 import { type Milestone } from '../hooks/useMilestones';
 import { type ProjectDetails } from '../hooks/useProjectDetails';
@@ -48,35 +54,47 @@ interface DisplayStatus {
 }
 
 function getMilestoneDisplayStatus(
-  chapterStatusCounts: Record<string, number>,
+  chapterStatusCounts: ChapterStatusCounts,
   t: (key: string) => string
 ): DisplayStatus {
   const totalChapters = Object.values(chapterStatusCounts).reduce(
-    (acc, curr) => acc + Number(curr),
+    (acc, curr) => acc + (Number(curr as number | undefined) || 0),
     0
   );
-  const completedChapters = chapterStatusCounts.complete;
-  const percentComplete = totalChapters === 0 ? 0 : (completedChapters / totalChapters) * 100;
 
-  if (percentComplete >= 100) {
+  if (totalChapters === 0) {
+    return {
+      label: t('milestoneStatusNotStarted'),
+      bg: 'var(--muted)',
+      text: 'var(--muted-foreground)',
+    };
+  }
+
+  const completedChapters =
+    (chapterStatusCounts[ChapterAssignmentStatus.COMPLETE] as number | undefined) ?? 0;
+  if (completedChapters >= totalChapters) {
     return {
       label: t('milestoneStatusComplete'),
       bg: 'var(--primary)',
       text: 'var(--primary-foreground)',
     };
   }
-  if (percentComplete > 0) {
-    return {
-      label: t('milestoneStatusInProgress'),
-      bg: 'var(--warning)',
-      text: 'var(--warning-foreground)',
-    };
-  }
-  return {
-    label: t('milestoneStatusNotStarted'),
-    bg: 'var(--muted)',
-    text: 'var(--muted-foreground)',
-  };
+
+  const notStartedChapters =
+    (chapterStatusCounts[ChapterAssignmentStatus.NOT_STARTED] as number | undefined) ?? 0;
+  const hasStarted = notStartedChapters < totalChapters;
+
+  return hasStarted
+    ? {
+        label: t('milestoneStatusInProgress'),
+        bg: 'var(--primary)',
+        text: 'var(--primary-foreground)',
+      }
+    : {
+        label: t('milestoneStatusNotStarted'),
+        bg: 'var(--muted)',
+        text: 'var(--muted-foreground)',
+      };
 }
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({

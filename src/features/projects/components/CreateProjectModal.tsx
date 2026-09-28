@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
-import { type UsfmFilePayload } from '@/lib/types';
+import { type ConnectivityProfile, type UsfmFilePayload } from '@/lib/types';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
 import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
@@ -27,7 +27,7 @@ export interface CreateProjectData {
    */
   books?: number[];
   /** Optional; becomes the default connectivity profile for milestones created under this project. */
-  connectivityProfile?: string;
+  connectivityProfile?: ConnectivityProfile | null;
   /** Present only when creating from existing data: the server derives the books from these. */
   usfmFiles?: UsfmFilePayload[];
 }
@@ -67,7 +67,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   // selector was removed there; restoring the picker itself is out of scope here, but the value
   // is threaded through so onSave gets it as soon as that control comes back).
   const [books, setBooks] = useState<number[]>([]);
-  const [connectivityProfile, setConnectivityProfile] = useState<string | undefined>(undefined);
 
   // ProjectFormFields runs the field queries; this one stays because a languages failure
   // replaces the whole dialog with an error rather than rendering the form.
@@ -77,7 +76,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     if (isOpen) {
       setFormData(EMPTY_FORM_DATA);
       setBooks([]);
-      setConnectivityProfile(undefined);
     }
     setIsSubmitting(false);
   }, [isOpen]);
@@ -128,7 +126,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         // Import. The files carry their own books and the server derives bookId from them, so
         // sending the manual list too would put two contradictory book sets in one request.
         books: files ? [] : books,
-        connectivityProfile,
+        connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
         ...(files && {
           usfmFiles: files.map(item => ({
