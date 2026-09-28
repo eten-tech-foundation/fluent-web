@@ -155,3 +155,36 @@ describe('useDrafting reveal rules', () => {
     expect(result.current.revealedVerses.has(2)).toBe(false);
   });
 });
+
+describe('useDrafting navigation retries', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['select another verse', 'move to next verse'])(
+    'retries a failed immediate save after %s without an unhandled rejection',
+    async navigation => {
+      const onSave = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Temporary save failure'))
+        .mockResolvedValue(undefined);
+      const { result, unmount } = draft(onSave);
+      act(() => result.current.handleTextChange(1, 'Unsaved before navigation', SPLIT));
+      act(() => {
+        if (navigation === 'select another verse') result.current.handleActiveVerseChange(2);
+        else result.current.moveToNextVerse();
+      });
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(result.current.activeVerseId).toBe(2);
+      expect(result.current.getSaveStatus(1).hasRetryScheduled).toBe(true);
+      await act(() => vi.advanceTimersByTimeAsync(10000));
+      expect(onSave).toHaveBeenCalledTimes(2);
+      expect(onSave).toHaveBeenLastCalledWith(1, {
+        content: 'Unsaved before navigation',
+        markers: SPLIT,
+      });
+      expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+      expect(result.current.getSaveStatus(1).hasRetryScheduled).toBe(false);
+      unmount();
+    }
+  );
+});
