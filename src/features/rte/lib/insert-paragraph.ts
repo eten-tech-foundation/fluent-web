@@ -85,14 +85,32 @@ export function insertParagraph(editor: EditorRef): boolean {
   const before = usj.content.slice(0, Number(index)).reduce((sum, child) => sum + length(child), 0);
   const tail = length(block) - 1 - inside;
   if (tail < 0) return false;
+  if (tail === 0 && block.marker !== 'p') {
+    editor.applyUpdate(
+      [
+        { retain: before + inside + 1 },
+        { insert: '  ' },
+        { insert: '\n', attributes: { para: { style: 'p' } } },
+      ],
+      'local'
+    );
+    editor.setSelection({ start: { jsonPath: `$.content[${Number(index) + 1}]`, offset: 0 } });
+    editor.getSelection();
+    return true;
+  }
   // A local delta keeps undo history and synchronizes USJ immediately. Editorial 0.8.15's
   // insertMarker splits the DOM but can leave getUsj/onUsjChange at the preceding document.
   editor.applyUpdate(
     [
       { retain: before + inside },
       { insert: '\n', attributes: { para: { style: block.marker ?? 'p' } } },
-      ...(tail ? [{ retain: tail }] : []),
-      { retain: 1, attributes: { para: { style: 'p' } } },
+      ...(block.marker !== 'p'
+        ? [
+            ...(tail ? [{ retain: tail }] : []),
+            { delete: 1 },
+            { insert: '\n', attributes: { para: { style: 'p' } } },
+          ]
+        : []),
     ],
     'local'
   );

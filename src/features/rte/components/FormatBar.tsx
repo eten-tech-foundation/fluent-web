@@ -143,8 +143,8 @@ export function FormatBar({
             'insertParagraphHint',
             'Place the cursor, then insert a paragraph. Selected text is kept.'
           )}
-          onMouseDown={event => event.preventDefault()}
           onClick={onInsertParagraph}
+          onMouseDown={event => event.preventDefault()}
         >
           <Pilcrow aria-hidden='true' className='h-4 w-4' />
           {t('insertParagraph', 'Insert paragraph')}

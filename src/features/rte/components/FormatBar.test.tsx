@@ -11,8 +11,8 @@ describe('formatting tooltips', () => {
     const onInsertParagraph = vi.fn();
     render(
       <FormatBar
-        blockMarker='p'
         canAddHeading
+        blockMarker='p'
         onFormat={onFormat}
         onInsertParagraph={onInsertParagraph}
       />

@@ -26,8 +26,8 @@ async function setup(marker = 'p', text = 'First words. Last words.') {
     <Editorial
       ref={ref}
       defaultUsj={pericopeVersesToUsj(rows, 1, 'GEN')}
-      scrRef={{ book: 'GEN', chapterNum: 1, verseNum: 1 }}
       options={{ hasExternalUI: true, hasSpellCheck: false }}
+      scrRef={{ book: 'GEN', chapterNum: 1, verseNum: 1 }}
       onUsjChange={onUsjChange}
     />
   );
@@ -46,11 +46,15 @@ describe('explicit paragraph insertion in Editorial', () => {
   });
 
   it.each(['p', 'q2'])('splits %s, repeats, and preserves native undo/redo', async marker => {
-    const { editor, select, container } = await setup(marker);
+    const { editor, select, container, onUsjChange } = await setup(marker);
     await select('$.content[2].content[1]', 13);
     act(() => expect(insertParagraph(editor)).toBe(true));
     await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
     expect(usjToPericopeVerses(editor.getUsj()!)[0].text).toBe('First words. Last words.');
+    expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[0].markers?.paragraphs).toEqual([
+      { marker, offset: 0 },
+      { marker: 'p', offset: 13 },
+    ]);
     expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
     act(() => expect(insertParagraph(editor)).toBe(true));
     await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(4));
@@ -91,6 +95,16 @@ describe('explicit paragraph insertion in Editorial', () => {
     await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
     expect(container.querySelectorAll('.verse')).toHaveLength(1);
     expect(usjToPericopeVerses(editor.getUsj()!)[0].verseNumber).toBe(1);
+  });
+
+  it.each(['p', 'q2'])('inserts after the last word in %s', async marker => {
+    const { editor, select, container } = await setup(marker);
+    await select('$.content[2].content[1]', 24);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
+    expect(editor.getUsj()!.content[2]).toMatchObject({ marker });
+    expect(editor.getUsj()!.content[3]).toMatchObject({ marker: 'p' });
+    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
   });
 
   it('never replaces a selected range', async () => {
