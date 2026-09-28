@@ -133,17 +133,23 @@ export function BibleBookMultiSelectPopover({
             ) : (
               books.map(book => {
                 const checked = value.includes(book.book.id);
+                const isAssigned = !!bookMilestoneMap[book.book.id];
                 return (
                   <label
                     key={book.book.id}
-                    className={`hover:bg-background/80 hover:text-foreground flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                      checked ? 'bg-background font-semibold shadow-2xs' : ''
-                    }`}
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                      isAssigned
+                        ? 'cursor-not-allowed opacity-50'
+                        : 'hover:bg-background/80 hover:text-foreground cursor-pointer'
+                    } ${checked ? 'bg-background font-semibold shadow-2xs' : ''}`}
                   >
                     <Checkbox
                       checked={checked}
                       className='h-4 w-4'
-                      onCheckedChange={() => toggleBook(book.book.id.toString())}
+                      disabled={isAssigned}
+                      onCheckedChange={() => {
+                        if (!isAssigned) toggleBook(book.book.id.toString());
+                      }}
                     />
                     <div className='flex flex-1 items-center justify-between gap-2 overflow-hidden'>
                       <div className='flex items-center gap-2 overflow-hidden'>
