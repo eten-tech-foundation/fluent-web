@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
@@ -63,6 +64,8 @@ export function PericopeEditor({
   onActiveVerseChange,
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useForwardTextDeletion(containerRef, editorRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
   /**
@@ -150,6 +153,7 @@ export function PericopeEditor({
 
   return (
     <div
+      ref={containerRef}
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
       onContextMenuCapture={handleEditorContextMenu}
