@@ -325,7 +325,7 @@ export function ChapterEditor({
               disabled={Boolean(headingError)}
               onFormat={handleFormat}
               onInsertParagraph={() => {
-                if (editorRef.current && !readOnly && !headingError)
+                if (editorRef.current && !headingError)
                   insertParagraph(editorRef.current);
               }}
             />

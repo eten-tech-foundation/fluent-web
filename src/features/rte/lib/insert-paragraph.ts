@@ -26,9 +26,9 @@ export function insertParagraph(editor: EditorRef): boolean {
 
   const usj = editor.getUsj();
   const index = /^\$\.content\[(\d+)\]/.exec(selection.start.jsonPath)?.[1];
-  if (!usj || index === undefined) return false;
+  if (!usj || index === undefined || Number(index) >= usj.content.length) return false;
   const block = usj.content[Number(index)];
-  if (typeof block === 'string' || block?.type !== 'para') return false;
+  if (typeof block === 'string' || block.type !== 'para') return false;
 
   if (isHeadingMarker(block.marker)) {
     // A title is not verse text. Insert in its following verse without splitting the title.
@@ -41,13 +41,13 @@ export function insertParagraph(editor: EditorRef): boolean {
         node.content?.some(item => typeof item !== 'string' && item.type === 'verse')
     );
     const body = usj.content[next];
-    if (!body || typeof body === 'string') return false;
-    const verseIndex = body.content!.findIndex(
+    if (!body || typeof body === 'string' || !body.content) return false;
+    const verseIndex = body.content.findIndex(
       item => typeof item !== 'string' && item.type === 'verse'
     );
     const offset =
       usj.content.slice(0, next).reduce((sum, child) => sum + length(child), 0) +
-      body.content!.slice(0, verseIndex + 1).reduce((sum, child) => sum + length(child), 0);
+      body.content.slice(0, verseIndex + 1).reduce((sum, child) => sum + length(child), 0);
     // Keep following Poetry unchanged. The two temporary spaces host the caret beside the
     // verse number; the save path trims them once the translator adds text.
     editor.applyUpdate(
