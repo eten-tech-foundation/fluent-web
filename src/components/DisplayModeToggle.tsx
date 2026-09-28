@@ -30,6 +30,17 @@ const ARROW_STEPS = new Map<string, number>([
   ['ArrowUp', -1],
 ]);
 
+/** Keep long runs of missing verses readable, including chapters with over 100 verses. */
+function formatVerseNumbers(numbers: number[]): string {
+  const ranges: string[] = [];
+  for (let i = 0; i < numbers.length; i++) {
+    const start = numbers[i];
+    while (i + 1 < numbers.length && numbers[i + 1] === numbers[i] + 1) i++;
+    ranges.push(start === numbers[i] ? String(start) : `${start}-${numbers[i]}`);
+  }
+  return ranges.join(', ');
+}
+
 /**
  * The Display selector in the drafting settings menu.
  *
@@ -62,7 +73,7 @@ export const DisplayModeToggle: React.FC = () => {
               'Chapter view needs content in all {{total}} verses. {{completed}} of {{total}} have content. Missing content: {{verses}}. Continue in Verse or Pericope view.',
             total: availability?.expectedVerseCount,
             completed: (availability?.expectedVerseCount ?? 0) - missing.length,
-            verses: missing.join(', '),
+            verses: formatVerseNumbers(missing),
           })
         : t('chapterViewUnavailable', 'Chapter view is available once all verses have content.');
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);

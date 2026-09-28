@@ -149,6 +149,21 @@ describe('DisplayModeToggle', () => {
     expect(useAppStore.getState().displayMode).toBe('verse');
   });
 
+  it('keeps long consecutive missing verse lists readable', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 176,
+        missingVerseNumbers: Array.from({ length: 176 }, (_, index) => index + 1),
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '0 of 176 have content. Missing content: 1-176.'
+    );
+  });
+
   it('does not reuse missing verse details from another assignment', () => {
     useAppStore.setState({
       chapterViewAvailability: {
