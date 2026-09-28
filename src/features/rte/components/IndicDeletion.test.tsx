@@ -42,9 +42,15 @@ describe.each([
   ['Chapter', ChapterEditor],
   ['Pericope', PericopeEditor],
 ] as const)('%s forward text deletion', (_name, Editor) => {
-  it.each(['કિ', 'ક્ષિ', 'कि', 'क्षि', 'é'])(
-    'deletes the complete browser-selected cluster %s and reports the saved text',
-    async cluster => {
+  it.each(
+    ['કિ', 'ક્ષિ', 'कि', 'क्षि', 'é'].flatMap(cluster =>
+      ['keydown', 'deleteContentForward', 'deleteContent'].map(
+        inputType => [cluster, inputType] as const
+      )
+    )
+  )(
+    'deletes the complete browser-selected cluster %s through %s and reports the saved text',
+    async (cluster, inputType) => {
       // jsdom has no caret navigation. Model the range supplied by the browser for one
       // forward character; real Chromium/Firefox contenteditable comparisons live in E2E.
       Object.defineProperty(Selection.prototype, 'modify', {
@@ -88,7 +94,12 @@ describe.each([
         fireEvent(document, new Event('selectionchange'));
       });
       await act(async () => {
-        fireEvent.keyDown(input, { key: 'Delete' });
+        if (inputType === 'keydown') fireEvent.keyDown(input, { key: 'Delete' });
+        else
+          fireEvent(
+            input,
+            new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType })
+          );
       });
       await waitFor(() => expect(text.textContent.trim()).toBe('A  Z'));
       expect(onVersesChange).toHaveBeenLastCalledWith([

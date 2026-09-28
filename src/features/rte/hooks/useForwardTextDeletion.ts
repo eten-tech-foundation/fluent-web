@@ -25,7 +25,8 @@ export function useForwardTextDeletion(
           event.shiftKey
         )
           return;
-      } else if (event.inputType !== 'deleteContentForward') return;
+      } else if (event.inputType !== 'deleteContentForward' && event.inputType !== 'deleteContent')
+        return;
 
       const target = event.target;
       const root =
