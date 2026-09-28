@@ -158,7 +158,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
             <div className='flex min-h-[24px] flex-1 flex-col items-start justify-center'>
               <div className='relative w-full'>
                 {readOnly ? (
-                  <p className='w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                  <p className='target-scripture w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                     {currentTargetVerse?.content ?? ''}
                   </p>
                 ) : (
@@ -169,7 +169,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                     aria-label={`Translation for verse ${v.verseNumber}`}
                     autoCapitalize='sentences'
                     autoCorrect='on'
-                    className={`text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
+                    className={`target-scripture text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
                       isButtonRow ? 'pr-16' : ''
                     }`}
                     placeholder={

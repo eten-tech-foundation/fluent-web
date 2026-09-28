@@ -54,7 +54,9 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
     <div className={`px-6 ${shouldShowTarget ? 'flex' : 'hidden'}`}>
       {readOnly ? (
         <div className='bg-card flex-1 rounded-lg border-2 px-4 py-3 shadow-sm'>
-          <p className='min-h-12 leading-snug'>{currentTargetVerse?.content ?? ''}</p>
+          <p className='target-scripture min-h-12 leading-snug'>
+            {currentTargetVerse?.content ?? ''}
+          </p>
         </div>
       ) : (
         <div
@@ -70,7 +72,7 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             aria-label={`Translation for verse ${verseNumber}`}
             autoCapitalize='sentences'
             autoCorrect='on'
-            className='w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+            className='target-scripture w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
             placeholder={
               isAiActiveNoSuggestion && suggestionStatus === 'generating'
                 ? t('generatingAiSuggestion', 'Generating...')
