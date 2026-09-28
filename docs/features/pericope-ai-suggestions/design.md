@@ -12,6 +12,8 @@ be available before enabling this web change.
 ## Loading and preservation
 
 Both pericope surfaces populate every empty, untouched verse in the active group.
+This includes source verses without a persisted translation row; the API does not return
+empty placeholders for them. A section title may also arrive before that first row exists.
 Saved and locally edited text remain unchanged. A single `queue-pericopes` request identifies
 the active and next source-backed groups; the API resolves their verse ranges and queues
 missing verse drafts and eligible titles. Suggestions for the next group are fetched into
@@ -28,6 +30,11 @@ Disabling AI cancels pending work on the client and stops new fills. Already dis
 content stays in the draft and continues through normal autosave. Enabling AI again requests
 the active group and permits any currently empty input to receive a suggestion. During an
 enabled session, manually clearing an input does not immediately refill it.
+
+Manual opt-in waits for the assignment update to succeed before enabling suggestion requests.
+Opt-out stops new fills immediately. Closing Settings does not discard the pending update or
+its rollback, and reopening it keeps the switch disabled until that request settles. A late
+response updates only the assignment it belongs to, preserving any newer project fields.
 
 ## Section titles
 

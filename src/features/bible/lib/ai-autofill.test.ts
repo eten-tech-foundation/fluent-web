@@ -13,6 +13,20 @@ const emptyPericope: TargetVerse[] = [
 const PERICOPE = [1, 2, 3, 4];
 
 describe('pendingAiAutoFills', () => {
+  it('fills source-backed verses that have no saved translation row without requiring focus', () => {
+    const fills = pendingAiAutoFills({
+      candidateVerseNumbers: PERICOPE,
+      verses: [{ verseNumber: 2, content: 'Human draft.' }],
+      suggestions: { 1: 'One.', 2: 'Two.', 3: 'Three.', 4: 'Four.', 5: 'Next group.' },
+      touchedVerseNumbers: new Set([3]),
+    });
+
+    expect(fills).toEqual([
+      { verseNumber: 1, text: 'One.' },
+      { verseNumber: 4, text: 'Four.' },
+    ]);
+  });
+
   it('fills only the verse in focus for the textarea path', () => {
     const fills = pendingAiAutoFills({
       candidateVerseNumbers: [2],
