@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 
-// Temporary mock wrapper for Milestone Detail
 import { MilestoneDetailWrapper } from '@/features/projects/components/MilestoneDetailWrapper';
 
 const searchSchema = z.object({
