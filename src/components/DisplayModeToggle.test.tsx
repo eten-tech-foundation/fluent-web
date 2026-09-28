@@ -1,5 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { config } from '@/lib/config';
@@ -11,8 +13,14 @@ import { DisplayModeToggle } from './DisplayModeToggle';
 // #396: the drafting settings toggle gains Chapter as a third option. Switching only changes how
 // the chapter is presented, so these tests assert the selection, never any content mutation.
 
+const i18n = createInstance();
+
 function renderToggle() {
-  render(<DisplayModeToggle />);
+  render(
+    <I18nextProvider i18n={i18n}>
+      <DisplayModeToggle />
+    </I18nextProvider>
+  );
   return { user: userEvent.setup() };
 }
 
@@ -30,7 +38,8 @@ describe('DisplayModeToggle', () => {
     config.features.rtePericope = initialFeatureFlag;
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.init({ lng: 'en', resources: { en: { translation: {} } } });
     config.features.rtePericope = true;
     useAppStore.setState({
       displayMode: 'verse',
