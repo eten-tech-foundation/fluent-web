@@ -93,7 +93,7 @@ export const useBibleTextDebounce = ({
     async (verseId: number, payload: SavePayload, sequenceNumber: number): Promise<void> => {
       // Serialize requests for this verse so a delayed older write cannot overwrite a newer one.
       const previousSave = activeSaves.current.get(verseId);
-      if (previousSave) await previousSave.catch(() => {});
+      await previousSave?.catch(() => {});
 
       // Don't execute save if role warning is active
       if (useAppStore.getState().roleChangeWarning) {

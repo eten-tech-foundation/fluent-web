@@ -92,6 +92,15 @@ describe('useBibleTextDebounce with markers', () => {
     expect(persisted).toEqual(['Older edit', 'Initial']);
   });
 
+  it('clears saving status when an immediate save has no changes', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    await result.current.saveImmediately(1, { content: 'Initial' });
+    expect(onSave).not.toHaveBeenCalled();
+    expect(result.current.getSaveStatus(1).isActivelySaving).toBe(false);
+  });
+
   it('saves a markers-only change so a new paragraph reaches the server', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
