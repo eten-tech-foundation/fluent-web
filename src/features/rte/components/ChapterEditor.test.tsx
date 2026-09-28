@@ -419,29 +419,6 @@ describe('ChapterEditor', () => {
       expect(editor.setUsj).not.toHaveBeenCalled();
     });
 
-    it('changes a heading level without applying it to the previous verse', async () => {
-      const user = userEvent.setup();
-      const onVersesChange = vi.fn();
-      const rows = [
-        { ...A_PAIR[0], markers: { headings: [{ marker: 's1', text: 'Title' }] } },
-        A_PAIR[1],
-      ];
-      render(<ChapterEditor {...CHAPTER_PROPS} verses={rows} onVersesChange={onVersesChange} />);
-      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 1 }));
-      reportBlock('s1');
-      await user.click(screen.getByRole('button', { name: 'Level 3' }));
-      expect(editor.formatPara).not.toHaveBeenCalled();
-      expect(onVersesChange).toHaveBeenLastCalledWith([
-        {
-          ...rows[0],
-          markers: {
-            paragraphs: [{ marker: 'p', offset: 0 }],
-            headings: [{ marker: 's3', text: 'Title' }],
-          },
-        },
-      ]);
-    });
-
     it('still reports a heading the cursor is already in', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 

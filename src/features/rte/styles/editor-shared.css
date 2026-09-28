@@ -51,3 +51,33 @@
 .dark .rte-editor .verse {
   color: var(--color-slate-100);
 }
+
+/* Keep the same section hierarchy in both editing surfaces, including imported s3/s4. */
+.rte-editor .usfm_s,
+.rte-editor .usfm_s1 {
+  font-size: 1.15em;
+  font-weight: 700;
+  font-style: normal;
+  margin: 1.4em 0 0.5em;
+}
+
+.rte-editor .usfm_s2 {
+  font-size: 1.05em;
+  font-weight: 700;
+  font-style: normal;
+  margin: 1.2em 0 0.45em;
+}
+
+.rte-editor .usfm_s3 {
+  font-size: 1em;
+  font-weight: 700;
+  font-style: normal;
+  margin: 1em 0 0.4em;
+}
+
+.rte-editor .usfm_s4 {
+  font-size: 1em;
+  font-weight: 400;
+  font-style: italic;
+  margin: 1em 0 0.4em;
+}

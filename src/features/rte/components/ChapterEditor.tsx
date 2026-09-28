@@ -68,8 +68,6 @@ export function ChapterEditor({
   onActiveVerseChange,
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
-  const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);
   const loadedKeyRef = useRef(contentKey);
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
@@ -210,8 +208,6 @@ export function ChapterEditor({
           const selection = formatHeadingLevel(editor, marker, handleUsjChange);
           if (selection) {
             setBlockMarker(marker);
-            clearTimeout(headingSelectionTimer.current);
-            headingSelectionTimer.current = setTimeout(() => editor.setSelection(selection), 0);
           }
         }
         return;
