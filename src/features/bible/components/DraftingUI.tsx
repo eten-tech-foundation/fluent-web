@@ -1098,6 +1098,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           pericopes={pericopes}
                           projectItem={projectItem}
                           readOnly={readOnly}
+                          resourceBibleError={bibleContentError}
                           resourceBibleId={activeResourceBibleTab?.id}
                           resourceBibleLoading={bibleContentLoading}
                           selectedPanel={selectedPanel}
