@@ -1,12 +1,15 @@
+import { useEffect, useMemo } from 'react';
+
 import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
+import { getActiveGrants, hasGrantForProject, isProjectManager } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -25,19 +28,34 @@ export const ProjectDetailWrapper: React.FC = () => {
     error: projectError,
   } = useProjectDetails(projectId);
 
-  const { userdetail } = useAppStore();
-  const isManager = isProjectManager(
-    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
-    project?.id
-  );
+  const location = useLocation();
+  const userdetail = useAppStore(state => state.userdetail);
+  const setRoleChangeWarning = useAppStore(state => state.setRoleChangeWarning);
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const targetProjectId = Number(projectId);
+
+  const hasProjectGrant = useMemo(() => {
+    if (!targetProjectId || !userdetail) return true;
+    return hasGrantForProject(activeGrants, targetProjectId);
+  }, [activeGrants, targetProjectId, userdetail]);
+
+  useEffect(() => {
+    if (targetProjectId && !hasProjectGrant) {
+      toast.error('You have been removed from this project.');
+      setRoleChangeWarning(false);
+      void navigate({ to: '/', replace: true });
+    }
+  }, [hasProjectGrant, targetProjectId, navigate, setRoleChangeWarning]);
+
+  // Same check the page uses to show the button, repeated here so `?modal=metadata`
+  // typed straight into the URL cannot open the editor for a non-manager.
+  const isManager = isProjectManager(activeGrants, project?.id);
 
   const { data: chapterAssignments } = useChapterAssignments(projectId);
   const { data: books } = useProjectBooks(projectId);
   const { data: users, isLoading: usersLoading } = useUsers(isManager);
 
   const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
-
-  const location = useLocation();
 
   const handleBack = () => {
     const from = (location.state as { from?: string } | undefined)?.from;

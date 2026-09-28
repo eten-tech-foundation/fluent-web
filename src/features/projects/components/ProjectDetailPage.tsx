@@ -93,8 +93,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   books,
   chapterAssignments,
 }) => {
-  const navigate = useNavigate();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
 
