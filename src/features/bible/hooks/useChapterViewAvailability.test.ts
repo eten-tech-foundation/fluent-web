@@ -178,12 +178,14 @@ describe('useChapterViewAvailability', () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const targetVerses = [COMPLETE[0], { verseNumber: 2, content: '' }];
     const { result } = renderHook(() => {
-      const drafting = useDrafting({
+      const draftingProps = {
         sourceVerses: SOURCES,
         targetVerses,
         readOnly: false,
+        displayMode: 'verse' as const,
         onSave,
-      });
+      };
+      const drafting = useDrafting(draftingProps);
       const available = useChapterViewAvailability({
         projectItem: PROJECT,
         sourceVerses: SOURCES,

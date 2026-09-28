@@ -26,17 +26,19 @@ vi.mock('@/features/bible/hooks/useSyncGlobalAiSetting', () => ({
 // Keep the real draft and save lifecycle while replacing only the visual editor.
 vi.mock('./DraftingUI', () => ({
   DraftingUI: ({ projectItem, sourceVerses, targetVerses, readOnly = false }: DraftingUIProps) => {
-    const { verses, handleTextChange } = useDrafting({
+    const draftingProps = {
       sourceVerses,
       targetVerses,
       readOnly,
-      onSave: (verse, payload) =>
+      displayMode: 'verse' as const,
+      onSave: (verse: number, payload: SavePayload) =>
         saveVerse(
           projectItem.chapterAssignmentId,
           sourceVerses.find(source => source.verseNumber === verse)!.id,
           payload
         ),
-    });
+    };
+    const { verses, handleTextChange } = useDrafting(draftingProps);
     return (
       <textarea
         aria-label='Translation'
