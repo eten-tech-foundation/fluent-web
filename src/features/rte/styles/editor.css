@@ -43,7 +43,7 @@
 }
 
 .editor-input > p {
-  direction: inherit;
+  /* Let each paragraph's dir="auto" resolve its own text direction. */
   margin-top: 0;
   margin-bottom: 0;
   line-height: 1.5;
