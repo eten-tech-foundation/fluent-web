@@ -268,6 +268,7 @@ const defaultDraftingHookResult = (overrides = {}) => ({
   moveToNextVerse: vi.fn(),
   revealNextVerse: vi.fn(),
   updateButtonPosition: vi.fn(),
+  resizeAndPosition: vi.fn(),
   ...overrides,
 });
 

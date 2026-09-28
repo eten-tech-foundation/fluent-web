@@ -74,6 +74,14 @@ export const useDrafting = ({
     setButtonTop(top);
   }, [lastRevealedVerseNumber, readOnly]);
 
+  const resizeAndPosition = useCallback(() => {
+    if (readOnly) return;
+    Object.values(textareaRefs.current).forEach(textarea => {
+      if (textarea) autoResizeTextarea(textarea);
+    });
+    updateButtonPosition();
+  }, [readOnly, autoResizeTextarea, updateButtonPosition]);
+
   const scrollVerseToTop = useCallback((verseNumber: number) => {
     const container = targetScrollRef.current;
     const activeRow = verseRefs.current[verseNumber];
@@ -296,12 +304,7 @@ export const useDrafting = ({
     if (readOnly) return;
 
     const resizeAll = () => {
-      Object.values(textareaRefs.current).forEach(textarea => {
-        if (textarea) {
-          autoResizeTextarea(textarea);
-        }
-      });
-      updateButtonPosition();
+      resizeAndPosition();
       if (pendingInitScrollRef.current !== null) {
         scrollVerseToTop(pendingInitScrollRef.current);
         pendingInitScrollRef.current = null;
@@ -326,17 +329,13 @@ export const useDrafting = ({
         observer.disconnect();
       }
     };
-  }, [displayMode, readOnly, autoResizeTextarea, updateButtonPosition, scrollVerseToTop]);
+  }, [displayMode, readOnly, resizeAndPosition, scrollVerseToTop]);
 
   useLayoutEffect(() => {
-    if (readOnly) return;
     // Switching views replaces the row refs without necessarily resizing the viewport.
     // Size the newly mounted textareas before measuring the last revealed row.
-    Object.values(textareaRefs.current).forEach(textarea => {
-      if (textarea) autoResizeTextarea(textarea);
-    });
-    updateButtonPosition();
-  }, [displayMode, readOnly, autoResizeTextarea, updateButtonPosition]);
+    resizeAndPosition();
+  }, [displayMode, resizeAndPosition]);
 
   useLayoutEffect(() => {
     if (readOnly) return;
@@ -349,10 +348,9 @@ export const useDrafting = ({
           textarea.setSelectionRange(len, len);
         } catch {}
       }
-      autoResizeTextarea(textarea);
     }
-    updateButtonPosition();
-  }, [activeVerseId, revealedVerses, updateButtonPosition, readOnly, autoResizeTextarea]);
+    resizeAndPosition();
+  }, [activeVerseId, revealedVerses, resizeAndPosition, readOnly]);
 
   return {
     verses,
@@ -371,5 +369,6 @@ export const useDrafting = ({
     moveToNextVerse,
     revealNextVerse,
     updateButtonPosition,
+    resizeAndPosition,
   };
 };

@@ -116,49 +116,75 @@ afterEach(() => {
   useAppStore.setState({ displayMode: originalDisplayMode });
 });
 
+function mockDraftingLayout() {
+  const layout = { measuredPericope: false, extraHeight: 0 };
+  vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (
+    this: HTMLElement
+  ) {
+    return this.closest('.hidden') ? null : this.parentElement;
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (
+    this: HTMLElement
+  ) {
+    return this instanceof HTMLTextAreaElement && this.value.includes('\n') ? 240 : 20;
+  });
+  // jsdom has no layout. A pericope is taller than a verse, while the shared scroll
+  // viewport stays fixed. Its ResizeObserver stub never emits a resize notification.
+  // These selectors mirror DraftingUI/GridVerse/GridPericope layout classes; update them
+  // together if their styling changes. Row-height assertions below make the coupling explicit.
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: HTMLElement
+  ) {
+    if (this.classList.contains('overflow-y-auto')) return new DOMRect(0, 80, 1000, 600);
+    if (this.classList.contains('py-4') && this.style.gridTemplateColumns === '1fr 1fr') {
+      layout.measuredPericope = true;
+      return new DOMRect(0, 80, 1000, 600);
+    }
+    if (this.classList.contains('py-4') && this.style.gridTemplateColumns === '2rem 1fr 1fr') {
+      const verseNumber = Number(this.querySelector('span')?.textContent);
+      const rowHeight = (verse: number) => {
+        const textarea = this.parentElement?.querySelector<HTMLTextAreaElement>(
+          '[aria-label="Translation for verse ' + verse + '"]'
+        );
+        const textareaHeight = textarea?.style.height;
+        return (
+          Math.max(160, (textareaHeight ? Number.parseFloat(textareaHeight) : 0) + 40) +
+          (verse === 1 ? layout.extraHeight : 0)
+        );
+      };
+      const previousHeight = Array.from({ length: verseNumber - 1 }, (_, index) =>
+        rowHeight(index + 1)
+      ).reduce((sum, height) => sum + height, 0);
+      return new DOMRect(0, 80 + previousHeight, 1000, rowHeight(verseNumber));
+    }
+    return new DOMRect();
+  });
+  return layout;
+}
+
+function renderDrafting() {
+  return renderWithProviders(
+    <DraftingUI
+      projectItem={assignment}
+      sourceVerses={sources}
+      targetVerses={[
+        { verseNumber: 1, content: savedFirstVerse },
+        { verseNumber: 2, content: 'Saved second verse' },
+        { verseNumber: 3, content: '' },
+        { verseNumber: 4, content: '' },
+      ]}
+      userdetail={user}
+    />
+  );
+}
+
 describe('Next Verse position after changing the drafting view', () => {
   it.each([
     { label: 'rich text', rte: true },
     { label: 'textarea', rte: false },
   ])('follows the verse row after leaving the $label pericope editor', async ({ rte }) => {
     config.features.rtePericope = rte;
-    let measuredPericope = false;
-    vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (
-      this: HTMLElement
-    ) {
-      return this.closest('.hidden') ? null : this.parentElement;
-    });
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (
-      this: HTMLElement
-    ) {
-      return this instanceof HTMLTextAreaElement && this.value.includes('\n') ? 240 : 20;
-    });
-    // jsdom has no layout. A pericope is taller than a verse, while the shared scroll
-    // viewport stays fixed. Its ResizeObserver stub never emits a resize notification.
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: HTMLElement
-    ) {
-      if (this.classList.contains('overflow-y-auto')) return new DOMRect(0, 80, 1000, 600);
-      if (this.classList.contains('py-4') && this.style.gridTemplateColumns === '1fr 1fr') {
-        measuredPericope = true;
-        return new DOMRect(0, 80, 1000, 600);
-      }
-      if (this.classList.contains('py-4') && this.style.gridTemplateColumns === '2rem 1fr 1fr') {
-        const verseNumber = Number(this.querySelector('span')?.textContent);
-        const rowHeight = (verse: number) => {
-          const textarea = this.parentElement?.querySelector<HTMLTextAreaElement>(
-            '[aria-label="Translation for verse ' + verse + '"]'
-          );
-          const textareaHeight = textarea?.style.height;
-          return Math.max(160, (textareaHeight ? Number.parseFloat(textareaHeight) : 0) + 40);
-        };
-        const previousHeight = Array.from({ length: verseNumber - 1 }, (_, index) =>
-          rowHeight(index + 1)
-        ).reduce((sum, height) => sum + height, 0);
-        return new DOMRect(0, 80 + previousHeight, 1000, rowHeight(verseNumber));
-      }
-      return new DOMRect();
-    });
+    const layout = mockDraftingLayout();
     const { container, user: translator } = renderWithProviders(
       <DraftingUI
         projectItem={assignment}
@@ -183,7 +209,7 @@ describe('Next Verse position after changing the drafting view', () => {
       );
     }
     // Let the initial measurement finish so it cannot accidentally repair the mode switch.
-    await waitFor(() => expect(measuredPericope).toBe(true));
+    await waitFor(() => expect(layout.measuredPericope).toBe(true));
 
     // Only the view changes: no resize, scroll event, edit, or verse selection.
     act(() => useAppStore.setState({ displayMode: 'verse' }));
@@ -216,5 +242,78 @@ describe('Next Verse position after changing the drafting view', () => {
       savedFirstVerse
     );
     expect(screen.getByRole('textbox', { name: 'Translation for verse 3' })).toHaveValue('');
+  });
+});
+
+describe('Next Verse position when the rendered rows change', () => {
+  it.each(['error', 'empty'] as const)(
+    'positions delayed pericope %s fallback without changing modes',
+    async result => {
+      config.features.rtePericope = true;
+      mockDraftingLayout();
+      let finishRequest!: () => void;
+      const pending = new Promise<void>(resolve => {
+        finishRequest = resolve;
+      });
+      server.use(
+        http.get(config.api.url + '/projects/7/pericopes/MRK/1', async () => {
+          await pending;
+          return result === 'error'
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json([]);
+        })
+      );
+      const { container } = renderDrafting();
+      const scrollContainer = container.querySelector<HTMLElement>('.overflow-y-auto')!;
+      scrollContainer.scrollTop = 60;
+      // Finish after the initial 100 ms measurement, so that timer cannot mask the missing row mount.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      });
+      expect(screen.queryByRole('button', { name: 'Next Verse' })).not.toBeInTheDocument();
+      finishRequest();
+      const next = await screen.findByRole('button', { name: 'Next Verse' });
+      expect(useAppStore.getState().displayMode).toBe('pericope');
+      expect(next.parentElement).toHaveStyle({ top: '500px' });
+      expect(screen.getByRole('textbox', { name: 'Translation for verse 1' })).toHaveStyle({
+        height: '240px',
+      });
+      if (result === 'error')
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Could not load the complete pericope.'
+        );
+    }
+  );
+
+  it('remeasures the new scroll container after returning from Chapter View', async () => {
+    config.features.rtePericope = true;
+    mockDraftingLayout();
+    const { container } = renderDrafting();
+    await screen.findByRole('button', { name: 'Next Pericope' }, { timeout: 3000 });
+    act(() => useAppStore.setState({ displayMode: 'chapter' }));
+    await screen.findByTestId('chapter-editor');
+    expect(screen.queryByRole('button', { name: 'Next Verse' })).not.toBeInTheDocument();
+    act(() => useAppStore.setState({ displayMode: 'verse' }));
+    const next = await screen.findByRole('button', { name: 'Next Verse' });
+    // The old viewport unmounted. The new viewport starts at scrollTop zero.
+    expect(container.querySelector<HTMLElement>('.overflow-y-auto')!.scrollTop).toBe(0);
+    expect(next.parentElement).toHaveStyle({ top: '440px' });
+    expect(screen.getByRole('textbox', { name: 'Translation for verse 1' })).toHaveValue(
+      savedFirstVerse
+    );
+  });
+
+  it('keeps Next Verse at the reveal boundary when editing an earlier verse', async () => {
+    config.features.rtePericope = false;
+    useAppStore.setState({ displayMode: 'verse' });
+    mockDraftingLayout();
+    const { user: translator } = renderDrafting();
+    const next = await screen.findByRole('button', { name: 'Next Verse' });
+    await translator.click(screen.getByRole('textbox', { name: 'Translation for verse 1' }));
+    expect(screen.getByRole('textbox', { name: 'Translation for verse 1' })).toHaveFocus();
+    expect(next.parentElement).toHaveStyle({ top: '440px' });
+    await translator.click(next);
+    expect(screen.getByRole('textbox', { name: 'Translation for verse 3' })).toHaveFocus();
+    expect(next.parentElement).toHaveStyle({ top: '600px' });
   });
 });
