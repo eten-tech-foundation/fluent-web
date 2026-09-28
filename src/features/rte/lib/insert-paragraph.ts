@@ -17,6 +17,8 @@ function length(node: string | MarkerObject): number {
 export function insertParagraph(editor: EditorRef): boolean {
   const selection = editor.getSelection();
   if (!selection) return false;
+  if (!('offset' in selection.start) || (selection.end && !('offset' in selection.end)))
+    return false;
   if (
     selection.end &&
     (selection.start.jsonPath !== selection.end.jsonPath ||

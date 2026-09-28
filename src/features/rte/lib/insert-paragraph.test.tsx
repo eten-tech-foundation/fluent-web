@@ -9,6 +9,11 @@ import { pericopeVersesToUsj, usjToPericopeVerses } from './pericope-usj';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 
+type OffsetLocation = Extract<
+  NonNullable<ReturnType<EditorRef['getSelection']>>['start'],
+  { offset: number }
+>;
+
 async function setup(marker = 'p', text = 'First words. Last words.') {
   const ref = createRef<EditorRef>();
   const rows = [
@@ -32,7 +37,7 @@ async function setup(marker = 'p', text = 'First words. Last words.') {
     />
   );
   await waitFor(() => expect(ref.current?.getUsj()).toBeTruthy());
-  const select = async (jsonPath: string, offset: number) => {
+  const select = async (jsonPath: OffsetLocation['jsonPath'], offset: number) => {
     act(() => ref.current!.setSelection({ start: { jsonPath, offset } }));
     await waitFor(() => expect(ref.current!.getSelection()?.start.jsonPath).toBe(jsonPath));
   };
