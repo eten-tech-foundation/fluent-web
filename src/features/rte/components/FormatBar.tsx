@@ -137,6 +137,7 @@ export function FormatBar({
 
       {onInsertParagraph && (
         <FormatButton
+          aria-label={t('insertParagraph', 'Insert paragraph')}
           className='h-7 gap-1 px-2 text-xs'
           disabled={disabled || blockMarker === undefined}
           title={t(
