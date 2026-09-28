@@ -18,28 +18,37 @@ export function useChapterViewAvailability({
 }: UseChapterViewAvailabilityProps): boolean {
   const { chapterAssignmentId, totalVerses } = projectItem;
   const setAvailability = useAppStore(state => state.setChapterViewAvailability);
-  const available = useMemo(() => {
+  const availability = useMemo(() => {
     if (
-      !config.features.rtePericope ||
       sourceVerses.length === 0 ||
       sourceVerses.length !== totalVerses ||
       new Set(sourceVerses.map(verse => verse.verseNumber)).size !== totalVerses
     ) {
-      return false;
+      return { available: false, expectedVerseCount: totalVerses, missingVerseNumbers: null };
     }
     const targets = new Map(verses.map(verse => [verse.verseNumber, verse.content]));
-    if (targets.size !== verses.length) return false;
-    return sourceVerses.every(source => Boolean(targets.get(source.verseNumber)?.trim()));
+    if (targets.size !== verses.length) {
+      return { available: false, expectedVerseCount: totalVerses, missingVerseNumbers: null };
+    }
+    const missingVerseNumbers = sourceVerses
+      .filter(source => !targets.get(source.verseNumber)?.trim())
+      .map(source => source.verseNumber)
+      .sort((a, b) => a - b);
+    return {
+      available: config.features.rtePericope && missingVerseNumbers.length === 0,
+      expectedVerseCount: totalVerses,
+      missingVerseNumbers,
+    };
   }, [sourceVerses, verses, totalVerses]);
 
   useLayoutEffect(() => {
-    setAvailability({ chapterAssignmentId, available });
+    setAvailability({ chapterAssignmentId, ...availability });
     return () => {
       if (chapterViewAvailabilityFor(useAppStore.getState(), chapterAssignmentId)) {
         setAvailability(null);
       }
     };
-  }, [available, chapterAssignmentId, setAvailability]);
+  }, [availability, chapterAssignmentId, setAvailability]);
 
-  return available;
+  return availability.available;
 }

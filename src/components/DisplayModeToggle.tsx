@@ -42,16 +42,29 @@ export const DisplayModeToggle: React.FC = () => {
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
   const setDisplayMode = useAppStore(state => state.setDisplayMode);
-  const chapterAvailable = useAppStore(
-    state =>
-      chapterViewAvailabilityFor(state, state.currentProjectItem?.chapterAssignmentId)
-        ?.available === true
+  const availability = useAppStore(state =>
+    chapterViewAvailabilityFor(state, state.currentProjectItem?.chapterAssignmentId)
   );
+  const chapterAvailable = availability?.available === true;
   const labelId = useId();
   const explanationId = useId();
-  const explanation = config.features.rtePericope
-    ? t('chapterViewUnavailable', 'Chapter view is available once all verses have content.')
-    : t('chapterViewDisabled', 'Chapter view is not available in this environment.');
+  const missing = availability?.missingVerseNumbers;
+  const explanation = !config.features.rtePericope
+    ? t('chapterViewDisabled', 'Chapter view is not available in this environment.')
+    : missing === null
+      ? t(
+          'chapterViewUnverified',
+          'Chapter content could not be verified. Reopen the chapter to try again.'
+        )
+      : missing?.length
+        ? t('chapterViewMissingContent', {
+            defaultValue:
+              'Chapter view needs content in all {{total}} verses. {{completed}} of {{total}} have content. Missing content: {{verses}}. Continue in Verse or Pericope view.',
+            total: availability?.expectedVerseCount,
+            completed: (availability?.expectedVerseCount ?? 0) - missing.length,
+            verses: missing.join(', '),
+          })
+        : t('chapterViewUnavailable', 'Chapter view is available once all verses have content.');
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Roving tabindex: the whole group is one tab stop, and Tab enters it at the checked option.
@@ -79,7 +92,7 @@ export const DisplayModeToggle: React.FC = () => {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className='border-primary bg-background flex w-full items-center justify-between rounded-[12px] border p-4 shadow-sm'>
+      <div className='border-primary bg-background flex w-full flex-wrap items-center justify-between gap-y-3 rounded-[12px] border p-4 shadow-sm'>
         <span className='text-foreground text-sm font-semibold' id={labelId}>
           {t('display', 'Display')}
         </span>
@@ -134,7 +147,7 @@ export const DisplayModeToggle: React.FC = () => {
           })}
         </div>
         {!chapterAvailable && (
-          <span className='sr-only' id={explanationId}>
+          <span className='text-muted-foreground w-full text-sm' id={explanationId} role='status'>
             {explanation}
           </span>
         )}

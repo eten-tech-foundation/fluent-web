@@ -49,6 +49,49 @@ describe('useBibleTextDebounce with markers', () => {
     useAppStore.getState().setRoleChangeWarning(false);
   });
 
+  it('keeps two debounced saves in order when the first request is delayed', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const persisted: string[] = [];
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      if (payload.content === 'Older edit') await pending;
+      persisted.push(payload.content);
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    result.current.debouncedSave(1, { content: 'Latest edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(persisted).toEqual(['Older edit', 'Latest edit']);
+    expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+  });
+
+  it('persists a revert to the initial content after a pending older write', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const persisted: string[] = [];
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      if (payload.content === 'Older edit') await pending;
+      persisted.push(payload.content);
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    result.current.debouncedSave(1, { content: 'Initial' });
+    await vi.advanceTimersByTimeAsync(20);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(persisted).toEqual(['Older edit', 'Initial']);
+  });
+
   it('saves a markers-only change so a new paragraph reaches the server', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));

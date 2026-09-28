@@ -117,7 +117,7 @@ describe('useChapterViewAvailability', () => {
     );
 
     expect(result.current).toBe(false);
-    expect(useAppStore.getState().chapterViewAvailability).toEqual({
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
       chapterAssignmentId: PROJECT.chapterAssignmentId,
       available: false,
     });
@@ -129,7 +129,7 @@ describe('useChapterViewAvailability', () => {
     );
 
     expect(result.current).toBe(true);
-    expect(useAppStore.getState().chapterViewAvailability).toEqual({
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
       chapterAssignmentId: PROJECT.chapterAssignmentId,
       available: true,
     });
@@ -240,8 +240,45 @@ describe('useChapterViewAvailability', () => {
 
     previous.unmount();
 
-    expect(useAppStore.getState().chapterViewAvailability).toEqual({
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
       chapterAssignmentId: nextProject.chapterAssignmentId,
+      available: false,
+    });
+  });
+
+  it('reports expected and missing content from the live draft', () => {
+    const { rerender } = renderHook(
+      ({ verses }) =>
+        useChapterViewAvailability({ projectItem: PROJECT, sourceVerses: SOURCES, verses }),
+      { initialProps: { verses: [COMPLETE[0]] } }
+    );
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
+      expectedVerseCount: 2,
+      missingVerseNumbers: [2],
+      available: false,
+    });
+    rerender({ verses: [{ verseNumber: 1, content: ' ' }, COMPLETE[1]] });
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
+      missingVerseNumbers: [1],
+      available: false,
+    });
+    rerender({ verses: COMPLETE });
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
+      missingVerseNumbers: [],
+      available: true,
+    });
+  });
+
+  it('does not label unverified source data as missing translations', () => {
+    renderHook(() =>
+      useChapterViewAvailability({
+        projectItem: PROJECT,
+        sourceVerses: [SOURCES[0]],
+        verses: COMPLETE,
+      })
+    );
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
+      missingVerseNumbers: null,
       available: false,
     });
   });
@@ -289,7 +326,7 @@ describe('chapter availability store lifecycle', () => {
     useAppStore
       .getState()
       .setCurrentProjectItem({ ...PROJECT, completedVerses: 2, isAiEnabled: true });
-    expect(useAppStore.getState().chapterViewAvailability).toEqual({
+    expect(useAppStore.getState().chapterViewAvailability).toMatchObject({
       chapterAssignmentId: PROJECT.chapterAssignmentId,
       available: true,
     });

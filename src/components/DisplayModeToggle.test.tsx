@@ -128,6 +128,56 @@ describe('DisplayModeToggle', () => {
     );
   });
 
+  it('shows expected and missing verses without needing hover, and explains them on keyboard focus', async () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: [4, 25],
+      },
+    });
+    const { user } = renderToggle();
+    const status = screen.getByRole('status');
+    expect(status).toBeVisible();
+    expect(status).toHaveTextContent('23 of 25 have content. Missing content: 4, 25.');
+    await user.tab();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(status.textContent!);
+    await user.keyboard('{Enter} ');
+    expect(useAppStore.getState().displayMode).toBe('verse');
+  });
+
+  it('does not reuse missing verse details from another assignment', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 397,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: [25],
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).not.toHaveTextContent('25');
+  });
+
+  it('distinguishes unverified data from missing translation content', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: null,
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Chapter content could not be verified. Reopen the chapter to try again.'
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent('Missing content');
+  });
+
   it('offers exactly the three views, in order', () => {
     renderToggle();
 

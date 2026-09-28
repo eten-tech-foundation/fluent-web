@@ -9,6 +9,8 @@ export type DisplayMode = 'verse' | 'pericope' | 'chapter';
 interface ChapterViewAvailability {
   chapterAssignmentId: number;
   available: boolean;
+  expectedVerseCount?: number;
+  missingVerseNumbers?: number[] | null;
 }
 
 interface AppState {

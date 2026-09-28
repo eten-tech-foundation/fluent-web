@@ -91,6 +91,10 @@ export const useBibleTextDebounce = ({
   // Core save function that handles race conditions and retries
   const executeSave = useCallback(
     async (verseId: number, payload: SavePayload, sequenceNumber: number): Promise<void> => {
+      // Serialize requests for this verse so a delayed older write cannot overwrite a newer one.
+      const previousSave = activeSaves.current.get(verseId);
+      if (previousSave) await previousSave.catch(() => {});
+
       // Don't execute save if role warning is active
       if (useAppStore.getState().roleChangeWarning) {
         activeSaves.current.delete(verseId);
@@ -112,9 +116,9 @@ export const useBibleTextDebounce = ({
       try {
         await onSave(verseId, payload);
 
-        // Only update if this is still the latest sequence
+        // Track what reached the server even when a newer edit is waiting to save.
+        lastSavedContent.current.set(verseId, payload);
         if (sequenceNumber === (saveSequence.current.get(verseId) ?? 0)) {
-          lastSavedContent.current.set(verseId, payload);
           activeSaves.current.delete(verseId);
 
           // Clear any pending retry for this verse
@@ -159,9 +163,6 @@ export const useBibleTextDebounce = ({
 
             retryTimeouts.current.set(verseId, retryTimeout);
           }
-        } else {
-          // If this is an outdated sequence that failed, still clean it up
-          activeSaves.current.delete(verseId);
         }
 
         throw error;
@@ -183,7 +184,10 @@ export const useBibleTextDebounce = ({
       }
 
       // Don't schedule a save if content and markers haven't changed from the last saved
-      if (samePayload(payload, lastSavedContent.current.get(verseId))) {
+      if (
+        !activeSaves.current.has(verseId) &&
+        samePayload(payload, lastSavedContent.current.get(verseId))
+      ) {
         debounceTimeouts.current.delete(verseId);
         return;
       }
@@ -220,20 +224,8 @@ export const useBibleTextDebounce = ({
         debounceTimeouts.current.delete(verseId);
       }
 
-      // Don't save if content and markers haven't changed
-      if (samePayload(payload, lastSavedContent.current.get(verseId))) {
-        return;
-      }
-
-      // Create new sequence number BEFORE checking existing saves
       const sequenceNumber = (saveSequence.current.get(verseId) ?? 0) + 1;
       saveSequence.current.set(verseId, sequenceNumber);
-
-      // Wait for any existing save to complete first, but ignore errors
-      const existingSave = activeSaves.current.get(verseId);
-      if (existingSave) {
-        await existingSave.catch(() => {});
-      }
 
       const savePromise = executeSave(verseId, payload, sequenceNumber);
       activeSaves.current.set(verseId, savePromise);
