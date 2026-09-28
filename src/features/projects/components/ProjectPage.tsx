@@ -141,7 +141,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   onProjectSelect,
 }) => {
   const { t } = useTranslation();
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [sortBy, setSortBy] = useState<SortOption>('title');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const columns = [
@@ -230,7 +230,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             </div>
           ) : sortedAndFilteredProjects.length === 0 ? (
             <div className='flex items-center justify-center py-8'>
-              <span className='text-gray-500'>{t('noProjectsFound')}</span>
+              <span className='text-gray-500'>{t('noProjectsContactAdmin')}</span>
             </div>
           ) : (
             <TooltipProvider delayDuration={300}>

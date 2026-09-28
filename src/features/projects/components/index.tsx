@@ -1,13 +1,13 @@
 import React from 'react';
 
-import { getRouteApi, useNavigate } from '@tanstack/react-router';
+import { Navigate, getRouteApi, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
 import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
 import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
-import { getActiveGrants, isManager } from '@/lib/grant-utils';
+import { canCreateProject, getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { type CreateProject } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -15,6 +15,10 @@ import { useAppStore } from '@/store/store';
 import { CreateProjectModal, type CreateProjectData } from './CreateProjectModal';
 
 const routeApi = getRouteApi('/_authenticated/projects/');
+
+// Where translator/reviewer/observer roles land instead of the Projects list (#410).
+// Update this to match whatever route these roles actually use in your app.
+const NON_MANAGER_LANDING_ROUTE = '/';
 
 export const ProjectsWrapper: React.FC = () => {
   const navigate = useNavigate();
@@ -28,8 +32,14 @@ export const ProjectsWrapper: React.FC = () => {
   const activeOrgId = userdetail?.lastActiveOrgId;
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
-  // All manager roles (including Project Manager) can create projects.
-  const canCreate = isManager(activeRoleGrants);
+
+  // Ticket #410: only project managers and org managers can view this page at all.
+  const canViewProjectsList = isManager(activeRoleGrants);
+
+  // Per #410: org managers only, target state. Project Managers keep access
+  // temporarily until the Org Manager dashboard ships — see
+  // ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT in grant-utils.ts.
+  const canCreate = canCreateProject(activeRoleGrants);
 
   const handleOpenCreate = () => {
     void navigate({
@@ -87,6 +97,14 @@ export const ProjectsWrapper: React.FC = () => {
       });
     }
   };
+
+  // Route non-manager roles away from the Projects list entirely (#410).
+  // The `userdetail &&` guard matters: without it, every user briefly gets
+  // redirected on page refresh, before userdetail finishes loading — including
+  // real managers. Waiting for userdetail avoids that flicker/bug.
+  if (userdetail && !canViewProjectsList) {
+    return <Navigate replace to={NON_MANAGER_LANDING_ROUTE} />;
+  }
 
   return (
     <>

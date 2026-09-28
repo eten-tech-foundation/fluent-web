@@ -55,6 +55,29 @@ export function isManager(activeGrants: UserGrant[]): boolean {
 }
 
 /**
+ * TEMPORARY (#410): Project Managers can still create projects for now,
+ * since there's no Org Manager dashboard yet for them to use instead.
+ * The ticket specifies org managers only. To remove PM access once the
+ * OM dashboard ships, flip this to `false` — nothing else needs to change.
+ */
+const ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT: boolean = true;
+
+const PROJECT_CREATE_ROLES: readonly string[] = [
+  ...ORG_LEVEL_ROLES,
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional manual toggle, not always true at authoring time
+  ...(ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT ? [ROLES.PROJECT_MANAGER] : []),
+];
+
+/**
+ * True if the user can create projects.
+ * Currently: org-level roles + Project Manager (see flag above).
+ * Spec (#410) target state: org-level roles only.
+ */
+export function canCreateProject(activeGrants: UserGrant[]): boolean {
+  return activeGrants.some(g => PROJECT_CREATE_ROLES.includes(g.roleName));
+}
+
+/**
  * True if the user has Manager privileges specifically for the given projectId:
  * - Org-level managers (projectId == null/undefined) have manager privileges for all projects in the org.
  * - Project-scoped managers only have manager privileges if their grant matches the projectId.
