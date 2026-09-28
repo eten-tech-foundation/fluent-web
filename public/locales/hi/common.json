@@ -91,5 +91,15 @@
   "milestoneRemoveBookAriaLabel": "{{bookName}} को माइलस्टोन से हटाएं",
   "removeBookConfirmTitle": "माइलस्टोन से पुस्तक हटाएं?",
   "removeBookConfirmDescription": "\"{{bookName}}\" को इस माइलस्टोन से हटाएं? इसकी अनुवाद प्रगति सुरक्षित रहती है और हटाई नहीं जाती — ज़रूरत पड़ने पर आप इसे बाद में फिर से जोड़ सकते हैं।",
-  "detectedBooks": "पहचानी गई पुस्तकें"
+  "detectedBooks": "पहचानी गई पुस्तकें",
+  "save": "सहेजें",
+  "exportMilestone": "माइलस्टोन निर्यात करें",
+  "milestoneName": "माइलस्टोन का नाम",
+  "milestoneNamePlaceholder": "उदा. सुसमाचार चरण 1",
+  "selectBooks": "पुस्तकें चुनें",
+  "loadingBooks": "पुस्तकें लोड हो रही हैं...",
+  "milestoneCreated": "माइलस्टोन सफलतापूर्वक बनाया गया",
+  "milestoneCreateFailed": "माइलस्टोन बनाने में विफल",
+  "largeMilestoneWarning": "बड़े माइलस्टोन फ़ील्ड डिवाइस पर डाउनलोड होने में धीमे हो सकते हैं। इसे छोटे माइलस्टोन में बाँटने पर विचार करें।",
+  "noProjectsContactAdmin": "प्रोजेक्ट सेट करने के लिए अपने एडमिन से संपर्क करें।"
 }

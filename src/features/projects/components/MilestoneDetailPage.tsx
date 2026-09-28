@@ -286,6 +286,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
         queryKey: ['chapterAssignments', projectId ? projectId.toString() : '0'],
       });
       setIsDialogOpen(false);
+      setSelectedAssignments([]);
       toast.success('Assignment updated successfully');
     } catch (error) {
       Logger.logException(error);
@@ -354,7 +355,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
               variant={'outline'}
               onClick={onExport}
             >
-              Export Milestone
+              {t('exportMilestone')}
             </Button>
             {isManager && (
               <DropdownMenu>
@@ -370,7 +371,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align='end'>
                   <DropdownMenuItem onSelect={() => setIsManageBooksOpen(true)}>
-                    Manage Books
+                    {t('manageBooks')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

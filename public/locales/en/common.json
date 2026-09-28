@@ -113,5 +113,14 @@
   "milestoneBookRemoveFailed": "Failed to remove {{bookName}}",
   "milestoneRemoveBookAriaLabel": "Remove {{bookName}} from milestone",
   "removeBookConfirmTitle": "Remove book from milestone?",
-  "removeBookConfirmDescription": "Remove \"{{bookName}}\" from this milestone? Its translation progress is kept and isn't deleted \u2014 you can add it back later if needed."
+  "removeBookConfirmDescription": "Remove \"{{bookName}}\" from this milestone? Its translation progress is kept and isn't deleted \u2014 you can add it back later if needed.",
+  "save": "Save",
+  "exportMilestone": "Export Milestone",
+  "milestoneName": "Milestone Name",
+  "milestoneNamePlaceholder": "e.g. Gospels Phase 1",
+  "selectBooks": "Select Books",
+  "milestoneCreated": "Milestone created successfully",
+  "milestoneCreateFailed": "Failed to create milestone",
+  "largeMilestoneWarning": "Large milestones may be slow to download on field devices. Consider splitting into smaller milestones.",
+  "noProjectsContactAdmin": "Contact your admin to set up a project."
 }

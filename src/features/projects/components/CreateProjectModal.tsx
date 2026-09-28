@@ -46,6 +46,7 @@ const EMPTY_FORM_DATA: ProjectFormData = {
   sourceLanguage: null,
   sourceBible: null,
   pericopeSetId: null,
+  connectivityProfile: null,
 };
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({

@@ -15,6 +15,7 @@ const EMPTY_FORM: ProjectFormData = {
   sourceLanguage: null,
   sourceBible: null,
   pericopeSetId: null,
+  connectivityProfile: null,
 };
 
 const COMPLETE_FORM: ProjectFormData = {
@@ -24,6 +25,7 @@ const COMPLETE_FORM: ProjectFormData = {
   sourceBible: 10,
   targetLanguage: 2,
   pericopeSetId: 1,
+  connectivityProfile: 'usually_connected',
 };
 
 /** jsdom's File has no usable `text()`, so the component's read path needs one supplied. */
