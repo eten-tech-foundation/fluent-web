@@ -132,6 +132,10 @@ export const useBibleTextDebounce = ({
         const errStatus = (error as { status?: number } | null | undefined)?.status;
         const isForbidden = errStatus === 403 || errStatus === 401 || errStatus === 404;
 
+        // A failed response does not prove the server rejected the write. Re-send the live
+        // content even when the translator reverted to the previously acknowledged text.
+        if (!isForbidden) lastSavedContent.current.delete(verseId);
+
         if (isForbidden) {
           useAppStore.getState().setRoleChangeWarning(true);
           cancelAllTimers();

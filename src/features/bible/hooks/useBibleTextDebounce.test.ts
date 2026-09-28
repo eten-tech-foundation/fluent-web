@@ -92,6 +92,29 @@ describe('useBibleTextDebounce with markers', () => {
     expect(persisted).toEqual(['Older edit', 'Initial']);
   });
 
+  it('persists a revert when an older write committed but its response was lost', async () => {
+    let rejectResponse!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, reject) => {
+      rejectResponse = reject;
+    });
+    let serverContent = 'Initial';
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      serverContent = payload.content;
+      if (payload.content === 'Older edit') await pending;
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(serverContent).toBe('Older edit');
+    result.current.debouncedSave(1, { content: 'Initial' });
+    await vi.advanceTimersByTimeAsync(20);
+    rejectResponse(new Error('Response lost after commit'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serverContent).toBe('Initial');
+    expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+  });
+
   it('clears saving status when an immediate save has no changes', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useBibleTextDebounce({ onSave }));
