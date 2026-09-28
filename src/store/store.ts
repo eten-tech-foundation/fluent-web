@@ -37,6 +37,16 @@ interface AppState {
   setIsOrgSwitching: (switching: boolean) => void;
   setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
+
+/** Return only the live availability snapshot owned by this assignment. */
+export function chapterViewAvailabilityFor(
+  state: AppState,
+  chapterAssignmentId: number | undefined
+) {
+  const availability = state.chapterViewAvailability;
+  return availability?.chapterAssignmentId === chapterAssignmentId ? availability : null;
+}
+
 let hydrationResolve: (() => void) | null = null;
 export const hydrationPromise = new Promise<void>(resolve => {
   hydrationResolve = resolve;

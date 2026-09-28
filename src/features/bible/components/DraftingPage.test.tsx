@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
+import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { type DraftingUIProps, type ProjectItem, type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -12,6 +11,9 @@ import DraftingPage from './DraftingPage';
 const match = vi.hoisted(() => ({
   loaderData: undefined as unknown,
 }));
+const saveVerse = vi.hoisted(() =>
+  vi.fn<(assignmentId: number, sourceId: number, payload: SavePayload) => Promise<void>>()
+);
 
 vi.mock('@tanstack/react-router', () => ({
   useMatch: ({ from }: { from: string }) => (from.includes('/translation/') ? match : undefined),
@@ -21,15 +23,25 @@ vi.mock('@/features/bible/hooks/useSyncGlobalAiSetting', () => ({
   useSyncGlobalAiSetting: vi.fn(),
 }));
 
-// The editor owns local state for its mounted assignment, just as useDrafting does.
+// Keep the real draft and save lifecycle while replacing only the visual editor.
 vi.mock('./DraftingUI', () => ({
-  DraftingUI: ({ targetVerses }: DraftingUIProps) => {
-    const [content, setContent] = useState(targetVerses[0]?.content ?? '');
+  DraftingUI: ({ projectItem, sourceVerses, targetVerses, readOnly = false }: DraftingUIProps) => {
+    const { verses, handleTextChange } = useDrafting({
+      sourceVerses,
+      targetVerses,
+      readOnly,
+      onSave: (verse, payload) =>
+        saveVerse(
+          projectItem.chapterAssignmentId,
+          sourceVerses.find(source => source.verseNumber === verse)!.id,
+          payload
+        ),
+    });
     return (
       <textarea
         aria-label='Translation'
-        value={content}
-        onChange={event => setContent(event.target.value)}
+        value={verses[0]?.content ?? ''}
+        onChange={event => handleTextChange(1, event.target.value)}
       />
     );
   },
@@ -57,42 +69,54 @@ const project: ProjectItem = {
 
 const chapter = (projectItem = project, content = 'First chapter', loadedAt = 'first-load') => ({
   projectItem,
-  sourceVerses: [{ id: 1, verseNumber: 1, text: 'Source' }],
+  sourceVerses: [{ id: projectItem.chapterAssignmentId * 100, verseNumber: 1, text: 'Source' }],
   targetVerses: [{ verseNumber: 1, content }],
   loadedAt,
 });
 
 describe('DraftingPage chapter identity', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    saveVerse.mockReset().mockResolvedValue(undefined);
     useAppStore.setState({
+      roleChangeWarning: false,
       currentProjectItem: null,
       userdetail: { id: 1, role: 'Project Translator', grants: [] } as unknown as User,
     });
     match.loaderData = chapter();
   });
 
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it('starts a new editor when navigating to another assignment', async () => {
-    const user = userEvent.setup();
     const { rerender } = render(<DraftingPage />);
-    await user.clear(screen.getByLabelText('Translation'));
-    await user.type(screen.getByLabelText('Translation'), 'Unsaved first chapter edit');
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'Unsaved first chapter edit' },
+    });
 
     match.loaderData = chapter({ ...project, chapterAssignmentId: 397, chapterNumber: 2 }, '');
     rerender(<DraftingPage />);
 
     expect(screen.getByLabelText('Translation')).toHaveValue('');
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(saveVerse).toHaveBeenCalledWith(396, 39600, {
+      content: 'Unsaved first chapter edit',
+      markers: undefined,
+    });
   });
 
-  it('preserves local edits when opening settings reloads the same assignment', async () => {
-    const user = userEvent.setup();
+  it('preserves local edits when opening settings reloads the same assignment', () => {
     const { rerender } = render(<DraftingPage />);
-    await user.clear(screen.getByLabelText('Translation'));
-    await user.type(screen.getByLabelText('Translation'), 'Local draft');
+    fireEvent.change(screen.getByLabelText('Translation'), { target: { value: 'Local draft' } });
 
     match.loaderData = chapter(project, 'Server draft', 'settings-navigation');
     rerender(<DraftingPage />);
 
     expect(screen.getByLabelText('Translation')).toHaveValue('Local draft');
+    expect(saveVerse).not.toHaveBeenCalled();
   });
 
   it('waits for loader data before mounting an editor', () => {
@@ -103,5 +127,102 @@ describe('DraftingPage chapter identity', () => {
     match.loaderData = chapter(project, 'Loaded draft');
     rerender(<DraftingPage />);
     expect(screen.getByLabelText('Translation')).toHaveValue('Loaded draft');
+  });
+
+  it('keeps saves for the same verse number isolated across assignments', async () => {
+    const { rerender } = render(<DraftingPage />);
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'First chapter edit' },
+    });
+    match.loaderData = chapter(
+      { ...project, chapterAssignmentId: 397, chapterNumber: 2 },
+      'Second chapter'
+    );
+    rerender(<DraftingPage />);
+    expect(screen.getByLabelText('Translation')).toHaveValue('Second chapter');
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'Second chapter edit' },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(saveVerse.mock.calls).toEqual([
+      [396, 39600, { content: 'First chapter edit', markers: undefined }],
+      [397, 39700, { content: 'Second chapter edit', markers: undefined }],
+    ]);
+  });
+
+  it('keeps a transient retry bound to its original assignment after navigation', async () => {
+    saveVerse.mockRejectedValueOnce(new Error('offline'));
+    const { rerender } = render(<DraftingPage />);
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'First chapter edit' },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(saveVerse).toHaveBeenCalledTimes(1);
+    match.loaderData = chapter(
+      { ...project, chapterAssignmentId: 397, chapterNumber: 2 },
+      'Second chapter'
+    );
+    rerender(<DraftingPage />);
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(saveVerse).toHaveBeenCalledTimes(2);
+    expect(saveVerse).toHaveBeenLastCalledWith(396, 39600, {
+      content: 'First chapter edit',
+      markers: undefined,
+    });
+  });
+
+  it('flushes the latest edit even if its in-flight predecessor fails after navigation', async () => {
+    let failSave: (error: Error) => void = () => {};
+    saveVerse.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          failSave = reject;
+        })
+    );
+    const { rerender } = render(<DraftingPage />);
+    fireEvent.change(screen.getByLabelText('Translation'), { target: { value: 'Older edit' } });
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    fireEvent.change(screen.getByLabelText('Translation'), { target: { value: 'Latest edit' } });
+    match.loaderData = chapter(
+      { ...project, chapterAssignmentId: 397, chapterNumber: 2 },
+      'Second chapter'
+    );
+    rerender(<DraftingPage />);
+    await act(async () => {
+      failSave(new Error('offline'));
+    });
+    expect(saveVerse).toHaveBeenLastCalledWith(396, 39600, {
+      content: 'Latest edit',
+      markers: undefined,
+    });
+  });
+
+  it('retries a failed unmount flush without mixing it with the new chapter', async () => {
+    saveVerse
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('still offline'));
+    const { rerender } = render(<DraftingPage />);
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'First chapter edit' },
+    });
+    match.loaderData = chapter(
+      { ...project, chapterAssignmentId: 397, chapterNumber: 2 },
+      'Second chapter'
+    );
+    await act(async () => {
+      rerender(<DraftingPage />);
+    });
+    expect(saveVerse).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(saveVerse).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(saveVerse.mock.calls).toEqual(
+      Array.from({ length: 3 }, () => [
+        396,
+        39600,
+        { content: 'First chapter edit', markers: undefined },
+      ])
+    );
+    expect(screen.getByLabelText('Translation')).toHaveValue('Second chapter');
   });
 });

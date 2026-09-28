@@ -44,7 +44,6 @@ import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
-import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -270,6 +269,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   });
 
   const chapterViewAvailable = useChapterViewAvailability({ projectItem, sourceVerses, verses });
+  // Chapter uses a shared scroll container instead of the per-column verse layout (#397).
   const isChapterMode = displayMode === 'chapter' && chapterViewAvailable;
 
   // A saved preference cannot open an incomplete chapter. Local edits remain in useDrafting
@@ -477,7 +477,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
-  // Reset assignment-local state without remounting and discarding pending verse saves.
+  // Initialize assignment-local resource state. The keyed draft flushes pending verse saves
+  // before unmounting; its replacement starts with the next assignment's content.
   useEffect(() => {
     setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
     setResourceBibleTabs([]);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -69,6 +69,7 @@ export const useBibleTextDebounce = ({
   const lastSavedContent = useRef<Map<number, SavePayload>>(new Map());
   const currentContent = useRef<Map<number, SavePayload>>(new Map());
   const saveSequence = useRef<Map<number, number>>(new Map());
+  const flushPendingSavesRef = useRef<() => void>(() => {});
 
   // Helper to cancel all pending timers
   const cancelAllTimers = useCallback(() => {
@@ -78,15 +79,7 @@ export const useBibleTextDebounce = ({
     retryTimeouts.current.clear();
   }, []);
 
-  useEffect(() => {
-    const debounceTimeoutsRef = debounceTimeouts.current;
-    const retryTimeoutsRef = retryTimeouts.current;
-
-    return () => {
-      debounceTimeoutsRef.forEach(timeout => clearTimeout(timeout));
-      retryTimeoutsRef.forEach(timeout => clearTimeout(timeout));
-    };
-  }, []);
+  useEffect(() => () => flushPendingSavesRef.current(), []);
 
   // Clear queued timers when roleChangeWarning becomes active
   useEffect(() => {
@@ -157,7 +150,10 @@ export const useBibleTextDebounce = ({
               ) {
                 const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
                 saveSequence.current.set(verseId, newSequence);
-                activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
+                const retryPromise = executeSave(verseId, retryPayload, newSequence);
+                // A failed background retry schedules its next attempt in executeSave.
+                retryPromise.catch(() => {});
+                activeSaves.current.set(verseId, retryPromise);
               }
             }, retryDelayMs);
 
@@ -236,7 +232,7 @@ export const useBibleTextDebounce = ({
       // Wait for any existing save to complete first, but ignore errors
       const existingSave = activeSaves.current.get(verseId);
       if (existingSave) {
-        await existingSave;
+        await existingSave.catch(() => {});
       }
 
       const savePromise = executeSave(verseId, payload, sequenceNumber);
@@ -246,6 +242,25 @@ export const useBibleTextDebounce = ({
     },
     [executeSave]
   );
+
+  useLayoutEffect(() => {
+    flushPendingSavesRef.current = () => {
+      const pendingVerseIds = new Set([
+        ...debounceTimeouts.current.keys(),
+        ...retryTimeouts.current.keys(),
+      ]);
+      cancelAllTimers();
+      // Keep the departing editor's onSave closure and payloads. The next assignment has
+      // its own hook instance, so its verse numbers cannot cancel or redirect these saves.
+      for (const verseId of pendingVerseIds) {
+        const payload = currentContent.current.get(verseId);
+        if (payload !== undefined) {
+          // Transient failures still schedule retries, including after this editor unmounts.
+          void saveImmediately(verseId, payload).catch(() => {});
+        }
+      }
+    };
+  }, [cancelAllTimers, saveImmediately]);
 
   const getSaveStatus = useCallback((verseId: number) => {
     const hasPendingDebounce = debounceTimeouts.current.has(verseId);

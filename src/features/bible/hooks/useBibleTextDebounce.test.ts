@@ -125,4 +125,29 @@ describe('useBibleTextDebounce with markers', () => {
     // onSave should not have been called again (no retries, no new saves)
     expect(onSave).toHaveBeenCalledTimes(1);
   });
+
+  it('flushes the latest pending markers on unmount without a duplicate debounce save', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.setInitialContent(1, { content: 'Verse', markers: null });
+    result.current.debouncedSave(1, { content: 'Verse', markers: OPENING });
+    result.current.debouncedSave(1, { content: 'Verse', markers: SPLIT });
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(12000);
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(1, { content: 'Verse', markers: SPLIT });
+  });
+
+  it.each([401, 403, 404])('does not retry a %s response to an unmount flush', async status => {
+    const onSave = vi.fn().mockRejectedValue({ status });
+    const { result, unmount } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.debouncedSave(1, { content: 'Unsaved verse', markers: OPENING });
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(20000);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().roleChangeWarning).toBe(true);
+  });
 });

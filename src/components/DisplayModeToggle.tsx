@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { config } from '@/lib/config';
-import { useAppStore, type DisplayMode } from '@/store/store';
+import { chapterViewAvailabilityFor, useAppStore, type DisplayMode } from '@/store/store';
 
 /**
  * The drafting views, in the order the toggle shows them (#396). Chapter is the entry point into
@@ -44,9 +44,8 @@ export const DisplayModeToggle: React.FC = () => {
   const setDisplayMode = useAppStore(state => state.setDisplayMode);
   const chapterAvailable = useAppStore(
     state =>
-      state.chapterViewAvailability?.available === true &&
-      state.chapterViewAvailability.chapterAssignmentId ===
-        state.currentProjectItem?.chapterAssignmentId
+      chapterViewAvailabilityFor(state, state.currentProjectItem?.chapterAssignmentId)
+        ?.available === true
   );
   const labelId = useId();
   const explanationId = useId();

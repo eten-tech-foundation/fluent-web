@@ -2,9 +2,9 @@ import { useLayoutEffect, useMemo } from 'react';
 
 import { config } from '@/lib/config';
 import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
-import { useAppStore } from '@/store/store';
+import { chapterViewAvailabilityFor, useAppStore } from '@/store/store';
 
-interface ChapterViewProps {
+interface UseChapterViewAvailabilityProps {
   projectItem: ProjectItem;
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -15,7 +15,7 @@ export function useChapterViewAvailability({
   projectItem,
   sourceVerses,
   verses,
-}: ChapterViewProps): boolean {
+}: UseChapterViewAvailabilityProps): boolean {
   const { chapterAssignmentId, totalVerses } = projectItem;
   const setAvailability = useAppStore(state => state.setChapterViewAvailability);
   const available = useMemo(() => {
@@ -35,9 +35,7 @@ export function useChapterViewAvailability({
   useLayoutEffect(() => {
     setAvailability({ chapterAssignmentId, available });
     return () => {
-      if (
-        useAppStore.getState().chapterViewAvailability?.chapterAssignmentId === chapterAssignmentId
-      ) {
+      if (chapterViewAvailabilityFor(useAppStore.getState(), chapterAssignmentId)) {
         setAvailability(null);
       }
     };
