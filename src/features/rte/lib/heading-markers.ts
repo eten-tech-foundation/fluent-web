@@ -34,10 +34,12 @@ export const isValidHeadingText = (text: string): boolean =>
 export type HeadingError = 'text' | 'count' | null;
 
 /** Validate direct editor changes too, before they enter the autosave queue. */
-export function headingErrorIn(rows: Array<{ markers: VerseMarkers | null }>): HeadingError {
+export function headingErrorIn(
+  rows: Array<{ markers: VerseMarkers | null; reservedHeadingSlots?: number }>
+): HeadingError {
   for (const row of rows) {
     const headings = row.markers?.headings ?? [];
-    if (headings.length > 4) return 'count';
+    if (headings.length + (row.reservedHeadingSlots ?? 0) > 4) return 'count';
     if (headings.some(heading => !isValidHeadingText(heading.text))) return 'text';
   }
   return null;

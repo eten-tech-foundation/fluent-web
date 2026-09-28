@@ -82,5 +82,7 @@
   "noBooksInProject": "No books found in this project",
   "bookDetailsSaveFailed": "Failed to save changes",
   "close": "Close",
-  "usfmFilesValidated": "USFM file(s) validated"
+  "usfmFilesValidated": "USFM file(s) validated",
+  "pericopeSectionTitle": "Section title",
+  "pericopeTitleInvalid": "Use a single line of up to 300 characters without backslashes."
 }

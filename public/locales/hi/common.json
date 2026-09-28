@@ -60,5 +60,7 @@
   "verse": "पद",
   "chapter": "अध्याय",
   "mainMenu": "मुख्य मेनू",
-  "userMenu": "उपयोगकर्ता मेनू"
+  "userMenu": "उपयोगकर्ता मेनू",
+  "pericopeSectionTitle": "अनुभाग का शीर्षक",
+  "pericopeTitleInvalid": "बैकस्लैश के बिना अधिकतम 300 अक्षरों की एक पंक्ति का उपयोग करें।"
 }
