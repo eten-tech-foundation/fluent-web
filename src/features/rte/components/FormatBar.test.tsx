@@ -5,6 +5,27 @@ import { describe, expect, it, vi } from 'vitest';
 import { FormatBar } from './FormatBar';
 
 describe('formatting tooltips', () => {
+  it('offers repeated insertion separately from the pressed Paragraph format', async () => {
+    const user = userEvent.setup();
+    const onFormat = vi.fn();
+    const onInsertParagraph = vi.fn();
+    render(
+      <FormatBar
+        blockMarker='p'
+        canAddHeading
+        onFormat={onFormat}
+        onInsertParagraph={onInsertParagraph}
+      />
+    );
+    const insert = screen.getByRole('button', { name: 'Insert paragraph' });
+    expect(insert).not.toHaveAttribute('aria-pressed');
+    await user.click(insert);
+    await user.click(insert);
+    expect(onInsertParagraph).toHaveBeenCalledTimes(2);
+    expect(onFormat).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    expect(onFormat).toHaveBeenCalledWith('p');
+  });
   it('explains unavailable headings on keyboard focus without formatting scripture', async () => {
     const user = userEvent.setup();
     const onFormat = vi.fn();

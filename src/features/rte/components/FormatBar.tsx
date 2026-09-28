@@ -30,6 +30,7 @@ export interface FormatBarProps {
   /** The block the cursor sits in, as the editor reports it. */
   blockMarker: string | undefined;
   onFormat: (marker: string) => void;
+  onInsertParagraph?: () => void;
   canAddHeading: boolean;
   disabled?: boolean;
 }
@@ -82,6 +83,7 @@ function FormatButton({ title, ...props }: ButtonProps & { title: string }) {
 export function FormatBar({
   blockMarker,
   onFormat,
+  onInsertParagraph,
   canAddHeading,
   disabled = false,
 }: FormatBarProps) {
@@ -132,6 +134,22 @@ export function FormatBar({
           );
         })}
       </div>
+
+      {onInsertParagraph && (
+        <FormatButton
+          className='h-7 gap-1 px-2 text-xs'
+          disabled={disabled || blockMarker === undefined}
+          title={t(
+            'insertParagraphHint',
+            'Place the cursor, then insert a paragraph. Selected text is kept.'
+          )}
+          onMouseDown={event => event.preventDefault()}
+          onClick={onInsertParagraph}
+        >
+          <Pilcrow aria-hidden='true' className='h-4 w-4' />
+          {t('insertParagraph', 'Insert paragraph')}
+        </FormatButton>
+      )}
 
       {kind === 'other' && (
         <span className='text-muted-foreground pl-2 text-xs' data-testid='other-block'>
