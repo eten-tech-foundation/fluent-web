@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
+import * as draftingHooks from '@/features/bible/hooks/useDrafting';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -14,7 +15,7 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
-import { act, renderWithProviders, screen, waitFor } from '@/test/render';
+import { act, fireEvent, renderWithProviders, screen, waitFor } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -287,17 +288,43 @@ describe('Next Verse position when the rendered rows change', () => {
 
   it('remeasures the new scroll container after returning from Chapter View', async () => {
     config.features.rtePericope = true;
+    useAppStore.setState({ displayMode: 'verse' });
     mockDraftingLayout();
-    const { container } = renderDrafting();
-    await screen.findByRole('button', { name: 'Next Pericope' }, { timeout: 3000 });
+    // Spy only on the real return value: do not replace the hook or Chapter availability.
+    const drafting = vi.spyOn(draftingHooks, 'useDrafting');
+    const { container } = renderWithProviders(
+      <DraftingUI
+        projectItem={{ ...assignment, completedVerses: 4 }}
+        sourceVerses={sources}
+        targetVerses={[
+          { verseNumber: 1, content: savedFirstVerse },
+          { verseNumber: 2, content: 'Saved second verse' },
+          { verseNumber: 3, content: 'Saved third verse' },
+          { verseNumber: 4, content: 'Saved fourth verse' },
+        ]}
+        userdetail={user}
+      />
+    );
+    const previousScrollContainer = container.querySelector<HTMLElement>('.overflow-y-auto')!;
+    fireEvent.scroll(previousScrollContainer, { target: { scrollTop: 60 } });
+    expect(drafting).toHaveLastReturnedWith(expect.objectContaining({ buttonTop: 820 }));
+
     act(() => useAppStore.setState({ displayMode: 'chapter' }));
     await screen.findByTestId('chapter-editor');
-    expect(screen.queryByRole('button', { name: 'Next Verse' })).not.toBeInTheDocument();
+    expect(previousScrollContainer).not.toBeInTheDocument();
     act(() => useAppStore.setState({ displayMode: 'verse' }));
-    const next = await screen.findByRole('button', { name: 'Next Verse' });
+    expect(screen.queryByTestId('chapter-editor')).not.toBeInTheDocument();
     // The old viewport unmounted. The new viewport starts at scrollTop zero.
-    expect(container.querySelector<HTMLElement>('.overflow-y-auto')!.scrollTop).toBe(0);
-    expect(next.parentElement).toHaveStyle({ top: '440px' });
+    const nextScrollContainer = container.querySelector<HTMLElement>('.overflow-y-auto')!;
+    expect(nextScrollContainer).not.toBe(previousScrollContainer);
+    expect(nextScrollContainer.scrollTop).toBe(0);
+    // A complete chapter is eligible for Chapter View, but hides Next Verse. Still verify
+    // its position is recalculated by the real hook against the new last-revealed row.
+    expect(screen.queryByRole('button', { name: 'Next Verse' })).not.toBeInTheDocument();
+    expect(drafting).toHaveLastReturnedWith(expect.objectContaining({ buttonTop: 760 }));
+    expect(screen.getByRole('textbox', { name: 'Translation for verse 1' })).toHaveStyle({
+      height: '240px',
+    });
     expect(screen.getByRole('textbox', { name: 'Translation for verse 1' })).toHaveValue(
       savedFirstVerse
     );
