@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+
+import { afterEach, describe, expect, it } from 'vitest';
 
 const styles = ['usj-nodes.css', 'editor-shared.css', 'chapter-editor.css', 'pericope-editor.css']
   .map(name => readFileSync(new URL(name, import.meta.url), 'utf8'))

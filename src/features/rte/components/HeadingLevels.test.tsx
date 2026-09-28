@@ -48,11 +48,11 @@ describe('heading toolbar with the real editor', () => {
       const onVersesChange = vi.fn();
       const { container } = render(
         <ChapterEditor
-          verses={verses}
-          chapterNumber={1}
           bookCode='GEN'
-          targetLanguage='English'
+          chapterNumber={1}
           contentKey='levels'
+          targetLanguage='English'
+          verses={verses}
           onVersesChange={onVersesChange}
         />
       );
