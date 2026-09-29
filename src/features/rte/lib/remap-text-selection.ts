@@ -2,7 +2,7 @@ import type { SelectionRange } from '@eten-tech-foundation/platform-editor';
 import type { MarkerObject, Usj } from '@eten-tech-foundation/scripture-utilities';
 
 interface TextLeaf {
-  path: SelectionRange['start']['jsonPath'];
+  path: Extract<SelectionRange['start'], { offset: number }>['jsonPath'];
   text: string;
   start: number;
 }
