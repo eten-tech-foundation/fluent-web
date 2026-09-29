@@ -12,12 +12,14 @@ export const ViewPageHeader: React.FC<ViewPageHeaderProps> = ({ title, onBack, r
   return (
     <div className='mb-4 flex items-center justify-between gap-3 sm:mb-6 sm:gap-4'>
       <div className='flex min-w-0 flex-1 items-center gap-3 sm:gap-4'>
-        <ChevronLeft
-          className='flex-shrink-0 cursor-pointer'
-          size={'24px'}
-          strokeWidth={'2px'}
-          onClick={onBack}
-        />
+        {onBack && (
+          <ChevronLeft
+            className='flex-shrink-0 cursor-pointer'
+            size={'24px'}
+            strokeWidth={'2px'}
+            onClick={onBack}
+          />
+        )}
         <h1 className='text-foreground max-w-[80%] cursor-default truncate text-2xl font-semibold sm:text-2xl lg:text-3xl'>
           {title}
         </h1>

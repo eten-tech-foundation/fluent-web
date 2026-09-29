@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
 import { getOrgRoleName } from '@/lib/grant-utils';
 import { getDisplayRole, type User } from '@/lib/types';
 
@@ -103,11 +104,18 @@ export const UsersPage: React.FC<UsersPageProps> = ({
 
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 shrink-0'>
-        <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('users')}</h1>
-        <Button className='bg-primary hover:bg-primary/90 text-white' onClick={onAddUser}>
-          {t(`addUser`)}
-        </Button>
+      <div className='shrink-0'>
+        <ViewPageHeader
+          rightContent={
+            <Button
+              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+              onClick={onAddUser}
+            >
+              <Plus className='h-4 w-4' /> {t('addUser')}
+            </Button>
+          }
+          title={t('users')}
+        />
       </div>
 
       {banner}

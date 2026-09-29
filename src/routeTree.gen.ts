@@ -25,6 +25,7 @@ import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './route
 import { Route as AuthenticatedOrganizationsOrgIdIndexRouteImport } from './routes/_authenticated/organizations/$orgId/index'
 import { Route as AuthenticatedViewBookIdChapterNumberRouteImport } from './routes/_authenticated/view/$bookId/$chapterNumber'
 import { Route as AuthenticatedTranslationBookIdChapterNumberRouteImport } from './routes/_authenticated/translation/$bookId/$chapterNumber'
+import { Route as AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport } from './routes/_authenticated/projects/$projectId/milestones/$milestoneId'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -111,6 +112,12 @@ const AuthenticatedTranslationBookIdChapterNumberRoute =
     path: '/translation/$bookId/$chapterNumber',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute =
+  AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport.update({
+    id: '/projects/$projectId/milestones/$milestoneId',
+    path: '/projects/$projectId/milestones/$milestoneId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/projects/$projectId/': typeof AuthenticatedProjectsProjectIdIndexRoute
+  '/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
 export interface FileRoutesByTo {
   '/accept-invitation': typeof AcceptInvitationRoute
@@ -145,6 +153,7 @@ export interface FileRoutesByTo {
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/organizations/$orgId': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdIndexRoute
+  '/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -164,6 +173,7 @@ export interface FileRoutesById {
   '/_authenticated/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/_authenticated/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/_authenticated/projects/$projectId/': typeof AuthenticatedProjectsProjectIdIndexRoute
+  '/_authenticated/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/view/$bookId/$chapterNumber'
     | '/organizations/$orgId/'
     | '/projects/$projectId/'
+    | '/projects/$projectId/milestones/$milestoneId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/accept-invitation'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/view/$bookId/$chapterNumber'
     | '/organizations/$orgId'
     | '/projects/$projectId'
+    | '/projects/$projectId/milestones/$milestoneId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -218,6 +230,7 @@ export interface FileRouteTypes {
     | '/_authenticated/view/$bookId/$chapterNumber'
     | '/_authenticated/organizations/$orgId/'
     | '/_authenticated/projects/$projectId/'
+    | '/_authenticated/projects/$projectId/milestones/$milestoneId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -342,6 +355,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTranslationBookIdChapterNumberRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/projects/$projectId/milestones/$milestoneId': {
+      id: '/_authenticated/projects/$projectId/milestones/$milestoneId'
+      path: '/projects/$projectId/milestones/$milestoneId'
+      fullPath: '/projects/$projectId/milestones/$milestoneId'
+      preLoaderRoute: typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -355,6 +375,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedViewBookIdChapterNumberRoute: typeof AuthenticatedViewBookIdChapterNumberRoute
   AuthenticatedOrganizationsOrgIdIndexRoute: typeof AuthenticatedOrganizationsOrgIdIndexRoute
   AuthenticatedProjectsProjectIdIndexRoute: typeof AuthenticatedProjectsProjectIdIndexRoute
+  AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute: typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -371,6 +392,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedOrganizationsOrgIdIndexRoute,
   AuthenticatedProjectsProjectIdIndexRoute:
     AuthenticatedProjectsProjectIdIndexRoute,
+  AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute:
+    AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

@@ -61,6 +61,7 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  milestoneCount?: number;
   pericopeSetId?: number | null;
 }
 
@@ -81,10 +82,17 @@ export interface PericopeGroup {
   verses: PericopeVerseRef[];
 }
 
+/** One validated USFM file sent when creating a project from existing data. */
+export interface UsfmFilePayload {
+  fileName: string;
+  bookCode: string;
+  usfm: string;
+}
+
 export interface CreateProject {
   id: number;
   name: string;
-  bibleId: number;
+  sourceBibleId: number;
   bookId: number[];
   organization: number;
   createdBy: number;
@@ -92,6 +100,8 @@ export interface CreateProject {
   sourceLanguage: number;
   targetLanguage: number;
   pericopeSetId?: number;
+  /** Create-from-existing-data (#419): one validated USFM file per book. */
+  usfmFiles?: UsfmFilePayload[];
 }
 
 export interface Chapter {
@@ -128,6 +138,7 @@ export interface ChapterAssignmentProgress {
   updatedAt?: Date | null;
   isSubmitted?: boolean;
   submittedTime?: Date | null;
+  hasConflict?: boolean;
 }
 
 export interface Book {
@@ -346,6 +357,7 @@ export enum ChapterAssignmentStatus {
 }
 export const ROLES = {
   SUPER_ADMIN: 'SuperAdmin',
+  ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
@@ -360,6 +372,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.PROJECT_MANAGER]: 'Project Manager',
   [ROLES.PROJECT_TRANSLATOR]: 'Translator',
   [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
   [ROLES.ORG_MEMBER]: 'Organization Member',

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -23,6 +22,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { type Project, type SortOption, type StatusFilter } from '@/lib/types';
+
+import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -105,11 +106,12 @@ type StatusChip = { label: string; bg: string; text: string; filterValue: Status
 
 const deriveStatusChip = (
   status: string,
-  lastChapterActivity: string | null | undefined
+  lastChapterActivity: string | null | undefined,
+  t: (key: string) => string
 ): StatusChip => {
   if (status === 'not_assigned') {
     return {
-      label: 'Not Assigned',
+      label: t('statusNotAssigned'),
       bg: 'var(--popover)',
       text: 'var(--foreground)',
       filterValue: 'not_assigned',
@@ -121,7 +123,7 @@ const deriveStatusChip = (
 
     if (diffDays > STALLED_THRESHOLD_DAYS) {
       return {
-        label: 'Potentially Stalled',
+        label: t('statusPotentiallyStalled'),
         bg: 'var(--warning)',
         text: 'var(--warning-foreground)',
         filterValue: 'potentially_stalled',
@@ -134,26 +136,6 @@ const deriveStatusChip = (
 
 type EnrichedProject = Project & { statusChip: StatusChip };
 
-const StatusChipCell: React.FC<{ chip: StatusChip }> = ({ chip }) => {
-  const badgeClass =
-    'inline-flex items-center rounded-md border-0 px-2.5 py-1 text-xs leading-tight font-medium whitespace-normal text-center';
-  if (!chip)
-    return (
-      <Badge
-        className={badgeClass}
-        style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-      >
-        Active
-      </Badge>
-    );
-
-  return (
-    <Badge className={badgeClass} style={{ backgroundColor: chip.bg, color: chip.text }}>
-      {chip.label}
-    </Badge>
-  );
-};
-
 export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   loading,
   projects,
@@ -162,16 +144,16 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   onProjectSelect,
 }) => {
   const { t } = useTranslation();
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [sortBy, setSortBy] = useState<SortOption>('title');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const columns = [
-    { key: 'title', label: t('title') },
+    { key: 'title', label: t('projectName') },
     { key: 'sourceLanguage', label: t('sourceLanguage') },
     { key: 'targetLanguage', label: t('targetLanguage') },
     { key: 'sourceBible', label: t('sourceBible') },
-    { key: 'status', label: t('status') },
-    { key: 'progress', label: t('Progress') },
+    { key: 'milestones', label: t('milestones') },
+    { key: 'progress', label: t('overallProgress') },
   ];
 
   const colWidth = `${(100 / columns.length).toFixed(4)}%`;
@@ -179,7 +161,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const sortedAndFilteredProjects = useMemo(() => {
     const enriched: EnrichedProject[] = projects.map(project => ({
       ...project,
-      statusChip: deriveStatusChip(project.status, project.lastChapterActivity),
+      statusChip: deriveStatusChip(project.status, project.lastChapterActivity, t),
     }));
 
     const sorted = enriched.sort((a, b) => {
@@ -201,48 +183,55 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     if (statusFilter === 'all') return sorted;
 
     return sorted.filter(project => project.statusChip?.filterValue === statusFilter);
-  }, [projects, sortBy, statusFilter]);
+  }, [projects, sortBy, statusFilter, t]);
 
   const handleRowClick = (project: Project) => {
     onProjectSelect(project.id);
   };
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 shrink-0'>
-        <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('projects')}</h1>
-        <div className='flex items-center gap-4'>
-          {isManager && (
-            <Button className='bg-primary hover:bg-primary/90 text-white' onClick={onCreateProject}>
-              {t('createProject')}
-            </Button>
-          )}
+      <div className='shrink-0'>
+        <ViewPageHeader
+          rightContent={
+            isManager ? (
+              <Button
+                className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+                onClick={onCreateProject}
+              >
+                <Plus className='h-4 w-4' /> {t('createProject')}
+              </Button>
+            ) : undefined
+          }
+          title={t('projects')}
+        />
+        <div className='mb-6 flex items-center gap-4'>
           <Select value={sortBy} onValueChange={value => setSortBy(value as SortOption)}>
-            <SelectTrigger className='bg-card h-10! w-[165px]'>
+            <SelectTrigger className='h-10! w-[165px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='recent'>{t('Recent')}</SelectItem>
-              <SelectItem value='title'>{t('Title')}</SelectItem>
-              <SelectItem value='targetLanguage'>{t('Target Language')}</SelectItem>
+              <SelectItem value='recent'>{t('sortRecent')}</SelectItem>
+              <SelectItem value='title'>{t('sortTitle')}</SelectItem>
+              <SelectItem value='targetLanguage'>{t('targetLanguage')}</SelectItem>
             </SelectContent>
           </Select>
           <Select
             value={statusFilter}
             onValueChange={value => setStatusFilter(value as StatusFilter)}
           >
-            <SelectTrigger className='bg-card h-10! w-[185px]'>
+            <SelectTrigger className='h-10! w-[185px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='all'>{t('Show All')}</SelectItem>
-              <SelectItem value='potentially_stalled'>{t('Potentially Stalled')}</SelectItem>
-              <SelectItem value='not_assigned'>{t('Not Assigned')}</SelectItem>
+              <SelectItem value='all'>{t('statusShowAll')}</SelectItem>
+              <SelectItem value='potentially_stalled'>{t('statusPotentiallyStalled')}</SelectItem>
+              <SelectItem value='not_assigned'>{t('statusNotAssigned')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className='flex-1 overflow-hidden rounded-lg border shadow'>
+      <div className='overflow-hidden rounded-lg border shadow'>
         <div className='flex h-full flex-col'>
           {loading ? (
             <div className='flex items-center justify-center gap-2 py-8'>
@@ -251,7 +240,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             </div>
           ) : sortedAndFilteredProjects.length === 0 ? (
             <div className='flex items-center justify-center py-8'>
-              <span className='text-gray-500'>{t('noProjectsFound')}</span>
+              <span className='text-gray-500'>{t('noProjectsContactAdmin')}</span>
             </div>
           ) : (
             <TooltipProvider delayDuration={300}>
@@ -302,10 +291,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           <TruncatedText text={project.sourceName} />
                         </TableCell>
                         <TableCell
-                          className='text-popover-foreground overflow-visible px-6 py-4 text-sm text-clip whitespace-normal'
+                          className='text-popover-foreground px-6 py-4 text-sm'
                           style={{ width: colWidth }}
                         >
-                          <StatusChipCell chip={project.statusChip} />
+                          {project.milestoneCount ?? 0}
                         </TableCell>
                         <TableCell
                           className='text-popover-foreground px-6 py-4 text-sm'

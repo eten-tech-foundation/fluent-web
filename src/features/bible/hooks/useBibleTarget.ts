@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import { type ProjectItem, type TargetVerse, type VerseData } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 export interface TargetText extends TargetVerse {
   id: number;
@@ -55,9 +56,25 @@ const addTranslatedVerse = async (verseData: VerseData): Promise<ProjectItem> =>
     },
     body: JSON.stringify(verseData),
   });
-  if (!res.ok) throw new Error('Failed to add verse text');
+  if (!res.ok) {
+    let message = 'Failed to add verse text';
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      // Fallback if non-JSON error
+    }
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   const data = (await res.json()) as ProjectItem;
   return data;
+};
+
+const isPermissionError = (error: unknown): boolean => {
+  const status = (error as { status?: number } | null | undefined)?.status;
+  return status === 403 || status === 401 || status === 404;
 };
 
 export const useAddTranslatedVerse = () => {
@@ -71,6 +88,9 @@ export const useAddTranslatedVerse = () => {
       });
     },
     onError: error => {
+      if (isPermissionError(error)) {
+        useAppStore.getState().setRoleChangeWarning(true);
+      }
       Logger.logException(error, { context: 'Error adding translated verse' });
     },
   });
@@ -85,7 +105,18 @@ const submitChapter = async (chapterAssignmentId: number): Promise<ProjectItem> 
     },
     body: JSON.stringify(chapterAssignmentId),
   });
-  if (!res.ok) throw new Error('Failed to submit chapter');
+  if (!res.ok) {
+    let message = 'Failed to submit chapter';
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      // Fallback if non-JSON error
+    }
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   const data = (await res.json()) as ProjectItem;
   return data;
 };
@@ -100,6 +131,9 @@ export const useSubmitChapter = () => {
       void queryClient.invalidateQueries({ queryKey: ['chapter-submit'] });
     },
     onError: error => {
+      if (isPermissionError(error)) {
+        useAppStore.getState().setRoleChangeWarning(true);
+      }
       Logger.logException(error, { context: 'Error submitting chapter' });
     },
   });

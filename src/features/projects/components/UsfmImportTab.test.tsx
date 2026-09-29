@@ -14,9 +14,8 @@ const EMPTY_FORM: ProjectFormData = {
   targetLanguage: null,
   sourceLanguage: null,
   sourceBible: null,
-  books: [],
-  connectivityProfile: null,
   pericopeSetId: null,
+  connectivityProfile: null,
 };
 
 const COMPLETE_FORM: ProjectFormData = {
@@ -26,6 +25,7 @@ const COMPLETE_FORM: ProjectFormData = {
   sourceBible: 10,
   targetLanguage: 2,
   pericopeSetId: 1,
+  connectivityProfile: 'usually_connected',
 };
 
 /** jsdom's File has no usable `text()`, so the component's read path needs one supplied. */
@@ -39,10 +39,10 @@ const renderTab = (overrides: Partial<Parameters<typeof UsfmImportTab>[0]> = {})
   renderWithProviders(
     <UsfmImportTab
       formData={EMPTY_FORM}
-      onBooksChange={vi.fn()}
       onFieldChange={vi.fn()}
       onSubmit={vi.fn()}
       {...overrides}
+      onBooksChange={overrides.onBooksChange ?? vi.fn()}
     />
   );
 
@@ -158,7 +158,7 @@ describe('UsfmImportTab upload and validation (#418)', () => {
     const slow = pendingUsfmFile('bad.usfm');
     drop([slow.file]);
     drop([usfmFile('gen.usfm', '\\id GEN Genesis')]);
-    await waitFor(() => expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN'));
+    await waitFor(() => expect(screen.getByTestId('accepted-files')).toHaveTextContent('gen.usfm'));
 
     slow.finish('no markers here');
     // Let the superseded batch resume, so it gets its chance to clobber the newer result.
@@ -167,7 +167,7 @@ describe('UsfmImportTab upload and validation (#418)', () => {
     });
 
     expect(screen.queryByText('errorNotValidUsfm')).not.toBeInTheDocument();
-    expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN');
+    expect(screen.getByTestId('accepted-files')).toHaveTextContent('gen.usfm');
     expect(onFilesAccepted).toHaveBeenCalledTimes(1);
   });
 });
@@ -188,12 +188,6 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByText('mat.usfm')).toBeInTheDocument();
   });
 
-  it('shows the detected books read-only rather than as a picker', async () => {
-    renderTab();
-    drop([usfmFile('gen.usfm', GEN), usfmFile('mat.usfm', MAT)]);
-    await waitFor(() => expect(screen.getByTestId('detected-books')).toHaveTextContent('GEN, MAT'));
-  });
-
   it('keeps the validation success message with the fields', async () => {
     renderTab();
     drop([usfmFile('gen.usfm', GEN)]);
@@ -207,9 +201,8 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeDisabled();
   });
 
-  // Unreachable through the UI, since Source Bible is gated on Source Language and neither
-  // select can be cleared back to empty. Asserted anyway because the modal's submit guard checks
-  // it, so the enable rule has to name it or the two can drift apart.
+  // The source picker sets the Bible and its language together. Assert this incomplete state
+  // anyway because the modal's submit guard checks it too.
   it('keeps Create Project disabled without a source language', async () => {
     renderTab({ formData: { ...COMPLETE_FORM, sourceLanguage: null } });
     drop([usfmFile('gen.usfm', GEN)]);
@@ -231,6 +224,26 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     expect(screen.getByRole('button', { name: 'createProject' })).toBeEnabled();
   });
 
+  it('does not fetch the book picker data for detected import books', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      renderTab({ formData: COMPLETE_FORM });
+      drop([usfmFile('gen.usfm', GEN)]);
+      await screen.findByTestId('detected-books');
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/bibles/search?q='),
+          expect.anything()
+        )
+      );
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/bible-books/bible/'))).toBe(
+        false
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('submits through the parent when Create Project is clicked', async () => {
     const onSubmit = vi.fn();
     renderTab({ formData: COMPLETE_FORM, onSubmit });
@@ -240,5 +253,9 @@ describe('UsfmImportTab fields after validation (#420)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'createProject' }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+    // The files go with the submit, text included, so nothing has to be read again (#419).
+    expect(onSubmit).toHaveBeenCalledWith([
+      expect.objectContaining({ bookCode: 'GEN', usfm: GEN }),
+    ]);
   });
 });

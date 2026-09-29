@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
 import { type OrganizationSummary } from '@/lib/types';
 
 import { formatOrgDate } from './formatOrgDate';
@@ -34,17 +35,21 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
 
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 shrink-0'>
-        <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('organizations')}</h1>
-        <Button
-          className='bg-primary hover:bg-primary/90 text-white'
-          onClick={onCreateOrganization}
-        >
-          {t('createOrganization')}
-        </Button>
+      <div className='shrink-0'>
+        <ViewPageHeader
+          rightContent={
+            <Button
+              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+              onClick={onCreateOrganization}
+            >
+              <Plus className='h-4 w-4' /> {t('createOrganization')}
+            </Button>
+          }
+          title={t('organizations')}
+        />
       </div>
 
-      <div className='flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
+      <div className='flex flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (
           <div className='flex items-center justify-center gap-2 py-8'>
             <Loader2 className='h-5 w-5 animate-spin' />
@@ -71,18 +76,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
                     className='cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
                     onClick={() => onSelectOrganization(org.id)}
                   >
-                    <TableCell className={cellClass}>
-                      <button
-                        className='text-primary block max-w-full truncate text-left underline-offset-4 hover:underline'
-                        type='button'
-                        onClick={e => {
-                          e.stopPropagation();
-                          onSelectOrganization(org.id);
-                        }}
-                      >
-                        {org.name}
-                      </button>
-                    </TableCell>
+                    <TableCell className={cellClass}>{org.name}</TableCell>
                     <TableCell className={cellClass}>{org.orgManagerCount}</TableCell>
                     <TableCell className={cellClass}>{formatOrgDate(org.createdAt)}</TableCell>
                   </TableRow>

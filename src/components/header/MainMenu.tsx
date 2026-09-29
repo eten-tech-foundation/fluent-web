@@ -35,7 +35,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
   const showUsers = canViewUsers(activeRoleGrants);
-  const showOrganizations = isSuperAdmin(userdetail?.grants);
+  const superAdmin = isSuperAdmin(userdetail?.grants);
   const orgMemberOnly = isOrgMemberOnly(activeGrants);
 
   if (!isAuthenticated || !user) {
@@ -66,7 +66,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClick={onDashboardClick}
               onClosePopover={() => setOpen(false)}
             />
-            {!orgMemberOnly && (
+            {!orgMemberOnly && !superAdmin && (
               <MenuItem
                 icon={<Kanban size={18} />}
                 isActive={isProjectsActive}
@@ -87,7 +87,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
               />
             </>
           )}
-          {showOrganizations && (
+          {superAdmin && (
             <MenuItem
               icon={<Building2 size={18} />}
               isActive={isOrganizationsActive}
