@@ -511,7 +511,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       >
         {/* Title row */}
         <div className='flex shrink-0 items-center justify-between p-4 pb-3'>
-          <h3 className='text-lg font-bold'>Project Users</h3>
+          <h3 className='text-lg font-bold'>Project Team</h3>
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
