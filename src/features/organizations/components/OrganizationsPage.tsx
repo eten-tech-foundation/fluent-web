@@ -76,18 +76,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
                     className='cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
                     onClick={() => onSelectOrganization(org.id)}
                   >
-                    <TableCell className={cellClass}>
-                      <button
-                        className='text-primary block max-w-full truncate text-left underline-offset-4 hover:underline'
-                        type='button'
-                        onClick={e => {
-                          e.stopPropagation();
-                          onSelectOrganization(org.id);
-                        }}
-                      >
-                        {org.name}
-                      </button>
-                    </TableCell>
+                    <TableCell className={cellClass}>{org.name}</TableCell>
                     <TableCell className={cellClass}>{org.orgManagerCount}</TableCell>
                     <TableCell className={cellClass}>{formatOrgDate(org.createdAt)}</TableCell>
                   </TableRow>
