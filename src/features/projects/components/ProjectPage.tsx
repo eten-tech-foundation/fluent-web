@@ -231,7 +231,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         </div>
       </div>
 
-      <div className='flex-1 overflow-hidden rounded-lg border shadow'>
+      <div className='overflow-hidden rounded-lg border shadow'>
         <div className='flex h-full flex-col'>
           {loading ? (
             <div className='flex items-center justify-center gap-2 py-8'>

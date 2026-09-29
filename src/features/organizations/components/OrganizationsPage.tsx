@@ -49,7 +49,7 @@ export const OrganizationsPage: React.FC<OrganizationsPageProps> = ({
         />
       </div>
 
-      <div className='flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
+      <div className='flex flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (
           <div className='flex items-center justify-center gap-2 py-8'>
             <Loader2 className='h-5 w-5 animate-spin' />
