@@ -14,7 +14,8 @@ import type { SerializedVerseRef } from '@sillsdev/scripture';
 export const NO_VERSE = 0;
 
 /**
- * Puts the cursor back in a verse after the editor's document has been reloaded.
+ * Puts the selection back after the editor's document has been reloaded.
+ * A mapped text selection keeps both offsets; marker positions fall back to the verse reference.
  *
  * Reloading leaves the editor with no selection at all, and `ScriptureReferencePlugin` places the
  * cursor only when the verse it is handed *changes* — so getting the same verse back means letting

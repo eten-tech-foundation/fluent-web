@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
+import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
@@ -74,6 +75,7 @@ export function ChapterEditor({
   const editorRef = useRef<EditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   useProtectedVerseMarkers(containerRef);
+  useNativeRtlSelection(containerRef, readOnly);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);

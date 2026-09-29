@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
+import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
@@ -67,6 +68,7 @@ export function PericopeEditor({
   const editorRef = useRef<EditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   useProtectedVerseMarkers(containerRef);
+  useNativeRtlSelection(containerRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
   /**

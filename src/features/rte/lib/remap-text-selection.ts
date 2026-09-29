@@ -1,7 +1,11 @@
 import type { SelectionRange } from '@eten-tech-foundation/platform-editor';
 import type { MarkerObject, Usj } from '@eten-tech-foundation/scripture-utilities';
 
-type TextLeaf = { path: SelectionRange['start']['jsonPath']; text: string; start: number };
+interface TextLeaf {
+  path: SelectionRange['start']['jsonPath'];
+  text: string;
+  start: number;
+}
 
 function textLeaves(usj: Usj): TextLeaf[] {
   const leaves: TextLeaf[] = [];
