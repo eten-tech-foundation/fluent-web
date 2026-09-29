@@ -104,11 +104,12 @@ type StatusChip = { label: string; bg: string; text: string; filterValue: Status
 
 const deriveStatusChip = (
   status: string,
-  lastChapterActivity: string | null | undefined
+  lastChapterActivity: string | null | undefined,
+  t: (key: string) => string
 ): StatusChip => {
   if (status === 'not_assigned') {
     return {
-      label: 'Not Assigned',
+      label: t('statusNotAssigned'),
       bg: 'var(--popover)',
       text: 'var(--foreground)',
       filterValue: 'not_assigned',
@@ -120,7 +121,7 @@ const deriveStatusChip = (
 
     if (diffDays > STALLED_THRESHOLD_DAYS) {
       return {
-        label: 'Potentially Stalled',
+        label: t('statusPotentiallyStalled'),
         bg: 'var(--warning)',
         text: 'var(--warning-foreground)',
         filterValue: 'potentially_stalled',
@@ -145,12 +146,12 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const columns = [
-    { key: 'title', label: t('projectName', 'Project Name') },
-    { key: 'sourceLanguage', label: t('sourceLanguage', 'Source Lang') },
-    { key: 'targetLanguage', label: t('targetLanguage', 'Target Lang') },
-    { key: 'sourceBible', label: t('sourceBible', 'Source Bible') },
-    { key: 'milestones', label: t('milestones', 'Milestones') },
-    { key: 'progress', label: t('overallProgress', 'Overall Progress') },
+    { key: 'title', label: t('projectName') },
+    { key: 'sourceLanguage', label: t('sourceLanguage') },
+    { key: 'targetLanguage', label: t('targetLanguage') },
+    { key: 'sourceBible', label: t('sourceBible') },
+    { key: 'milestones', label: t('milestones') },
+    { key: 'progress', label: t('overallProgress') },
   ];
 
   const colWidth = `${(100 / columns.length).toFixed(4)}%`;
@@ -158,7 +159,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const sortedAndFilteredProjects = useMemo(() => {
     const enriched: EnrichedProject[] = projects.map(project => ({
       ...project,
-      statusChip: deriveStatusChip(project.status, project.lastChapterActivity),
+      statusChip: deriveStatusChip(project.status, project.lastChapterActivity, t),
     }));
 
     const sorted = enriched.sort((a, b) => {
@@ -180,7 +181,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     if (statusFilter === 'all') return sorted;
 
     return sorted.filter(project => project.statusChip?.filterValue === statusFilter);
-  }, [projects, sortBy, statusFilter]);
+  }, [projects, sortBy, statusFilter, t]);
 
   const handleRowClick = (project: Project) => {
     onProjectSelect(project.id);
@@ -200,9 +201,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='recent'>{t('Recent')}</SelectItem>
-              <SelectItem value='title'>{t('Title')}</SelectItem>
-              <SelectItem value='targetLanguage'>{t('Target Language')}</SelectItem>
+              <SelectItem value='recent'>{t('sortRecent')}</SelectItem>+{' '}
+              <SelectItem value='title'>{t('sortTitle')}</SelectItem>+{' '}
+              <SelectItem value='targetLanguage'>{t('targetLanguage')}</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -213,9 +214,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='all'>{t('Show All')}</SelectItem>
-              <SelectItem value='potentially_stalled'>{t('Potentially Stalled')}</SelectItem>
-              <SelectItem value='not_assigned'>{t('Not Assigned')}</SelectItem>
+              <SelectItem value='all'>{t('statusShowAll')}</SelectItem>
+              <SelectItem value='potentially_stalled'>{t('statusPotentiallyStalled')}</SelectItem>
+              <SelectItem value='not_assigned'>{t('statusNotAssigned')}</SelectItem>
             </SelectContent>
           </Select>
         </div>

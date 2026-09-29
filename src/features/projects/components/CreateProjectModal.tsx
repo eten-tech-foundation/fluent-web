@@ -61,11 +61,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   const [formData, setFormData] = useState<ProjectFormData>(EMPTY_FORM_DATA);
 
-  // books/connectivityProfile live outside ProjectFormData on purpose: UsfmImportTab already
-  // treats book selection as its own concern via onBooksChange rather than routing it through
-  // onFieldChange, and connectivityProfile has no field in ProjectFormFields yet (see #410 — the
-  // selector was removed there; restoring the picker itself is out of scope here, but the value
-  // is threaded through so onSave gets it as soon as that control comes back).
+  // books live outside ProjectFormData on purpose: UsfmImportTab already
+  // treats book selection as its own concern via onBooksChange rather than routing it through onFieldChange
   const [books, setBooks] = useState<number[]>([]);
 
   // ProjectFormFields runs the field queries; this one stays because a languages failure

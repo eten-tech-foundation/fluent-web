@@ -101,5 +101,20 @@
   "milestoneCreated": "माइलस्टोन सफलतापूर्वक बनाया गया",
   "milestoneCreateFailed": "माइलस्टोन बनाने में विफल",
   "largeMilestoneWarning": "बड़े माइलस्टोन फ़ील्ड डिवाइस पर डाउनलोड होने में धीमे हो सकते हैं। इसे छोटे माइलस्टोन में बाँटने पर विचार करें।",
-  "noProjectsContactAdmin": "प्रोजेक्ट सेट करने के लिए अपने एडमिन से संपर्क करें।"
+  "noProjectsContactAdmin": "प्रोजेक्ट सेट करने के लिए अपने एडमिन से संपर्क करें।",
+  "overallProgress": "समग्र प्रगति",
+  "sortRecent": "हाल का",
+  "sortTitle": "शीर्षक",
+  "statusShowAll": "सभी दिखाएं",
+  "statusPotentiallyStalled": "संभवतः रुका हुआ",
+  "statusNotAssigned": "असाइन नहीं किया गया",
+  "projectNotFound": "प्रोजेक्ट नहीं मिला",
+  "milestoneBooksLabel": "पुस्तकें",
+  "lastActivity": "अंतिम गतिविधि",
+  "assign": "असाइन करें",
+  "bookSelectPlaceholder": "पुस्तक",
+  "allBooksOption": "पुस्तकें",
+  "moreMilestoneActionsAriaLabel": "अधिक माइलस्टोन कार्रवाइयां",
+  "assignmentUpdatedSuccess": "असाइनमेंट सफलतापूर्वक अपडेट किया गया",
+  "assignmentUpdateFailed": "उपयोगकर्ता असाइन करने में विफल"
 }

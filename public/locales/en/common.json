@@ -122,5 +122,20 @@
   "milestoneCreated": "Milestone created successfully",
   "milestoneCreateFailed": "Failed to create milestone",
   "largeMilestoneWarning": "Large milestones may be slow to download on field devices. Consider splitting into smaller milestones.",
-  "noProjectsContactAdmin": "Contact your admin to set up a project."
+  "noProjectsContactAdmin": "Contact your admin to set up a project.",
+  "overallProgress": "Overall Progress",
+  "sortRecent": "Recent",
+  "sortTitle": "Title",
+  "statusShowAll": "Show All",
+  "statusPotentiallyStalled": "Potentially Stalled",
+  "statusNotAssigned": "Not Assigned",
+  "projectNotFound": "Project not found",
+  "milestoneBooksLabel": "Books",
+  "lastActivity": "Last Activity",
+  "assign": "Assign",
+  "bookSelectPlaceholder": "Book",
+  "allBooksOption": "Books",
+  "moreMilestoneActionsAriaLabel": "More milestone actions",
+  "assignmentUpdatedSuccess": "Assignment updated successfully",
+  "assignmentUpdateFailed": "Failed to assign user"
 }

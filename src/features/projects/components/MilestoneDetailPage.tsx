@@ -287,10 +287,10 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
       });
       setIsDialogOpen(false);
       setSelectedAssignments([]);
-      toast.success('Assignment updated successfully');
+      toast.success(t('assignmentUpdatedSuccess'));
     } catch (error) {
       Logger.logException(error);
-      toast.error('Failed to assign user');
+      toast.error(t('assignmentUpdateFailed'));
     }
   }, [
     selectedDrafter,
@@ -299,6 +299,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     projectId,
     assignChapterMutation,
     queryClient,
+    t,
   ]);
 
   useEffect(() => {
@@ -320,7 +321,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   if (!projectId) {
     return (
       <div className='flex h-full items-center justify-center'>
-        <span>Project not found</span>
+        <span>{t('projectNotFound')}</span>
       </div>
     );
   }
@@ -361,7 +362,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    aria-label='More milestone actions'
+                    aria-label={t('moreMilestoneActionsAriaLabel')}
                     className='text-primary hover px-2'
                     size='sm'
                     variant='outline'
@@ -389,14 +390,14 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
           <Card ref={detailsCardRef} className='h-fit flex-1 lg:flex-none'>
             <CardContent className='space-y-4 py-4'>
               <div className='grid grid-cols-2 gap-2'>
-                <label className='text-base font-bold'>Project</label>
+                <label className='text-base font-bold'>{t('project')}</label>
                 <TruncatedCardText text={projectTitle} />
 
-                <label className='text-base font-bold'>Milestone</label>
+                <label className='text-base font-bold'>{t('milestoneColumnMilestone')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {milestoneName}
                 </p>
-                <label className='text-base font-bold'>Books</label>
+                <label className='text-base font-bold'>{t('milestoneBooksLabel')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {milestoneBooks.length > 0 && (
                     <span className='text-base font-medium text-gray-600 dark:text-gray-400'>
@@ -410,11 +411,11 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                     </span>
                   )}
                 </p>
-                <label className='text-base font-bold'>Source Bible</label>
+                <label className='text-base font-bold'>{t('sourceBible')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {projectSource}
                 </p>
-                <label className='text-base font-bold'>Last Activity</label>
+                <label className='text-base font-bold'>{t('lastActivity')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {getLastActivityDisplay(milestoneUpdatedAt)}
                 </p>
@@ -438,10 +439,12 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
             <div className='flex items-center gap-3'>
               <Select value={selectedBook} onValueChange={setSelectedBook}>
                 <SelectTrigger className='my-0.5 w-[200px] lg:w-[250px]'>
-                  <SelectValue placeholder={booksLoading ? 'Loading books...' : 'Book'} />
+                  <SelectValue
+                    placeholder={booksLoading ? t('loadingBooks') : t('bookSelectPlaceholder')}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>Books</SelectItem>
+                  <SelectItem value='all'>{t('allBooksOption')}</SelectItem>
                   {milestoneBooks.map(book => (
                     <SelectItem key={book.bookId} value={book.bookId.toString()}>
                       {book.engDisplayName}
@@ -466,7 +469,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                   {assignChapterMutation.isPending && (
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                   )}
-                  Assign
+                  {t('assign')}
                 </Button>
               )}
             </div>

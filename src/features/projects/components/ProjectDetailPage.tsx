@@ -75,8 +75,8 @@ function getMilestoneDisplayStatus(
   if (completedChapters >= totalChapters) {
     return {
       label: t('milestoneStatusComplete'),
-      bg: 'var(--primary)',
-      text: 'var(--primary-foreground)',
+      bg: 'var(--success)',
+      text: 'var(--success-foreground)',
     };
   }
 
