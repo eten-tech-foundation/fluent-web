@@ -157,6 +157,10 @@ export const useAssignChapters = (
       void queryClient.invalidateQueries({
         queryKey: ['projectDetails', projectId],
       });
+
+      void queryClient.invalidateQueries({
+        queryKey: ['milestones', projectId],
+      });
     },
   });
 };

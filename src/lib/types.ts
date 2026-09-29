@@ -51,6 +51,7 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  milestoneCount?: number;
   pericopeSetId?: number | null;
 }
 
@@ -81,7 +82,7 @@ export interface UsfmFilePayload {
 export interface CreateProject {
   id: number;
   name: string;
-  bibleId: number;
+  sourceBibleId: number;
   bookId: number[];
   organization: number;
   createdBy: number;
