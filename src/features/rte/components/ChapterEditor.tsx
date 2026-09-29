@@ -15,6 +15,7 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
+import { remapTextSelection } from '../lib/remap-text-selection';
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 
 import { ActiveVerseOutline } from './ActiveVerseOutline';
@@ -118,6 +119,7 @@ export function ChapterEditor({
       knownVersesRef.current = usjToPericopeVerses(usj);
       suppressedJsonRef.current = JSON.stringify(usj);
       editorRef.current?.setUsj(usj);
+      return usj;
     },
     [bookCode, chapterNumber]
   );
@@ -182,7 +184,7 @@ export function ChapterEditor({
     verseNum: 1,
   }));
 
-  const { restoreAfterLoad, cancelRestore } = useVerseCursorRestore(scrRef, setScrRef);
+  const { restoreAfterLoad, cancelRestore } = useVerseCursorRestore(scrRef, setScrRef, editorRef);
 
   useEffect(() => {
     activeVerseRef.current = undefined;
@@ -250,7 +252,10 @@ export function ChapterEditor({
           ? null
           : scopeBlockFormatToVerse(knownVersesRef.current, activeVerse, marker);
       if (scoped && activeVerse !== undefined) {
-        loadIntoEditor(scoped.updated);
+        const before = editor.getUsj();
+        const selection = editor.getSelection();
+        const after = loadIntoEditor(scoped.updated);
+        const restoredSelection = remapTextSelection(before, after, selection);
         // Report what the document ended up holding, not the rows we handed it: the load
         // re-derives them, and the parent's copy has to be the one the next commit is diffed
         // against or an edit somewhere else would come back as a change to this verse.
@@ -261,7 +266,7 @@ export function ChapterEditor({
           )
         );
         // The load leaves the editor with no selection, and it only lands a task from now.
-        restoreAfterLoad(activeVerse);
+        restoreAfterLoad(activeVerse, restoredSelection);
       } else {
         editor.formatPara(marker);
       }
