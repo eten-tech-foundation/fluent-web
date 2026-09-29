@@ -458,7 +458,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                     return (
                       <button
                         key={role.value}
-                        className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors hover:bg-white/60 ${
+                        className={`hover:bg-popover-hover flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors ${
                           isSelected ? 'font-medium' : ''
                         }`}
                         type='button'
@@ -546,8 +546,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Remove-confirmation banner */}
         {removeTarget && (
-          <div className='border-warning-border bg-warning mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
-            <div className='text-warning-foreground flex flex-col text-[14px] leading-snug font-semibold'>
+          <div className='border-warning-border bg-warning-surface mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
+            <div className='text-warning-surface-foreground flex flex-col text-[14px] leading-snug font-semibold'>
               {getActiveAssignmentCount(removeTarget.userId) > 0 ? (
                 <>
                   <span>Remove {removeTarget.displayName} from this project?</span>
@@ -584,8 +584,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
 
         {/* Role-change confirmation banner */}
         {roleChangeTarget && (
-          <div className='border-warning-border bg-warning mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
-            <div className='text-warning-foreground flex flex-col text-[14px] leading-snug font-semibold'>
+          <div className='border-warning-border bg-warning-surface mx-4 mb-3 flex shrink-0 items-center justify-between gap-3 rounded-sm border px-3.5 py-2'>
+            <div className='text-warning-surface-foreground flex flex-col text-[14px] leading-snug font-semibold'>
               <span>Change {roleChangeTarget.displayName}'s role to Observer?</span>
               <span>Their chapter assignments will be removed.</span>
             </div>
@@ -636,17 +636,17 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         <div
           className={`flex min-h-0 flex-1 flex-col overflow-hidden border-t ${
             error || projectUsersError || removeTarget || removeBlockedReason
-              ? 'max-h-[165px] lg:max-h-[165px]'
-              : 'max-h-[188px] lg:max-h-[188px]'
+              ? 'max-h-[165px]'
+              : 'max-h-[188px]'
           }`}
         >
           <div className='min-h-0 flex-1 overflow-y-auto'>
             <Table>
-              <TableHeader className='bg-muted sticky top-0 z-10'>
+              <TableHeader className='sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
-                  <TableHead className='py-2.5 pl-4 text-sm font-semibold'>Name</TableHead>
-                  <TableHead className='py-2.5 pr-4 text-sm font-semibold'>Role</TableHead>
-                  <TableHead className='w-10 py-2.5 pr-4' />
+                  <TableHead className='bg-muted py-2.5 pl-4 text-sm font-semibold'>Name</TableHead>
+                  <TableHead className='bg-muted py-2.5 pr-4 text-sm font-semibold'>Role</TableHead>
+                  <TableHead className='bg-muted w-10 py-2.5 pr-4' />
                 </TableRow>
               </TableHeader>
               <TableBody className='bg-background'>{renderTableBody()}</TableBody>
@@ -727,7 +727,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   Role
                 </Label>
                 <Select value={selectedRole ?? ''} onValueChange={value => setSelectedRole(value)}>
-                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
+                  <SelectTrigger className='w-full'>
                     <SelectValue placeholder='Select a role' />
                   </SelectTrigger>
                   <SelectContent>
@@ -766,7 +766,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Email Address
                 </Label>
                 <Input
-                  className='bg-background text-foreground border-input'
                   id='invite-email'
                   placeholder='user@example.com'
                   type='email'
@@ -790,7 +789,6 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Display Name
                 </Label>
                 <Input
-                  className='bg-background text-foreground border-input'
                   id='invite-display-name'
                   placeholder='Display Name'
                   value={inviteDisplayName}
@@ -803,7 +801,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                   <span style={{ color: 'red' }}>*</span> Role
                 </Label>
                 <Select value={inviteRole ?? ''} onValueChange={value => setInviteRole(value)}>
-                  <SelectTrigger className='bg-background text-foreground border-input w-full'>
+                  <SelectTrigger className='w-full'>
                     <SelectValue placeholder='Select a role' />
                   </SelectTrigger>
                   <SelectContent>
