@@ -39,18 +39,15 @@ The ticket describes the current state slightly differently from what is in the 
 
 ---
 
-## Open decisions for Product (block the tasks marked with them)
+## Decisions (resolved by Product 2026-09-16)
 
-**D1 — What does "Project Manager" mean on the org-level Users page?** (blocks A3, W1-role-list)
+**D1 → Option B: org-level roles only.** The OM invite brings a user into the org with a member grant; project roles are set per project once it exists. The Users page offers `Org Manager` (promote) and `Org Member` (demote — removes the org-level role while keeping membership + project grants). A PM can be promoted to OM; an OM+PM demoted stays PM. **A3 was dropped.**
 
-- **Option A: introduce an org-level PM grant** (`orgId` set, `projectId = null`, role `Project Manager`). Pros: matches ticket wording; `grant-utils.isProjectManager()` already treats a null-project manager grant as manager of every project in the org, so the web side mostly works. Cons: it is a new concept in the API's RBAC model; `canAssignRole` and the `projects.route.ts` TEMP bypass need updating; it blurs the "PMs are per-project" direction #329 was moving toward.
-- **Option B: only "Org Manager" in the Users page dropdown.** PMs keep being added per project via Add Project User. Pros: no new RBAC concept. Cons: deviates from the ticket; an Org Manager who wants a PM must first create a project.
+**D2 → Self-change block is the guard.** An OM cannot change their own role — only another OM can demote them, which guarantees ≥1 OM always remains. Self-removal via `DELETE` is blocked for the same reason (and the remove action is hidden on the caller's row).
 
-The plan below includes both branches. Pick one before starting A3 / W1.
+**D3 → Role column precedence (top wins):** no role → `Organization Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
 
-**D2 — Last-Org-Manager guard.** The ticket explicitly scopes this out. Confirm we ship without it (an Org Manager can demote every other Org Manager; only self-demotion is blocked).
-
-**D3 — Role column when a user holds several roles in the org** (e.g. Org Manager + Translator on project X). Proposed: the Users page shows the org-level role (`projectId === null`, not `Org Member`), falling back to the first project role, then `No Role`. Today it shows `orgGrants[0]`, which is often the `Org Member` anchor.
+**New scope:** an OM can remove a user from the org entirely — confirm banner warns "Their chapter assignments will be removed." when the target holds assignments (mirrors `AssignProjectUsers`).
 
 ---
 
@@ -131,7 +128,9 @@ If D1 = Option B: skip this task and restrict A2's `roleName` enum to `Org Manag
 
 ## Phase B — fluent-web
 
-Depends on A1 + A2 being merged and deployed to the environment you test against (and A3 if D1 = Option A).
+**Implemented on `feat/org-manager-self-service`** (stacked on `feat/organization-onboarding`; not pushed). Depends on A1 + A2 being merged and deployed to the environment you test against.
+
+What shipped vs the tasks below: `ORG_ROLE_OPTIONS` landed in `constants/roles.ts` as `[Org Member, Org Manager]` for edit plus `ORG_INVITE_ROLE_OPTIONS` (OM only — invite already creates the anchor, so inviting "as member" would double-grant). `getOrgRoleName` implements the D3 order (org role → PM > Translator > Observer → `Org Member`); a new `getOrgLevelRoleName` drives the edit dropdown's initial value. Edit saves go to `PATCH /organizations/:orgId/users/:userId` via `useUpdateOrgUserRole`; `onSave` rethrows so the modal reverts the dropdown on failure. New scope: per-row remove action + `RemoveOrgUserBanner` + `useRemoveOrgUser` (DELETE org-user) with the assignment warning.
 
 ### Task W1: Org-scoped role options and role display
 

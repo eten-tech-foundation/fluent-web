@@ -22,9 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { roleOptions } from '@/lib/constants/roles';
+import { ORG_INVITE_ROLE_OPTIONS, ORG_ROLE_OPTIONS } from '@/lib/constants/roles';
+import { getOrgLevelRoleName } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
+import { ROLES, type User } from '@/lib/types';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -35,6 +36,10 @@ interface UserModalProps {
   mode: 'create' | 'edit';
   isLoading?: boolean;
   disableRoleSelection?: boolean;
+  /** Org the role change applies to — used to resolve the edit-mode role. */
+  activeOrgId?: number | null;
+  /** Lowercased emails of existing org members — blocks duplicate invites. */
+  existingEmails?: ReadonlySet<string>;
 }
 
 interface FormData {
@@ -57,6 +62,8 @@ export const UserModal: React.FC<UserModalProps> = ({
   error = null,
   isLoading = false,
   disableRoleSelection = false,
+  activeOrgId = null,
+  existingEmails,
 }) => {
   const { t } = useTranslation();
 
@@ -68,18 +75,18 @@ export const UserModal: React.FC<UserModalProps> = ({
     role: '',
     status: 'invited',
   });
+  const [initialRole, setInitialRole] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       if (mode === 'edit' && user) {
-        const activeGrant =
-          user.orgGrants?.find(g => g.orgId === user.lastActiveOrgId) ??
-          user.grants?.find(g => g.orgId === user.lastActiveOrgId) ??
-          user.orgGrants?.[0] ??
-          user.grants?.[0];
+        // The Users page manages org-level roles only (D1): a project-scoped
+        // role like Project Manager is never a dropdown value here. A member
+        // with no org-level role is 'Org Member' — selecting it demotes.
+        const initialRoleName =
+          getOrgLevelRoleName(user.orgGrants ?? user.grants, activeOrgId) ?? ROLES.ORG_MEMBER;
 
-        const initialRoleName = activeGrant?.roleName ?? user.role;
-
+        setInitialRole(initialRoleName);
         setFormData({
           username: user.username,
           firstName: user.firstName ?? '',
@@ -89,6 +96,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           status: user.status ?? '',
         });
       } else {
+        setInitialRole('');
         setFormData({
           username: '',
           firstName: '',
@@ -99,7 +107,7 @@ export const UserModal: React.FC<UserModalProps> = ({
         });
       }
     }
-  }, [isOpen, user, mode]);
+  }, [isOpen, user, mode, activeOrgId]);
 
   const emailSchema = z.string().email();
 
@@ -112,6 +120,9 @@ export const UserModal: React.FC<UserModalProps> = ({
     }
   };
 
+  const isDuplicateEmail =
+    mode === 'create' && (existingEmails?.has(formData.email.trim().toLowerCase()) ?? false);
+
   const isFormValid = (): boolean => {
     const hasUsername = Boolean(formData.username.trim());
     const hasValidEmail = Boolean(formData.email.trim()) && isEmailValid(formData.email.trim());
@@ -119,7 +130,7 @@ export const UserModal: React.FC<UserModalProps> = ({
       formData.role && formData.role.trim() !== '' && formData.role !== 'No Role'
     );
 
-    return hasUsername && hasValidEmail && hasValidRole;
+    return hasUsername && hasValidEmail && hasValidRole && !isDuplicateEmail;
   };
 
   const handleSubmit = async (): Promise<void> => {
@@ -130,6 +141,11 @@ export const UserModal: React.FC<UserModalProps> = ({
         await onSave(formData as unknown as Omit<User, 'id'>);
       }
     } catch (error) {
+      // The dialog stays open; restore the role dropdown to the pre-submit
+      // value so a failed role save doesn't appear to have applied.
+      if (mode === 'edit') {
+        setFormData(prev => ({ ...prev, role: initialRole }));
+      }
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'handle user submit',
       });
@@ -162,6 +178,11 @@ export const UserModal: React.FC<UserModalProps> = ({
               value={formData.email}
               onChange={e => updateFormData('email', e.target.value.toLowerCase())}
             />
+            {isDuplicateEmail && (
+              <p className='text-sm text-red-600' role='alert'>
+                {t('userAlreadyInOrg')}
+              </p>
+            )}
           </div>
 
           <div className='grid gap-3'>
@@ -206,7 +227,7 @@ export const UserModal: React.FC<UserModalProps> = ({
                 <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
               </SelectTrigger>
               <SelectContent>
-                {roleOptions.map(option => (
+                {(mode === 'edit' ? ORG_ROLE_OPTIONS : ORG_INVITE_ROLE_OPTIONS).map(option => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

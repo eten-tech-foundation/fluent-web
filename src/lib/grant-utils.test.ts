@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getOrgRoleName, isSuperAdmin } from '@/lib/grant-utils';
+import { getOrgLevelRoleName, getOrgRoleName, isSuperAdmin } from '@/lib/grant-utils';
 import { ROLES, type UserGrant } from '@/lib/types';
 
 const grant = (
@@ -39,15 +39,50 @@ describe('getOrgRoleName', () => {
     expect(getOrgRoleName(grants, 1)).toBe(ROLES.ORG_MANAGER);
   });
 
-  it('falls back to the first project role when there is no org-level role', () => {
+  it('applies the D3 project-role order (PM > Translator > Observer) when no org-level role', () => {
+    const projectOnly = [
+      grant(1, null, ROLES.ORG_MEMBER),
+      grant(1, 11, ROLES.PROJECT_OBSERVER),
+      grant(1, 10, ROLES.PROJECT_TRANSLATOR),
+      grant(1, 12, ROLES.PROJECT_MANAGER),
+    ];
+    expect(getOrgRoleName(projectOnly, 1)).toBe(ROLES.PROJECT_MANAGER);
+  });
+
+  it('falls back to a single project role when there is no org-level role', () => {
     const projectOnly = [grant(1, null, ROLES.ORG_MEMBER), grant(1, 10, ROLES.PROJECT_TRANSLATOR)];
     expect(getOrgRoleName(projectOnly, 1)).toBe(ROLES.PROJECT_TRANSLATOR);
   });
 
-  it('is undefined when only the anchor exists, for another org, or with no input', () => {
-    expect(getOrgRoleName([grant(1, null, ROLES.ORG_MEMBER)], 1)).toBeUndefined();
+  it('returns Org Member when only the anchor exists (D3: no role shows member)', () => {
+    expect(getOrgRoleName([grant(1, null, ROLES.ORG_MEMBER)], 1)).toBe(ROLES.ORG_MEMBER);
+  });
+
+  it('is undefined for another org or with no input', () => {
     expect(getOrgRoleName(grants, 99)).toBeUndefined();
     expect(getOrgRoleName(undefined, 1)).toBeUndefined();
     expect(getOrgRoleName(grants, null)).toBeUndefined();
+  });
+});
+
+describe('getOrgLevelRoleName', () => {
+  it('returns the org-level role, ignoring project roles', () => {
+    const grants = [
+      grant(1, null, ROLES.ORG_MEMBER),
+      grant(1, 10, ROLES.PROJECT_MANAGER),
+      grant(1, null, ROLES.ORG_MANAGER),
+    ];
+    expect(getOrgLevelRoleName(grants, 1)).toBe(ROLES.ORG_MANAGER);
+  });
+
+  it('returns Org Member when the user has only the anchor (even with project roles)', () => {
+    const grants = [grant(1, null, ROLES.ORG_MEMBER), grant(1, 10, ROLES.PROJECT_MANAGER)];
+    expect(getOrgLevelRoleName(grants, 1)).toBe(ROLES.ORG_MEMBER);
+  });
+
+  it('is undefined when the user has no grants in the org', () => {
+    expect(getOrgLevelRoleName([grant(2, null, ROLES.ORG_MANAGER)], 1)).toBeUndefined();
+    expect(getOrgLevelRoleName(undefined, 1)).toBeUndefined();
+    expect(getOrgLevelRoleName([grant(1, null, ROLES.ORG_MEMBER)], null)).toBeUndefined();
   });
 });

@@ -161,6 +161,79 @@ export const useUpdateUser = () => {
   });
 };
 
+const updateOrgUserRole = async ({
+  orgId,
+  userId,
+  roleName,
+}: {
+  orgId: number;
+  userId: number;
+  roleName: string;
+}): Promise<User> => {
+  try {
+    return await apiRequest<User>(`${config.api.url}/organizations/${orgId}/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ roleName }),
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message && error.message !== 'Generic API error') {
+      return Promise.reject(error);
+    }
+    return Promise.reject(new Error('Error: Role was not saved.'));
+  }
+};
+
+/** PATCH /organizations/{orgId}/users/{userId} — change a member's org-level role. */
+export const useUpdateOrgUserRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: updateOrgUserRole,
+    onSuccess: (_data, { orgId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['organizationUsers', orgId] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error updating org role' });
+    },
+  });
+};
+
+const removeOrgUser = async ({
+  orgId,
+  userId,
+}: {
+  orgId: number;
+  userId: number;
+}): Promise<void> => {
+  const response = await fetch(`${config.api.url}/organizations/${orgId}/users/${userId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const message = await parseErrorMessage(response);
+    throw new Error(message === 'Generic API error' ? 'Error: User was not removed.' : message);
+  }
+};
+
+/** DELETE /organizations/{orgId}/users/{userId} — remove a member from the org entirely. */
+export const useRemoveOrgUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: removeOrgUser,
+    onSuccess: (_data, { orgId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['organizationUsers', orgId] });
+      void queryClient.invalidateQueries({ queryKey: ['organizations'] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error removing org user' });
+    },
+  });
+};
+
 export const useGetUserDetailsMutation = () => {
   const queryClient = useQueryClient();
 

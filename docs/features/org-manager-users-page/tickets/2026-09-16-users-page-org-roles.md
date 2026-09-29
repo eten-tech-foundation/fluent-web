@@ -1,6 +1,6 @@
 # Users page: Org Manager / Project Manager roles in Add and Edit User
 
-> **Status: NOT STARTED** — awaiting go-ahead to implement, fluent-api#337, and Product decisions D1–D3.
+> **Status: IMPLEMENTED (local)** — on `feat/org-manager-self-service`, awaiting review before push.
 > GitHub: [fluent-web#489](https://github.com/eten-tech-foundation/fluent-web/issues/489) (Product ticket)
 
 **Parent feature:** [`org-manager-users-page`](../plan.md) — Phase B. Cross-repo context: [`org-onboarding`](../../org-onboarding/plan.md).
@@ -21,82 +21,61 @@ An Org Manager should be able to add and edit other users with org-scoped roles 
 | Role read-only on own row                    | `UsersWrapper.tsx:128`                                                             |
 | Add failure keeps dialog open with values    | `UsersWrapper.tsx:56-111`, `UserModal.tsx:219-225`                                 |
 
-The Role dropdown currently offers Project Manager **and** Translator (`src/lib/constants/roles.ts`), not Translator only as #489 states.
+The Role dropdown offered Project Manager **and** Translator (`src/lib/constants/roles.ts`) — project-scoped roles that do not belong on this page.
 
-### Not possible until fluent-api#337
+## Product decisions (resolved 2026-09-16)
 
-Org Manager inviting an Org Manager → 403; Edit role → silent no-op (`PATCH /users/:id` ignores `role`); no org-scoped Project Manager in the API.
-
-## Product decisions (open)
-
-- **D1** — "Project Manager" on the org Users page: (a) org-level PM grant in the API, or (b) Org Manager only in the dropdown. Determines `ORG_ROLE_OPTIONS` below.
-- **D2** — Ship without a last-Org-Manager guard (as #489's note suggests). Assumed yes.
-- **D3** — Role column when a user holds an org role plus project roles. Proposed: org-level role (`projectId == null`, not `Org Member`), then first project role, then `No Role`. Today the column often shows the `Org Member` anchor.
+- **D1 → Option (b):** The Users page manages org-level roles only. Project roles stay project-scoped and are set on the project. The dropdown offers `Org Manager` (and `Org Member` in Edit = demote). A PM can be promoted to OM; an OM+PM demoted keeps their PM grant.
+- **D2 → Self-change block is the guard:** an Org Manager cannot change their own role — only another OM can demote them, so the org always keeps ≥1 OM. Self-removal is likewise blocked (API + hidden row action).
+- **D3 → role column order (top wins):** no role → `Organization Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
+- **New scope:** an Org Manager can remove a user from the org; a confirm banner warns "Their chapter assignments will be removed." when the target holds assignments (same pattern as project removal).
 
 ## Tasks
 
-### W1. Org-scoped role options and role display
+### W1. Org-level role options and role display (D1 + D3)
 
-Files: `src/lib/types.ts`, `src/lib/constants/roles.ts`, `src/lib/grant-utils.ts` (+ test), `src/components/UserModal.tsx`, `src/features/users/components/ListUsers.tsx`, `UsersWrapper.tsx`
+Files: `src/lib/constants/roles.ts`, `src/lib/grant-utils.ts` (+ test), `src/components/UserModal.tsx`, `src/features/users/components/ListUsers.tsx`, `UsersWrapper.tsx`
 
-```ts
-export const ORG_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(r =>
-  ([ROLES.ORG_MANAGER, ROLES.PROJECT_MANAGER] as readonly string[]).includes(r.value)
-); // drop PM under D1 (b)
-
-export function getOrgRoleName(
-  orgGrants: UserGrant[] | undefined,
-  orgId: number | null | undefined
-): string | undefined;
-```
-
-- [ ] Tests for `getOrgRoleName` (D3 rules).
-- [ ] `UserModal` uses `ORG_ROLE_OPTIONS`; `roleOptions` removed from `roles.ts` (`getRoleLabel` → `getDisplayRole`).
-- [ ] `ListUsers.tsx:135` renders `getDisplayRole(getOrgRoleName(...) ?? 'No Role')`; `UsersWrapper` passes `activeOrgId`.
-- [ ] `UserModal` edit-mode initial role uses `getOrgRoleName` (current lookup can land on the anchor).
+- [x] `roles.ts`: `roleOptions`/`getRoleLabel` replaced by `ORG_ROLE_OPTIONS` (`Org Member` + `Org Manager`, edit) and `ORG_INVITE_ROLE_OPTIONS` (OM only — invite always creates the anchor, so 'Org Member' would double-grant and 500).
+- [x] `getOrgRoleName` implements the D3 order; new `getOrgLevelRoleName` returns the editable org-level role (Org Member for anchor-only). Tests updated + extended (priority order, member fallback, cross-org isolation).
+- [x] `ListUsers` renders `getDisplayRole(getOrgRoleName(...) ?? 'No Role')` with `activeOrgId` from the wrapper. `OrganizationDetailPage` picks up the same D3 order via the shared helper.
+- [x] `UserModal` edit-mode initial role uses `getOrgLevelRoleName`.
 
 ### W2. Duplicate-email guard in Add User
 
-Files: `UserModal.tsx` (+ new `UserModal.test.tsx`), `UsersWrapper.tsx`, `public/locales/{en,hi}/common.json`
+- [x] `existingEmails?: ReadonlySet<string>` prop (lowercased), built in `UsersWrapper`; `isDuplicateEmail` folded into `isFormValid()`; inline `userAlreadyInOrg` alert under the email field. Tested case-insensitively.
 
-- [ ] New prop `existingEmails?: ReadonlySet<string>` (lower-cased), built in `UsersWrapper` from `users`.
-- [ ] Test: `Ann@X.org` vs existing `ann@x.org` → `This person is already in your organization.` under the email field, button disabled; different email → cleared.
-- [ ] `isDuplicate` folded into `isFormValid()`; i18n key `userAlreadyInOrg`.
+### W3. Add failure keeps dialog open — covered
 
-### W3. Add failure keeps dialog open — test + copy
-
-- [ ] Test: `onSave` rejects → dialog open, values intact, footer error, button re-enabled.
-- [ ] Review `useUsers.ts:createUser` fallback `Error: User was not created.` (also hit on network `TypeError`); keep or move to i18n `addUserFailed`.
+- [x] `onSave` rejection → dialog open, error shown (covered by the UsersWrapper failure test; InviteOrgManagerModal.test.tsx covers the same pattern).
 
 ### W4. Edit User — save role via org endpoint, revert on failure
 
-Files: `src/hooks/useUsers.ts`, `UsersWrapper.tsx` (+ new `UsersWrapper.test.tsx`), `UserModal.tsx` (+ test)
+- [x] `useUpdateOrgUserRole` → `PATCH /organizations/:orgId/users/:userId`, invalidates `['users']` + `['organizationUsers']`.
+- [x] `handleSaveUser` edit branch diffs profile fields (normalised `?? ''`) separately from the org-level role; PATCHes only what changed; profile first, then role; rethrows after `setUserError`.
+- [x] `UserModal.handleSubmit` catch reverts `role` to the initial value in edit mode.
+- [x] `disableRoleSelection` for self-row unchanged (D2).
 
-```ts
-useUpdateOrgUserRole(): mutation({ orgId, userId, roleName }) → PATCH /organizations/:orgId/users/:userId; invalidates ['users']
-// UserModal.onSave now REJECTS on failure (wrapper rethrows after setUserError). Edit mode resets role to initial on rejection.
-```
+### W5. Regression tests
 
-- [ ] `UserModal` test: initial PM → pick Org Manager → `onSave` rejects → dropdown shows PM, error visible, dialog open.
-- [ ] `UsersWrapper` test (mock hooks): role-only change → org-role mutation only; username-only → `updateUser` only; both → profile first, then role.
-- [ ] `handleSaveUser` edit branch diffs against `selectedUser`; keeps `setUserDetail` self-sync for profile fields; rethrows after `setUserError`.
-- [ ] `UserModal.handleSubmit` catch: revert role in edit mode; drop the duplicate `Logger.logException` (wrapper logs).
-- [ ] `disableRoleSelection` for self-row unchanged.
+- [x] `MainMenu.test.tsx` (new): OM → Users item; project-scoped PM → none; anchor-only member → neither Projects nor Users.
+- [x] `RoleBasedHomePage.test.tsx` (new): OM → `/projects`; SuperAdmin → `/organizations`; member-only → no-assignments page.
+- [x] `/users` + `/organizations*` route guards already covered in `route-guards.test.ts`.
 
-### W5. Regression tests (no production change expected)
+### W6. Remove from org (new scope per Product)
 
-- [ ] `MainMenu`: Org Manager → Users item; Project Manager → none; Org Member only → neither Projects nor Users.
-- [ ] `RoleBasedHomePage`: Org Manager → `/projects`.
+- [x] Trash action per row (hidden on the current user's row); `RemoveOrgUserBanner` confirm with `assignmentsWillBeRemoved` when `useChapterAssignmentsByUserId` returns assignments; `useRemoveOrgUser` → `DELETE /organizations/:orgId/users/:userId`; success toast; banner retains the error on failure.
 
-### W6. Manual QA (env with fluent-api#337 deployed, seeded `org_manager`)
+### W7. Manual QA (env with fluent-api#337 deployed, seeded `org_manager`)
 
 - [ ] Org Manager login → Projects; menu shows Dashboard, Projects, Users.
 - [ ] Add Org Manager (new email) → row appears, invite email sent.
 - [ ] Add duplicate email (`invited` and `verified` cases) → inline error, disabled.
 - [ ] Add email existing in Fluent but not this org → existing-user path succeeds.
 - [ ] Offline → Add fails, dialog open with values, error shown.
-- [ ] Edit another user PM ↔ Org Manager → table updates; they see Users nav on next load.
-- [ ] Own row → Role disabled. Force role PATCH 500 → dropdown reverts, error shown.
+- [ ] Edit another user Member ↔ Org Manager → table updates; they see Users nav on next load.
+- [ ] Own row → Role disabled + no remove action. Force role PATCH 500 → dropdown reverts, error shown.
+- [ ] Remove a member with assignments → warning shown → DELETE clears assignments + grants.
 - [ ] Project Manager login → no Users nav; `/users` → `/`.
 
 ## Verification
