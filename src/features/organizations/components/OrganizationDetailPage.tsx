@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,6 @@ import {
 import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
 import { getOrgRoleName } from '@/lib/grant-utils';
 import { getDisplayRole, type OrganizationSummary, type User } from '@/lib/types';
-
-import { formatOrgDate } from './formatOrgDate';
 
 interface OrganizationDetailPageProps {
   organization: OrganizationSummary | undefined;
@@ -45,21 +43,25 @@ export const OrganizationDetailPage: React.FC<OrganizationDetailPageProps> = ({
       <ViewPageHeader
         rightContent={
           <Button
-            className='bg-primary hover:bg-primary/90 text-white'
+            className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
             disabled={!organization}
             onClick={onInviteOrgManager}
           >
-            {t('inviteOrgManager')}
+            <Plus className='h-4 w-4' /> {t('inviteOrgManager')}
           </Button>
         }
         title={organization?.name ?? ''}
         onBack={onBack}
       />
-      {organization?.createdAt && (
-        <p className='text-muted-foreground mb-4 text-sm'>
-          {t('created')}: {formatOrgDate(organization.createdAt)}
-        </p>
-      )}
+      <div className='flex shrink-0 items-center justify-between pb-4'>
+        <h2 className='text-xl font-bold'>{t('members')}</h2>
+        {organization && (
+          <p className='text-muted-foreground text-sm'>
+            {t('memberCount', { count: members.length })} ·{' '}
+            {t('orgManagerCount', { count: organization.orgManagerCount })}
+          </p>
+        )}
+      </div>
 
       <div className='flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (
