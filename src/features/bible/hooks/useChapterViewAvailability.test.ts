@@ -224,6 +224,38 @@ describe('useChapterViewAvailability', () => {
     expect(useAppStore.getState().chapterViewAvailability).toBeNull();
   });
 
+  it('does not clear or republish availability when editing an already filled verse', () => {
+    const { rerender } = renderHook(
+      ({ verses }) =>
+        useChapterViewAvailability({ projectItem: PROJECT, sourceVerses: SOURCES, verses }),
+      { initialProps: { verses: COMPLETE } }
+    );
+    const listener = vi.fn();
+    const unsubscribe = useAppStore.subscribe(listener);
+    try {
+      rerender({ verses: [COMPLETE[0], { verseNumber: 2, content: 'કિ' }] });
+
+      expect(useAppStore.getState().chapterViewAvailability?.available).toBe(true);
+      expect(listener).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('settles when a store subscriber supplies equivalent fresh verse arrays', () => {
+    const { result } = renderHook(() => {
+      useAppStore();
+      return useChapterViewAvailability({
+        projectItem: PROJECT,
+        sourceVerses: SOURCES.map(verse => ({ ...verse })),
+        verses: COMPLETE.map(verse => ({ ...verse })),
+      });
+    });
+
+    expect(result.current).toBe(true);
+    expect(useAppStore.getState().chapterViewAvailability?.available).toBe(true);
+  });
+
   it('does not let an old chapter cleanup clear the next chapter snapshot', () => {
     const previous = renderHook(() =>
       useChapterViewAvailability({ projectItem: PROJECT, sourceVerses: SOURCES, verses: COMPLETE })

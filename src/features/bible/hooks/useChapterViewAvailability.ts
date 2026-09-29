@@ -42,13 +42,34 @@ export function useChapterViewAvailability({
   }, [sourceVerses, verses, totalVerses]);
 
   useLayoutEffect(() => {
+    const current = chapterViewAvailabilityFor(useAppStore.getState(), chapterAssignmentId);
+    const missing = current?.missingVerseNumbers;
+    const nextMissing = availability.missingVerseNumbers;
+    const sameMissing =
+      missing === nextMissing ||
+      (Array.isArray(missing) &&
+        Array.isArray(nextMissing) &&
+        missing.length === nextMissing.length &&
+        missing.every((number, index) => number === nextMissing[index]));
+    if (
+      current?.available === availability.available &&
+      current.expectedVerseCount === availability.expectedVerseCount &&
+      sameMissing
+    )
+      return;
+
     setAvailability({ chapterAssignmentId, ...availability });
+  }, [availability, chapterAssignmentId, setAvailability]);
+
+  // Editing a verse must not briefly clear the shared snapshot. Store subscribers can render
+  // synchronously during IME input; clearing and republishing on each render creates a loop.
+  useLayoutEffect(() => {
     return () => {
       if (chapterViewAvailabilityFor(useAppStore.getState(), chapterAssignmentId)) {
         setAvailability(null);
       }
     };
-  }, [availability, chapterAssignmentId, setAvailability]);
+  }, [chapterAssignmentId, setAvailability]);
 
   return availability.available;
 }
