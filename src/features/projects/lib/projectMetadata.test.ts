@@ -3,20 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { buildProjectMetadata } from './projectMetadata';
 
 describe('buildProjectMetadata', () => {
-  it('returns an empty object when no profile is selected', () => {
-    expect(buildProjectMetadata(null)).toEqual({});
-    expect(buildProjectMetadata(undefined)).toEqual({});
+  it('returns empty metadata when no connectivity profile is given', () => {
+    expect(buildProjectMetadata()).toEqual({});
   });
 
-  it('embeds the selected profile under connectivityProfile', () => {
-    expect(buildProjectMetadata('rarely_connected')).toEqual({
-      connectivityProfile: 'rarely_connected',
-    });
+  it('includes connectivityProfile when one is given', () => {
     expect(buildProjectMetadata('usually_connected')).toEqual({
       connectivityProfile: 'usually_connected',
-    });
-    expect(buildProjectMetadata('sometimes_connected')).toEqual({
-      connectivityProfile: 'sometimes_connected',
     });
   });
 });

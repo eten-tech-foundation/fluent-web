@@ -51,6 +51,7 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  milestoneCount?: number;
   pericopeSetId?: number | null;
 }
 
@@ -81,7 +82,7 @@ export interface UsfmFilePayload {
 export interface CreateProject {
   id: number;
   name: string;
-  bibleId: number;
+  sourceBibleId: number;
   bookId: number[];
   organization: number;
   createdBy: number;
@@ -346,6 +347,7 @@ export enum ChapterAssignmentStatus {
 }
 export const ROLES = {
   SUPER_ADMIN: 'SuperAdmin',
+  ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
@@ -360,6 +362,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.PROJECT_MANAGER]: 'Project Manager',
   [ROLES.PROJECT_TRANSLATOR]: 'Translator',
   [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
   [ROLES.ORG_MEMBER]: 'Organization Member',

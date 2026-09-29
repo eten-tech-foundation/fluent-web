@@ -510,7 +510,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         style={referenceHeight ? { height: referenceHeight } : undefined}
       >
         {/* Title row */}
-        <div className='flex shrink-0 items-center justify-between p-4 pb-3'>
+        <div className='flex shrink-0 items-center justify-between p-3 pb-3'>
           <h3 className='text-lg font-bold'>Project Team</h3>
           <TooltipProvider delayDuration={300}>
             <Tooltip>

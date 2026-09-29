@@ -177,10 +177,41 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
     [workflowConfig, colors]
   );
 
+  const calculateOverallProgress = useCallback(
+    (chapterStatusCounts: Record<string, number>): number => {
+      const totalChapters = Object.values(chapterStatusCounts).reduce(
+        (sum, count) => sum + Number(count),
+        0
+      );
+
+      if (totalChapters === 0) return 0;
+
+      // Filter out not_started to avoid giving it weight (it's 0 progress)
+      // The workflow steps are ordered from start to finish
+      const steps = workflowConfig.map(s => s.id);
+
+      let totalWeightedProgress = 0;
+
+      Object.entries(chapterStatusCounts).forEach(([status, count]) => {
+        const stepIndex = steps.indexOf(status);
+        if (stepIndex > 0) {
+          // stepIndex 0 is typically not_started, weight = 0
+          // Weight is index / (total steps - 1)
+          const weight = stepIndex / Math.max(1, steps.length - 1);
+          totalWeightedProgress += Number(count) * weight;
+        }
+      });
+
+      return (totalWeightedProgress / totalChapters) * 100;
+    },
+    [workflowConfig]
+  );
+
   return {
     colors,
     legendItems,
     calculateProgressSegments,
+    calculateOverallProgress,
   };
 };
 
