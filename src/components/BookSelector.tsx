@@ -24,6 +24,7 @@ interface BibleBookMultiSelectPopoverProps {
   disabled?: boolean;
   placeholder?: string;
   maxVisibleNames?: number;
+  bookMilestoneMap?: Record<number, string>;
 }
 
 export function BibleBookMultiSelectPopover({
@@ -33,6 +34,7 @@ export function BibleBookMultiSelectPopover({
   disabled = false,
   placeholder = 'Select book(s)',
   maxVisibleNames = 3,
+  bookMilestoneMap = {},
 }: BibleBookMultiSelectPopoverProps) {
   const [open, setOpen] = useState(false);
 
@@ -131,20 +133,33 @@ export function BibleBookMultiSelectPopover({
             ) : (
               books.map(book => {
                 const checked = value.includes(book.book.id);
+                const isAssigned = !!bookMilestoneMap[book.book.id];
                 return (
                   <label
                     key={book.book.id}
-                    className={`hover:bg-background/80 hover:text-foreground flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                      checked ? 'bg-background font-semibold shadow-2xs' : ''
-                    }`}
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                      isAssigned
+                        ? 'cursor-not-allowed opacity-50'
+                        : 'hover:bg-background/80 hover:text-foreground cursor-pointer'
+                    } ${checked ? 'bg-background font-semibold shadow-2xs' : ''}`}
                   >
                     <Checkbox
                       checked={checked}
                       className='h-4 w-4'
-                      onCheckedChange={() => toggleBook(book.book.id.toString())}
+                      disabled={isAssigned}
+                      onCheckedChange={() => {
+                        if (!isAssigned) toggleBook(book.book.id.toString());
+                      }}
                     />
                     <div className='flex flex-1 items-center justify-between gap-2 overflow-hidden'>
-                      <span className='truncate'>{book.book.eng_display_name}</span>
+                      <div className='flex items-center gap-2 overflow-hidden'>
+                        <span className='truncate'>{book.book.eng_display_name}</span>
+                        {bookMilestoneMap[book.book.id] && (
+                          <span className='text-muted-foreground truncate text-xs font-normal'>
+                            (in {bookMilestoneMap[book.book.id]})
+                          </span>
+                        )}
+                      </div>
                       {book.hasAudio && (
                         <Badge
                           className='bg-success/15 text-success hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'

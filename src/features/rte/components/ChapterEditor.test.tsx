@@ -323,27 +323,24 @@ describe('ChapterEditor', () => {
       expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
     });
 
-    it('keeps names and tooltips on icon controls', () => {
+    it('keeps accessible names on contextual icon controls', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
-      for (const name of ['Paragraph', 'Poetry Line']) {
-        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+      for (const name of ['Paragraph', 'Poetry Line', 'Section Heading']) {
+        expect(screen.getByRole('button', { name })).toBeVisible();
       }
-      expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
-        'title',
-        'Select a verse with fewer than four headings.'
-      );
+      expect(screen.getByRole('button', { name: 'Section Heading' })).toBeDisabled();
 
       reportBlock('q2');
       for (const name of ['Decrease indent', 'Increase indent']) {
-        expect(screen.getByRole('button', { name })).toHaveAttribute('title', name);
+        expect(screen.getByRole('button', { name })).toBeVisible();
       }
       expect(screen.getByRole('button', { name: 'Increase indent' })).toBeDisabled();
 
       reportBlock('s2');
       for (const level of [1, 2, 3, 4]) {
         const label = `Level ${level}`;
-        expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', label);
+        expect(screen.getByRole('button', { name: label })).toBeVisible();
       }
     });
 

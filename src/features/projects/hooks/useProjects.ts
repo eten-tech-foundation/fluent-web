@@ -120,7 +120,7 @@ const fetchChapterAssignments = async (user: User): Promise<ProjectItem[]> => {
   return (await response.json()) as ProjectItem[];
 };
 
-export const useChapterAssignments = (user: User) => {
+export const useUserChapterAssignments = (user: User) => {
   return useQuery<ProjectItem[]>({
     queryKey: ['chapter-assignments', user.id],
     queryFn: () => fetchChapterAssignments(user),

@@ -8,20 +8,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
 import { config } from '@/lib/config';
-import { type ConnectivityProfile } from '@/lib/constants/connectivityProfiles';
 import { Logger } from '@/lib/services/logger';
+import { type ConnectivityProfile, type UsfmFilePayload } from '@/lib/types';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
-import { UsfmImportTab } from './UsfmImportTab';
+import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
 
 export interface CreateProjectData {
   title: string;
   targetLanguage: number;
   sourceLanguage: number;
   sourceBible: number;
-  books: number[];
-  connectivityProfile: ConnectivityProfile | null;
   pericopeSetId: number;
+  /**
+   * Manually picked books (New tab). Omitted/empty when creating from USFM
+   * import, since the server derives books from usfmFiles instead — sending
+   * both would put two contradictory book sets in one request.
+   */
+  books?: number[];
+  /** Optional; becomes the default connectivity profile for milestones created under this project. */
+  connectivityProfile?: ConnectivityProfile | null;
+  /** Present only when creating from existing data: the server derives the books from these. */
+  usfmFiles?: UsfmFilePayload[];
 }
 
 interface CreateProjectModalProps {
@@ -31,6 +39,15 @@ interface CreateProjectModalProps {
   isLoading?: boolean;
   error?: string | null;
 }
+
+const EMPTY_FORM_DATA: ProjectFormData = {
+  title: '',
+  targetLanguage: null,
+  sourceLanguage: null,
+  sourceBible: null,
+  pericopeSetId: null,
+  connectivityProfile: null,
+};
 
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   isOpen,
@@ -42,15 +59,11 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState<ProjectFormData>({
-    title: '',
-    targetLanguage: null,
-    sourceLanguage: null,
-    sourceBible: null,
-    books: [],
-    connectivityProfile: null,
-    pericopeSetId: null,
-  });
+  const [formData, setFormData] = useState<ProjectFormData>(EMPTY_FORM_DATA);
+
+  // books live outside ProjectFormData on purpose: UsfmImportTab already
+  // treats book selection as its own concern via onBooksChange rather than routing it through onFieldChange
+  const [books, setBooks] = useState<number[]>([]);
 
   // ProjectFormFields runs the field queries; this one stays because a languages failure
   // replaces the whole dialog with an error rather than rendering the form.
@@ -58,18 +71,23 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({
-        title: '',
-        targetLanguage: null,
-        sourceLanguage: null,
-        sourceBible: null,
-        books: [],
-        connectivityProfile: null,
-        pericopeSetId: null,
-      });
+      setFormData(EMPTY_FORM_DATA);
+      setBooks([]);
     }
     setIsSubmitting(false);
   }, [isOpen]);
+
+  // onSave resolves whether the save succeeded or failed — the parent catches its own errors — so
+  // a resolved promise is not proof of success. isSubmitting therefore stays set once a submit
+  // resolves, and only a reported failure releases it for a retry; a success is released by the
+  // effect above when the route closes the dialog. Without this the button comes back for the
+  // moment between a successful save and `isOpen` flipping, and a second click there creates a
+  // duplicate project.
+  useEffect(() => {
+    if (error && !isLoading) {
+      setIsSubmitting(false);
+    }
+  }, [error, isLoading]);
 
   const isFormValid = (): boolean => {
     return Boolean(
@@ -78,12 +96,11 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       formData.targetLanguage &&
       formData.sourceLanguage &&
       formData.sourceBible &&
-      formData.books.length > 0 &&
       formData.pericopeSetId
     );
   };
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async (files?: AcceptedUsfmFile[]): Promise<void> => {
     if (isSubmitting) {
       return;
     }
@@ -102,9 +119,19 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: formData.targetLanguage,
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
-        books: formData.books,
+        // Both tabs share formData, so a book list picked on the New tab outlives a switch to
+        // Import. The files carry their own books and the server derives bookId from them, so
+        // sending the manual list too would put two contradictory book sets in one request.
+        books: files ? [] : books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
+        ...(files && {
+          usfmFiles: files.map(item => ({
+            fileName: item.file.name,
+            bookCode: item.bookCode,
+            usfm: item.usfm,
+          })),
+        }),
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -119,10 +146,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     value: ProjectFormData[K]
   ): void => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleBooksChange = (books: number[]): void => {
-    setFormData(prev => ({ ...prev, books }));
   };
 
   const isButtonDisabled = isLoading || isSubmitting || !isFormValid();
@@ -163,11 +186,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           )}
           <TabsContent value='new'>
             <div className='space-y-6 py-6'>
-              <ProjectFormFields
-                formData={formData}
-                onBooksChange={handleBooksChange}
-                onFieldChange={updateFormData}
-              />
+              <ProjectFormFields formData={formData} onFieldChange={updateFormData} />
 
               <div className='flex items-center justify-end pt-4'>
                 {error && (
@@ -183,7 +202,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
                   disabled={isButtonDisabled}
                   type='button'
-                  onClick={handleSubmit}
+                  onClick={() => void handleSubmit()}
                 >
                   {isLoading ? (
                     <div className='flex items-center gap-2'>
@@ -202,9 +221,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <UsfmImportTab
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}
-                onBooksChange={handleBooksChange}
+                onBooksChange={setBooks}
                 onFieldChange={updateFormData}
-                onSubmit={() => void handleSubmit()}
+                onSubmit={files => void handleSubmit(files)}
               />
             </TabsContent>
           )}

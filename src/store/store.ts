@@ -10,6 +10,7 @@ interface AppState {
   userdetail: User | null;
   currentProjectItem: ProjectItem | null;
   presenceWarning: string | null;
+  roleChangeWarning: boolean;
   _hasHydrated: boolean;
   displayMode: DisplayMode;
   isAiThresholdMet: boolean | null;
@@ -22,6 +23,7 @@ interface AppState {
   clearCurrentProjectItem: () => void;
   setHasHydrated: (state: boolean) => void;
   setPresenceWarning: (msg: string | null) => void;
+  setRoleChangeWarning: (warning: boolean) => void;
   setDisplayMode: (mode: DisplayMode) => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
   setIsAiSyncPending: (pending: boolean) => void;
@@ -39,6 +41,7 @@ export const useAppStore = create<AppState>()(
       userdetail: null,
       currentProjectItem: null,
       presenceWarning: null,
+      roleChangeWarning: false,
       _hasHydrated: false,
       displayMode: 'verse',
       isAiThresholdMet: null,
@@ -51,17 +54,19 @@ export const useAppStore = create<AppState>()(
         const newId = currentProjectItem?.chapterAssignmentId;
 
         if (currentProjectItem === null || currentId !== newId) {
-          // Clear threshold status when changing projects
-          set({ currentProjectItem, isAiThresholdMet: null });
+          // Clear threshold status and role warning when changing projects
+          set({ currentProjectItem, isAiThresholdMet: null, roleChangeWarning: false });
         } else {
           // Keep threshold status when just updating the same project's fields
           set({ currentProjectItem });
         }
       },
-      clearUserDetail: () => set({ userdetail: null }),
-      clearCurrentProjectItem: () => set({ currentProjectItem: null, isAiThresholdMet: null }),
+      clearUserDetail: () => set({ userdetail: null, roleChangeWarning: false }),
+      clearCurrentProjectItem: () =>
+        set({ currentProjectItem: null, isAiThresholdMet: null, roleChangeWarning: false }),
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
       setPresenceWarning: (presenceWarning: string | null) => set({ presenceWarning }),
+      setRoleChangeWarning: (roleChangeWarning: boolean) => set({ roleChangeWarning }),
       setDisplayMode: (displayMode: DisplayMode) => set({ displayMode }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
       setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),

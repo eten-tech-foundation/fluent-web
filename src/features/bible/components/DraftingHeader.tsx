@@ -11,6 +11,7 @@ import {
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
   type ProjectItem,
 } from '@/lib/types';
+import { useAppStore } from '@/store/store';
 
 interface DraftingHeaderProps {
   projectItem: ProjectItem;
@@ -46,6 +47,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   onSubmit,
 }) => {
   const { t } = useTranslation();
+  const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
 
   const backButton = (
     <TooltipProvider delayDuration={300}>
@@ -102,11 +104,16 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
                 <TooltipTrigger asChild>
                   <Button
                     aria-pressed={showResources}
-                    className='bg-primary relative flex cursor-pointer items-center gap-2'
+                    className={`relative flex cursor-pointer items-center gap-2 ${
+                      !showResources
+                        ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary'
+                        : ''
+                    }`}
                     type='button'
+                    variant={showResources ? 'default' : 'outline'}
                     onClick={onToggleResources}
                   >
-                    <BookText color='#ffffff' />
+                    <BookText />
                     {activeFindingsCount !== undefined && activeFindingsCount > 0 && (
                       <span className='absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 ring-2 ring-white'></span>
                     )}
@@ -138,11 +145,11 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
             {!isComplete && (
               <Button
                 className={`shrink-0 px-6 py-2 font-medium transition-all ${
-                  isTranslationComplete
+                  isTranslationComplete && !roleChangeWarning
                     ? 'bg-primary hover:bg-primary-hover cursor-pointer text-white'
                     : 'cursor-not-allowed bg-gray-300 text-gray-500'
                 }`}
-                disabled={!isTranslationComplete}
+                disabled={!isTranslationComplete || roleChangeWarning}
                 onClick={onSubmit}
               >
                 {buttonText}
