@@ -40,24 +40,28 @@ export const UsersWrapper: React.FC = () => {
   const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization ?? null;
 
   // GET /users spans every org the caller can see (and all users for
-  // SuperAdmin), so the duplicate-invite guard must be scoped to the active
-  // org — a Fluent account outside this org is still invitable.
-  const existingEmails = useMemo(
+  // SuperAdmin), so the table rows, edit/remove targets, and the
+  // duplicate-invite guard are all scoped to membership in the active org —
+  // a Fluent account outside this org is still invitable.
+  const orgUsers = useMemo(
     () =>
-      new Set(
-        users
-          .filter(u => (u.orgGrants ?? u.grants ?? []).some(g => g.orgId === activeOrgId))
-          .map(u => u.email.toLowerCase())
-      ),
+      activeOrgId == null
+        ? []
+        : users.filter(u => (u.orgGrants ?? u.grants ?? []).some(g => g.orgId === activeOrgId)),
     [users, activeOrgId]
+  );
+
+  const existingEmails = useMemo(
+    () => new Set(orgUsers.map(u => u.email.toLowerCase())),
+    [orgUsers]
   );
 
   const isModalOpen = modal === 'add' || modal === 'edit';
   const mode = modal === 'edit' ? 'edit' : 'create';
 
   const selectedUser = useMemo(
-    () => (userId ? users.find(u => u.id === userId) : undefined),
-    [userId, users]
+    () => (userId ? orgUsers.find(u => u.id === userId) : undefined),
+    [userId, orgUsers]
   );
 
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
@@ -219,7 +223,7 @@ export const UsersWrapper: React.FC = () => {
         }
         currentUserEmail={userdetail?.email}
         loading={isLoading}
-        users={users}
+        users={orgUsers}
         onAddUser={handleAddUser}
         onEditUser={handleEditUser}
         onRemoveUser={handleRemoveUser}

@@ -29,7 +29,11 @@ export const RemoveOrgUserBanner: React.FC<RemoveOrgUserBannerProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
-  const { data: assignments } = useChapterAssignmentsByUserId(user.id, orgId);
+  const {
+    data: assignments,
+    isError: assignmentsError,
+    refetch,
+  } = useChapterAssignmentsByUserId(user.id, orgId);
 
   const hasAssignments =
     (assignments?.assignedChapters.length ?? 0) + (assignments?.peerCheckChapters.length ?? 0) > 0;
@@ -41,6 +45,18 @@ export const RemoveOrgUserBanner: React.FC<RemoveOrgUserBannerProps> = ({
           <span>{t('removeFromOrgConfirm', { name: user.username })}</span>
           {hasAssignments && <span>{t('assignmentsWillBeRemoved')}</span>}
           {error && <span className='text-red-600'>{error}</span>}
+          {assignmentsError && (
+            <span className='font-normal text-red-600'>
+              {t('assignmentsLoadFailed')}{' '}
+              <button
+                className='font-semibold underline underline-offset-2'
+                type='button'
+                onClick={() => void refetch()}
+              >
+                {t('retry')}
+              </button>
+            </span>
+          )}
         </div>
         <div className='flex shrink-0 flex-col gap-1.5'>
           <Button
