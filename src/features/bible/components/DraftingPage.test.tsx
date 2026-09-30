@@ -131,6 +131,28 @@ describe('DraftingPage chapter identity', () => {
     expect(screen.getByLabelText('Translation')).toHaveValue('Loaded draft');
   });
 
+  it('waits for the selected assignment when a cancelled loader finishes first', async () => {
+    const nextProject = { ...project, chapterAssignmentId: 397, projectUnitId: 2 };
+    useAppStore.setState({ currentProjectItem: nextProject });
+    match.loaderData = chapter(project, 'Cancelled assignment draft');
+
+    const { rerender } = render(<DraftingPage />);
+
+    expect(screen.queryByLabelText('Translation')).not.toBeInTheDocument();
+    expect(saveVerse).not.toHaveBeenCalled();
+
+    match.loaderData = chapter(nextProject, 'Selected assignment draft');
+    rerender(<DraftingPage />);
+    expect(screen.getByLabelText('Translation')).toHaveValue('Selected assignment draft');
+    fireEvent.change(screen.getByLabelText('Translation'), {
+      target: { value: 'Edited selected assignment' },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(saveVerse.mock.calls).toEqual([
+      [397, 39700, { content: 'Edited selected assignment', markers: undefined }],
+    ]);
+  });
+
   it('keeps saves for the same verse number isolated across assignments', async () => {
     const { rerender } = render(<DraftingPage />);
     fireEvent.change(screen.getByLabelText('Translation'), {
