@@ -8,6 +8,8 @@ export const Route = createFileRoute('/_authenticated/translation/$bookId/$chapt
   validateSearch: z.object({
     t: z.string().optional(),
   }),
+  // Assignments can share a URL path. Isolate each navigation's pending loader result.
+  loaderDeps: ({ search: { t } }) => ({ t }),
   loader: translationLoader,
   component: DraftingPage,
   gcTime: 0,
