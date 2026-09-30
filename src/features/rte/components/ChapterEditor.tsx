@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
@@ -68,6 +69,8 @@ export function ChapterEditor({
   onActiveVerseChange,
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useForwardTextDeletion(containerRef, editorRef, readOnly);
   const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);
   const loadedKeyRef = useRef(contentKey);
@@ -300,6 +303,7 @@ export function ChapterEditor({
         />
       )}
       <div
+        ref={containerRef}
         className='chapter-editor flex h-full min-h-0 min-w-0 flex-col'
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
