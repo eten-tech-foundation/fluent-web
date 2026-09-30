@@ -323,6 +323,27 @@ describe('ChapterEditor', () => {
       expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
     });
 
+    it.each([false, true])(
+      'updates the language after switching projects (readOnly=%s)',
+      readOnly => {
+        const props = { ...CHAPTER_PROPS, readOnly, verses: A_PAIR, onVersesChange: vi.fn() };
+        const { rerender } = render(<ChapterEditor {...props} />);
+
+        rerender(
+          <ChapterEditor
+            {...props}
+            chapterNumber={12}
+            contentKey='another-project/12'
+            targetLanguage='हिन्दी'
+          />
+        );
+
+        expect(screen.queryByRole('heading', { name: 'Spanish' })).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'हिन्दी' })).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'हिन्दी' })).toHaveAttribute('title', 'हिन्दी');
+      }
+    );
+
     it('keeps accessible names on contextual icon controls', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
