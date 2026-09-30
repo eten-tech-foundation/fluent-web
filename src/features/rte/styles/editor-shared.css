@@ -1,3 +1,9 @@
+/* Let drags over numbers followed by editable text reach the paragraph.
+   Empty or wrapped markers keep their native hit target to avoid typing in another verse. */
+.rte-editor .verse[contenteditable='false']:not(.psc-empty-text):has(+ [data-lexical-text]) {
+  pointer-events: none;
+}
+
 /*
  * What every surface that mounts the editor has to undo, whichever view it belongs to.
  *
