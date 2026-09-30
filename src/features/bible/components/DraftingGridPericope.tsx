@@ -28,6 +28,8 @@ import { useAppStore } from '@/store/store';
 
 import { PericopeTitleInput } from './PericopeTitleInput';
 
+import '../styles/source-fonts.css';
+
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
 const PericopeRteGroup = lazy(() =>
@@ -156,7 +158,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
             <div className='flex min-h-[24px] flex-1 flex-col items-start justify-center'>
               <div className='relative w-full'>
                 {readOnly ? (
-                  <p className='w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                  <p className='target-scripture w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                     {currentTargetVerse?.content ?? ''}
                   </p>
                 ) : (
@@ -167,7 +169,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                     aria-label={`Translation for verse ${v.verseNumber}`}
                     autoCapitalize='sentences'
                     autoCorrect='on'
-                    className={`text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
+                    className={`target-scripture text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
                       isButtonRow ? 'pr-16' : ''
                     }`}
                     placeholder={
@@ -515,7 +517,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               className='grid w-full items-start py-4'
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
-              <div className='flex w-full flex-col space-y-2 px-6'>
+              <div className='source-scripture flex w-full flex-col space-y-2 px-6'>
                 <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
                   {heading}
                 </h4>
