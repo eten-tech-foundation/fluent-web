@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { canViewUsers, getActiveGrants, isOrgMemberOnly } from '@/lib/grant-utils';
+import { canViewUsers, getActiveGrants, isManager } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -33,7 +33,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
   const showUsers = canViewUsers(activeRoleGrants);
-  const orgMemberOnly = isOrgMemberOnly(activeGrants);
+  const showProjects = isManager(activeRoleGrants);
 
   if (!isAuthenticated || !user) {
     return null;
@@ -62,7 +62,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClick={onDashboardClick}
               onClosePopover={() => setOpen(false)}
             />
-            {!orgMemberOnly && (
+            {showProjects && (
               <MenuItem
                 icon={<Kanban size={18} />}
                 isActive={isProjectsActive}

@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
@@ -85,7 +87,27 @@ export const useProjectsByRole = (user: User | null | undefined) => {
 
   const managerQuery = useProjects(isAnyManager, user?.lastActiveOrgId);
   const translatorQuery = useUserProjects(!isAnyManager ? user : null);
-  return isAnyManager ? managerQuery : translatorQuery;
+
+  // For project-scoped managers (e.g. Project Manager), narrow the full
+  // project list to only the projects they hold a manager grant for.
+  // Org-level managers (Org Manager / Org Owner / SuperAdmin) have
+  // projectId == null on their grant, so they still see everything.
+  const filteredData = useMemo(() => {
+    if (!isAnyManager || !managerQuery.data) return managerQuery.data;
+
+    const hasOrgLevelGrant = activeRoleGrants.some(g => g.projectId == null);
+    if (hasOrgLevelGrant) return managerQuery.data;
+
+    const managedProjectIds = new Set(
+      activeRoleGrants.filter(g => g.projectId != null).map(g => g.projectId as number)
+    );
+    return managerQuery.data.filter(p => managedProjectIds.has(p.id));
+  }, [isAnyManager, managerQuery.data, activeRoleGrants]);
+
+  if (isAnyManager) {
+    return { ...managerQuery, data: filteredData };
+  }
+  return translatorQuery;
 };
 
 export const useCreateProject = () => {
