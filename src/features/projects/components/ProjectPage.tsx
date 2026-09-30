@@ -201,8 +201,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='recent'>{t('sortRecent')}</SelectItem>+{' '}
-              <SelectItem value='title'>{t('sortTitle')}</SelectItem>+{' '}
+              <SelectItem value='recent'>{t('sortRecent')}</SelectItem>
+              <SelectItem value='title'>{t('sortTitle')}</SelectItem>
               <SelectItem value='targetLanguage'>{t('targetLanguage')}</SelectItem>
             </SelectContent>
           </Select>
