@@ -7,6 +7,7 @@ import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipbo
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
 import { headingErrorIn, isHeadingMarker, type HeadingError } from '../lib/heading-markers';
+import { insertParagraph } from '../lib/insert-paragraph';
 import {
   changedVerses,
   pericopeVersesToUsj,
@@ -323,6 +324,10 @@ export function ChapterEditor({
               }
               disabled={Boolean(headingError)}
               onFormat={handleFormat}
+              onInsertParagraph={() => {
+                if (editorRef.current && !headingError)
+                  insertParagraph(editorRef.current);
+              }}
             />
           )}
         </div>
