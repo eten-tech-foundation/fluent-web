@@ -35,13 +35,12 @@ export function formatHeadingLevel(
     return undefined;
   if (heading.marker === marker) return undefined;
 
-  const updated: Usj = {
-    ...usj,
-    content: usj.content.map((node, i) => (i === index ? { ...heading, marker } : node)),
-  };
-  // Editorial 0.8.15's delta fast path misses a paragraph-only change on a single text leaf.
-  // Load and report this one heading explicitly; the eventual editor echo is deduped by the host.
-  editor.setUsj(updated);
-  onChange(updated);
+  editor.formatPara(marker);
+  // Editorial's delta fast path can miss a paragraph-only change. An empty local update commits
+  // the pending format and synchronizes its USJ before typing, preserving the caret and history.
+  // setUsj reloads asynchronously and can race with typing or delayed selection restoration.
+  editor.applyUpdate([], 'local');
+  const updated = editor.getUsj();
+  if (updated) onChange(updated);
   return selection;
 }
