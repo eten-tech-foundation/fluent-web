@@ -44,6 +44,7 @@ interface DraftingGridPericopeProps {
   contextChapters?: Map<number, PericopeContextChapter>;
   resourceBibleId?: string;
   resourceBibleLoading?: boolean;
+  resourceBibleError?: boolean;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -455,6 +456,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   contextChapters,
   resourceBibleId,
   resourceBibleLoading = false,
+  resourceBibleError = false,
   pericopes,
   sourceVerses,
   verses,
@@ -529,9 +531,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                         className='text-muted-foreground h-6 w-6 animate-spin'
                       />
                     ) : (
-                      <p className='text-muted-foreground text-center text-sm'>
-                        {t('noContentAvailable', 'No content available')}
-                      </p>
+                      <PericopeText className='text-center' isError={resourceBibleError} />
                     )}
                   </div>
                 ) : (
@@ -595,7 +595,9 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                               ? !isCurrentChapter && context?.sourceIsLoading
                               : resourceBibleLoading;
                           const failed =
-                            selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
+                            selectedPanel === 1
+                              ? !isCurrentChapter && context?.sourceIsError
+                              : isCurrentChapter && resourceBibleError;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>

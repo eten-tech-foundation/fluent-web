@@ -140,6 +140,35 @@ describe('cross-chapter pericope display', () => {
     expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
   });
 
+  it('shows resource provider errors instead of an empty local passage', () => {
+    const localGroup = {
+      ...fullGroup,
+      verses: [{ chapterNumber: 8, verseNumber: 31 }],
+    };
+    renderChapter(8, {
+      selectedPanel: 2,
+      pericopes: [localGroup],
+      fullPericopes: [localGroup],
+      resourceBibleError: true,
+    });
+    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(screen.queryByText('No content available')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
+  });
+
+  it('scopes resource provider errors to missing current-chapter verses', () => {
+    renderChapter(8, {
+      selectedPanel: 2,
+      bibleVerseMap: new Map([[31, 'Retained reference verse']]),
+      resourceBibleError: true,
+    });
+    expect(screen.getByText('Retained reference verse')).not.toHaveClass('text-muted-foreground');
+    expect(screen.getAllByText('Unable to load Bible content.')).toHaveLength(7);
+    expect(screen.getAllByText('No content available')).toHaveLength(1);
+    expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
+  });
+
   it('distinguishes missing resource verses from scripture text', () => {
     renderChapter(8, { selectedPanel: 2, bibleVerseMap: new Map([[31, 'Reference Mark 8:31']]) });
     expect(screen.getByText('Reference Mark 8:31')).not.toHaveClass('text-muted-foreground');
