@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -122,6 +122,7 @@ interface DraftingGridVerseProps {
   effectiveRevealedVerses: Set<number>;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
+  onLayoutChange: () => void;
   getPericopeStyle: (verseNumber: number, isActive: boolean, baseClass: string) => string;
   handleTextChange: (verseNumber: number, text: string) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
@@ -142,6 +143,7 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   effectiveRevealedVerses,
   textareaRefs,
   verseRefs,
+  onLayoutChange,
   getPericopeStyle,
   handleTextChange,
   handleActiveVerseChange,
@@ -152,6 +154,27 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   suggestionStatus,
 }) => {
   const { t } = useTranslation();
+  useLayoutEffect(() => {
+    if (readOnly) return;
+    // Pericope loading/error/empty states can mount these rows without changing displayMode.
+    onLayoutChange();
+    if (typeof ResizeObserver === 'undefined') return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(onLayoutChange);
+    });
+    // A change above the last revealed row also moves its bottom edge.
+    sourceVerses.forEach(verse => {
+      const row = verseRefs.current[verse.verseNumber];
+      if (row) observer.observe(row);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [readOnly, sourceVerses, verseRefs, onLayoutChange]);
+
   return (
     <>
       {sourceVerses.map(verse => {

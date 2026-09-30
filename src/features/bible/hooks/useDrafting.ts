@@ -5,15 +5,23 @@ import {
   type SavePayload,
 } from '@/features/bible/hooks/useBibleTextDebounce';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
+import type { DisplayMode } from '@/store/store';
 
 interface UseDraftingProps {
   sourceVerses: Source[];
   targetVerses: TargetVerse[];
   readOnly: boolean;
+  displayMode: DisplayMode;
   onSave: (verse: number, payload: SavePayload) => Promise<void>;
 }
 
-export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: UseDraftingProps) => {
+export const useDrafting = ({
+  sourceVerses,
+  targetVerses,
+  readOnly,
+  displayMode,
+  onSave,
+}: UseDraftingProps) => {
   const [verses, setVerses] = useState<TargetVerse[]>(targetVerses);
   const [activeVerseId, setActiveVerseId] = useState(1);
   const [revealedVerses, setRevealedVerses] = useState<Set<number>>(new Set());
@@ -65,6 +73,14 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     const top = container.scrollTop + (verseRect.bottom - containerRect.top);
     setButtonTop(top);
   }, [lastRevealedVerseNumber, readOnly]);
+
+  const resizeAndPosition = useCallback(() => {
+    if (readOnly) return;
+    Object.values(textareaRefs.current).forEach(textarea => {
+      if (textarea) autoResizeTextarea(textarea);
+    });
+    updateButtonPosition();
+  }, [readOnly, autoResizeTextarea, updateButtonPosition]);
 
   const scrollVerseToTop = useCallback((verseNumber: number) => {
     const container = targetScrollRef.current;
@@ -288,12 +304,7 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     if (readOnly) return;
 
     const resizeAll = () => {
-      Object.values(textareaRefs.current).forEach(textarea => {
-        if (textarea) {
-          autoResizeTextarea(textarea);
-        }
-      });
-      updateButtonPosition();
+      resizeAndPosition();
       if (pendingInitScrollRef.current !== null) {
         scrollVerseToTop(pendingInitScrollRef.current);
         pendingInitScrollRef.current = null;
@@ -318,7 +329,13 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
         observer.disconnect();
       }
     };
-  }, [readOnly, autoResizeTextarea, updateButtonPosition, scrollVerseToTop]);
+  }, [displayMode, readOnly, resizeAndPosition, scrollVerseToTop]);
+
+  useLayoutEffect(() => {
+    // Switching views replaces the row refs without necessarily resizing the viewport.
+    // Size the newly mounted textareas before measuring the last revealed row.
+    resizeAndPosition();
+  }, [displayMode, resizeAndPosition]);
 
   useLayoutEffect(() => {
     if (readOnly) return;
@@ -331,10 +348,9 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
           textarea.setSelectionRange(len, len);
         } catch {}
       }
-      autoResizeTextarea(textarea);
     }
-    updateButtonPosition();
-  }, [activeVerseId, revealedVerses, updateButtonPosition, readOnly, autoResizeTextarea]);
+    resizeAndPosition();
+  }, [activeVerseId, revealedVerses, resizeAndPosition, readOnly]);
 
   return {
     verses,
@@ -353,5 +369,6 @@ export const useDrafting = ({ sourceVerses, targetVerses, readOnly, onSave }: Us
     moveToNextVerse,
     revealNextVerse,
     updateButtonPosition,
+    resizeAndPosition,
   };
 };

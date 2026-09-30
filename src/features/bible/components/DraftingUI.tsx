@@ -254,10 +254,12 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     moveToNextVerse,
     revealNextVerse,
     updateButtonPosition,
+    resizeAndPosition,
   } = useDrafting({
     sourceVerses,
     targetVerses,
     readOnly,
+    displayMode,
     onSave: saveVerse,
   });
 
@@ -1127,6 +1129,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           textareaRefs={textareaRefs}
                           verseRefs={verseRefs}
                           verses={verses}
+                          onLayoutChange={resizeAndPosition}
                         />
                       )}
                     </>

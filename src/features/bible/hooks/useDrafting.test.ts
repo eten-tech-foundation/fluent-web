@@ -26,7 +26,13 @@ const TARGETS: TargetVerse[] = [
 
 const draft = (onSave: (verse: number, payload: SavePayload) => Promise<void>) =>
   renderHook(() =>
-    useDrafting({ sourceVerses: SOURCES, targetVerses: TARGETS, readOnly: false, onSave })
+    useDrafting({
+      sourceVerses: SOURCES,
+      targetVerses: TARGETS,
+      readOnly: false,
+      displayMode: 'verse',
+      onSave,
+    })
   );
 
 describe('useDrafting with markers', () => {
@@ -38,6 +44,7 @@ describe('useDrafting with markers', () => {
         sourceVerses: SOURCES,
         targetVerses: [{ ...TARGETS[0], markers: { ...SPLIT, headings } }],
         readOnly: false,
+        displayMode: 'verse',
         onSave,
       })
     );
