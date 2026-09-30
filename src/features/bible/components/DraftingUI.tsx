@@ -718,7 +718,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedVerseNumbers: userTouchedVersesRef.current,
     });
     const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
-    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const firstTarget = firstSource
+      ? (verses.find(verse => verse.verseNumber === firstSource.verseNumber) ?? {
+          verseNumber: firstSource.verseNumber,
+          content: '',
+          markers: undefined,
+        })
+      : undefined;
     const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
     const titleFill =
       currentPericopeGroup?.pericopeTitle?.trim() &&

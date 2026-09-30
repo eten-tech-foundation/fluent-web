@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useLocation, useSearch } from '@tanstack/react-router';
+import { toast } from 'sonner';
 
 import {
   Accordion,
@@ -16,40 +17,60 @@ import { useAppStore } from '@/store/store';
 export const AiTranslationSettings: React.FC = () => {
   const {
     currentProjectItem,
-    setCurrentProjectItem,
     userdetail,
     isAiThresholdMet,
     isAiSyncPending,
+    setIsAiSyncPending,
     setAiAutoEnablePreference,
   } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
 
-  const { mutate: toggleAi, isPending } = useToggleChapterAi(
+  const { mutateAsync: toggleAi, isPending } = useToggleChapterAi(
     currentProjectItem?.chapterAssignmentId ?? 0,
     currentProjectItem?.projectId ?? 0
   );
 
-  const handleToggleAi = (checked: boolean) => {
+  const handleToggleAi = async (checked: boolean) => {
+    if (!currentProjectItem) return;
+    setIsAiSyncPending(true);
     setLocalAiState(checked);
+    const assignmentId = currentProjectItem.chapterAssignmentId;
+    const previousState = currentProjectItem.isAiEnabled;
     const priorUserPreference = userdetail
       ? useAppStore.getState().aiAutoEnablePreferences[userdetail.id]
       : undefined;
-    if (userdetail) {
-      setAiAutoEnablePreference(userdetail.id, checked);
-    }
-    if (currentProjectItem) {
-      const previousState = currentProjectItem.isAiEnabled;
-      setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: checked });
-      toggleAi(checked, {
-        onError: () => {
-          // Revert UI and store state on failure
-          setLocalAiState(previousState ?? false);
-          if (userdetail) {
-            setAiAutoEnablePreference(userdetail.id, priorUserPreference);
-          }
-          setCurrentProjectItem({ ...currentProjectItem, isAiEnabled: previousState });
-        },
+    const updateCurrentAssignment = (isAiEnabled: boolean | undefined) => {
+      const latest = useAppStore.getState();
+      if (latest.currentProjectItem?.chapterAssignmentId !== assignmentId) return;
+      latest.setCurrentProjectItem({
+        ...latest.currentProjectItem,
+        isAiEnabled,
       });
+    };
+
+    // Stop loading immediately on opt-out. Opt-in must wait for the server:
+    // otherwise the first suggestion requests still see a disabled assignment.
+    if (!checked) {
+      if (userdetail) setAiAutoEnablePreference(userdetail.id, false);
+      updateCurrentAssignment(false);
+    }
+    try {
+      await toggleAi(checked);
+      if (useAppStore.getState().userdetail?.id !== userdetail?.id) return;
+      if (userdetail) setAiAutoEnablePreference(userdetail.id, checked);
+      updateCurrentAssignment(checked);
+    } catch {
+      // The request can settle after Settings closes or navigation changes the
+      // assignment. Never restore a captured project over the current one.
+      if (useAppStore.getState().userdetail?.id !== userdetail?.id) return;
+      if (useAppStore.getState().currentProjectItem?.chapterAssignmentId === assignmentId) {
+        setLocalAiState(previousState ?? false);
+      }
+      if (userdetail) setAiAutoEnablePreference(userdetail.id, priorUserPreference);
+      updateCurrentAssignment(previousState);
+      toast.error('Could not update AI translation suggestions. Please try again.');
+    } finally {
+      setIsAiSyncPending(false);
     }
   };
 
@@ -57,7 +78,7 @@ export const AiTranslationSettings: React.FC = () => {
     if (currentProjectItem?.isAiEnabled !== undefined) {
       setLocalAiState(currentProjectItem.isAiEnabled);
     }
-  }, [currentProjectItem?.isAiEnabled]);
+  }, [currentProjectItem?.chapterAssignmentId, currentProjectItem?.isAiEnabled]);
 
   const location = useLocation();
   const isTranslationView = location.pathname.startsWith('/translation');
@@ -90,6 +111,7 @@ export const AiTranslationSettings: React.FC = () => {
               AI Translation Suggestions
             </span>
             <Switch
+              aria-label='AI Translation Suggestions'
               checked={localAiState}
               disabled={isPending || isAiSyncPending}
               onCheckedChange={handleToggleAi}

@@ -1108,6 +1108,50 @@ describe('DraftingUI', () => {
 
     const titleSuggestion = { pericopeNumber: '1', bibleTextId: 101, suggestedText: 'La creación' };
 
+    it('fills a verse and title without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one', 2: 'Verse two' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, 'Verse one', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        pericopeNumber: '1',
+        wasUsed: false,
+      });
+    });
+
+    it('fills a title arriving before scripture without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, '', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+    });
+
     it('fills title and first verse in one save without putting title words in scripture', () => {
       mockUseAiSuggestions.mockReturnValue({
         suggestions: { 1: 'Verse one', 2: 'Verse two' },

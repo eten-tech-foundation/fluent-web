@@ -50,7 +50,9 @@ export const pendingAiAutoFills = ({
     if (!suggestion) return [];
 
     const target = verses.find(verse => verse.verseNumber === verseNumber);
-    if (!target || target.content.trim()) return [];
+    // The API only returns persisted translation rows. A source-backed verse
+    // without a row is still an empty input, including before it receives focus.
+    if (target?.content.trim()) return [];
 
-    return [{ verseNumber, text: suggestion, markers: target.markers ?? undefined }];
+    return [{ verseNumber, text: suggestion, markers: target?.markers ?? undefined }];
   });
