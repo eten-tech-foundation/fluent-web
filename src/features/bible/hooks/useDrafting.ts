@@ -155,7 +155,7 @@ export const useDrafting = ({
             void saveImmediately(activeVerseId, {
               content: previousVerse.content,
               markers: previousVerse.markers,
-            });
+            }).catch(() => {});
           }
         }
       }
@@ -198,7 +198,7 @@ export const useDrafting = ({
           void saveImmediately(verseToSave.verseNumber, {
             content: verseToSave.content,
             markers: verseToSave.markers,
-          });
+          }).catch(() => {});
         }
       }
       setActiveVerseId(nextVerseId);
