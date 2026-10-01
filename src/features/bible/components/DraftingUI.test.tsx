@@ -1,7 +1,7 @@
-import { type ComponentProps } from 'react';
+import { type ComponentProps, type ReactNode } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render as renderUi, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
 import type { SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import type * as ResourcePanelModule from '@/features/resources/components/ResourcePanel';
+import { PlaybackRegistryProvider } from '@/features/tts';
 import { config } from '@/lib/config';
 import {
   ChapterAssignmentStatus,
@@ -23,6 +24,8 @@ import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 
 import type * as ReactRouter from '@tanstack/react-router';
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
@@ -162,6 +165,14 @@ const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
 
 vi.mock('@/features/flags', () => ({
   useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
+  // DraftingUI reads the source-TTS flag through `useFeatureFlags` so that it
+  // can take the raw override from the same call — `flagOverrides.ts` permits
+  // exactly one override read site. No override here: the verification tint
+  // stays off and the playback wash is the ordinary one.
+  useFeatureFlags: () => ({
+    features: { sourceAudio: mockFeatureFlag('sourceAudio'), repeatedWordCheck: true },
+    overrides: {},
+  }),
 }));
 
 const resourcePanelMode = vi.hoisted(() => ({ real: false }));
@@ -1936,3 +1947,8 @@ describe('DraftingUI', () => {
     });
   });
 });
+
+vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
+  useReferenceChapterTexts: () => new Map(),
+}));
