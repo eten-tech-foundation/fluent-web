@@ -24,6 +24,16 @@ export interface User {
   isActive?: boolean;
 }
 
+export interface Organization {
+  id: number;
+  name: string;
+  createdAt: string | null;
+}
+
+export interface OrganizationSummary extends Organization {
+  orgManagerCount: number;
+}
+
 export interface AssignmentUser {
   id: number;
   displayName: string;

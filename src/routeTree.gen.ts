@@ -20,7 +20,9 @@ import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
 import { Route as AuthenticatedDebugRouteImport } from './routes/_authenticated/debug'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
+import { Route as AuthenticatedOrganizationsIndexRouteImport } from './routes/_authenticated/organizations/index'
 import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './routes/_authenticated/projects/$projectId/index'
+import { Route as AuthenticatedOrganizationsOrgIdIndexRouteImport } from './routes/_authenticated/organizations/$orgId/index'
 import { Route as AuthenticatedViewBookIdChapterNumberRouteImport } from './routes/_authenticated/view/$bookId/$chapterNumber'
 import { Route as AuthenticatedTranslationBookIdChapterNumberRouteImport } from './routes/_authenticated/translation/$bookId/$chapterNumber'
 import { Route as AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport } from './routes/_authenticated/projects/$projectId/milestones/$milestoneId'
@@ -80,10 +82,22 @@ const AuthenticatedProjectsIndexRoute =
     path: '/projects/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedOrganizationsIndexRoute =
+  AuthenticatedOrganizationsIndexRouteImport.update({
+    id: '/organizations/',
+    path: '/organizations/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProjectsProjectIdIndexRoute =
   AuthenticatedProjectsProjectIdIndexRouteImport.update({
     id: '/projects/$projectId/',
     path: '/projects/$projectId/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedOrganizationsOrgIdIndexRoute =
+  AuthenticatedOrganizationsOrgIdIndexRouteImport.update({
+    id: '/organizations/$orgId/',
+    path: '/organizations/$orgId/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedViewBookIdChapterNumberRoute =
@@ -114,10 +128,12 @@ export interface FileRoutesByFullPath {
   '/debug': typeof AuthenticatedDebugRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
+  '/organizations/': typeof AuthenticatedOrganizationsIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
+  '/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/projects/$projectId/': typeof AuthenticatedProjectsProjectIdIndexRoute
   '/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
@@ -130,10 +146,12 @@ export interface FileRoutesByTo {
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/organizations': typeof AuthenticatedOrganizationsIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
+  '/organizations/$orgId': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdIndexRoute
   '/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
@@ -148,10 +166,12 @@ export interface FileRoutesById {
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/organizations/': typeof AuthenticatedOrganizationsIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/_authenticated/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
+  '/_authenticated/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
   '/_authenticated/projects/$projectId/': typeof AuthenticatedProjectsProjectIdIndexRoute
   '/_authenticated/projects/$projectId/milestones/$milestoneId': typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
@@ -166,10 +186,12 @@ export interface FileRouteTypes {
     | '/debug'
     | '/legal/privacy'
     | '/legal/terms'
+    | '/organizations/'
     | '/projects/'
     | '/users/'
     | '/translation/$bookId/$chapterNumber'
     | '/view/$bookId/$chapterNumber'
+    | '/organizations/$orgId/'
     | '/projects/$projectId/'
     | '/projects/$projectId/milestones/$milestoneId'
   fileRoutesByTo: FileRoutesByTo
@@ -182,10 +204,12 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/terms'
     | '/'
+    | '/organizations'
     | '/projects'
     | '/users'
     | '/translation/$bookId/$chapterNumber'
     | '/view/$bookId/$chapterNumber'
+    | '/organizations/$orgId'
     | '/projects/$projectId'
     | '/projects/$projectId/milestones/$milestoneId'
   id:
@@ -199,10 +223,12 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/terms'
     | '/_authenticated/'
+    | '/_authenticated/organizations/'
     | '/_authenticated/projects/'
     | '/_authenticated/users/'
     | '/_authenticated/translation/$bookId/$chapterNumber'
     | '/_authenticated/view/$bookId/$chapterNumber'
+    | '/_authenticated/organizations/$orgId/'
     | '/_authenticated/projects/$projectId/'
     | '/_authenticated/projects/$projectId/milestones/$milestoneId'
   fileRoutesById: FileRoutesById
@@ -294,11 +320,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/organizations/': {
+      id: '/_authenticated/organizations/'
+      path: '/organizations'
+      fullPath: '/organizations/'
+      preLoaderRoute: typeof AuthenticatedOrganizationsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/projects/$projectId/': {
       id: '/_authenticated/projects/$projectId/'
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId/'
       preLoaderRoute: typeof AuthenticatedProjectsProjectIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/organizations/$orgId/': {
+      id: '/_authenticated/organizations/$orgId/'
+      path: '/organizations/$orgId'
+      fullPath: '/organizations/$orgId/'
+      preLoaderRoute: typeof AuthenticatedOrganizationsOrgIdIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/view/$bookId/$chapterNumber': {
@@ -328,10 +368,12 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedDebugRoute: typeof AuthenticatedDebugRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedOrganizationsIndexRoute: typeof AuthenticatedOrganizationsIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedTranslationBookIdChapterNumberRoute: typeof AuthenticatedTranslationBookIdChapterNumberRoute
   AuthenticatedViewBookIdChapterNumberRoute: typeof AuthenticatedViewBookIdChapterNumberRoute
+  AuthenticatedOrganizationsOrgIdIndexRoute: typeof AuthenticatedOrganizationsOrgIdIndexRoute
   AuthenticatedProjectsProjectIdIndexRoute: typeof AuthenticatedProjectsProjectIdIndexRoute
   AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute: typeof AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute
 }
@@ -339,12 +381,15 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDebugRoute: AuthenticatedDebugRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedOrganizationsIndexRoute: AuthenticatedOrganizationsIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedTranslationBookIdChapterNumberRoute:
     AuthenticatedTranslationBookIdChapterNumberRoute,
   AuthenticatedViewBookIdChapterNumberRoute:
     AuthenticatedViewBookIdChapterNumberRoute,
+  AuthenticatedOrganizationsOrgIdIndexRoute:
+    AuthenticatedOrganizationsOrgIdIndexRoute,
   AuthenticatedProjectsProjectIdIndexRoute:
     AuthenticatedProjectsProjectIdIndexRoute,
   AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute:

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { type Project, type SortOption, type StatusFilter } from '@/lib/types';
+
+import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -188,16 +190,23 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   };
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 shrink-0'>
-        <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('projects')}</h1>
-        <div className='flex items-center gap-4'>
-          {isManager && (
-            <Button className='bg-primary hover:bg-primary/90 text-white' onClick={onCreateProject}>
-              {t('createProject')}
-            </Button>
-          )}
+      <div className='shrink-0'>
+        <ViewPageHeader
+          rightContent={
+            isManager ? (
+              <Button
+                className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+                onClick={onCreateProject}
+              >
+                <Plus className='h-4 w-4' /> {t('createProject')}
+              </Button>
+            ) : undefined
+          }
+          title={t('projects')}
+        />
+        <div className='mb-6 flex items-center gap-4'>
           <Select value={sortBy} onValueChange={value => setSortBy(value as SortOption)}>
-            <SelectTrigger className='bg-card h-10! w-[165px]'>
+            <SelectTrigger className='h-10! w-[165px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -210,7 +219,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             value={statusFilter}
             onValueChange={value => setStatusFilter(value as StatusFilter)}
           >
-            <SelectTrigger className='bg-card h-10! w-[185px]'>
+            <SelectTrigger className='h-10! w-[185px]'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -222,7 +231,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         </div>
       </div>
 
-      <div className='flex-1 overflow-hidden rounded-lg border shadow'>
+      <div className='overflow-hidden rounded-lg border shadow'>
         <div className='flex h-full flex-col'>
           {loading ? (
             <div className='flex items-center justify-center gap-2 py-8'>

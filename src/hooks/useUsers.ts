@@ -19,7 +19,10 @@ const fetchUsers = async (): Promise<User[]> => {
 };
 
 const knownErrors = ['A user with this email already exists.', 'Username already exists.'];
-const apiRequest = async <T>(url: string, options: RequestInit): Promise<T> => {
+const apiRequestWithStatus = async <T>(
+  url: string,
+  options: RequestInit
+): Promise<{ data: T; status: number }> => {
   const response = await fetch(url, {
     ...options,
     credentials: 'include',
@@ -34,8 +37,11 @@ const apiRequest = async <T>(url: string, options: RequestInit): Promise<T> => {
     throw new Error(errorMessage);
   }
 
-  return (await response.json()) as T;
+  return { data: (await response.json()) as T, status: response.status };
 };
+
+const apiRequest = async <T>(url: string, options: RequestInit): Promise<T> =>
+  (await apiRequestWithStatus<T>(url, options)).data;
 
 const parseErrorMessage = async (response: Response): Promise<string> => {
   try {
@@ -62,12 +68,19 @@ export interface InviteUserPayload {
   inviterName?: string;
 }
 
-const createUser = async (userData: InviteUserPayload): Promise<User> => {
+/** Result of POST /users/invite. `created` is true when a new Fluent account was made (201). */
+export interface InviteUserResult {
+  user: User;
+  created: boolean;
+}
+
+const createUser = async (userData: InviteUserPayload): Promise<InviteUserResult> => {
   try {
-    return await apiRequest<User>(`${config.api.url}/users/invite`, {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
+    const { data, status } = await apiRequestWithStatus<{ user: User }>(
+      `${config.api.url}/users/invite`,
+      { method: 'POST', body: JSON.stringify(userData) }
+    );
+    return { user: data.user, created: status === 201 };
   } catch (error: unknown) {
     if (error instanceof Error && error.message && error.message !== 'Generic API error') {
       return Promise.reject(error);
@@ -122,6 +135,9 @@ export const useCreateUser = () => {
       // Invalidate project users list if invited within a project context
       if (userData.projectId) {
         void queryClient.invalidateQueries({ queryKey: ['projectUsers', userData.projectId] });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['organizationUsers', userData.orgId] });
+        void queryClient.invalidateQueries({ queryKey: ['organizations'] });
       }
     },
     onError: error => {
@@ -141,6 +157,79 @@ export const useUpdateUser = () => {
     },
     onError: error => {
       Logger.logException(error, { context: 'Error updating user' });
+    },
+  });
+};
+
+const updateOrgUserRole = async ({
+  orgId,
+  userId,
+  roleName,
+}: {
+  orgId: number;
+  userId: number;
+  roleName: string;
+}): Promise<User> => {
+  try {
+    return await apiRequest<User>(`${config.api.url}/organizations/${orgId}/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ roleName }),
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message && error.message !== 'Generic API error') {
+      return Promise.reject(error);
+    }
+    return Promise.reject(new Error('Error: Role was not saved.'));
+  }
+};
+
+/** PATCH /organizations/{orgId}/users/{userId} — change a member's org-level role. */
+export const useUpdateOrgUserRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: updateOrgUserRole,
+    onSuccess: (_data, { orgId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['organizationUsers', orgId] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error updating org role' });
+    },
+  });
+};
+
+const removeOrgUser = async ({
+  orgId,
+  userId,
+}: {
+  orgId: number;
+  userId: number;
+}): Promise<void> => {
+  const response = await fetch(`${config.api.url}/organizations/${orgId}/users/${userId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const message = await parseErrorMessage(response);
+    throw new Error(message === 'Generic API error' ? 'Error: User was not removed.' : message);
+  }
+};
+
+/** DELETE /organizations/{orgId}/users/{userId} — remove a member from the org entirely. */
+export const useRemoveOrgUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: removeOrgUser,
+    onSuccess: (_data, { orgId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['organizationUsers', orgId] });
+      void queryClient.invalidateQueries({ queryKey: ['organizations'] });
+    },
+    onError: error => {
+      Logger.logException(error, { context: 'Error removing org user' });
     },
   });
 };

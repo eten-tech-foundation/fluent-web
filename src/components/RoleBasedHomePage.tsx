@@ -3,7 +3,13 @@ import { Navigate } from '@tanstack/react-router';
 import { NoAssignmentsPage } from '@/components/NoAssignmentsPage';
 import { ObserverDashboard } from '@/features/dashboard/observer';
 import { UserDashboard } from '@/features/dashboard/user';
-import { getActiveGrants, isManager, isObserver, isOrgMemberOnly } from '@/lib/grant-utils';
+import {
+  getActiveGrants,
+  isManager,
+  isObserver,
+  isOrgMemberOnly,
+  isSuperAdmin,
+} from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -12,6 +18,10 @@ export const RoleBasedHomePage = () => {
 
   if (!userdetail?.grants || userdetail.grants.length === 0) {
     return <UserDashboard />;
+  }
+
+  if (isSuperAdmin(userdetail.grants)) {
+    return <Navigate to='/organizations' />;
   }
 
   const activeGrants = getActiveGrants(userdetail.grants, userdetail.lastActiveOrgId);

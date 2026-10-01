@@ -7,6 +7,8 @@ export interface AuthContext {
   isManager?: boolean;
   /** True for any role with USER_VIEW — includes project-scoped Project Managers */
   canViewUsers?: boolean;
+  /** True for a global SuperAdmin grant — can list and create organizations */
+  canManageOrgs?: boolean;
 }
 
 export interface RouterContext {

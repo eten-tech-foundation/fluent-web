@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
@@ -14,13 +14,22 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { type User } from '@/lib/types';
+import { ViewPageHeader } from '@/features/projects/components/ViewPageHeader';
+import { getOrgRoleName } from '@/lib/grant-utils';
+import { getDisplayRole, type User } from '@/lib/types';
 
 interface UsersPageProps {
   users: User[];
   loading?: boolean;
   onAddUser: () => void;
   onEditUser: (user: User) => void;
+  /** Org whose roles are being displayed — drives the D3 role column. */
+  activeOrgId?: number | null;
+  /** Email of the signed-in user; their row hides the remove action (D2). */
+  currentUserEmail?: string;
+  onRemoveUser?: (user: User) => void;
+  /** Slot rendered above the table (e.g. the remove-confirmation banner). */
+  banner?: React.ReactNode;
 }
 
 const TruncatedTextCell = ({
@@ -71,7 +80,16 @@ const TruncatedTextCell = ({
 };
 // -----------------------------------------------------------
 
-export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser, onEditUser }) => {
+export const UsersPage: React.FC<UsersPageProps> = ({
+  loading,
+  users,
+  onAddUser,
+  onEditUser,
+  activeOrgId = null,
+  currentUserEmail,
+  onRemoveUser,
+  banner,
+}) => {
   const { t } = useTranslation();
 
   const getStatusVariant = (status: 'invited' | 'verified') => {
@@ -82,14 +100,25 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
     return [...users].sort((a, b) => a.username.localeCompare(b.username));
   }, [users]);
 
+  const showActions = Boolean(onRemoveUser);
+
   return (
     <div className='flex h-full flex-col'>
-      <div className='mb-6 shrink-0'>
-        <h1 className='text-foreground mb-4 text-3xl font-semibold'>{t('users')}</h1>
-        <Button className='bg-primary hover:bg-primary/90 text-white' onClick={onAddUser}>
-          {t(`addUser`)}
-        </Button>
+      <div className='shrink-0'>
+        <ViewPageHeader
+          rightContent={
+            <Button
+              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+              onClick={onAddUser}
+            >
+              <Plus className='h-4 w-4' /> {t('addUser')}
+            </Button>
+          }
+          title={t('users')}
+        />
       </div>
+
+      {banner}
 
       <div className='flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (
@@ -107,18 +136,19 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
               <Table className='table-fixed'>
                 <TableHeader className='sticky top-0 z-10'>
                   <TableRow className='bg-accent'>
-                    <TableHead className='text-accent-foreground w-1/4 px-6 py-3 text-left text-sm font-semibold tracking-wider'>
+                    <TableHead className='text-accent-foreground px-6 py-3 text-left text-sm font-semibold tracking-wider'>
                       {t(`name`)}
                     </TableHead>
-                    <TableHead className='text-accent-foreground w-1/4 px-6 py-3 text-left text-sm font-semibold tracking-wider'>
+                    <TableHead className='text-accent-foreground px-6 py-3 text-left text-sm font-semibold tracking-wider'>
                       {t(`role`)}
                     </TableHead>
-                    <TableHead className='text-accent-foreground w-1/4 px-6 py-3 text-left text-sm font-semibold tracking-wider'>
+                    <TableHead className='text-accent-foreground px-6 py-3 text-left text-sm font-semibold tracking-wider'>
                       {t(`email`)}
                     </TableHead>
-                    <TableHead className='text-accent-foreground w-1/4 px-6 py-3 text-left text-sm font-semibold tracking-wider'>
+                    <TableHead className='text-accent-foreground px-6 py-3 text-left text-sm font-semibold tracking-wider'>
                       {t(`status`)}
                     </TableHead>
+                    {showActions && <TableHead className='w-14 px-3 py-3' />}
                   </TableRow>
                 </TableHeader>
                 <TableBody className='divide-border divide-y'>
@@ -132,7 +162,9 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
                         <TruncatedTextCell text={user.username} />
                       </TableCell>
                       <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
-                        {user.orgGrants?.[0]?.roleName ?? user.grants?.[0]?.roleName ?? 'No Role'}
+                        {getDisplayRole(
+                          getOrgRoleName(user.orgGrants ?? user.grants, activeOrgId) ?? 'No Role'
+                        )}
                       </TableCell>
                       <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
                         <TruncatedTextCell align='center' text={user.email} />
@@ -142,6 +174,23 @@ export const UsersPage: React.FC<UsersPageProps> = ({ loading, users, onAddUser,
                           {user.status}
                         </Badge>
                       </TableCell>
+                      {showActions && (
+                        <TableCell className='px-3 py-4 whitespace-nowrap'>
+                          {user.email !== currentUserEmail && (
+                            <button
+                              aria-label={t('removeUserFromOrg')}
+                              className='text-muted-foreground hover:text-destructive cursor-pointer rounded p-1 transition-colors'
+                              type='button'
+                              onClick={e => {
+                                e.stopPropagation();
+                                onRemoveUser?.(user);
+                              }}
+                            >
+                              <Trash2 className='h-4 w-4' />
+                            </button>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

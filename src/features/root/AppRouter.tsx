@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 
 import { useAuth } from '@/hooks/useAuth';
-import { canViewUsers, getActiveGrants, isManager } from '@/lib/grant-utils';
+import { canViewUsers, getActiveGrants, isManager, isSuperAdmin } from '@/lib/grant-utils';
 import { router } from '@/lib/router';
 import { useAppStore } from '@/store/store';
 
@@ -17,11 +17,12 @@ export function AppRouter(): React.JSX.Element {
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
   const managerState = isManager(activeRoleGrants);
   const viewUsersState = canViewUsers(activeRoleGrants);
+  const manageOrgsState = isSuperAdmin(userdetail?.grants);
 
   // Invalidate router when auth state or permissions change so route guards re-evaluate
   useEffect(() => {
     void router.invalidate();
-  }, [isAuthenticated, isLoading, managerState, viewUsersState]);
+  }, [isAuthenticated, isLoading, managerState, viewUsersState, manageOrgsState]);
 
   return (
     <RouterProvider
@@ -32,6 +33,7 @@ export function AppRouter(): React.JSX.Element {
           isLoading,
           isManager: managerState,
           canViewUsers: viewUsersState,
+          canManageOrgs: manageOrgsState,
         },
       }}
       router={router}
