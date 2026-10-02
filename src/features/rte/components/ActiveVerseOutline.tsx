@@ -85,7 +85,7 @@ export function ActiveVerseOutline({
   return (
     <div aria-hidden='true' className='active-verse-outline' data-active-verse={outline.verse}>
       {outline.rects.map((rect, index) => (
-        <span key={index} style={rect} />
+        <span key={index} style={{ ...rect }} />
       ))}
     </div>
   );

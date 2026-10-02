@@ -1,3 +1,4 @@
+import { PARAGRAPH_MARKER } from './block-types';
 import { isHeadingMarker } from './heading-markers';
 import { remapTextSelection } from './remap-text-selection';
 
@@ -57,7 +58,7 @@ function verseLocations(usj: Usj): VerseLocation[] {
   return verses;
 }
 
-const paragraphAttributes = (marker: string) => ({ para: { style: marker } });
+const paragraphAttributes = (marker: string = PARAGRAPH_MARKER) => ({ para: { style: marker } });
 
 /** Local deltas use Editorial's native history and onUsjChange, including undo and redo. */
 export function applyStructuralEdit(editor: EditorRef, ops: DeltaOp[]): void {
