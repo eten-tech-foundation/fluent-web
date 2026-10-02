@@ -1,9 +1,8 @@
 import { isHeadingMarker } from './heading-markers';
+import { applyStructuralEdit, deltaLength } from './structural-edits';
+import { blockIndex } from './usj-path';
 
 import type { EditorRef, SelectionRange } from '@eten-tech-foundation/platform-editor';
-import type { Usj } from '@eten-tech-foundation/scripture-utilities';
-
-const blockIndex = (path: string) => /^\$\.content\[(\d+)\]/.exec(path)?.[1];
 
 /** Block formats must not sweep a heading and scripture into the same paragraph kind. */
 export function selectionSpansBlocks(selection: SelectionRange | undefined): boolean {
@@ -13,11 +12,7 @@ export function selectionSpansBlocks(selection: SelectionRange | undefined): boo
 }
 
 /** Change one heading's level without formatting scripture in a multi-paragraph selection. */
-export function formatHeadingLevel(
-  editor: EditorRef,
-  marker: string,
-  onChange: (usj: Usj) => void
-): SelectionRange | undefined {
+export function formatHeadingLevel(editor: EditorRef, marker: string): SelectionRange | undefined {
   const selection = editor.getSelection();
   if (!selection) return undefined;
   const start = blockIndex(selection.start.jsonPath);
@@ -35,13 +30,10 @@ export function formatHeadingLevel(
     return undefined;
   if (heading.marker === marker) return undefined;
 
-  const updated: Usj = {
-    ...usj,
-    content: usj.content.map((node, i) => (i === index ? { ...heading, marker } : node)),
-  };
-  // Editorial 0.8.15's delta fast path misses a paragraph-only change on a single text leaf.
-  // Load and report this one heading explicitly; the eventual editor echo is deduped by the host.
-  editor.setUsj(updated);
-  onChange(updated);
+  const offset =
+    usj.content.slice(0, index + 1).reduce((length, node) => length + deltaLength(node), 0) - 1;
+  // Apply a local paragraph attribute change. Unlike setUsj this retains the history entry,
+  // and applyUpdate reports paragraph-only changes even when the text leaves are unchanged.
+  applyStructuralEdit(editor, [{ retain: offset }, { retain: 1, attributes: { style: marker } }]);
   return selection;
 }

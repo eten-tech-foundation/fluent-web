@@ -1,6 +1,6 @@
-import type { PericopeVerseText } from './pericope-usj';
+import { PARAGRAPH_MARKER } from './block-types';
 
-const DEFAULT_BLOCK_MARKER = 'p';
+import type { PericopeVerseText } from './pericope-usj';
 
 const opensBlock = (row: PericopeVerseText): boolean =>
   Boolean(row.markers?.headings?.length) ||
@@ -19,13 +19,13 @@ const midVerseSplits = (row: PericopeVerseText) =>
 function openBlockMarkerAfter(rows: PericopeVerseText[], index: number): string {
   for (let i = index; i >= 0; i--) {
     const paragraphs = rows[i].markers?.paragraphs ?? [];
-    if (paragraphs.length === 0 && rows[i].markers?.headings?.length) return DEFAULT_BLOCK_MARKER;
+    if (paragraphs.length === 0 && rows[i].markers?.headings?.length) return PARAGRAPH_MARKER;
     if (paragraphs.length === 0) continue;
     return paragraphs.reduce((furthest, paragraph) =>
       paragraph.offset > furthest.offset ? paragraph : furthest
     ).marker;
   }
-  return DEFAULT_BLOCK_MARKER;
+  return PARAGRAPH_MARKER;
 }
 
 /**
