@@ -180,6 +180,50 @@ describe('structural edits in Editorial history', () => {
     for (const row of rows) expect(body(row.verseNumber).textContent?.trim()).toBe(row.text);
   });
 
+  it('saves a heading level undo after insertion has already been undone and redone', async () => {
+    const { input, body, onVersesChange, history, user } = await setup();
+    const heading = () =>
+      input.querySelector<HTMLElement>('[data-marker="s1"], [data-marker="s2"]');
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+    await user.type(screen.getByRole('textbox', { name: 'Heading text' }), 'A title');
+    await user.click(screen.getByRole('button', { name: 'Add heading' }));
+    await waitFor(() => expect(heading()).toHaveTextContent('A title'));
+    await history();
+    await waitFor(() => expect(heading()).toBeNull());
+    await history(true);
+    await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's1'));
+    await select(input, heading()!.firstChild!.firstChild!, 2);
+    await user.click(screen.getByRole('button', { name: 'Level 2' }));
+    await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's2'));
+    await select(input, body(2), 3);
+    onVersesChange.mockClear();
+    await history();
+    await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's1'));
+    await waitFor(() =>
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        {
+          ...rows[1],
+          markers: {
+            paragraphs: [{ marker: 'p', offset: 0 }],
+            headings: [{ marker: 's1', text: 'A title' }],
+          },
+        },
+      ])
+    );
+    await history(true);
+    await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's2'));
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      {
+        ...rows[1],
+        markers: {
+          paragraphs: [{ marker: 'p', offset: 0 }],
+          headings: [{ marker: 's2', text: 'A title' }],
+        },
+      },
+    ]);
+  });
+
   it('undoes heading level then heading insertion as separate actions and saves every state', async () => {
     const { input, verse, body, onVersesChange, history, user } = await setup();
     await select(input, body(2), 3);

@@ -88,6 +88,13 @@ The former design documented that limitation, but #397 explicitly requires undo/
 actions. A fix must test scoped body formatting, heading insertion and level changes as real edits,
 including text before and after the structural action, autosave, reload and both editor hosts.
 
+Firefox testing also found a history update that restored a heading's level in the DOM without
+notifying autosave. Editorial 0.8.15 can report that history state with no dirty nodes, which its
+change plugin ignores. After undo/redo, the host now applies an empty local delta through the public
+editor API to synchronize the serialized document and change callback. It does not change the
+document or add a history entry. The browser regression checks every saved state through heading
+insertion, undo, redo, level change, another undo/redo and reload.
+
 The vendored CSS sync note must identify Fluent's removal of `direction: inherit` from direct
 paragraph children. Restoring that declaration would override the paragraph's `dir="auto"`
 direction resolution. Fluent-specific rules that can be expressed as overrides belong in
