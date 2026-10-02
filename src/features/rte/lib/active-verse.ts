@@ -1,21 +1,22 @@
+import { SCRIPTURE_MARKER_SELECTOR, VERSE_MARKER_SELECTOR, elementAt } from './editor-dom';
 import { isHeadingMarker } from './heading-markers';
 
 /** The focus end follows both keyboard navigation and backwards selections. */
 export function activeVerseRange(editor: HTMLElement, selection: Selection | null) {
   const focus = selection?.focusNode;
   if (!focus || !editor.contains(focus)) return null;
-  const element = focus instanceof Element ? focus : focus.parentElement;
+  const element = elementAt(focus);
   if (isHeadingMarker(element?.closest<HTMLElement>('[data-marker]')?.dataset.marker)) return null;
 
   const boundaries = [...editor.querySelectorAll<HTMLElement>('[data-marker]')].filter(
-    node => node.matches('.verse, .chapter') || isHeadingMarker(node.dataset.marker)
+    node => node.matches(SCRIPTURE_MARKER_SELECTOR) || isHeadingMarker(node.dataset.marker)
   );
   let start: HTMLElement | undefined;
   for (const boundary of boundaries) {
     const range = document.createRange();
     range.selectNode(boundary);
     if (range.comparePoint(focus, selection.focusOffset) < 0) break;
-    start = boundary.matches('.verse') ? boundary : undefined;
+    start = boundary.matches(VERSE_MARKER_SELECTOR) ? boundary : undefined;
   }
   if (!start) return null;
 
@@ -27,7 +28,7 @@ export function activeVerseRange(editor: HTMLElement, selection: Selection | nul
   return { verse: start.dataset.number ?? '', range };
 }
 
-interface LineRect {
+export interface LineRect {
   left: number;
   top: number;
   width: number;

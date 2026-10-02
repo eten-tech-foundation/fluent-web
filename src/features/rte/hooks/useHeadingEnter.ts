@@ -1,23 +1,11 @@
 import { useCallback, type KeyboardEvent, type RefObject } from 'react';
 
+import { EDITOR_SELECTOR, isComposingKey } from '../lib/editor-dom';
 import { isHeadingMarker } from '../lib/heading-markers';
+import { deltaLength } from '../lib/structural-edits';
+import { blockIndex } from '../lib/usj-path';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
-import type { MarkerObject } from '@eten-tech-foundation/scripture-utilities';
-
-// Fluent builds the editor from chapter/verse embeds, paragraphs, headings and inline text.
-// In Editorial's delta coordinates an embed occupies one unit and a paragraph ends with one LF.
-function deltaLength(node: string | MarkerObject): number {
-  if (typeof node === 'string') return node.length;
-  if (node.type === 'para' || node.type === 'char')
-    return (
-      (node.content ?? []).reduce((sum, child) => sum + deltaLength(child), 0) +
-      (node.type === 'para' ? 1 : 0)
-    );
-  return 1;
-}
-
-const blockIndex = (path: string) => /^\$\.content\[(\d+)\]/.exec(path)?.[1];
 
 /**
  * Headings are single-line titles. Enter leaves the title intact and continues in the next verse.
@@ -34,10 +22,9 @@ export function useHeadingEnter(editorRef: RefObject<EditorRef | null>, readOnly
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||
-        event.nativeEvent.isComposing ||
-        event.nativeEvent.keyCode === 229 ||
+        isComposingKey(event.nativeEvent) ||
         !(event.target instanceof HTMLElement) ||
-        !event.target.closest('.editor-input')
+        !event.target.closest(EDITOR_SELECTOR)
       )
         return false;
 

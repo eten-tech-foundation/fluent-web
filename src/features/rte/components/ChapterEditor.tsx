@@ -5,19 +5,23 @@ import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
-import { useVerseCursorRestore } from '../hooks/useVerseCursorRestore';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
-import { headingErrorIn, isHeadingMarker, type HeadingError } from '../lib/heading-markers';
+import {
+  headingErrorIn,
+  isHeadingMarker,
+  MAX_HEADINGS_PER_VERSE,
+  type HeadingError,
+} from '../lib/heading-markers';
 import {
   changedVerses,
   pericopeVersesToUsj,
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
-import { remapTextSelection } from '../lib/remap-text-selection';
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
+import { formatVerseBlock, insertSectionHeading } from '../lib/structural-edits';
 
 import { ActiveVerseOutline } from './ActiveVerseOutline';
 import { FormatBar } from './FormatBar';
@@ -30,7 +34,11 @@ import '../styles/editor.css';
 import '../styles/editor-shared.css';
 import '../styles/chapter-editor.css';
 
-import type { EditorRef, StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
+import type {
+  EditorRef,
+  SelectionRange,
+  StateChangeSnapshot,
+} from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 import type { SerializedVerseRef } from '@sillsdev/scripture';
 
@@ -77,8 +85,7 @@ export function ChapterEditor({
   useProtectedVerseMarkers(containerRef);
   useNativeRtlSelection(containerRef, readOnly);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const headingSelectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(headingSelectionTimer.current), [contentKey]);
+  const headingSelectionRef = useRef<SelectionRange | undefined>(undefined);
   const loadedKeyRef = useRef(contentKey);
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
@@ -103,6 +110,7 @@ export function ChapterEditor({
   } | null>(null);
 
   useEffect(() => {
+    headingSelectionRef.current = undefined;
     setPendingHeading(null);
   }, [contentKey, readOnly]);
 
@@ -186,14 +194,11 @@ export function ChapterEditor({
     verseNum: 1,
   }));
 
-  const { restoreAfterLoad, cancelRestore } = useVerseCursorRestore(scrRef, setScrRef, editorRef);
-
   useEffect(() => {
     activeVerseRef.current = undefined;
     setActiveVerse(undefined);
-    cancelRestore();
     setScrRef({ book: bookCode ?? '', chapterNum: chapterNumber, verseNum: 1 });
-  }, [bookCode, cancelRestore, chapterNumber, contentKey]);
+  }, [bookCode, chapterNumber, contentKey]);
 
   const trackActiveVerse = useCallback(
     (verseNumber: number | undefined) => {
@@ -226,11 +231,9 @@ export function ChapterEditor({
       // scripture reference. Body formats would fold those words into a verse on save.
       if (isHeadingMarker(blockMarker)) {
         if (isHeadingMarker(marker)) {
-          const selection = formatHeadingLevel(editor, marker, handleUsjChange);
+          const selection = formatHeadingLevel(editor, marker);
           if (selection) {
             setBlockMarker(marker);
-            clearTimeout(headingSelectionTimer.current);
-            headingSelectionTimer.current = setTimeout(() => editor.setSelection(selection), 0);
           }
         }
         return;
@@ -238,7 +241,7 @@ export function ChapterEditor({
       if (isHeadingMarker(marker)) {
         const verseNumber = activeVerseRef.current;
         const verse = knownVersesRef.current.find(row => row.verseNumber === verseNumber);
-        if (verse && (verse.markers?.headings?.length ?? 0) < 4) {
+        if (verse && (verse.markers?.headings?.length ?? 0) < MAX_HEADINGS_PER_VERSE) {
           setPendingHeading({ verseNumber: verse.verseNumber, marker });
         }
         return;
@@ -246,29 +249,14 @@ export function ChapterEditor({
       // A fresh chapter is one paragraph holding every verse, and the editor's own block
       // formatting restyles the whole block — one click would turn 31 verses into poetry (#427).
       // When the active verse's paragraph spans further than itself, the format is scoped to that
-      // verse by rewriting the rows; the editor-native path stays for already-scoped blocks, where
-      // it does the same thing and keeps the cursor.
+      // verse by inserting paragraph boundaries in one local history transaction.
       const activeVerse = activeVerseRef.current;
       const scoped =
         activeVerse === undefined
           ? null
           : scopeBlockFormatToVerse(knownVersesRef.current, activeVerse, marker);
       if (scoped && activeVerse !== undefined) {
-        const before = editor.getUsj();
-        const selection = editor.getSelection();
-        const after = loadIntoEditor(scoped.updated);
-        const restoredSelection = remapTextSelection(before, after, selection);
-        // Report what the document ended up holding, not the rows we handed it: the load
-        // re-derives them, and the parent's copy has to be the one the next commit is diffed
-        // against or an edit somewhere else would come back as a change to this verse.
-        const loaded = knownVersesRef.current;
-        onVersesChange(
-          scoped.changed.map(
-            row => loaded.find(verse => verse.verseNumber === row.verseNumber) ?? row
-          )
-        );
-        // The load leaves the editor with no selection, and it only lands a task from now.
-        restoreAfterLoad(activeVerse, restoredSelection);
+        formatVerseBlock(editor, activeVerse, marker);
       } else {
         editor.formatPara(marker);
       }
@@ -278,36 +266,29 @@ export function ChapterEditor({
       // claimed otherwise would keep claiming it until the next selection change.
       setBlockMarker(current => (current === undefined ? current : marker));
     },
-    [
-      blockMarker,
-      readOnly,
-      headingError,
-      handleUsjChange,
-      loadIntoEditor,
-      onVersesChange,
-      restoreAfterLoad,
-    ]
+    [blockMarker, readOnly, headingError]
   );
 
   const addHeading = (text: string) => {
-    if (!pendingHeading || readOnly || headingError) return;
+    const editor = editorRef.current;
+    if (!editor || !pendingHeading || readOnly || headingError) return;
     const { verseNumber, marker } = pendingHeading;
-    const before = knownVersesRef.current;
-    const updated = before.map(verse =>
-      verse.verseNumber === verseNumber
-        ? {
-            ...verse,
-            markers: {
-              ...verse.markers,
-              headings: [...(verse.markers?.headings ?? []), { marker, text }],
-            },
-          }
-        : verse
-    );
-    loadIntoEditor(updated);
-    onVersesChange(changedVerses(before, knownVersesRef.current));
+    headingSelectionRef.current = insertSectionHeading(editor, verseNumber, marker, text);
     setPendingHeading(null);
-    restoreAfterLoad(verseNumber);
+  };
+
+  const restoreHeadingFocus = (event: Event) => {
+    const selection = headingSelectionRef.current;
+    headingSelectionRef.current = undefined;
+    const editor = editorRef.current;
+    if (!selection || !editor) return;
+    // Restore after the dialog releases its focus trap; doing it during submit loses focus
+    // to Radix's close handling in Firefox, so the user's next typed text never reaches the verse.
+    event.preventDefault();
+    editor.focus();
+    editor.getSelection();
+    editor.setSelection(selection);
+    editor.getSelection();
   };
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
@@ -320,6 +301,7 @@ export function ChapterEditor({
           verseNumber={pendingHeading.verseNumber}
           onAdd={addHeading}
           onClose={() => setPendingHeading(null)}
+          onCloseAutoFocus={restoreHeadingFocus}
         />
       )}
       <div
@@ -345,7 +327,7 @@ export function ChapterEditor({
               canAddHeading={
                 activeVerse !== undefined &&
                 (knownVersesRef.current.find(row => row.verseNumber === activeVerse)?.markers
-                  ?.headings?.length ?? 0) < 4
+                  ?.headings?.length ?? 0) < MAX_HEADINGS_PER_VERSE
               }
               disabled={Boolean(headingError)}
               onFormat={handleFormat}

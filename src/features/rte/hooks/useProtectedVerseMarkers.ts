@@ -1,17 +1,20 @@
 import { useEffect, type RefObject } from 'react';
 
+import {
+  BLOCK_SELECTOR,
+  EDITABLE_EDITOR_SELECTOR,
+  SCRIPTURE_MARKER_SELECTOR,
+  elementAt,
+} from '../lib/editor-dom';
 import { isHeadingMarker } from '../lib/heading-markers';
 
-const MARKERS = '.verse, .chapter, [data-marker="v"], [data-marker="c"]';
-const EDITOR = '.editor-input[contenteditable="true"]';
-const BLOCKS = 'p, h1, h2, h3, h4, h5, h6, .para';
-
-function elementAt(node: Node): Element | null {
-  return node instanceof Element ? node : node.parentElement;
+interface DeletionIntent {
+  direction: 'backward' | 'forward';
+  unit: 'character' | 'word' | 'line';
 }
 
 function markerContainsPoint(node: Node): boolean {
-  return Boolean(elementAt(node)?.closest(MARKERS));
+  return Boolean(elementAt(node)?.closest(SCRIPTURE_MARKER_SELECTOR));
 }
 
 function comparePoints(a: Range, aEnd: boolean, b: Range, bEnd: boolean): number {
@@ -28,7 +31,7 @@ function touchesMarker(range: Range, root: HTMLElement): boolean {
     return true;
   }
   if (range.collapsed) return false;
-  return Array.from(root.querySelectorAll(MARKERS)).some(marker => {
+  return Array.from(root.querySelectorAll(SCRIPTURE_MARKER_SELECTOR)).some(marker => {
     const markerRange = document.createRange();
     markerRange.selectNode(marker);
     return (
@@ -39,46 +42,46 @@ function touchesMarker(range: Range, root: HTMLElement): boolean {
 }
 
 /** Find a protected boundary a delete would cross, without changing the user's selection. */
-function deletesAdjacentMarker(
-  range: Range,
-  root: HTMLElement,
-  backward: boolean,
-  word: boolean,
-  line: boolean
-): boolean {
+function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: DeletionIntent): boolean {
+  const backward = intent.direction === 'backward';
   if (!range.collapsed) return false;
-  const block = elementAt(range.startContainer)?.closest(BLOCKS) ?? root;
+  const block = elementAt(range.startContainer)?.closest(BLOCK_SELECTOR) ?? root;
   // Paragraph merges remain native. Inline landmarks are checked within the caret's own block.
-  const removesInlineMarker = Array.from(block.querySelectorAll(MARKERS)).some(marker => {
-    const markerRange = document.createRange();
-    markerRange.selectNode(marker);
-    const pointOrder = comparePoints(range, false, markerRange, backward);
-    if (backward ? pointOrder < 0 : pointOrder > 0) return false;
-    const gap = document.createRange();
-    if (backward) {
-      gap.setStartAfter(marker);
-      gap.setEnd(range.startContainer, range.startOffset);
-    } else {
-      gap.setStart(range.startContainer, range.startOffset);
-      gap.setEndBefore(marker);
-    }
-    if (gap.cloneContents().querySelector('br')) return false;
-    const text = gap.toString().replace(/\u200B/g, '');
-    if (line) {
-      // Cmd+Backspace deletes a visual line, not the whole paragraph. A verse earlier in a
-      // wrapped paragraph must not disable the shortcut on later lines.
-      const caretBox =
-        typeof range.getClientRects === 'function' ? range.getClientRects()[0] : undefined;
-      const markerBoxes = marker.getClientRects();
-      if (caretBox?.height && markerBoxes.length > 0) {
-        return Array.from(markerBoxes).some(
-          box => box.top < caretBox.bottom && box.bottom > caretBox.top
-        );
+  const removesInlineMarker = Array.from(block.querySelectorAll(SCRIPTURE_MARKER_SELECTOR)).some(
+    marker => {
+      const markerRange = document.createRange();
+      markerRange.selectNode(marker);
+      const pointOrder = comparePoints(range, false, markerRange, backward);
+      if (backward ? pointOrder < 0 : pointOrder > 0) return false;
+      const gap = document.createRange();
+      if (backward) {
+        gap.setStartAfter(marker);
+        gap.setEnd(range.startContainer, range.startOffset);
+      } else {
+        gap.setStart(range.startContainer, range.startOffset);
+        gap.setEndBefore(marker);
       }
-      return true;
+      if (gap.cloneContents().querySelector('br')) return false;
+      const text = gap.toString().replace(/\u200B/g, '');
+      if (intent.unit === 'line') {
+        // Cmd+Backspace deletes a visual line, not the whole paragraph. A verse earlier in a
+        // wrapped paragraph must not disable the shortcut on later lines.
+        const caretBox =
+          typeof range.getClientRects === 'function' ? range.getClientRects()[0] : undefined;
+        const markerBoxes = marker.getClientRects();
+        if (caretBox?.height && markerBoxes.length > 0) {
+          return Array.from(markerBoxes).some(
+            box => box.top < caretBox.bottom && box.bottom > caretBox.top
+          );
+        }
+        // Without layout information the visual line extent is unknown. Keep this shortcut
+        // conservative rather than risk deleting the verse identity; character/word edits
+        // still use their text boundary checks below.
+        return true;
+      }
+      return intent.unit === 'word' ? text.trim() === '' : text === '';
     }
-    return word ? text.trim() === '' : text === '';
-  });
+  );
   if (removesInlineMarker) return true;
   // A chapter decorator can be a standalone block. Deleting from the neighboring paragraph
   // boundary would remove that block, unlike merging two ordinary paragraphs.
@@ -88,10 +91,10 @@ function deletesAdjacentMarker(
   // render scripture as a heading or fold heading words into scripture. Deliberate range edits
   // remain available; this guard only handles a collapsed caret at a block edge.
   const crossesHeadingBoundary =
-    neighbor.matches(BLOCKS) &&
+    neighbor.matches(BLOCK_SELECTOR) &&
     isHeadingMarker(block.getAttribute('data-marker') ?? undefined) !==
       isHeadingMarker(neighbor.getAttribute('data-marker') ?? undefined);
-  if (!neighbor.matches(MARKERS) && !crossesHeadingBoundary) return false;
+  if (!neighbor.matches(SCRIPTURE_MARKER_SELECTOR) && !crossesHeadingBoundary) return false;
   const edge = document.createRange();
   edge.selectNodeContents(block);
   if (backward) edge.setEnd(range.startContainer, range.startOffset);
@@ -102,7 +105,10 @@ function deletesAdjacentMarker(
 function hasStructuralPayload(data: DataTransfer | null): boolean {
   if (!data) return false;
   const html = data.getData('text/html');
-  if (html && new DOMParser().parseFromString(html, 'text/html').querySelector(MARKERS)) {
+  if (
+    html &&
+    new DOMParser().parseFromString(html, 'text/html').querySelector(SCRIPTURE_MARKER_SELECTOR)
+  ) {
     return true;
   }
   // Lexical prefers its private clipboard format over HTML when both are supplied.
@@ -123,7 +129,7 @@ export function useProtectedVerseMarkers(containerRef: RefObject<HTMLElement | n
     const editorFor = (event: Event): HTMLElement | null => {
       const target = event.target;
       if (!(target instanceof Node)) return null;
-      const editor = elementAt(target)?.closest<HTMLElement>(EDITOR);
+      const editor = elementAt(target)?.closest<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
       return editor && container.contains(editor) ? editor : null;
     };
 
@@ -151,13 +157,10 @@ export function useProtectedVerseMarkers(containerRef: RefObject<HTMLElement | n
         range &&
         (touchesMarker(range, root) ||
           (deletion &&
-            deletesAdjacentMarker(
-              range,
-              root,
-              event.key === 'Backspace',
-              event.ctrlKey || event.altKey,
-              event.metaKey
-            )))
+            deletesAdjacentMarker(range, root, {
+              direction: event.key === 'Backspace' ? 'backward' : 'forward',
+              unit: event.metaKey ? 'line' : event.ctrlKey || event.altKey ? 'word' : 'character',
+            })))
       ) {
         block(event);
       }
@@ -186,13 +189,14 @@ export function useProtectedVerseMarkers(containerRef: RefObject<HTMLElement | n
             // It can arrive without a keydown or a native target range.
             ((event.inputType === 'deleteContent' ||
               /^delete.*(?:Backward|Forward)$/.test(event.inputType)) &&
-              deletesAdjacentMarker(
-                range,
-                root,
-                event.inputType.endsWith('Backward'),
-                event.inputType.includes('Word'),
-                event.inputType.includes('Line')
-              ))))
+              deletesAdjacentMarker(range, root, {
+                direction: event.inputType.endsWith('Backward') ? 'backward' : 'forward',
+                unit: event.inputType.includes('Line')
+                  ? 'line'
+                  : event.inputType.includes('Word')
+                    ? 'word'
+                    : 'character',
+              }))))
       ) {
         block(event);
       }

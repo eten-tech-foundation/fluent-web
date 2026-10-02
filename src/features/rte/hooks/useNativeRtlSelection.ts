@@ -1,5 +1,11 @@
 import { useEffect, type RefObject } from 'react';
 
+import {
+  EDITABLE_EDITOR_SELECTOR,
+  SCRIPTURE_MARKER_SELECTOR,
+  isComposingKey,
+} from '../lib/editor-dom';
+
 /** Keep native bidi selection instead of mixing it with Lexical's block-edge arrow movement. */
 export function useNativeRtlSelection(
   containerRef: RefObject<HTMLElement | null>,
@@ -15,15 +21,12 @@ export function useNativeRtlSelection(
         event.ctrlKey ||
         event.altKey ||
         event.metaKey ||
-        event.isComposing ||
-        event.keyCode === 229 ||
+        isComposingKey(event) ||
         (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')
       )
         return;
       const root =
-        event.target instanceof Element
-          ? event.target.closest('.editor-input[contenteditable="true"]')
-          : null;
+        event.target instanceof Element ? event.target.closest(EDITABLE_EDITOR_SELECTOR) : null;
       const selection = window.getSelection();
       const focus = selection?.focusNode;
       const anchor = selection?.anchorNode;
@@ -37,8 +40,7 @@ export function useNativeRtlSelection(
         !root.contains(anchor)
       )
         return;
-      if (focus.parentElement?.closest('.verse, .chapter, [data-marker="v"], [data-marker="c"]'))
-        return;
+      if (focus.parentElement?.closest(SCRIPTURE_MARKER_SELECTOR)) return;
       const paragraph = focus.parentElement?.closest('p, .para');
       if (!paragraph || getComputedStyle(paragraph).direction !== 'rtl') return;
 

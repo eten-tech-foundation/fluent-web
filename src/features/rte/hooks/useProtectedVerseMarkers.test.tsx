@@ -299,6 +299,8 @@ describe('useProtectedVerseMarkers', () => {
     render(<Fixture />);
     select(text('first'), 3);
     for (const name of ['paste', 'drop']) {
+      expect(transfer(name, { 'text/plain': '3' }).defaultPrevented).toBe(false);
+      expect(transfer(name, { 'text/html': '<b>3</b>' }).defaultPrevented).toBe(false);
       expect(
         transfer(name, { 'text/html': '<span data-marker="v">3</span>Copied text' })
           .defaultPrevented

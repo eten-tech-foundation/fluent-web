@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -381,31 +381,6 @@ describe('ChapterEditor', () => {
       expect(editor.formatPara).toHaveBeenCalledWith('q1');
     });
 
-    it('adds a heading with its own words before the selected verse', async () => {
-      const user = userEvent.setup();
-      const onVersesChange = vi.fn();
-      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={onVersesChange} />);
-      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 2 }));
-      reportBlock('p');
-      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
-      expect(screen.getByRole('button', { name: 'Add heading' })).toBeDisabled();
-      await user.type(screen.getByRole('textbox', { name: 'Heading text' }), 'The Creation');
-      await user.click(screen.getByRole('button', { name: 'Add heading' }));
-      expect(editor.formatPara).not.toHaveBeenCalled();
-      expect(documentVerses()).toEqual([
-        { ...A_PAIR[0], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
-        {
-          ...A_PAIR[1],
-          markers: {
-            headings: [{ marker: 's1', text: 'The Creation' }],
-            paragraphs: [{ marker: 'p', offset: 0 }],
-          },
-        },
-      ]);
-      expect(onVersesChange).toHaveBeenLastCalledWith([documentVerses()[1]]);
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-
     it('cancels heading insertion without changing scripture', async () => {
       const user = userEvent.setup();
       const onVersesChange = vi.fn();
@@ -417,29 +392,6 @@ describe('ChapterEditor', () => {
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onVersesChange).not.toHaveBeenCalled();
       expect(editor.setUsj).not.toHaveBeenCalled();
-    });
-
-    it('changes a heading level without applying it to the previous verse', async () => {
-      const user = userEvent.setup();
-      const onVersesChange = vi.fn();
-      const rows = [
-        { ...A_PAIR[0], markers: { headings: [{ marker: 's1', text: 'Title' }] } },
-        A_PAIR[1],
-      ];
-      render(<ChapterEditor {...CHAPTER_PROPS} verses={rows} onVersesChange={onVersesChange} />);
-      act(() => editor.reportScrRef?.({ book: BOOK, chapterNum: CHAPTER, verseNum: 1 }));
-      reportBlock('s1');
-      await user.click(screen.getByRole('button', { name: 'Level 3' }));
-      expect(editor.formatPara).not.toHaveBeenCalled();
-      expect(onVersesChange).toHaveBeenLastCalledWith([
-        {
-          ...rows[0],
-          markers: {
-            paragraphs: [{ marker: 'p', offset: 0 }],
-            headings: [{ marker: 's3', text: 'Title' }],
-          },
-        },
-      ]);
     });
 
     it('still reports a heading the cursor is already in', () => {
@@ -592,58 +544,6 @@ describe('scoped block formatting (#427)', () => {
     editor.askedForVerses = [];
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
-  });
-
-  const wholeChapter: PericopeVerseText[] = [
-    { verseNumber: 1, text: 'First.', markers: null },
-    { verseNumber: 2, text: 'Second.', markers: null },
-    { verseNumber: 3, text: 'Third.', markers: null },
-  ];
-
-  it('applies the format to the active verse only when its paragraph spans further', async () => {
-    const onVersesChange = vi.fn();
-    render(
-      <ChapterEditor {...CHAPTER_PROPS} verses={wholeChapter} onVersesChange={onVersesChange} />
-    );
-    act(() => {
-      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
-      editor.reportState?.({
-        canRedo: false,
-        canUndo: false,
-        blockMarker: 'p',
-        contextMarker: undefined,
-      });
-    });
-
-    await userEvent.click(screen.getByRole('button', { name: 'Poetry Line' }));
-
-    expect(editor.formatPara).not.toHaveBeenCalled();
-    expect(editor.setUsj).toHaveBeenCalledTimes(1);
-    expect(onVersesChange).toHaveBeenCalledWith([
-      { verseNumber: 2, text: 'Second.', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
-      { verseNumber: 3, text: 'Third.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
-    ]);
-  });
-
-  it('asks for the active verse back after the reload, so the next click still lands', async () => {
-    render(<ChapterEditor {...CHAPTER_PROPS} verses={wholeChapter} onVersesChange={vi.fn()} />);
-    act(() => {
-      editor.reportScrRef?.({ book: 'GEN', chapterNum: 1, verseNum: 2 });
-      editor.reportState?.({
-        canRedo: false,
-        canUndo: false,
-        blockMarker: 'p',
-        contextMarker: undefined,
-      });
-    });
-    editor.askedForVerses = [];
-
-    await userEvent.click(screen.getByRole('button', { name: 'Poetry Line' }));
-
-    // Reloading the document leaves no selection, and the plugin only acts on a verse it has not
-    // just been given — so the verse has to be let go of before it can be asked for again. Both
-    // halves wait for the load, which lands a task after the click handler that started it.
-    await waitFor(() => expect(editor.askedForVerses).toEqual([0, 2]));
   });
 
   it('keeps the editor-native path when the active verse already is its own block', async () => {

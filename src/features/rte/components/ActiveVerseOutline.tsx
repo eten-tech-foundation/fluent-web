@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react';
 
-import { activeVerseRange, verseLineRects } from '../lib/active-verse';
+import { activeVerseRange, verseLineRects, type LineRect } from '../lib/active-verse';
+import { EDITOR_SELECTOR } from '../lib/editor-dom';
 
 interface Props {
   surfaceRef: RefObject<HTMLDivElement | null>;
@@ -11,7 +12,7 @@ interface Props {
 
 interface Outline {
   verse: string;
-  rects: Array<{ left: number; top: number; width: number; height: number }>;
+  rects: LineRect[];
 }
 
 /** Paint outside Lexical's content: decorations must never become saved scripture or undo steps. */
@@ -25,7 +26,7 @@ export function ActiveVerseOutline({
 
   useEffect(() => {
     const surface = surfaceRef.current;
-    const editor = surface?.querySelector<HTMLElement>('.editor-input');
+    const editor = surface?.querySelector<HTMLElement>(EDITOR_SELECTOR);
     if (!surface || !editor || readOnly) {
       setOutline(null);
       return;
