@@ -13,15 +13,14 @@ import {
 
 import { recordedNoticeKey, type RecordedNoticeAcknowledgment } from '../lib/ackStore';
 
+import { RecordedNoticeAttribution } from './RecordedNoticeAttribution';
+
 export interface AttributionDialogProps {
   entries: readonly RecordedNoticeAcknowledgment[];
   open: boolean;
   trigger: ReactElement;
   onOpenChange: (open: boolean) => void;
 }
-
-const providerName = (provider: RecordedNoticeAcknowledgment['notice']['recordingProvider']) =>
-  provider === 'aquifer' ? 'Aquifer' : provider === 'dbl' ? 'API.Bible' : 'YouVersion';
 
 /** Reopens the notices for recordings acknowledged on this device. */
 export function AttributionDialog({
@@ -52,15 +51,7 @@ export function AttributionDialog({
                 key={recordedNoticeKey(notice)}
                 className='space-y-1 border-b pb-4 last:border-b-0'
               >
-                <p>
-                  <span className='font-semibold'>{t('recordedAudioTextSource', 'Text:')}</span>{' '}
-                  {notice.textBibleName}
-                </p>
-                <p>
-                  <span className='font-semibold'>{t('recordedAudioSource', 'Recording:')}</span>{' '}
-                  {providerName(notice.recordingProvider)}: {notice.recordingName}
-                </p>
-                <p className='break-words whitespace-pre-wrap'>{notice.notice}</p>
+                <RecordedNoticeAttribution notice={notice} />
               </li>
             ))}
           </ul>

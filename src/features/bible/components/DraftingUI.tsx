@@ -90,6 +90,24 @@ const EMPTY_BIBLE_VERSES: BibleVerse[] = [];
 
 const BIBLES_RESOURCE: ResourceName = { id: 'Bibles', name: 'Bibles' };
 
+interface AudioChapterSnapshot {
+  texts: ReadonlyMap<number, string>;
+  loading: boolean;
+  error: boolean;
+}
+
+interface AudioPanelDescriptor {
+  role: 'projectSource' | 'referenceBible';
+  referenceBibleId: string | null;
+  languageCode: string;
+  textBibleKey: string | null;
+  selectedRecordingKey: string | null;
+  selectionIdentity: readonly ['projectSource' | 'referenceBible', number | string | null];
+  displayName: string;
+  currentChapter: AudioChapterSnapshot;
+  adjacentChapters: ReadonlyMap<number, AudioChapterSnapshot>;
+}
+
 const RESOURCE_NAMES: ResourceName[] = [
   { id: 'UWTranslationNotes', name: 'TN' },
   { id: 'Images', name: 'Images & Maps' },
@@ -928,11 +946,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     chapter => chapter !== projectItem.chapterNumber
   );
   const referenceContext = useReferenceChapterTexts(
-    selectedPanel === 2 ? referenceBibleId : null,
+    referenceBibleId,
     projectItem.bookCode,
     adjacentChapters
   );
-  const textBibleKey = selectedPanel === 1 ? (projectItem.textBibleKey ?? null) : referenceBibleId;
   const providerFacts = useProviderFacts(projectItem.projectId);
   // Current-chapter refs preserve the existing host API; adjacent refs are chapter-qualified,
   // and page identity scopes both. Equal verse numbers can never collide.
@@ -941,44 +958,80 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       formatVerseRef({ chapterNumber: chapter, verseNumber: verse }, projectItem.chapterNumber),
     [projectItem.chapterNumber]
   );
+
+  // One current-render descriptor keeps panel-dependent audio facts together. It is deliberately
+  // plain data: callbacks consume the hook's freshness guards instead of closing over this object.
+  const audioPanel: AudioPanelDescriptor =
+    selectedPanel === 1
+      ? {
+          role: 'projectSource',
+          referenceBibleId: null,
+          languageCode: projectItem.sourceLangCode,
+          textBibleKey: projectItem.textBibleKey ?? null,
+          selectedRecordingKey: projectItem.selectedRecordingKey ?? null,
+          selectionIdentity: ['projectSource', projectItem.bibleId],
+          displayName: projectItem.bibleName,
+          currentChapter: {
+            texts: new Map(sourceVerses.map(row => [row.verseNumber, row.text])),
+            loading: false,
+            error: false,
+          },
+          adjacentChapters: new Map(
+            adjacentChapters.flatMap(chapter => {
+              const context = pericopeContext.chapters.get(chapter);
+              return context
+                ? [
+                    [
+                      chapter,
+                      {
+                        texts: new Map(
+                          context.sourceVerses.map(row => [row.verseNumber, row.text])
+                        ),
+                        loading: context.sourceIsLoading,
+                        error: context.sourceIsError,
+                      },
+                    ] as const,
+                  ]
+                : [];
+            })
+          ),
+        }
+      : {
+          role: 'referenceBible',
+          referenceBibleId,
+          languageCode: activeResourceBibleTab?.language ?? '',
+          textBibleKey: referenceBibleId,
+          selectedRecordingKey: null,
+          selectionIdentity: ['referenceBible', referenceBibleId],
+          displayName: activeResourceBibleTab?.label ?? '',
+          currentChapter: {
+            texts: bibleVerseMap,
+            loading: bibleContentLoading,
+            error: bibleContentError,
+          },
+          adjacentChapters: referenceContext,
+        };
+
   const audioRowDrafts: SourceAudioRow[] = visibleAudioRefs.map(ref => {
     const current = ref.chapterNumber === projectItem.chapterNumber;
-    const context = pericopeContext.chapters.get(ref.chapterNumber);
-    const reference = referenceContext.get(ref.chapterNumber);
+    const chapter = current
+      ? audioPanel.currentChapter
+      : audioPanel.adjacentChapters.get(ref.chapterNumber);
+    const text = chapter?.texts.get(ref.verseNumber);
     return {
       verseRef: ttsVerseRefFor(ref.verseNumber, ref.chapterNumber),
       verseNumber: ref.verseNumber,
       chapterNumber: ref.chapterNumber,
-      text:
-        selectedPanel === 1
-          ? (current ? sourceVerses : context?.sourceIsError ? [] : context?.sourceVerses)?.find(
-              row => row.verseNumber === ref.verseNumber
-            )?.text
-          : current
-            ? bibleContentError
-              ? undefined
-              : bibleVerseMap.get(ref.verseNumber)
-            : reference?.texts.get(ref.verseNumber),
-      unavailable:
-        !current &&
-        (selectedPanel === 1
-          ? !context ||
-            context.sourceIsError ||
-            !context.sourceVerses.some(
-              row => row.verseNumber === ref.verseNumber && row.text?.trim()
-            )
-          : !reference || reference.error || !reference.texts.get(ref.verseNumber)?.trim()),
-      loading: current
-        ? selectedPanel === 2 && bibleContentLoading
-        : selectedPanel === 1
-          ? context?.sourceIsLoading
-          : reference?.loading,
-      langCode:
-        selectedPanel === 1 ? projectItem.sourceLangCode : (activeResourceBibleTab?.language ?? ''),
-      audioSource: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
+      text: chapter?.error ? undefined : text,
+      unavailable: !current && (!chapter || chapter.error || !text?.trim()),
+      loading: chapter?.loading,
+      langCode: audioPanel.languageCode,
+      audioSource: audioPanel.role,
     };
   });
 
+  // Stabilize by row content, rather than render-local arrays/maps, so unrelated drafting renders
+  // cannot mint new playback input identity or reset a queue that still describes the same text.
   const audioRowsJson = JSON.stringify(audioRowDrafts);
   const ttsRows = useMemo(() => JSON.parse(audioRowsJson) as SourceAudioRow[], [audioRowsJson]);
   const chapterVerseRefs = useMemo(
@@ -1020,21 +1073,21 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const tts = useSourceTtsPlayback({
     engine: ttsEngine,
     rows: ttsRows,
-    referenceBibleId: selectedPanel === 2 ? referenceBibleId : null,
-    textBibleName:
-      selectedPanel === 1 ? projectItem.bibleName : (activeResourceBibleTab?.label ?? ''),
+    referenceBibleId: audioPanel.referenceBibleId,
+    textBibleName: audioPanel.displayName,
     facts: providerFacts,
+    // Assignment status is bootstrap metadata. Provider facts above remain authoritative and
+    // missing identity/facts never turn this status into permission to synthesize.
     sourceLicence: { status: projectItem.ttsLicenseStatus },
     sourceChapter: {
       projectId: projectItem.projectId,
       bibleId: projectItem.bibleId,
       bookCode: projectItem.bookCode,
       chapter: projectItem.chapterNumber,
-      languageCode:
-        selectedPanel === 1 ? projectItem.sourceLangCode : (activeResourceBibleTab?.language ?? ''),
-      role: selectedPanel === 1 ? 'projectSource' : 'referenceBible',
-      textBibleKey,
-      selectedRecordingKey: selectedPanel === 1 ? (projectItem.selectedRecordingKey ?? null) : null,
+      languageCode: audioPanel.languageCode,
+      role: audioPanel.role,
+      textBibleKey: audioPanel.textBibleKey,
+      selectedRecordingKey: audioPanel.selectedRecordingKey,
     },
     getRowElement: getTtsRowElement,
     getViewport: getTtsViewport,
@@ -1059,11 +1112,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   }, [audioSurface, playbackRegistry]);
   // Selection identity only: it does not choose the recording provider. Keep
   // pageKey independent so switching back resumes and chapter continuation survives.
-  const sourceSelectionKey = JSON.stringify(
-    selectedPanel === 1
-      ? ['projectSource', projectItem.bibleId]
-      : ['referenceBible', referenceBibleId]
-  );
+  const sourceSelectionKey = JSON.stringify(audioPanel.selectionIdentity);
   const previousSourceSelection = useRef(sourceSelectionKey);
   useEffect(() => {
     if (previousSourceSelection.current === sourceSelectionKey) return;

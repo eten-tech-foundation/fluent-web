@@ -30,6 +30,15 @@ describe('RecordedNoticeDialog', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['aquifer', 'Aquifer'],
+    ['dbl', 'API.Bible'],
+    ['youversion', 'YouVersion'],
+  ] as const)('uses the shared %s provider label', (recordingProvider, label) => {
+    render(<RecordedNoticeDialog notice={{ ...notice, recordingProvider }} onClose={vi.fn()} />);
+    expect(screen.getByText(`${label}: ${notice.recordingName}`)).toBeInTheDocument();
+  });
+
   it.each([null, { ...notice, notice: '' }])('renders nothing for absent/blank data', value => {
     const { container } = render(<RecordedNoticeDialog notice={value} onClose={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();

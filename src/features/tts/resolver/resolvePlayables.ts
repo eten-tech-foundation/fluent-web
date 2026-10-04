@@ -49,9 +49,9 @@ export interface SourceResolverContext
   pericopeId?: string;
   // The licence fence. Carry the API spelling, not the DB column name.
   /**
-   * The assignment's status is authoritative when supplied. The chapter
-   * response is a fallback for callers without assignment metadata, so a
-   * cleared Bible keeps its voice through a provider outage.
+   * Pre-resolved status for hosts without `facts`. Drafting supplies authoritative
+   * provider facts; assignment state is only bootstrap metadata and cannot clear
+   * missing identity or failed facts.
    */
   ttsLicenseStatus?: ChapterSourceAudio['ttsLicenseStatus'];
   licenseNotice?: ChapterSourceAudio['licenseNotice'];
@@ -165,10 +165,9 @@ export const resolvePlayables = (
                 }
                 signal.throwIfAborted();
               }
-              // The fence, in one branch: synthesis exists only for a Bible
-              // whose status says `allowed`. The status travels with the
-              // assignment, so this holds when no recording answer arrives at
-              // all — and a status nobody supplied is not a clearance.
+              // The fence, in one branch: synthesis exists only when authoritative
+              // provider facts say `allowed`. Legacy hosts may supply a pre-resolved
+              // bootstrap status; an absent status is never clearance.
               const barred = licenceBar(status());
               // A downgrade may have happened while this chapter request was in flight.
               const source =

@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+import { RecordedNoticeAttribution } from './RecordedNoticeAttribution';
+
 import type { RecordedNotice } from '../lib/ackStore';
 
 export interface RecordedNoticeDialogProps {
@@ -21,12 +23,6 @@ export interface RecordedNoticeDialogProps {
 export function RecordedNoticeDialog({ notice, onClose }: RecordedNoticeDialogProps) {
   const { t } = useTranslation();
   if (!notice?.notice.trim()) return null;
-  const provider =
-    notice.recordingProvider === 'aquifer'
-      ? 'Aquifer'
-      : notice.recordingProvider === 'dbl'
-        ? 'API.Bible'
-        : 'YouVersion';
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent showCloseButton={false}>
@@ -37,15 +33,7 @@ export function RecordedNoticeDialog({ notice, onClose }: RecordedNoticeDialogPr
           </DialogDescription>
         </DialogHeader>
         <div className='max-h-[50vh] space-y-3 overflow-y-auto text-sm'>
-          <p>
-            <span className='font-semibold'>{t('recordedAudioTextSource', 'Text:')}</span>{' '}
-            {notice.textBibleName}
-          </p>
-          <p>
-            <span className='font-semibold'>{t('recordedAudioSource', 'Recording:')}</span>{' '}
-            {provider}: {notice.recordingName}
-          </p>
-          <p className='break-words whitespace-pre-wrap'>{notice.notice}</p>
+          <RecordedNoticeAttribution notice={notice} />
         </div>
         <DialogFooter>
           <Button onClick={onClose}>{t('recordedAudioAcknowledge', 'Got it')}</Button>

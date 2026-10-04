@@ -84,9 +84,8 @@ export interface LicenceVerdict {
 
 /**
  * What a host may say about one verse from knowledge it already holds. Does no
- * I/O. The assignment's status is preferred over the chapter response's copy:
- * both come from the same Bible row, but only the assignment's survives an
- * audio provider being unreachable.
+ * I/O. The caller passes its already resolved status: drafting resolves exact
+ * provider facts first; legacy callers may bootstrap from assignment metadata.
  */
 export const licenceVerdictForVerse = (
   response: ChapterSourceAudio | undefined,

@@ -55,7 +55,7 @@ export function PlayableControl({
   const impossible = state === 'impossible';
   const loading = state === 'loading';
   // Deliberate card reading: primary pauses, never resets; retained Stop is a
-  // separate host API. The pause-first visual is pending Chad's confirmation.
+  // separate host API used by playback lifecycle cleanup.
   const pauses = state === 'playing' || loading;
   const action = pauses ? t('ttsPause', 'Pause') : t('ttsPlay', 'Play');
   const restart = t('ttsRestart', 'Restart');

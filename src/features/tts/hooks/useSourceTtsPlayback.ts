@@ -69,9 +69,9 @@ export interface UseSourceTtsPlaybackOptions {
   /** Null for reference-panel text: its provider identity is not a Fluent Bible id. */
   sourceChapter: ChapterSourceAudioRequest | null;
   /**
-   * The source Bible's audio licence, from the chapter assignment the surface
-   * already loaded. The fence prefers this to the copy on the chapter-audio
-   * response, because this one survives a provider outage.
+   * Bootstrap status from the chapter assignment for hosts without provider-facts access.
+   * When `facts` is present, its exact provider identity is authoritative and this value
+   * cannot authorize missing or failed facts.
    */
   sourceLicence?: {
     status?: 'allowed' | 'forbidden' | 'unknown';
@@ -277,8 +277,8 @@ export const useSourceTtsPlayback = (
           cache,
           recordedRecovery: RecordedRecoveryStrategy,
           pericopeId,
-          // The assignment's answer first; a held response only fills in for an
-          // API that does not carry the licence on the assignment yet.
+          // Exact provider facts govern drafting. Assignment/cache status is only the
+          // compatibility bootstrap for a host that did not supply facts access.
           ttsLicenseStatus: currentFacts
             ? currentFacts.status(chapter.textBibleKey ?? null)
             : (currentLicence ?? cache.peek(chapter)?.ttsLicenseStatus),

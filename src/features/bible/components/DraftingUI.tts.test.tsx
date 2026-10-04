@@ -206,6 +206,7 @@ let playback: TtsFeature.SourceTtsPlaybackApi;
 let registry: TtsFeature.PlaybackRegistry;
 let referenceBibleId: string | null;
 let capturedPageKey: string | undefined;
+let capturedPlaybackOptions: TtsFeature.UseSourceTtsPlaybackOptions | undefined;
 const elements: FakeClipElement[] = [];
 const playedElements = () => elements.filter(element => element.playCalls.length > 0);
 const initialClaimPause = vi.fn();
@@ -250,6 +251,7 @@ vi.mock('@/features/tts', async importOriginal => {
       ttsRows = options.rows;
       referenceBibleId = options.referenceBibleId;
       capturedPageKey = options.pageKey;
+      capturedPlaybackOptions = options;
       sourceChapter = options.sourceChapter;
       ttsPlaybackEnabled = options.enabled;
       // Fixed for the entire mount; only the source-switch suite uses the real host/queue.
@@ -319,16 +321,19 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
     onLanguageChange,
     selectedBibleId,
     onBibleLoadingChange,
+    onBibleErrorChange,
   }: {
     onBibleVersesChange: (id: string, verses: Array<{ verseNumber: number; text: string }>) => void;
     onBibleSelect: (bible: { id: string; label: string; language: string }) => void;
     onLanguageChange?: (langCode: string) => void;
     selectedBibleId?: string;
     onBibleLoadingChange: (id: string, loading: boolean) => void;
+    onBibleErrorChange: (id: string, error: boolean) => void;
   }) => {
     const select = (id: string, label = 'Hindi Bible') => {
       onBibleSelect({ id, label, language: 'hin' });
       onLanguageChange?.('hin');
+      onBibleErrorChange(id, false);
       onBibleLoadingChange(id, false);
       onBibleVersesChange(id, [
         { verseNumber: 1, text: 'Hindi verse 1' },
@@ -341,6 +346,17 @@ vi.mock('@/features/resources/components/ResourcePanel', () => ({
         <button onClick={() => select('yv-123')}>Select Same Text From Other Domain</button>
         <button onClick={() => select(selectedBibleId ?? 'aq-123', 'Renamed Bible')}>
           Rename Selected Bible
+        </button>
+        <button onClick={() => onBibleLoadingChange(selectedBibleId ?? 'aq-123', true)}>
+          Mark Selected Bible Loading
+        </button>
+        <button
+          onClick={() => {
+            onBibleLoadingChange(selectedBibleId ?? 'aq-123', false);
+            onBibleErrorChange(selectedBibleId ?? 'aq-123', true);
+          }}
+        >
+          Mark Selected Bible Failed
         </button>
       </div>
     );
@@ -421,6 +437,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockFeatureFlag.mockReturnValue(true);
   ttsRows = [];
+  capturedPlaybackOptions = undefined;
   realPlayback = false;
   elements.length = 0;
   synthesize.mockResolvedValue({ audioUrl: 'https://tts.test/verse.ogg' });
@@ -507,6 +524,60 @@ describe('DraftingUI — source-TTS gate', () => {
 // ── Controls: panel-aware text and language (T17/T18, §5.1) ─────────────────
 
 describe('DraftingUI — panel-aware TTS rows', () => {
+  it('rebuilds the complete panel descriptor in both directions without stale row state', async () => {
+    renderDrafting({
+      ...mockProjectItem,
+      textBibleKey: 'dbl-WEB',
+      selectedRecordingKey: 'aq-recording',
+    });
+
+    expect(capturedPlaybackOptions).toMatchObject({
+      referenceBibleId: null,
+      textBibleName: 'WEB',
+      sourceChapter: {
+        role: 'projectSource',
+        languageCode: 'eng',
+        textBibleKey: 'dbl-WEB',
+        selectedRecordingKey: 'aq-recording',
+      },
+    });
+
+    await selectReferenceBible();
+    expect(capturedPlaybackOptions).toMatchObject({
+      referenceBibleId: 'aq-123',
+      textBibleName: 'Hindi Bible',
+      sourceChapter: {
+        role: 'referenceBible',
+        languageCode: 'hin',
+        textBibleKey: 'aq-123',
+        selectedRecordingKey: null,
+      },
+    });
+    expect(ttsRows[0]).toMatchObject({ text: 'Hindi verse 1', loading: false });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mark Selected Bible Loading' }));
+    expect(ttsRows.every(row => row.loading)).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Mark Selected Bible Failed' }));
+    expect(ttsRows.every(row => row.loading === false && row.text === undefined)).toBe(true);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'WEB' }));
+    expect(capturedPlaybackOptions).toMatchObject({
+      referenceBibleId: null,
+      textBibleName: 'WEB',
+      sourceChapter: {
+        role: 'projectSource',
+        languageCode: 'eng',
+        textBibleKey: 'dbl-WEB',
+        selectedRecordingKey: 'aq-recording',
+      },
+    });
+    expect(ttsRows[0]).toMatchObject({
+      text: 'In the beginning God created the heaven and the earth.',
+      loading: false,
+      audioSource: 'projectSource',
+    });
+  });
+
   it('panel 1 reads the project source text in the project source language', () => {
     renderDrafting();
 

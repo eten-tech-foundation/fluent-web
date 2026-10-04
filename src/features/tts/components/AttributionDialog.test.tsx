@@ -25,6 +25,17 @@ const entries: RecordedNoticeAcknowledgment[] = [
     },
   },
   {
+    acknowledgedAt: '2026-09-22T10:00:00.000Z',
+    notice: {
+      textBibleKey: 'text-3',
+      textBibleName: 'Third text',
+      recordingKey: 'recording-3',
+      recordingName: 'Third recording',
+      recordingProvider: 'youversion',
+      notice: 'Third licence.',
+    },
+  },
+  {
     acknowledgedAt: '2026-09-22T11:00:00.000Z',
     notice: {
       textBibleKey: 'text-2',
@@ -73,5 +84,8 @@ describe('AttributionDialog', () => {
     expect(screen.getByText('Second text')).toBeInTheDocument();
     expect(screen.getByText('API.Bible: Second recording')).toBeInTheDocument();
     expect(screen.getByText('Second licence.')).toBeInTheDocument();
+    expect(screen.getByText('Third text')).toBeInTheDocument();
+    expect(screen.getByText('YouVersion: Third recording')).toBeInTheDocument();
+    expect(screen.getByText('Third licence.')).toBeInTheDocument();
   });
 });
