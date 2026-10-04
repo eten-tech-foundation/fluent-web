@@ -23,10 +23,14 @@ export const SECONDS_PER_CHAR = 0.06;
 const meanRatio = (ratios: readonly number[]): number =>
   ratios.length ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : SECONDS_PER_CHAR;
 
+export interface DurationEstimator {
+  estimate: (characterCount: number) => number;
+}
+
 /** Immutable snapshot for render-time geometry: no effects, shared mutation or stale frame. */
 export const calibratedEstimator = (
   samples: ReadonlyArray<{ characterCount: number; durationSeconds: MeasuredDuration }>
-): Pick<Estimator, 'estimate'> => {
+): DurationEstimator => {
   const ratios = samples.flatMap(({ characterCount, durationSeconds }) =>
     Number.isFinite(characterCount) && characterCount > 0 && isDuration(durationSeconds)
       ? [durationSeconds / characterCount]
@@ -67,38 +71,6 @@ export function segmentAt(spans: readonly BarSpan[], position: number) {
 }
 
 /**
- * One instance per chunk. The host feeds measured durations, including metadata
- * available before playback, and resets on a new chunk or replacement segment list.
- * Re-measurement replaces a sample rather than counting repeated events twice.
- * No provider/kind, playback-rate adjustment, or cross-chunk history belongs here.
- */
-export class Estimator {
-  private readonly ratios = new Map<number, number>();
-
-  measure(index: number, characterCount: number, durationSeconds: MeasuredDuration): void {
-    if (!Number.isInteger(index) || index < 0) return;
-    if (!Number.isFinite(characterCount) || characterCount <= 0 || !isDuration(durationSeconds)) {
-      this.ratios.delete(index);
-      return;
-    }
-    this.ratios.set(index, durationSeconds / characterCount);
-  }
-
-  get secondsPerCharacter(): number {
-    // Each measured segment contributes once, even across repeated events.
-    return meanRatio([...this.ratios.values()]);
-  }
-
-  estimate(characterCount: number): number {
-    return Math.max(1, characterCount) * this.secondsPerCharacter;
-  }
-
-  reset(): void {
-    this.ratios.clear();
-  }
-}
-
-/**
  * currentTime is SEGMENT-LOCAL media seconds. The host subtracts a recording's
  * start before calling; neither a file-absolute pause offset nor a Source enters
  * this module. Returns the honest target, including backwards recovery/correction;
@@ -109,7 +81,7 @@ export const dotPosition = (
   index: number,
   currentTime: number,
   durations: readonly MeasuredDuration[],
-  estimator: Pick<Estimator, 'estimate'>
+  estimator: DurationEstimator
 ): number => {
   if (!Number.isInteger(index) || index < 0) return 0;
   const span = spans.at(index);
@@ -155,7 +127,7 @@ export const elapsedReadout = (
   index: number,
   currentTime: number,
   durations: readonly MeasuredDuration[],
-  estimator: Pick<Estimator, 'estimate'>
+  estimator: DurationEstimator
 ): { seconds: number | null; estimated: boolean } => {
   const exact = elapsedSeconds(index, currentTime, durations);
   if (exact !== null) return { seconds: exact, estimated: false };

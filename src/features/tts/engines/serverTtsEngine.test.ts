@@ -92,6 +92,43 @@ describe('ServerTtsEngine.synthesize', () => {
 
     await expect(engine.synthesize({ text: 'hello' })).rejects.toThrow('HTTP 502');
   });
+
+  it.each([
+    ['a missing audio URL', {}],
+    ['a non-string audio URL', { audio_url: 42 }],
+    ['a blank audio URL', { audio_url: '' }],
+    ['a whitespace-only audio URL', { audio_url: '   ' }],
+  ])('rejects an otherwise successful response with %s', async (_case, body) => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(fakeResponse({ url: 'https://api.test/ai/tts/generate', body }));
+
+    await expect(makeEngine(fetchFn).synthesize({ text: 'hello' })).rejects.toThrow();
+  });
+
+  it('preserves malformed-JSON failures from the response boundary', async () => {
+    const malformed = new SyntaxError('Unexpected end of JSON input');
+    const response = fakeResponse({ url: 'https://api.test/ai/tts/generate' });
+    response.json = vi.fn().mockRejectedValue(malformed);
+    const fetchFn = vi.fn().mockResolvedValue(response);
+
+    await expect(makeEngine(fetchFn).synthesize({ text: 'hello' })).rejects.toBe(malformed);
+  });
+
+  it('passes the abort signal to fetch and preserves its rejection', async () => {
+    const aborted = new DOMException('The operation was aborted.', 'AbortError');
+    const fetchFn = vi.fn().mockRejectedValue(aborted);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(makeEngine(fetchFn).synthesize({ text: 'hello' }, controller.signal)).rejects.toBe(
+      aborted
+    );
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://api.test/ai/tts/generate',
+      expect.objectContaining({ signal: controller.signal })
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

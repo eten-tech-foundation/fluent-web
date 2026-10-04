@@ -36,6 +36,7 @@ import {
   getPericopeTitle,
   withPericopeTitle,
 } from '@/features/bible/lib/pericope-title';
+import { formatVerseRef, parseVerseRef } from '@/features/bible/lib/verse-ref';
 import { type OccurrenceRules } from '@/features/checks/checks.types';
 import { ChecksPanel } from '@/features/checks/components/ChecksPanel';
 import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsCheck';
@@ -916,7 +917,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               group.verses.some(ref => ref.chapterNumber === projectItem.chapterNumber)
             )
             .flatMap(orderedPericopeRefs)
-            .map(ref => [`${ref.chapterNumber}:${ref.verseNumber}`, ref])
+            .map(ref => [formatVerseRef(ref), ref])
         ).values(),
       ]
     : sourceVerses.map(row => ({
@@ -937,7 +938,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // and page identity scopes both. Equal verse numbers can never collide.
   const ttsVerseRefFor = useCallback(
     (verse: number, chapter = projectItem.chapterNumber) =>
-      chapter === projectItem.chapterNumber ? String(verse) : `${chapter}:${verse}`,
+      formatVerseRef({ chapterNumber: chapter, verseNumber: verse }, projectItem.chapterNumber),
     [projectItem.chapterNumber]
   );
   const audioRowDrafts: SourceAudioRow[] = visibleAudioRefs.map(ref => {
@@ -996,13 +997,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // measured against the target column's scroll container.
   const getTtsRowElement = useCallback(
     (verseRef: string) => {
-      const [chapter, verse] = verseRef.includes(':')
-        ? verseRef.split(':').map(Number)
-        : [projectItem.chapterNumber, Number(verseRef)];
-      if (isChapterMode) return chapterSourceVerseRefs.current[verse] ?? undefined;
-      if (chapter === projectItem.chapterNumber) return verseRefs.current[verse];
+      const parsed = parseVerseRef(verseRef, projectItem.chapterNumber);
+      if (!parsed) return undefined;
+      const { chapterNumber, verseNumber } = parsed;
+      if (isChapterMode) return chapterSourceVerseRefs.current[verseNumber] ?? undefined;
+      if (chapterNumber === projectItem.chapterNumber) return verseRefs.current[verseNumber];
       const group = fullPericopes?.find(group =>
-        group.verses.some(ref => ref.chapterNumber === chapter && ref.verseNumber === verse)
+        group.verses.some(
+          ref => ref.chapterNumber === chapterNumber && ref.verseNumber === verseNumber
+        )
       );
       const current = group?.verses.find(ref => ref.chapterNumber === projectItem.chapterNumber);
       return current ? verseRefs.current[current.verseNumber] : undefined;

@@ -79,13 +79,6 @@ export {
   type RecordedNoticeAcknowledgment,
 } from './lib/ackStore';
 
-export {
-  buildTtsQueueItems,
-  findTtsQueueIndex,
-  isPlayableRow,
-  type TtsRowDraft,
-} from './lib/buildTtsQueueItems';
-
 export { VERSE_CONTROL_REVEAL_CLASS } from './lib/controlLayout';
 export { ttsServingWashClass } from './lib/servingWash';
 

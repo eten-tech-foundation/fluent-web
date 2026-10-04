@@ -4,7 +4,7 @@
  * Why this exists: a feature can be merged and deployed while its API flag is
  * still off (ship dark), and it must still be exercisable **in the real hosting
  * environment** before the flag is turned on for real. The source-TTS proposal
- * (`docs/proposals/source-tts/source-tts-suggestion.md` §6.3 / T12 and §11.3
+ * (`docs/features/source-tts/source-tts-suggestion.md` §6.3 / T12 and §11.3
  * step 4) explicitly relies on such an override existing.
  *
  * Shape of the mechanism (decisions O1–O6 of the phase plan):

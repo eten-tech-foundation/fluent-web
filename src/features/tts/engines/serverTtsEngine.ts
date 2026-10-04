@@ -2,6 +2,8 @@
  * Server-backed text synthesis. Recovery policy lives in TtsRecoveryStrategy.
  */
 
+import { z } from 'zod';
+
 import { config } from '@/lib/config';
 
 import {
@@ -36,9 +38,11 @@ export interface TtsGenerateWireRequest {
   lang_code?: string;
 }
 
-export interface TtsGenerateWireResponse {
-  audio_url: string;
-}
+const ttsGenerateWireResponseSchema = z.object({
+  audio_url: z.string().refine(value => value.trim().length > 0, 'audio_url must not be blank'),
+});
+
+export type TtsGenerateWireResponse = z.infer<typeof ttsGenerateWireResponseSchema>;
 
 export {
   DEFAULT_TTS_RECOVERY_TIMING,
@@ -110,7 +114,7 @@ export class ServerTtsEngine implements TtsEngine {
       throw new Error(`Failed to generate TTS clip (HTTP ${res.status})`);
     }
 
-    const wire = (await res.json()) as TtsGenerateWireResponse;
+    const wire = ttsGenerateWireResponseSchema.parse(await res.json());
     // §7.1: `audio_url` is a sibling-relative reference. Resolving against the
     // RESPONSE URL (never string-concatenating a base) is what keeps the
     // serving choice server-side — the browser called fluent-api, so the

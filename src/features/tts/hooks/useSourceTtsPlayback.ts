@@ -19,7 +19,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { recordedNoticeAckStore, type RecordedNotice } from '../lib/ackStore';
-import { isPlayableRow } from '../lib/buildTtsQueueItems';
 import { pressPrimary, pressRestart, unavailableReason } from '../lib/controlActions';
 import {
   type ScrollableRow,
@@ -38,7 +37,11 @@ import {
   noteLicenceBar,
   recordedFailedBarredReason,
 } from '../resolver/licenceFence';
-import { resolvePlayables, type SourceAudioRow } from '../resolver/resolvePlayables';
+import {
+  isPlayableSourceAudioRow,
+  resolvePlayables,
+  type SourceAudioRow,
+} from '../resolver/resolvePlayables';
 import { recordingProvenance, type RecordingProvenance } from '../resolver/selectTrack';
 import {
   type ChapterSourceAudio,
@@ -298,7 +301,7 @@ export const useSourceTtsPlayback = (
 
   // Text holes remain disabled in this text-drafting host. The resolver itself
   // accepts text-free rows for future audio-only surfaces.
-  const items = useMemo(() => rows.filter(isPlayableRow), [rows]);
+  const items = useMemo(() => rows.filter(isPlayableSourceAudioRow), [rows]);
   const itemsRef = useRef<readonly SourceAudioRow[]>(items);
   itemsRef.current = items;
 

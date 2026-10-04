@@ -10,17 +10,26 @@ import {
 
 import type { ChapterAudioCache } from './chapterCache';
 import type { ProviderFactsAccess } from './providerFacts';
-import type { TtsRowDraft } from '../lib/buildTtsQueueItems';
 import type { CreateTtsSegmentOptions } from '../lib/createTtsSegment';
 import type { Playable, RecoveryStrategy, SourceThunk } from '../seam/types';
 
 /** Source-side drafting rows only, never translator target rows. Labels remain opaque to L3. */
-export interface SourceAudioRow extends TtsRowDraft {
+export interface SourceAudioRow {
+  verseRef: string;
+  text?: string | null;
+  /** Sent when known (T18); omitted rather than guessed. */
+  langCode?: string;
+  /** Panel provenance retained on drafting rows for diagnostics. */
+  audioSource?: string;
   verseNumber: number;
   chapterNumber?: number;
   loading?: boolean;
   unavailable?: boolean;
 }
+
+/** A source row is playable only if it has non-whitespace text (§5.1). */
+export const isPlayableSourceAudioRow = (row: SourceAudioRow): boolean =>
+  typeof row.text === 'string' && row.text.trim() !== '';
 
 /** Construction inputs for task E's implementing class; no placeholder recovery ships in task D. */
 export interface RecordedRecoveryOptions {

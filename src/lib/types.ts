@@ -113,15 +113,23 @@ export interface Chapter {
   totalVerses?: number;
 }
 
-export interface ChapterAssignmentProgress {
-  bibleId: number;
-  // Surfaced here as well as on the user-assignments endpoint, because the PM
-  // "open chapter" path builds its ProjectItem from this response (BUG #3's
-  // lesson, applied to the audio licence).
+/** Source-Bible playback facts carried unchanged through every drafting entry path. */
+export interface BiblePlaybackMetadata {
+  /** Canonical provider-qualified text identity, when the API can identify it. */
   textBibleKey?: string | null;
+  /** Explicit selected recording identity; it does not imply synthesis permission. */
   selectedRecordingKey?: string | null;
+  /**
+   * Whether anyone may synthesize speech from this Bible, never a user permission.
+   * Optional for compatibility with an older API; absence remains uncleared.
+   */
   ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  /** Human-curated attribution for this Bible, shown with its audio. */
   licenseNotice?: string | null;
+}
+
+export interface ChapterAssignmentProgress extends BiblePlaybackMetadata {
+  bibleId: number;
   bookId: number;
   bookCode: string;
   sourceLangCode: string;
@@ -154,25 +162,13 @@ export interface Book {
   engDisplayName: string;
 }
 
-export interface ProjectItem {
+export interface ProjectItem extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
-  /**
-   * Whether anyone may synthesise speech from this Bible — never a user
-   * permission. Carried on the assignment so the drafting page knows before it
-   * asks an audio provider anything, and still knows when one is unreachable.
-   * Optional only for responses from an API without this field yet; absent is
-   * treated as uncleared, never as permission.
-   */
-  textBibleKey?: string | null;
-  selectedRecordingKey?: string | null;
-  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
-  /** Human-curated attribution for this Bible, shown with its audio. */
-  licenseNotice?: string | null;
   /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
   /**
@@ -342,19 +338,13 @@ export interface DraftingUIProps {
   readOnly?: boolean;
 }
 
-export interface UserChapterAssignment {
+export interface UserChapterAssignment extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
   projectUnitId: number;
   bibleId: number;
   bibleName: string;
-  // Handed to the drafting route as the ProjectItem, so the source Bible's
-  // audio licence rides along with it. See ProjectItem for why it is optional.
-  textBibleKey?: string | null;
-  selectedRecordingKey?: string | null;
-  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
-  licenseNotice?: string | null;
   chapterStatus: string;
   /** Human-readable target language display NAME, e.g. "English". */
   targetLanguage: string;
