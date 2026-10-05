@@ -19,8 +19,10 @@ export const AiTranslationSettings: React.FC = () => {
     currentProjectItem,
     userdetail,
     isAiThresholdMet,
-    isAiSyncPending,
-    setIsAiSyncPending,
+    aiSyncPendingCount,
+    beginAiSync,
+    endAiSync,
+    setAiEnabledFor,
     setAiAutoEnablePreference,
   } = useAppStore();
   const [localAiState, setLocalAiState] = useState(currentProjectItem?.isAiEnabled ?? false);
@@ -32,45 +34,41 @@ export const AiTranslationSettings: React.FC = () => {
 
   const handleToggleAi = async (checked: boolean) => {
     if (!currentProjectItem) return;
-    setIsAiSyncPending(true);
+    beginAiSync();
     setLocalAiState(checked);
     const assignmentId = currentProjectItem.chapterAssignmentId;
-    const previousState = currentProjectItem.isAiEnabled;
+    const previousIsAiEnabled = currentProjectItem.isAiEnabled;
     const priorUserPreference = userdetail
       ? useAppStore.getState().aiAutoEnablePreferences[userdetail.id]
       : undefined;
-    const updateCurrentAssignment = (isAiEnabled: boolean | undefined) => {
-      const latest = useAppStore.getState();
-      if (latest.currentProjectItem?.chapterAssignmentId !== assignmentId) return;
-      latest.setCurrentProjectItem({
-        ...latest.currentProjectItem,
-        isAiEnabled,
-      });
-    };
 
     // Stop loading immediately on opt-out. Opt-in must wait for the server:
     // otherwise the first suggestion requests still see a disabled assignment.
     if (!checked) {
       if (userdetail) setAiAutoEnablePreference(userdetail.id, false);
-      updateCurrentAssignment(false);
+      setAiEnabledFor(assignmentId, false);
     }
     try {
-      await toggleAi(checked);
-      if (useAppStore.getState().userdetail?.id !== userdetail?.id) return;
-      if (userdetail) setAiAutoEnablePreference(userdetail.id, checked);
-      updateCurrentAssignment(checked);
-    } catch {
+      const didUpdate = await toggleAi(checked).then(
+        () => true,
+        () => false
+      );
       // The request can settle after Settings closes or navigation changes the
       // assignment. Never restore a captured project over the current one.
       if (useAppStore.getState().userdetail?.id !== userdetail?.id) return;
-      if (useAppStore.getState().currentProjectItem?.chapterAssignmentId === assignmentId) {
-        setLocalAiState(previousState ?? false);
+      if (didUpdate) {
+        if (userdetail) setAiAutoEnablePreference(userdetail.id, checked);
+        setAiEnabledFor(assignmentId, checked, checked);
+      } else {
+        if (useAppStore.getState().currentProjectItem?.chapterAssignmentId === assignmentId) {
+          setLocalAiState(previousIsAiEnabled ?? false);
+        }
+        if (userdetail) setAiAutoEnablePreference(userdetail.id, priorUserPreference);
+        setAiEnabledFor(assignmentId, previousIsAiEnabled);
+        toast.error('Could not update AI translation suggestions. Please try again.');
       }
-      if (userdetail) setAiAutoEnablePreference(userdetail.id, priorUserPreference);
-      updateCurrentAssignment(previousState);
-      toast.error('Could not update AI translation suggestions. Please try again.');
     } finally {
-      setIsAiSyncPending(false);
+      endAiSync();
     }
   };
 
@@ -113,7 +111,7 @@ export const AiTranslationSettings: React.FC = () => {
             <Switch
               aria-label='AI Translation Suggestions'
               checked={localAiState}
-              disabled={isPending || isAiSyncPending}
+              disabled={isPending || aiSyncPendingCount > 0}
               onCheckedChange={handleToggleAi}
             />
           </div>

@@ -12,6 +12,7 @@ be available before enabling this web change.
 ## Loading and preservation
 
 Both pericope surfaces populate every empty, untouched verse in the active group.
+Verse mode applies the same empty-input rule to the focused source verse.
 This includes source verses without a persisted translation row; the API does not return
 empty placeholders for them. A section title may also arrive before that first row exists.
 Saved and locally edited text remain unchanged. A single `queue-pericopes` request identifies
@@ -33,7 +34,9 @@ enabled session, manually clearing an input does not immediately refill it.
 
 Manual opt-in waits for the assignment update to succeed before enabling suggestion requests.
 Opt-out stops new fills immediately. Closing Settings does not discard the pending update or
-its rollback, and reopening it keeps the switch disabled until that request settles. A late
+its rollback, and reopening it keeps the switch disabled until all manual and automatic updates
+settle, including updates from a previous assignment. Only a successful manual enable permits
+cleared inputs to fill again; restoring a failed opt-out preserves their interaction state. A late
 response updates only the assignment it belongs to, preserving any newer project fields.
 
 ## Section titles

@@ -27,6 +27,18 @@ describe('pendingAiAutoFills', () => {
     ]);
   });
 
+  it('fills an unsaved source verse in Verse mode only while it is untouched', () => {
+    const args = {
+      candidateVerseNumbers: [2],
+      verses: [],
+      suggestions: { 1: 'One.', 2: 'Two.', 3: 'Three.' },
+      touchedVerseNumbers: new Set<number>(),
+    };
+    expect(pendingAiAutoFills(args)).toEqual([{ verseNumber: 2, text: 'Two.' }]);
+    args.touchedVerseNumbers.add(2);
+    expect(pendingAiAutoFills(args)).toEqual([]);
+  });
+
   it('fills only the verse in focus for the textarea path', () => {
     const fills = pendingAiAutoFills({
       candidateVerseNumbers: [2],
