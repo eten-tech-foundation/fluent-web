@@ -92,6 +92,7 @@ const DraftingPage: React.FC = () => {
 
   return (
     <DraftingUI
+      key={projectItem.chapterAssignmentId}
       projectItem={projectItem}
       readOnly={isReadOnly}
       sourceVerses={loaderData.sourceVerses}
