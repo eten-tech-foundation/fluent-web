@@ -54,7 +54,8 @@ title requests no heading suggestion. Groups whose scripture was already fully s
 do not request an optional title or show title-only generation errors. A title can still arrive
 after verses generated during the current session. The input uses the same 300-character, single-line
 validation as the existing heading editor. Invalid input stays visible for correction and is
-not saved. The API independently validates generated text and tracks the selected pericope
+not saved. Clearing the last title omits the empty headings array and keeps any paragraphs;
+if no structure remains, the save sends `markers: null`. The API independently validates generated text and tracks the selected pericope
 set, so an older set's in-flight result cannot become the current title.
 
 When a verse suggestion and title arrive together, one draft update carries both. This

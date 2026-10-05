@@ -1317,6 +1317,42 @@ describe('DraftingUI', () => {
       });
     });
 
+    it.each([undefined, [{ marker: 'p', offset: 0 }]])(
+      'saves a cleared final title with valid markers while preserving paragraphs %j',
+      async paragraphs => {
+        const authored: TargetVerse[] = [
+          {
+            verseNumber: 1,
+            content: 'My scripture',
+            markers: {
+              headings: [{ marker: 's1', text: 'My title' }],
+              ...(paragraphs ? { paragraphs } : {}),
+            },
+          },
+          { verseNumber: 2, content: 'My other verse' },
+        ];
+        mockUseDrafting.mockReturnValue(
+          defaultDraftingHookResult({ verses: authored, handleTextChange })
+        );
+        const mutateAsync = vi.fn().mockResolvedValue(undefined);
+        mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync, isPending: false });
+        renderWithAi();
+        await userEvent.setup().clear(screen.getByLabelText('Section title'));
+        const expectedMarkers = paragraphs ? { paragraphs } : null;
+        expect(handleTextChange).toHaveBeenLastCalledWith(1, 'My scripture', expectedMarkers);
+        const { onSave } = mockUseDrafting.mock.calls.at(-1)?.[0] as {
+          onSave: (verse: number, payload: SavePayload) => Promise<void>;
+        };
+        await onSave(1, { content: 'My scripture', markers: expectedMarkers });
+        expect(mutateAsync).toHaveBeenCalledWith({
+          verseData: expect.objectContaining({
+            content: 'My scripture',
+            markers: expectedMarkers,
+          }) as unknown,
+        });
+      }
+    );
+
     it('preserves saved verse content without accepting an AI verse for a title-only fill', async () => {
       mockUseDrafting.mockReturnValue(
         defaultDraftingHookResult({
