@@ -89,11 +89,27 @@ const createUser = async (userData: InviteUserPayload): Promise<InviteUserResult
   }
 };
 
-const updateUser = async (userData: User): Promise<User> => {
+/**
+ * Fields PATCH /users/:id accepts — mirrors the API's updateUserRequestSchema.
+ * Role/grant fields are deliberately absent: roles change only via the
+ * org-users and project-users endpoints, and the API strips unknown keys.
+ */
+export interface UpdateUserPayload {
+  id: number;
+  username?: string;
+  email?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  status?: string;
+  lastActiveOrgId?: number | null;
+}
+
+const updateUser = async (userData: UpdateUserPayload): Promise<User> => {
   try {
-    return await apiRequest<User>(`${config.api.url}/users/${userData.id}`, {
+    const { id, username, email, firstName, lastName, status, lastActiveOrgId } = userData;
+    return await apiRequest<User>(`${config.api.url}/users/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(userData),
+      body: JSON.stringify({ username, email, firstName, lastName, status, lastActiveOrgId }),
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.message && error.message !== 'Generic API error') {
@@ -150,7 +166,7 @@ export const useUpdateUser = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ userData }: { userData: User }) => updateUser(userData),
+    mutationFn: ({ userData }: { userData: UpdateUserPayload }) => updateUser(userData),
     onSuccess: () => {
       // Invalidate and refetch users list
       void queryClient.invalidateQueries({ queryKey: ['users'] });
