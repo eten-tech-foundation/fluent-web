@@ -257,7 +257,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                         >
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
                             <div className='flex flex-col gap-1'>
-                              <span className='text-foreground font-medium'>{milestone.name}</span>
+                              <span
+                                className='text-foreground block max-w-[200px] truncate font-medium'
+                                title={milestone.name}
+                              >
+                                {milestone.name}
+                              </span>
                               {milestone.bookIds.length > 0 && books && (
                                 <span className='text-xs text-gray-500'>
                                   {(() => {

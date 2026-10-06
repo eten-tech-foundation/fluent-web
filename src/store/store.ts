@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { config } from '@/lib/config';
 import { type ProjectItem, type User } from '@/lib/types';
 
 /** The drafting views a chapter can be presented in (#396). */
@@ -91,6 +92,11 @@ export const useAppStore = create<AppState>()(
         aiAutoEnablePreferences: state.aiAutoEnablePreferences,
       }),
       onRehydrateStorage: () => state => {
+        // The chapter surface is RTE-backed; a build without the flag must not revive a
+        // stored 'chapter' selection into a mode the toggle cannot offer (#314).
+        if (!config.features.rtePericope && state?.displayMode === 'chapter') {
+          state.setDisplayMode('verse');
+        }
         state?.setHasHydrated(true);
         if (hydrationResolve) {
           hydrationResolve();

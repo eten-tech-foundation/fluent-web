@@ -231,12 +231,12 @@ export const UsersWrapper: React.FC = () => {
 
       <UserModal
         activeOrgId={activeOrgId}
-        disableRoleSelection={userdetail?.email === selectedUser?.email}
         error={userError ?? mutationError}
         existingEmails={existingEmails}
         isLoading={mutationIsLoading}
         isOpen={isModalOpen}
         mode={mode}
+        roleField={userdetail?.email === selectedUser?.email ? 'disabled' : 'editable'}
         user={selectedUser}
         onClose={handleClose}
         onSave={handleSaveUser}

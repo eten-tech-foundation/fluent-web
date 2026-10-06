@@ -108,9 +108,20 @@ describe('UserModal — edit', () => {
   });
 
   it('disables the role dropdown for the current user (D2 self-change)', () => {
-    setup({ mode: 'edit', user: member(), disableRoleSelection: true });
+    setup({ mode: 'edit', user: member(), roleField: 'disabled' });
 
     expect(screen.getByRole('combobox')).toBeDisabled();
+  });
+
+  it('omits the role field entirely when roleField is hidden, and still validates', async () => {
+    const { onSave, user } = setup({ mode: 'edit', user: member(), roleField: 'hidden' });
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText('role')).not.toBeInTheDocument();
+
+    // No role to satisfy — the saved payload carries no role value.
+    await user.click(screen.getByRole('button', { name: 'saveUser' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ role: '' })));
   });
 
   it('reverts the role dropdown when the save rejects', async () => {

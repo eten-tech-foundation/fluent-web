@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { config } from '@/lib/config';
 import { useAppStore } from '@/store/store';
 
 import { DisplayModeToggle } from './DisplayModeToggle';
@@ -22,9 +23,18 @@ function focusedRadios() {
   return screen.getAllByRole('radio').filter(radio => radio === document.activeElement);
 }
 
+const originalRteFlag = config.features.rtePericope;
+
 describe('DisplayModeToggle', () => {
   beforeEach(() => {
+    // Most of these tests exercise the three-option group, which only exists with the flag
+    // on; the flag-off group has its own describe below.
+    config.features.rtePericope = true;
     useAppStore.setState({ displayMode: 'verse' });
+  });
+
+  afterEach(() => {
+    config.features.rtePericope = originalRteFlag;
   });
 
   it('offers exactly the three views, in order', () => {
@@ -157,5 +167,46 @@ describe('DisplayModeToggle', () => {
     await user.keyboard('{ArrowLeft}');
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
     expect(useAppStore.getState().displayMode).toBe('chapter');
+  });
+
+  // With the RTE flag off the chapter surface cannot work, so its option is removed from the
+  // group rather than shown disabled (#314).
+  describe('when the RTE flag is off', () => {
+    beforeEach(() => {
+      config.features.rtePericope = false;
+    });
+
+    it('offers only the two non-RTE views', () => {
+      renderToggle();
+
+      const options = screen.getAllByRole('radio').map(option => option.textContent);
+      expect(options).toEqual(['Verse', 'Pericope']);
+      expect(screen.queryByRole('radio', { name: 'Chapter' })).not.toBeInTheDocument();
+    });
+
+    it('wraps the arrow keys around the two remaining options', async () => {
+      const { user } = renderToggle();
+      await user.tab();
+
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Pericope' })).toHaveFocus();
+      expect(useAppStore.getState().displayMode).toBe('pericope');
+
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Verse' })).toHaveFocus();
+      expect(useAppStore.getState().displayMode).toBe('verse');
+    });
+
+    it('checks nothing but keeps a tab stop when the stored mode is not offered', () => {
+      useAppStore.setState({ displayMode: 'chapter' });
+      renderToggle();
+
+      const options = screen.getAllByRole('radio');
+      expect(options.map(option => option.getAttribute('aria-checked'))).toEqual([
+        'false',
+        'false',
+      ]);
+      expect(options.map(option => option.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    });
   });
 });
