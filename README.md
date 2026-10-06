@@ -80,18 +80,9 @@ pnpm typecheck
 
 ## Project Structure
 
-```
-src/
-├── components/          # Reusable UI components
-│   ├── auth/           # Authentication components
-│   └── ui/             # Base UI components
-├── hooks/              # Custom React hooks
-├── layouts/            # Page layouts
-├── lib/                # Utility libraries
-├── routes/             # Route definitions
-├── store/              # Global state management
-└── app.tsx             # Main app component
-```
+Most code lives in feature folders under `src/features/`, with file-based routes in `src/routes/`.
+See the [code map](docs/code-map.md) for what each folder owns and which fluent-api endpoints it
+calls.
 
 ## Technologies
 
