@@ -2,6 +2,7 @@ import React, { useId, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { config } from '@/lib/config';
 import { useAppStore, type DisplayMode } from '@/store/store';
 
 /**
@@ -42,10 +43,17 @@ export const DisplayModeToggle: React.FC = () => {
   const labelId = useId();
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
+  // The chapter surface is RTE-backed, so the flag removes the option entirely rather than
+  // showing a view that cannot work (#314). Read at render, not module scope, so tests can
+  // flip the flag.
+  const modes = config.features.rtePericope
+    ? DISPLAY_MODES
+    : DISPLAY_MODES.filter(option => option.mode !== 'chapter');
+
   // Roving tabindex: the whole group is one tab stop, and Tab enters it at the checked option.
   // Falling back to the first option keeps a tab stop even if the store ever holds a mode this
   // toggle does not offer, which would otherwise strand keyboard users outside the control.
-  const checkedIndex = DISPLAY_MODES.findIndex(option => option.mode === displayMode);
+  const checkedIndex = modes.findIndex(option => option.mode === displayMode);
   const tabStopIndex = checkedIndex === -1 ? 0 : checkedIndex;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -57,8 +65,8 @@ export const DisplayModeToggle: React.FC = () => {
     // Selection follows focus in a radio group, so an arrow both moves and chooses, and the ends
     // wrap. preventDefault stops the vertical arrows from scrolling the settings dialog instead.
     event.preventDefault();
-    const nextIndex = (index + step + DISPLAY_MODES.length) % DISPLAY_MODES.length;
-    setDisplayMode(DISPLAY_MODES[nextIndex].mode);
+    const nextIndex = (index + step + modes.length) % modes.length;
+    setDisplayMode(modes[nextIndex].mode);
     optionRefs.current[nextIndex]?.focus();
   };
 
@@ -72,7 +80,7 @@ export const DisplayModeToggle: React.FC = () => {
         className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
         role='radiogroup'
       >
-        {DISPLAY_MODES.map((option, index) => (
+        {modes.map((option, index) => (
           <React.Fragment key={option.mode}>
             {index > 0 && <div className='bg-primary h-full w-px' />}
             <button
