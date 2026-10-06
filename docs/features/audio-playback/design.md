@@ -8,7 +8,7 @@ Fluent's audio controls let a translator hear the source text or resource they a
 - The exact selected recording plays when it has usable verse windows. Otherwise, speech is available only when the exact text edition has whole-edition synthesis clearance; native YouVersion recordings remain future work.
 - One shared player handles seeking, pause and restart, keyboard controls, provenance, recorded-audio notices, and Hide Audio across the integrated drafting surfaces.
 - Speech is generated lazily from text and reused as a recipe-addressed R2 artifact; recorded provider files stay with their providers.
-- Translation resources and the native FIA player have further integration work. The final section lists the product and rights decisions still open for review.
+- Translation-resource and FIA integration, article chunking, tablet/touch behavior, and generated-resource rights remain later work. The final section separates those follow-ups from current delivery decisions.
 
 ## 1. The problem
 
@@ -40,6 +40,49 @@ The current reference picker supports recorded playback from Aquifer only. Nativ
 
 The provider response must contain verse-addressable timestamps for verse playback. A chapter file without usable windows remains useful to other consumers, but cannot silently masquerade as a verse source. Within a DBL response, timestamps must belong to the chosen audio track; within Aquifer's codec choices, prefer playable WebM/Opus and otherwise use MP3. The recording and its timestamps are selected together. DBL's timecode-bearing path remains based on contract-shaped fixtures because the surveyed DBL audio Bibles did not publish timecodes; Aquifer has supplied real verse windows.
 
+### 2.3 Module and dependency map
+
+The implementation follows the three layers above through bounded modules. The dependency direction runs
+from a surface host into playback orchestration, then into resolver, queue, recovery, registry, engine, and
+media utilities. Controls render state and invoke actions; they do not select providers or decide license.
+
+| Area                          | Main modules                                                                                                          | Responsibility and dependency boundary                                                                                                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Drafting host                 | `DraftingUI`, `DraftingAudioPageBoundary`                                                                             | Builds the current-render panel descriptor and ordered rows from drafting data, supplies DOM/viewport geometry, and owns page-lifetime cleanup.                                                                                            |
+| Provider facts and resolution | `providerFacts`, `sourceAudioClient`, `chapterCache`, `licenceFence`, `selectTrack`, `mapWindows`, `resolvePlayables` | Loads exact provider-qualified facts and chapter media, applies the license fence, selects one recording track with its windows, and builds lazy playables. This layer depends on API contracts and the playback seam, not on controls.    |
+| Recovery and queue            | `recordedRecoveryStrategy`, `ttsRecoveryStrategy`, `useTtsPlaybackQueue`, `useSourceTtsPlayback`                      | Supervises lazy source resolution, bounded retries and fallback, one-ahead prefetch, one media element, run state, and the host-facing playback actions.                                                                                   |
+| Registry and pause records    | `PlaybackRegistryStore`, `pauseRecord`, `usePlayableState`                                                            | Arbitrates one sounding claimant across the app and retains page-lifetime positions and provenance by playable key. It does not resolve media.                                                                                             |
+| Media and geometry            | `audioElement`, `windowPlayback`, `playbackTiming`, `barGeometry`, `ScrubBar`                                         | Adapts the browser media element, enforces recorded windows, calculates time and seek coordinates, and renders pointer/keyboard seeking.                                                                                                   |
+| Controls and notices          | `TtsVerseControls`, `SourceVerseControl`, `TtsGroupControls`, `RecordedNoticeDialog`, `AttributionDialog`             | Presents the shared actions, status, progress, AI cue, and recording attribution supplied by the host-facing hook.                                                                                                                         |
+| Synthesis engine              | `ServerTtsEngine`                                                                                                     | Posts `generate`, validates its response, resolves the returned audio URL, and returns a `TtsClip` through the engine interface. It does not probe artifacts or parse `Retry-After`; `TtsRecoveryStrategy` owns those recovery operations. |
+
+`useSourceTtsPlayback` is intentionally the host orchestration boundary: it coordinates facts, queue,
+recovery, registry, notices, and scroll requests while the modules below it keep those policies separate.
+A later maintenance pass may split that hook when independently reusable orchestration seams emerge. That
+refactor is not required to supply a missing layer. The drafting host's panel descriptor and content-based
+row stabilization also stay at the host boundary: they keep one render internally consistent and prevent an
+unrelated render from minting a new playback identity for unchanged text.
+
+### 2.4 Why the four external stores remain separate
+
+Four `useSyncExternalStore` boundaries connect React to state whose source and lifetime are outside an
+ordinary component render:
+
+1. **Browser connectivity** (`useOffline`) subscribes to `online` and `offline` events. It is ephemeral,
+   browser-owned state and is never persisted or inferred from a failed request.
+2. **Playback registry** (`PlaybackRegistryStore` through `usePlayableState`) publishes keyed claimant,
+   pause-position, and provenance changes from the app-root registry. Keyed subscriptions avoid rerendering
+   every audio control for an unrelated playable.
+3. **Hide Audio preference** (`hideAudioStore`) persists a product preference in `localStorage` and also
+   notifies the current tab immediately. Its writes silence playback before controls disappear.
+4. **Developer flag overrides** (`flagOverrides`) persists a tri-state diagnostic map and publishes stable
+   snapshots to the diagnostics UI. The map is merged into effective feature flags in one place.
+
+These stores have different authorities, persistence rules, subscribers, and reset lifetimes. Combining
+them would widen updates and blur browser state, playback state, user preference, and developer diagnostics.
+`useSyncExternalStore` gives each source a stable snapshot and an explicit subscription without turning it
+into general application data.
+
 ## 3. Playables, segments, and identity
 
 A **playable** is an ordered list of logical segments and a caller-supplied `playableKey`. Each segment resolves to a whole source descriptor: URL, optional recorded-file window, optional measured duration, and recovery strategy. Recorded verses may share one chapter file while having different windows. A first-listen TTS segment may have no duration until it ends. Arbitration is per segment, so recorded and synthetic verses can coexist in a playable.
@@ -61,7 +104,7 @@ Every verse is a logical boundary for position and highlighting. Adjacent window
 | Translation Question                | Question and answer are separate one-segment playables.                                      |
 | Translation Word or Open Study Note | One recorded file or structured TTS chunks.                                                  |
 
-The chapter player is delivered with the drafting view as one chapter-sized playable, not as eager whole-chapter synthesis. Chad's review of that control is still requested. Resource controls are later work. For resource audio, provenance may determine the segment count, and a recorded-to-TTS handoff may change it during playback. The player and bar cannot assume a stable count. TTS article chunks follow source structure, such as paragraphs, with normalized whitespace. Their text changes the recipe hash when boundaries change; an extra chunker-version field would invalidate unaffected artifacts.
+The chapter player is delivered with the drafting view as one chapter-sized playable, not as eager whole-chapter synthesis. That is the approved and disclosed current behavior. Resource controls are later work. Future resource audio may change segment count when provenance or a recorded-to-TTS handoff changes, so the player and bar cannot assume a stable count. Article chunk boundaries, normalization, and any explicit chunker version belong to that later resource work.
 
 ## 5. Progress and seeking
 
@@ -69,7 +112,7 @@ The bar needs a monotonic coordinate across the playable before all media exists
 
 Dragging the bar selects a position and leaves playback paused, even when it was playing. It does not synthesize audio. The next explicit Play seeks by setting the element's `currentTime`. A first-listen stream may clamp to the selected verse's start; compressed and recorded files may seek within the verse. The bar reflects the actual landing. Recorded window ends use a scheduled halt because periodic `timeupdate` events are too coarse to prevent spill into the next verse; an open-ended last window ends with the file.
 
-Elapsed time uses measured completed segments and local media time. After a forward seek past ungenerated clips, missing earlier durations are estimated and the elapsed label is visually quieter and accessible as estimated. Total-time presentation remains a review question; the player does not infer a total by synthesizing all clips.
+Elapsed time uses measured completed segments and local media time. After a forward seek past ungenerated clips, missing earlier durations are estimated and the elapsed label is visually quieter and accessible as estimated. The remaining current-delivery direction request is how grouped total time should appear while durations are unknown; the player does not infer a total by synthesizing all clips.
 
 ## 6. When synthesis spends money
 
@@ -87,7 +130,7 @@ There is no eager availability sweep or availability cache. Recorded coverage va
 
 One icon vocabulary applies to the drafting and later resource surfaces: outlined circular Play, Pause while sounding, Restart when a run or saved position exists, a loader in the primary position while loading, and a sparkle for AI sound. Restart clears the saved position and starts a live run at zero; on a paused playable it clears the position and remains idle. A never-started playable has Restart disabled.
 
-Offline and structurally impossible audio keep their primary controls visible and focusable with `aria-disabled`. A press explains the reason in a toast, and a Radix tooltip exposes it on hover or focus. Restart remains natively disabled in those states. Offline follows the browser's connectivity signal so its own online event can wake the control; it does not hide the control after a failed fetch. The impossible state currently reuses `li:play-off`; Chad is asked whether it needs a distinct glyph. A transient recorded failure is an error and recovery case, not proof that audio can never exist.
+Offline and structurally impossible audio keep their primary controls visible and focusable with `aria-disabled`. A press explains the reason in a toast, and a Radix tooltip exposes it on hover or focus. Restart remains natively disabled in those states. Offline follows the browser's connectivity signal so its own online event can wake the control; it does not hide the control after a failed fetch. The current delivery reuses `li:play-off` for the impossible state; a distinct glyph would be a later presentation change. A transient recorded failure is an error and recovery case, not proof that audio can never exist.
 
 ## 9. Playback, pauses, and exclusivity
 
@@ -120,9 +163,9 @@ Bindings use `event.code` so macOS Option combinations do not type characters in
 
 TTS clearance belongs to the exact provider-qualified text Bible, whether used as source or reference. `allowed`, `forbidden`, and `unknown` distinguish clearance, a reviewed refusal, and an unreviewed edition. `allowed` covers the entire provider edition; partial or uncertain clearance remains barred rather than granting passage-level exceptions. A missing provider identity or licence record is unknown and bars TTS without creating a row. The selected audio resource is a separate identity; selecting a recording does not confer synthesis rights. Rights decisions are curated, not inferred from free-text copyright or a broad “Open Access” label. Current records are populated by seeds or manual work; automated licence import and classification are deferred. This fence makes the UI honor a notice and keeps an operational record; it is not a DRM boundary around text that a screen reader can already speak.
 
-The first playback of a recording with a nonblank notice holds sound behind an acknowledgment for the exact text identity, recording identity, and notice. A changed notice or recording can be acknowledged separately. While the dialog is open, playback remains silent and stable; accepting it continues the intended playback without reopening it. A pericope Info button makes the current recording notice reachable afterward, and Settings exposes acknowledged recordings. A blank, stale, or missing recording notice creates no dialog or Info control. TTS, including a fallback after a recording fails, creates no recording-notice dialog. Chad's mockups did not include this acknowledgment, Info button, or Settings access, so their presentation remains for his review.
+The first playback of a recording with a nonblank notice holds sound behind an acknowledgment for the exact text identity, recording identity, and notice. A changed notice or recording can be acknowledged separately. While the dialog is open, playback remains silent and stable; accepting it continues the intended playback without reopening it. A pericope Info button makes the current recording notice reachable afterward, and Settings exposes acknowledged recordings. These are current-delivery decisions. A blank, stale, or missing recording notice creates no dialog or Info control. TTS, including a fallback after a recording fails, creates no recording-notice dialog.
 
-Resource text and audio carry their own attribution. A later resource player must keep the actual source's notice reachable even if its text is off screen. Generated audio from CC BY-SA resource prose raises a separate rights question: whether the rendering is an adaptation being shared and who may declare the resulting audio's licence. Joel and the lab need to settle that declaration. No generated-audio download is part of this web delivery.
+Resource text and audio carry their own attribution. A later resource player must keep the actual source's notice reachable even if its text is off screen. Generated audio from CC BY-SA resource prose has a later rights and authorization follow-up: whether a shared rendering is an adaptation and who may declare its license. No generated-audio download is part of this web delivery.
 
 ## 13. Caching and storage
 
@@ -138,15 +181,20 @@ An uncuttable recorded verse or an exhausted recorded source falls back to permi
 
 ## 15. Surfaces and delivery boundary
 
-The drafting delivery includes source and reference Bible audio in verse, pericope, and chapter modes, the shared player and badge, recorded notices, and Hide Audio. The chapter control is one sticky, chapter-sized player with a scrub bar, verse cues, and source-only scrolling. It resolves segments lazily; it does not synthesize a whole chapter at entry. This is the chapter-view choice to show Chad in review.
+The drafting delivery includes source and reference Bible audio in verse, pericope, and chapter modes, the shared player and badge, recorded notices, and Hide Audio. The chapter control is one sticky, chapter-sized player with a scrub bar, verse cues, and source-only scrolling. It resolves segments lazily; it does not synthesize a whole chapter at entry. This is the approved and disclosed chapter delivery.
 
-Translation Notes, Questions, Words, and Open Study Notes use the same resolver/player design in later work. Notes use an expanded-entry bar; questions and answers have independent compact controls and saved positions; article playback uses a sticky title bar and reads prose rather than structural cross-references. Recorded FIA guide and key-term audio still uses its native player outside the shared registry; a later resource/FIA change needs to register that player for app-wide exclusivity. Whether those FIA collections receive redesigned resource controls remains a product-scope question. Audio-only source Bibles are not ruled out by the segment model.
+Translation Notes, Questions, Words, and Open Study Notes remain later delivery. Their concrete controls and article chunking will be decided with that work. The native FIA guide/key-term player now honors the aggregate audio gate and Hide Audio, but it remains outside the shared playback registry. Later resource/FIA work can add app-wide exclusivity and decide whether FIA receives redesigned controls. Audio-only source Bibles are not ruled out by the segment model.
 
-## 16. Open questions for review
+## 16. Current delivery decisions and later follow-ups
 
-- **Chad:** Should the primary action pause as built, or should any surface stop and reset? This also governs `Alt+S` and the reading that starting a Translation Question's answer preserves the question's position and Restart state.
-- **Chad:** Do the recorded-notice acknowledgment, Info button, and Settings access fit the desired UI? Should the impossible-audio state have a glyph distinct from offline `li:play-off`? Is chapter view correctly represented by one chapter-sized playable?
-- **Chad:** What total-time display should the grouped player use while durations remain unknown? Where should translator-facing shortcut documentation live, and should the Settings row include an accordion? Do the pericope highlight, auto-scroll, and scroll convention read clearly?
-- **Chad:** Card [#424](https://github.com/eten-tech-foundation/fluent-web/issues/424) describes reference Bibles as DBL-only with no TTS fallback. This delivery intentionally permits Aquifer reference recordings and TTS for references whose exact text edition has whole-edition clearance. Is that policy acceptable?
-- **Later resource review:** Who sets long-article chunk boundaries, and do the FIA guide and key-term collections receive the new control treatment? Tablet ownership and touch discovery also need a product choice.
-- **Joel and the lab:** Confirm the share-alike rights posture for generated readings of CC BY-SA resource text and who is authorized to declare the audio licence. This question does not gate the current streaming-only drafting controls.
+Current drafting delivery records these decisions:
+
+- The sounding primary action is Pause, and Play resumes. `Alt+S` follows that action. The host API retains a separate Stop action for teardown or callers that need a full reset.
+- Recording acknowledgment, later Info access, and Settings attribution are part of the current notice flow.
+- Chapter mode uses one chapter-sized player with source-only highlighting and scrolling.
+- Reference playback may use an exact configured Aquifer recording or TTS when that exact text identity has whole-edition clearance. DBL reference resolution is best effort in the API, while the current picker exposes no DBL reference choices and live DBL timing remains unproven.
+- The current impossible-state glyph, shortcut discovery, pericope highlighting, and scroll behavior remain the disclosed delivery. Any presentation change is separate follow-up work.
+
+The only current-delivery direction request is the grouped total-time display. Generated clips still leave the total as `--:--`; the final treatment could be elapsed-only, a real total once known, or another specified display.
+
+Later work covers resource/FIA controls and exclusivity, long-article chunk boundaries, tablet ownership and touch discovery, and any rights/authorization decision needed before generated CC BY-SA resource audio is shared or downloaded. None of those later decisions reverses or gates the current drafting delivery.
