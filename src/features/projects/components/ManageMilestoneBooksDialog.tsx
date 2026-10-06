@@ -170,7 +170,9 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                                   void handleMove(book.bookId, milestone.id, book.bookName)
                                 }
                               >
-                                {milestone.name}
+                                <span className='max-w-[200px] truncate' title={milestone.name}>
+                                  {milestone.name}
+                                </span>
                               </DropdownMenuItem>
                             ))}
                           </DropdownMenuContent>
