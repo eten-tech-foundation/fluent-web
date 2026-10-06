@@ -48,10 +48,10 @@ export function EditProfile({ isOpen, onClose }: EditProfileProps) {
 
   return (
     <UserModal
-      disableRoleSelection={true}
       isLoading={updateUserMutation.isPending}
       isOpen={isModalOpen}
       mode={'edit'}
+      roleField='hidden'
       user={userdetail}
       onClose={handleClose}
       onSave={handleSaveUser}

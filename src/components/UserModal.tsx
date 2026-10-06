@@ -35,7 +35,8 @@ interface UserModalProps {
   error?: string | null;
   mode: 'create' | 'edit';
   isLoading?: boolean;
-  disableRoleSelection?: boolean;
+  /** 'editable' renders the role dropdown, 'disabled' renders it read-only, 'hidden' omits it. */
+  roleField?: 'editable' | 'disabled' | 'hidden';
   /** Org the role change applies to — used to resolve the edit-mode role. */
   activeOrgId?: number | null;
   /** Lowercased emails of existing org members — blocks duplicate invites. */
@@ -61,7 +62,7 @@ export const UserModal: React.FC<UserModalProps> = ({
   mode,
   error = null,
   isLoading = false,
-  disableRoleSelection = false,
+  roleField = 'editable',
   activeOrgId = null,
   existingEmails,
 }) => {
@@ -84,7 +85,9 @@ export const UserModal: React.FC<UserModalProps> = ({
         // role like Project Manager is never a dropdown value here. A member
         // with no org-level role is 'Org Member' — selecting it demotes.
         const initialRoleName =
-          getOrgLevelRoleName(user.orgGrants ?? user.grants, activeOrgId) ?? ROLES.ORG_MEMBER;
+          roleField === 'hidden'
+            ? ''
+            : (getOrgLevelRoleName(user.orgGrants ?? user.grants, activeOrgId) ?? ROLES.ORG_MEMBER);
 
         setInitialRole(initialRoleName);
         setFormData({
@@ -107,7 +110,7 @@ export const UserModal: React.FC<UserModalProps> = ({
         });
       }
     }
-  }, [isOpen, user, mode, activeOrgId]);
+  }, [isOpen, user, mode, activeOrgId, roleField]);
 
   const emailSchema = z.string().email();
 
@@ -126,9 +129,9 @@ export const UserModal: React.FC<UserModalProps> = ({
   const isFormValid = (): boolean => {
     const hasUsername = Boolean(formData.username.trim());
     const hasValidEmail = Boolean(formData.email.trim()) && isEmailValid(formData.email.trim());
-    const hasValidRole = Boolean(
-      formData.role && formData.role.trim() !== '' && formData.role !== 'No Role'
-    );
+    const hasValidRole =
+      roleField === 'hidden' ||
+      Boolean(formData.role && formData.role.trim() !== '' && formData.role !== 'No Role');
 
     return hasUsername && hasValidEmail && hasValidRole && !isDuplicateEmail;
   };
@@ -218,26 +221,28 @@ export const UserModal: React.FC<UserModalProps> = ({
             />
           </div>
 
-          <div className='disabled grid gap-3'>
-            <Label className='gap-1' htmlFor='role'>
-              <span style={{ color: 'red' }}>*</span> {t('role')}
-            </Label>
-            <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
-              <SelectTrigger
-                className='bg-background text-foreground border-input w-full'
-                disabled={disableRoleSelection}
-              >
-                <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
-              </SelectTrigger>
-              <SelectContent>
-                {(mode === 'edit' ? ORG_ROLE_OPTIONS : ORG_INVITE_ROLE_OPTIONS).map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {roleField !== 'hidden' && (
+            <div className='disabled grid gap-3'>
+              <Label className='gap-1' htmlFor='role'>
+                <span style={{ color: 'red' }}>*</span> {t('role')}
+              </Label>
+              <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
+                <SelectTrigger
+                  className='bg-background text-foreground border-input w-full'
+                  disabled={roleField === 'disabled'}
+                >
+                  <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(mode === 'edit' ? ORG_ROLE_OPTIONS : ORG_INVITE_ROLE_OPTIONS).map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
