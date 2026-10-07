@@ -55,6 +55,15 @@ const mockUseSaveResourceState = vi.fn();
 const mockUseDrafting = vi.fn();
 const mockUsePericope = vi.fn();
 const mockUsePericopeContext = vi.fn();
+const mockUseChapterAudio = vi.fn().mockReturnValue({
+  data: undefined,
+  isLoading: false,
+  error: null,
+});
+
+vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
+  useChapterAudio: (...args: unknown[]) => mockUseChapterAudio(...args),
+}));
 
 vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
   useAddTranslatedVerse: () => mockUseAddTranslatedVerse() as unknown,
