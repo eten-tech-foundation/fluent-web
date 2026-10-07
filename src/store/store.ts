@@ -22,7 +22,8 @@ interface AppState {
   displayMode: DisplayMode;
   chapterViewAvailability: ChapterViewAvailability | null;
   isAiThresholdMet: boolean | null;
-  isAiSyncPending: boolean;
+  aiSyncPendingCount: number;
+  manualAiEnable: { assignmentId: number; revision: number } | null;
   isOrgSwitching: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
   setUserDetail: (user: User) => void;
@@ -35,7 +36,13 @@ interface AppState {
   setDisplayMode: (mode: DisplayMode) => void;
   setChapterViewAvailability: (availability: ChapterViewAvailability | null) => void;
   setIsAiThresholdMet: (status: boolean | null) => void;
-  setIsAiSyncPending: (pending: boolean) => void;
+  beginAiSync: () => void;
+  endAiSync: () => void;
+  setAiEnabledFor: (
+    assignmentId: number,
+    value: boolean | undefined,
+    manualEnable?: boolean
+  ) => void;
   setIsOrgSwitching: (switching: boolean) => void;
   setAiAutoEnablePreference: (userId: number, status: boolean | undefined) => void;
 }
@@ -65,7 +72,8 @@ export const useAppStore = create<AppState>()(
       displayMode: 'verse',
       chapterViewAvailability: null,
       isAiThresholdMet: null,
-      isAiSyncPending: false,
+      aiSyncPendingCount: 0,
+      manualAiEnable: null,
       isOrgSwitching: false,
       aiAutoEnablePreferences: {},
       setUserDetail: (userdetail: User) => set({ userdetail }),
@@ -101,7 +109,24 @@ export const useAppStore = create<AppState>()(
       setDisplayMode: (displayMode: DisplayMode) => set({ displayMode }),
       setChapterViewAvailability: chapterViewAvailability => set({ chapterViewAvailability }),
       setIsAiThresholdMet: (status: boolean | null) => set({ isAiThresholdMet: status }),
-      setIsAiSyncPending: (pending: boolean) => set({ isAiSyncPending: pending }),
+      beginAiSync: () => set(state => ({ aiSyncPendingCount: state.aiSyncPendingCount + 1 })),
+      endAiSync: () =>
+        set(state => ({ aiSyncPendingCount: Math.max(0, state.aiSyncPendingCount - 1) })),
+      setAiEnabledFor: (assignmentId, isAiEnabled, manualEnable = false) =>
+        set(state => {
+          if (state.currentProjectItem?.chapterAssignmentId !== assignmentId) return state;
+          return {
+            currentProjectItem: { ...state.currentProjectItem, isAiEnabled },
+            ...(manualEnable && isAiEnabled
+              ? {
+                  manualAiEnable: {
+                    assignmentId,
+                    revision: (state.manualAiEnable?.revision ?? 0) + 1,
+                  },
+                }
+              : {}),
+          };
+        }),
       setIsOrgSwitching: (isOrgSwitching: boolean) => set({ isOrgSwitching }),
       setAiAutoEnablePreference: (userId: number, status: boolean | undefined) =>
         set(state => {

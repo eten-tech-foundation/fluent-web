@@ -29,7 +29,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
-import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { pendingAiAutoFills, targetFor } from '@/features/bible/lib/ai-autofill';
 import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
 import {
   canSetPericopeTitle,
@@ -331,8 +331,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // immediately request and refill them while the translator is still working.
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
   const touchedTitlesRef = useRef(new Set<number>());
-  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
-  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+  const manualAiEnable = useAppStore(state => state.manualAiEnable);
+  const handledManualEnableRef = useRef(manualAiEnable?.revision);
+  const isAiJustEnabled =
+    manualAiEnable?.assignmentId === projectItem.chapterAssignmentId &&
+    manualAiEnable.revision !== handledManualEnableRef.current;
 
   const {
     suggestions: aiSuggestions,
@@ -685,8 +688,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   );
 
   useEffect(() => {
-    const justEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
-    wasAiEnabledRef.current = projectItem.isAiEnabled;
+    const justEnabled = isAiJustEnabled;
+    handledManualEnableRef.current = manualAiEnable?.revision;
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
     // An explicit opt-in is a new request for every empty input. While AI stays
@@ -718,7 +721,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedVerseNumbers: userTouchedVersesRef.current,
     });
     const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
-    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const firstTarget = firstSource ? targetFor(firstSource.verseNumber, verses) : undefined;
     const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
     const titleFill =
       currentPericopeGroup?.pericopeTitle?.trim() &&
@@ -774,6 +777,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     verses,
     handleTextChange,
     projectItem.isAiEnabled,
+    isAiJustEnabled,
+    manualAiEnable,
     projectItem.projectUnitId,
     projectItem.chapterAssignmentId,
     projectItem.chapterNumber,
