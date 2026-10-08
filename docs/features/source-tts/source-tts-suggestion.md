@@ -882,4 +882,4 @@ External facts in §§8 and 10 were rechecked on July 14 and July 16, 2026, with
 
 ---
 
-_Originally prepared 2026-07-14; revised 2026-07-16 and 2026-07-23 after the first and second engineering review rounds of PR #356, with a further 2026-07-23 pass addressing the CodeRabbit review (CB1–CB6) and a 2026-07-28 pass addressing the third review round (N1–N6). Author: Joshua Lansford._
+_Originally prepared 2026-07-14; revised 2026-07-16 and 2026-07-23 after the first and second engineering review rounds of PR #356, with a further 2026-07-23 pass addressing the CodeRabbit review (CB1–CB6) and a 2026-07-28 pass addressing the third review round (N1–N6)._
