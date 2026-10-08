@@ -63,8 +63,9 @@ published server flag. The deployment still needs working fluent-ai configuratio
       account id and jurisdiction, so an unpinned host fails `HeadBucket` against buckets that
       genuinely exist — a confusing failure, and the reason there is no endpoint variable.
 - [ ] **A custom public domain is attached to the bucket** and set as `TTS_PUBLIC_AUDIO_BASE_URL`.
-      **Not `r2.dev`** (§7.3). This is the 302 target; blank makes redirects fail cleanly rather
-      than emit a broken URL.
+      **Not `r2.dev`** (§7.3). This is both the base for warm absolute `audio_url` responses and
+      the 302 target when a compressed artifact is requested through its recovery URL. If it is blank,
+      `generate` stays on the recovery form and compressed resolution fails cleanly rather than emit a broken URL.
 - [ ] **The bucket is not listable**, and ideally `requests/*` is blocked at the edge. Artifact URLs
       are capability-secured (unguessable, HMAC-keyed), which only holds if the space cannot be
       enumerated (§11.2).
@@ -149,9 +150,10 @@ Synthesis is billed only when someone actually listens: `generate` writes a side
 nothing, so UI affordances nobody uses cost nothing. Content addressing and in-process attachment
 avoid repeat synthesis; simultaneous requests on different instances can still incur duplicate cost,
 while conditional PUT stores one artifact. R2 storage of compressed clips is cents per month even at
-whole-Bible scale, and **R2 egress is free** — which is why the heavy bytes 302 to R2 instead of
-being proxied through service pods. The conscious v1 trade is unbounded-but-tiny storage growth in
-exchange for no lifecycle machinery.
+whole-Bible scale, and **R2 egress is free** — which is why the heavy bytes come directly from R2 instead of
+being proxied through service pods. A warm `generate` response names the R2 object outright; a request
+to the recovery URL receives a 302 to that object. The conscious v1 trade is unbounded-but-tiny storage
+growth in exchange for no lifecycle machinery.
 
 This is also why §4 matters: a broken artifact store does not fail, it just quietly moves every
 listen back onto the paid path.
