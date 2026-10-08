@@ -26,9 +26,10 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
  * `features/checks/checks.types.ts` already does for greek-room.
  *
  * Keeping them separate is not pedantry: they hold different values. The
- * server's `audio_url` is a SIBLING-RELATIVE reference; `TtsClip.audioUrl` is
- * the ABSOLUTE URL derived from it below. This module is the only place the
- * two vocabularies meet, which is exactly why a future browser-local engine
+ * server's `audio_url` is sibling-relative while an artifact is cold and may
+ * be an absolute R2 URL when warm; `TtsClip.audioUrl` is always the ABSOLUTE
+ * URL derived below. This module is the only place the two vocabularies meet,
+ * which is exactly why a future browser-local engine
  * (§13.3) can implement the same seam with no wire vocabulary at all.
  */
 export interface TtsGenerateWireRequest {
@@ -69,7 +70,7 @@ export interface ServerTtsEngineOptions {
 
 /**
  * Server-backed engine: POSTs to fluent-api's `generate` proxy and resolves
- * the sibling-relative `audio_url` against the response URL (§7.1).
+ * either `audio_url` form against the response URL (§7.1).
  */
 export class ServerTtsEngine implements TtsEngine {
   private readonly apiBaseUrl: string;
@@ -115,11 +116,11 @@ export class ServerTtsEngine implements TtsEngine {
     }
 
     const wire = ttsGenerateWireResponseSchema.parse(await res.json());
-    // §7.1: `audio_url` is a sibling-relative reference. Resolving against the
-    // RESPONSE URL (never string-concatenating a base) is what keeps the
-    // serving choice server-side — the browser called fluent-api, so the
-    // audio fetch goes to fluent-api. The absolute result is what makes the
-    // returned `TtsClip` a different thing from the wire body.
+    // §7.1: resolving either `audio_url` form against the RESPONSE URL (never
+    // string-concatenating a base) keeps the serving choice server-side. A
+    // cold sibling-relative reference stays beside fluent-api's generate route;
+    // a warm absolute R2 URL resolves to itself. The absolute result is what
+    // makes the returned `TtsClip` a different thing from the wire body.
     const audioUrl = new URL(wire.audio_url, res.url).toString();
     return { audioUrl, servedAs: servedFormatOf(audioUrl) };
   }

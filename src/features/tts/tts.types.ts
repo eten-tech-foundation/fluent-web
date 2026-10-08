@@ -45,10 +45,10 @@ export interface TtsRequest {
  * A playable clip reference.
  *
  * `audioUrl` is ABSOLUTE by the time it reaches a caller: the engine resolves
- * the server's sibling-relative `audio_url` against the response URL on
- * receipt (§7.1), so the serving choice stays server-side. It is therefore a
- * DERIVED value, not the wire value — which is why this type is not the shape
- * of the response body.
+ * the server's cold sibling-relative or warm absolute `audio_url` against the
+ * response URL on receipt (§7.1), so the serving choice stays server-side. It
+ * is therefore a DERIVED value, not the wire value — which is why this type is
+ * not the shape of the response body.
  *
  * `durationMs` is deliberately absent (T8/§6.2): a streaming first listen has
  * no knowable duration, and once compressed the container header carries the
