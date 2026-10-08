@@ -11,6 +11,7 @@ import { getActiveGrants, hasGrantForProject, ORG_LEVEL_ROLES } from '@/lib/gran
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
+import { DraftingAudioPageBoundary } from './DraftingAudioPageBoundary';
 import { DraftingUI } from './DraftingUI';
 
 type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
@@ -126,13 +127,18 @@ const DraftingPage: React.FC = () => {
   }
 
   return (
-    <DraftingUI
-      projectItem={projectItem}
-      readOnly={isReadOnly}
-      sourceVerses={loaderData.sourceVerses}
-      targetVerses={loaderData.targetVerses}
-      userdetail={userdetail}
-    />
+    <DraftingAudioPageBoundary
+      key={translationMatch ? 'translation' : 'view'}
+      pageKey={String(projectItem.chapterAssignmentId)}
+    >
+      <DraftingUI
+        projectItem={projectItem}
+        readOnly={isReadOnly}
+        sourceVerses={loaderData.sourceVerses}
+        targetVerses={loaderData.targetVerses}
+        userdetail={userdetail}
+      />
+    </DraftingAudioPageBoundary>
   );
 };
 
