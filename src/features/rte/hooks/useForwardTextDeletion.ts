@@ -6,7 +6,7 @@ import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 export function useForwardTextDeletion(
   containerRef: RefObject<HTMLElement | null>,
   editorRef: RefObject<EditorRef | null>,
-  readOnly = false
+  readOnly: boolean
 ): void {
   useEffect(() => {
     const container = containerRef.current;
@@ -18,6 +18,7 @@ export function useForwardTextDeletion(
       if (event instanceof KeyboardEvent) {
         if (
           event.key !== 'Delete' ||
+          // 229 is the IME process key. Some browsers send it without setting isComposing.
           event.keyCode === 229 ||
           event.ctrlKey ||
           event.metaKey ||
@@ -70,6 +71,8 @@ export function useForwardTextDeletion(
       } else if (typeof dom.modify === 'function') {
         // Use this browser's caret navigation rather than imposing a different Unicode version.
         // Restrict the adjustment to one text leaf so it cannot cross a verse or block boundary.
+        // A cluster split across leaves (bold base letter, pasted formatting) needs no help:
+        // Lexical only shrinks the range when both ends sit in the same text node.
         dom.modify('extend', 'forward', 'character');
         if (dom.anchorNode === original.startContainer && dom.focusNode === original.startContainer)
           endOffset = dom.focusOffset;
@@ -78,14 +81,17 @@ export function useForwardTextDeletion(
       }
       if (endOffset - original.startOffset <= 1) return;
 
-      // Editorial 0.8.15 shrinks a collapsed forward deletion of a combining sequence to one
-      // code unit. Its selected-text deletion keeps the complete range and the native history.
+      // Editorial 0.8.15 (Lexical 0.43) shrinks a collapsed forward deletion of a combining
+      // sequence to one code unit. Its selected-text deletion keeps the complete range and the
+      // native history.
       editor.setSelection({
         start,
         end: { ...start, offset: endOffset },
       });
       // Complete the selection-only transaction before the input reaches Lexical. Otherwise its
       // selection tag can suppress the text-change callback and lose the autosave notification.
+      // This relies on Editorial 0.8.15's getSelection() flushing the pending update; recheck it
+      // when upgrading.
       editor.getSelection();
     };
     const startComposition = () => {
