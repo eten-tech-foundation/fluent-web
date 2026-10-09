@@ -806,6 +806,75 @@ describe('DraftingUI', () => {
         expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
       }
     );
+
+    it.each([
+      ['the Bible tab', 'success'],
+      ['the Bible tab', 'error'],
+      ['the Resources button', 'success'],
+      ['the Resources button', 'error'],
+    ] as const)(
+      'recovers a request that finished while Resources was hidden through %s (%s)',
+      async (path, result) => {
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        let requested = false;
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, async () => {
+            requested = true;
+            await pendingText;
+            if (result === 'error') return new HttpResponse(null, { status: 503 });
+            return HttpResponse.json({
+              chapters: [
+                {
+                  number: 1,
+                  verses: [
+                    { number: 1, text: 'Hidden request completed' },
+                    { number: 2, text: 'Hidden request verse 2' },
+                  ],
+                },
+              ],
+            });
+          })
+        );
+        try {
+          const user = await openResources();
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          await waitFor(() => expect(requested).toBe(true));
+          await user.click(screen.getByRole('button', { name: '', pressed: true }));
+          expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+
+          releaseText();
+          await waitFor(() => {
+            expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe(
+              result
+            );
+          });
+          // The unmounted panel cannot publish the response until it is shown again.
+          expect(screen.queryByText('Hidden request completed')).not.toBeInTheDocument();
+          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+
+          if (path === 'the Bible tab') {
+            await user.click(screen.getByRole('tab', { name: 'ENG' }));
+          } else {
+            await user.click(screen.getByRole('button', { name: '', pressed: false }));
+          }
+
+          expect(await screen.findByRole('combobox')).toHaveTextContent('English');
+          if (result === 'success') {
+            expect(await screen.findByText('Hidden request completed')).toBeInTheDocument();
+          } else {
+            expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+          }
+          expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
+          expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+        } finally {
+          releaseText();
+        }
+      }
+    );
   });
 
   it('renders correctly in Verse Mode', () => {
