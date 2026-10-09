@@ -23,10 +23,17 @@ RTE edits are checked against the API's limits: four headings per verse, 300 cha
 and no backslashes or line breaks. An invalid edit stays visible with an error and does not enter
 autosave until corrected. Structural reloads and external fills are suspended while it is invalid.
 
-Editorial 0.8.15 does not emit a change for a level-only update to a heading with a single text leaf.
-Fluent therefore rewrites that one USJ paragraph, reports the change explicitly, and restores the
-selection after the editor reload. This uses the same document reload approach as scoped verse
-formatting; it does not add a separate undo history for structural reloads.
+Editorial 0.8.15 can miss a level-only update to a heading with a single text leaf: its delta fast
+path does not always emit a paragraph-only change. Fluent calls `formatPara` on the selected heading
+and then an empty local `applyUpdate([], 'local')`, which commits the pending format and
+synchronizes the editor's USJ before the next keystroke. Fluent reports that USJ as the change. The
+caret and undo history stay in the editor; there is no document reload and no delayed reselection.
+
+An earlier version rewrote the heading's USJ paragraph, reloaded the document with `setUsj` and
+restored the selection on a timer. That reload is asynchronous, so text typed right after a level
+change could race with it and with the selection restore, rolling the heading back to its previous
+level. `applyUpdate` is marked EXPERIMENTAL in platform-editor 0.8.15. Whoever upgrades the editor
+should recheck this call and the immediate-typing tests listed below.
 
 ## API dependency
 
@@ -42,4 +49,8 @@ Regression coverage checks heading/verse separation, ordered headings on empty v
 heading/verse repair, poetry offsets, title-only edits and deletion, textarea preservation and
 autosave. Component tests exercise insertion/cancel, invalid edit recovery and readonly behavior.
 Real Editorial tests cover level persistence and refusal of selections crossing heading/verse blocks.
+They also type immediately after switching a heading to `s2`, `s3` or `s4` and check that the saved
+text keeps the new level, and they drive the H3/H4 toolbar buttons in ChapterEditor, type right
+away, and check that the other headings and scripture are unchanged. A stylesheet test checks that
+all four levels render differently in both editing surfaces.
 Browser verification uses the production ChapterEditor and PericopeEditor with local save fixtures.
