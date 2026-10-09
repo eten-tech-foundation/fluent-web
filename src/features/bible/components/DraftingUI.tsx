@@ -1117,6 +1117,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         <DraftingGridVerse
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
+                          bibleContentError={bibleContentError}
+                          bibleContentLoading={bibleContentLoading}
                           bibleVerseMap={bibleVerseMap}
                           effectiveRevealedVerses={effectiveRevealedVerses}
                           getPericopeStyle={getPericopeStyle}
