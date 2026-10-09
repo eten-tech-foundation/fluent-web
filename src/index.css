@@ -112,6 +112,7 @@
   --color-warning-border: var(--warning-border);
   --color-warning-surface: var(--warning-surface);
   --color-warning-surface-foreground: var(--warning-surface-foreground);
+  --color-warning-banner-foreground: var(--warning-banner-foreground);
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-info: var(--info);
@@ -188,6 +189,7 @@
   --warning-border: #e48f06;
   --warning-surface: #fff6d6;
   --warning-surface-foreground: #7c2d12;
+  --warning-banner-foreground: #7c2d12;
 
   --error: #d64545;
   --error-foreground: #ffffff;
@@ -295,6 +297,7 @@
   --warning-border: #e48f06;
   --warning-surface: #3a2f10;
   --warning-surface-foreground: #e48f06;
+  --warning-banner-foreground: #e48f06;
 
   --error: #f04438;
   --error-foreground: #ffffff;

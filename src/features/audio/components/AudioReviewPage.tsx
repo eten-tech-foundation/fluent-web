@@ -399,15 +399,18 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             {/* Conflict banner — shown only while still in conflict */}
             {selectedHasConflict && (
               <div
-                className='flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-medium'
+                className='flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium'
                 role='alert'
                 style={{
                   backgroundColor: 'var(--warning-surface)',
                   borderColor: 'var(--warning-border)',
-                  color: 'var(--warning-surface-foreground)',
+                  color: 'var(--warning-banner-foreground)',
                 }}
               >
-                <AlertTriangle className='mt-0.5 h-4 w-4 shrink-0' />
+                <AlertTriangle
+                  className='mt-0.5 h-4 w-4 shrink-0'
+                  style={{ color: 'var(--warning-border)' }}
+                />
                 <span>This passage has conflicting takes — select one to resolve.</span>
               </div>
             )}
@@ -418,7 +421,11 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             className='min-h-0 flex-1 overflow-y-auto px-6 pb-6'
             style={{ scrollbarGutter: 'stable' }}
           >
-            {selectedTakes.length === 0 ? (
+            {displayMode === 'pericope' ? (
+              <p className='text-muted-foreground text-sm font-normal'>
+                Recorded by verse. Switch to Verse view to view these takes.
+              </p>
+            ) : selectedTakes.length === 0 ? (
               <p className='text-muted-foreground text-sm'>No audio drafts available.</p>
             ) : (
               <div className='flex flex-col gap-3'>
