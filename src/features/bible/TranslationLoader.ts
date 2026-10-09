@@ -4,7 +4,7 @@ import { redirect } from '@tanstack/react-router';
 import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
 import { bibleTextQueryOptions } from '@/features/bible/hooks/useBibleText';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
-import { hydrationPromise, useAppStore } from '@/store/store';
+import { hydrationPromise, isSameProjectAssignment, useAppStore } from '@/store/store';
 
 interface SourceVerseData {
   id: number;
@@ -53,14 +53,10 @@ export const translationLoader = async ({
   }
   const locationStateItem = location.state?.projectItem;
   let projectItem = currentProjectItem;
-
-  // Only use the location state if it's a different assignment than what we have in the store
-  if (
-    locationStateItem &&
-    locationStateItem.chapterAssignmentId !== currentProjectItem?.chapterAssignmentId
-  ) {
-    projectItem = locationStateItem;
-  } else if (!projectItem && locationStateItem) {
+  // A selected assignment wins when its project/source context differs, even if a local DB reset
+  // reused its numeric assignment ID. For the same assignment, the store may have newer metadata
+  // than a browser-history snapshot (for example, an updated isAiEnabled value).
+  if (locationStateItem && !isSameProjectAssignment(locationStateItem, currentProjectItem)) {
     projectItem = locationStateItem;
   }
 

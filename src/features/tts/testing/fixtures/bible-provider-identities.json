@@ -1,0 +1,82 @@
+{
+  "valid": [
+    {
+      "key": "aq-1",
+      "provider": "aquifer",
+      "externalId": "1"
+    },
+    {
+      "key": "aq-20",
+      "provider": "aquifer",
+      "externalId": "20"
+    },
+    {
+      "key": "yv-206",
+      "provider": "youversion",
+      "externalId": "206"
+    },
+    {
+      "key": "dbl-bba9f40183526463-01",
+      "provider": "dbl",
+      "externalId": "bba9f40183526463-01"
+    },
+    {
+      "key": "dbl-Aa-bB",
+      "provider": "dbl",
+      "externalId": "Aa-bB"
+    },
+    {
+      "key": "aq-9007199254740991",
+      "provider": "aquifer",
+      "externalId": "9007199254740991"
+    },
+    {
+      "key": "yv-1",
+      "provider": "youversion",
+      "externalId": "1"
+    },
+    {
+      "key": "yv-9007199254740991",
+      "provider": "youversion",
+      "externalId": "9007199254740991"
+    },
+    {
+      "key": "dbl-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "provider": "dbl",
+      "externalId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "key": "dbl-Case-preserved-ID-01",
+      "provider": "dbl",
+      "externalId": "Case-preserved-ID-01"
+    }
+  ],
+  "invalid": [
+    "",
+    "aq-0",
+    "aq-01",
+    "yv-1.0",
+    "yv-9007199254740992",
+    "AQ-1",
+    "bad-1",
+    "dbl-",
+    " dbl-id",
+    "dbl-id ",
+    "dbl-id\n",
+    "dbl-\u00a0id",
+    "dbl-id\u00a0",
+    "dbl-id\u0000",
+    "dbl-https://example.com",
+    "dbl-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "aq-9007199254740992",
+    "aq-9007199254740993",
+    "yv-9007199254740993",
+    "aq--1",
+    "yv-0",
+    "yv-01",
+    "aq-1e2",
+    "yv--1",
+    "dbl-id\u007f",
+    "dbl-id\u009f"
+  ]
+}

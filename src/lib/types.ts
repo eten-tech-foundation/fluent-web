@@ -113,7 +113,22 @@ export interface Chapter {
   totalVerses?: number;
 }
 
-export interface ChapterAssignmentProgress {
+/** Source-Bible playback facts carried unchanged through every drafting entry path. */
+export interface BiblePlaybackMetadata {
+  /** Canonical provider-qualified text identity, when the API can identify it. */
+  textBibleKey?: string | null;
+  /** Explicit selected recording identity; it does not imply synthesis permission. */
+  selectedRecordingKey?: string | null;
+  /**
+   * Whether anyone may synthesize speech from this Bible, never a user permission.
+   * Optional for compatibility with an older API; absence remains uncleared.
+   */
+  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  /** Human-curated attribution for this Bible, shown with its audio. */
+  licenseNotice?: string | null;
+}
+
+export interface ChapterAssignmentProgress extends BiblePlaybackMetadata {
   bibleId: number;
   bookId: number;
   bookCode: string;
@@ -147,7 +162,7 @@ export interface Book {
   engDisplayName: string;
 }
 
-export interface ProjectItem {
+export interface ProjectItem extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
@@ -323,7 +338,7 @@ export interface DraftingUIProps {
   readOnly?: boolean;
 }
 
-export interface UserChapterAssignment {
+export interface UserChapterAssignment extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
