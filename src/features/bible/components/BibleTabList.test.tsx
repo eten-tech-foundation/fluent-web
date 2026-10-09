@@ -6,14 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BibleTabList, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
 
-const resourceTabs = [{ id: 'yv-2', label: 'NIV' }];
+const resourceTab = { id: 'yv-2', label: 'NIV' };
 
 function ControlledTabs({ onSelect }: { onSelect: (id: string) => void }) {
   const [activeTabId, setActiveTabId] = useState('yv-2');
   return (
     <BibleTabList
       activeTabId={activeTabId}
-      resourceTabs={resourceTabs}
+      resourceTab={resourceTab}
       sourceLabel='WEB'
       onClose={vi.fn()}
       onSelect={id => {
@@ -29,7 +29,7 @@ describe('BibleTabList', () => {
     render(
       <BibleTabList
         activeTabId='yv-2'
-        resourceTabs={resourceTabs}
+        resourceTab={resourceTab}
         sourceLabel='WEB'
         onClose={vi.fn()}
         onSelect={vi.fn()}
@@ -39,6 +39,22 @@ describe('BibleTabList', () => {
     expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB', 'NIV']);
     expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.queryByRole('button', { name: 'Close WEB' })).not.toBeInTheDocument();
+  });
+
+  it('shows only the source when no resource Bible is open', () => {
+    render(
+      <BibleTabList
+        activeTabId={SOURCE_BIBLE_TAB_ID}
+        resourceTab={null}
+        sourceLabel='WEB'
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB']);
+    expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('group', { name: 'Open resource Bibles' })).not.toBeInTheDocument();
   });
 
   it('selects the source and resource tabs by their stable ids', async () => {
@@ -83,7 +99,7 @@ describe('BibleTabList', () => {
     render(
       <BibleTabList
         activeTabId='yv-2'
-        resourceTabs={resourceTabs}
+        resourceTab={resourceTab}
         sourceLabel='WEB'
         onClose={onClose}
         onSelect={vi.fn()}

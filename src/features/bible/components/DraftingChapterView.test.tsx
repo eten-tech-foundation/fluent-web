@@ -49,24 +49,23 @@ const sourceVerses: Source[] = [
   { id: 102, verseNumber: 2, text: 'The earth was formless.' },
 ];
 
-const resourceBibleTabs: ResourceBibleTab[] = [
-  {
-    id: 'aq-alternative',
-    label: 'Alternative Bible',
-    language: 'eng',
-    verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
-    isLoading: false,
-    isError: false,
-  },
-  {
-    id: 'yv-empty',
-    label: 'Empty Bible',
-    language: 'eng',
-    verses: [],
-    isLoading: false,
-    isError: false,
-  },
-];
+const alternativeBibleTab: ResourceBibleTab = {
+  id: 'aq-alternative',
+  label: 'Alternative Bible',
+  language: 'eng',
+  verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
+  isLoading: false,
+  isError: false,
+};
+
+const emptyBibleTab: ResourceBibleTab = {
+  id: 'yv-empty',
+  label: 'Empty Bible',
+  language: 'eng',
+  verses: [],
+  isLoading: false,
+  isError: false,
+};
 
 const commonProps = {
   sourceVerses,
@@ -74,7 +73,7 @@ const commonProps = {
   projectItem,
   readOnly: false,
   bibleVerseMap: new Map<number, string>(),
-  resourceBibleTabs: [resourceBibleTabs[0]],
+  resourceBibleTab: alternativeBibleTab,
   bibleContentLoading: false,
   bibleContentError: false,
   handleTextChange: vi.fn(),
@@ -104,7 +103,7 @@ describe('DraftingChapterView', () => {
       <DraftingChapterView
         {...commonProps}
         activeBibleTabId='yv-empty'
-        resourceBibleTabs={[resourceBibleTabs[1]]}
+        resourceBibleTab={emptyBibleTab}
         selectedPanel={2}
       />
     );

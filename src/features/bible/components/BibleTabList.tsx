@@ -16,7 +16,7 @@ export interface ResourceBibleTab {
 
 interface BibleTabListProps {
   sourceLabel: string;
-  resourceTabs: Array<Pick<ResourceBibleTab, 'id' | 'label'>>;
+  resourceTab: Pick<ResourceBibleTab, 'id' | 'label'> | null;
   activeTabId: string;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
@@ -35,11 +35,13 @@ const tabClassName = (active: boolean) =>
  */
 export function BibleTabList({
   sourceLabel,
-  resourceTabs,
+  resourceTab,
   activeTabId,
   onSelect,
   onClose,
 }: BibleTabListProps) {
+  const isResourceActive = resourceTab !== null && activeTabId === resourceTab.id;
+
   return (
     <Tabs className='min-w-0' value={activeTabId} onValueChange={onSelect}>
       <TabsList
@@ -48,14 +50,14 @@ export function BibleTabList({
       >
         <TabsTrigger
           aria-controls={undefined}
-          className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} min-w-0 ${resourceTabs.length ? 'max-w-1/2' : 'max-w-full'}`}
+          className={`${tabClassName(activeTabId === SOURCE_BIBLE_TAB_ID)} min-w-0 ${resourceTab ? 'max-w-1/2' : 'max-w-full'}`}
           title={sourceLabel}
           value={SOURCE_BIBLE_TAB_ID}
         >
           <span className='truncate'>{sourceLabel}</span>
         </TabsTrigger>
 
-        {resourceTabs.length > 0 && (
+        {resourceTab && (
           <>
             <span
               aria-hidden='true'
@@ -64,38 +66,31 @@ export function BibleTabList({
               |
             </span>
             <div aria-label='Open resource Bibles' className='min-w-0 flex-1' role='group'>
-              <div className='flex min-w-0 items-center gap-1'>
-                {resourceTabs.map(tab => {
-                  const isActive = activeTabId === tab.id;
-
-                  return (
-                    <div key={tab.id} className='flex min-w-0 items-center'>
-                      <TabsTrigger
-                        aria-controls={undefined}
-                        className={`${tabClassName(isActive)} min-w-0 shrink`}
-                        title={tab.label}
-                        value={tab.id}
-                        onKeyDown={event => {
-                          if (isActive && (event.key === 'Enter' || event.key === ' '))
-                            onSelect(tab.id);
-                        }}
-                        onMouseDown={event => {
-                          if (isActive && event.button === 0 && !event.ctrlKey) onSelect(tab.id);
-                        }}
-                      >
-                        <span className='truncate'>{tab.label}</span>
-                      </TabsTrigger>
-                      <button
-                        aria-label={`Close ${tab.label}`}
-                        className='text-muted-foreground hover:text-foreground ml-1 shrink-0 cursor-pointer transition-colors'
-                        type='button'
-                        onClick={() => onClose(tab.id)}
-                      >
-                        <X aria-hidden='true' className='h-4 w-4' />
-                      </button>
-                    </div>
-                  );
-                })}
+              <div key={resourceTab.id} className='flex min-w-0 items-center'>
+                <TabsTrigger
+                  aria-controls={undefined}
+                  className={`${tabClassName(isResourceActive)} min-w-0 shrink`}
+                  title={resourceTab.label}
+                  value={resourceTab.id}
+                  onKeyDown={event => {
+                    if (isResourceActive && (event.key === 'Enter' || event.key === ' '))
+                      onSelect(resourceTab.id);
+                  }}
+                  onMouseDown={event => {
+                    if (isResourceActive && event.button === 0 && !event.ctrlKey)
+                      onSelect(resourceTab.id);
+                  }}
+                >
+                  <span className='truncate'>{resourceTab.label}</span>
+                </TabsTrigger>
+                <button
+                  aria-label={`Close ${resourceTab.label}`}
+                  className='text-muted-foreground hover:text-foreground ml-1 shrink-0 cursor-pointer transition-colors'
+                  type='button'
+                  onClick={() => onClose(resourceTab.id)}
+                >
+                  <X aria-hidden='true' className='h-4 w-4' />
+                </button>
               </div>
             </div>
           </>

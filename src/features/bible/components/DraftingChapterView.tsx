@@ -17,7 +17,7 @@ interface DraftingChapterViewProps {
   bibleVerseMap: Map<number, string>;
   selectedPanel: 1 | 2;
   activeBibleTabId: string;
-  resourceBibleTabs: ResourceBibleTab[];
+  resourceBibleTab: ResourceBibleTab | null;
   bibleContentLoading: boolean;
   bibleContentError: boolean;
   onBibleTabSelect: (tabId: string) => void;
@@ -47,7 +47,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   bibleVerseMap,
   selectedPanel,
   activeBibleTabId,
-  resourceBibleTabs,
+  resourceBibleTab,
   bibleContentLoading,
   bibleContentError,
   onBibleTabSelect,
@@ -90,7 +90,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
       <div className='bg-background min-w-0 px-6 py-3'>
         <BibleTabList
           activeTabId={activeBibleTabId}
-          resourceTabs={resourceBibleTabs}
+          resourceTab={resourceBibleTab}
           sourceLabel={projectItem.bibleName}
           onClose={onBibleTabClose}
           onSelect={onBibleTabSelect}

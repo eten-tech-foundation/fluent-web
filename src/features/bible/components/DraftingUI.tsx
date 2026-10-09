@@ -103,12 +103,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // The source tab is permanent. Resources reuses the second tab, and keyed
   // content updates cannot restore a Bible that has been replaced (#471).
   const [activeBibleTabId, setActiveBibleTabId] = useState(SOURCE_BIBLE_TAB_ID);
-  const [resourceBibleTabs, setResourceBibleTabs] = useState<ResourceBibleTab[]>([]);
+  const [resourceBibleTab, setResourceBibleTab] = useState<ResourceBibleTab | null>(null);
   const [resourcePanelSelectedBibleId, setResourcePanelSelectedBibleId] = useState<string | null>(
     null
   );
 
-  const activeResourceBibleTab = resourceBibleTabs.find(tab => tab.id === activeBibleTabId);
+  const activeResourceBibleTab =
+    resourceBibleTab?.id === activeBibleTabId ? resourceBibleTab : undefined;
   const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
   const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
   const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
@@ -460,7 +461,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // Reset assignment-local state without remounting and discarding pending verse saves.
   useEffect(() => {
     setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
-    setResourceBibleTabs([]);
+    setResourceBibleTab(null);
     setResourcePanelSelectedBibleId(null);
     setCurrentResource(RESOURCE_NAMES[0]);
     setCurrentLanguage('');
@@ -778,15 +779,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const handleBibleSelect = useCallback(
     (bible: { id: string; label: string; language: string }) => {
       setResourcePanelSelectedBibleId(bible.id);
-      setResourceBibleTabs(currentTabs => {
-        const existing = currentTabs.find(tab => tab.id === bible.id);
-        if (existing) {
-          if (existing.label === bible.label && existing.language === bible.language)
-            return currentTabs;
-          return [{ ...existing, ...bible }];
-        }
-
-        return [{ ...bible, verses: [], isLoading: true, isError: false }];
+      setResourceBibleTab(current => {
+        if (current?.id !== bible.id)
+          return { ...bible, verses: [], isLoading: true, isError: false };
+        if (current.label === bible.label && current.language === bible.language) return current;
+        return { ...current, ...bible };
       });
       setActiveBibleTabId(bible.id);
     },
@@ -799,7 +796,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       if (tabId === SOURCE_BIBLE_TAB_ID) return;
 
       setResourcePanelSelectedBibleId(tabId);
-      const tab = resourceBibleTabs.find(tab => tab.id === tabId);
+      const tab = resourceBibleTab?.id === tabId ? resourceBibleTab : null;
       if (tab) setCurrentLanguage(tab.language);
       if (tab?.isLoading) {
         setCurrentResource(BIBLES_RESOURCE);
@@ -807,26 +804,34 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         setShowResources(true);
       }
     },
-    [resourceBibleTabs]
+    [resourceBibleTab]
   );
 
-  const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, verses: nextVerses } : tab))
-    );
-  }, []);
+  const updateResourceBibleTab = useCallback(
+    (
+      bibleId: string,
+      changes: Partial<Pick<ResourceBibleTab, 'verses' | 'isLoading' | 'isError'>>
+    ) =>
+      setResourceBibleTab(current =>
+        current?.id === bibleId ? { ...current, ...changes } : current
+      ),
+    []
+  );
 
-  const handleBibleLoadingChange = useCallback((bibleId: string, isLoading: boolean) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isLoading } : tab))
-    );
-  }, []);
+  const handleBibleVersesChange = useCallback(
+    (bibleId: string, verses: BibleVerse[]) => updateResourceBibleTab(bibleId, { verses }),
+    [updateResourceBibleTab]
+  );
 
-  const handleBibleErrorChange = useCallback((bibleId: string, isError: boolean) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isError } : tab))
-    );
-  }, []);
+  const handleBibleLoadingChange = useCallback(
+    (bibleId: string, isLoading: boolean) => updateResourceBibleTab(bibleId, { isLoading }),
+    [updateResourceBibleTab]
+  );
+
+  const handleBibleErrorChange = useCallback(
+    (bibleId: string, isError: boolean) => updateResourceBibleTab(bibleId, { isError }),
+    [updateResourceBibleTab]
+  );
 
   const toggleResources = useCallback(() => {
     setShowResources(prev => !prev);
@@ -834,7 +839,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const handleBibleTabClose = useCallback(
     (bibleId: string) => {
-      setResourceBibleTabs(currentTabs => currentTabs.filter(tab => tab.id !== bibleId));
+      setResourceBibleTab(current => (current?.id === bibleId ? null : current));
       setActiveBibleTabId(currentId => (currentId === bibleId ? SOURCE_BIBLE_TAB_ID : currentId));
 
       if (resourcePanelSelectedBibleId === bibleId) {
@@ -993,7 +998,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 handleTextChange={handleTextChangeWithTracking}
                 projectItem={projectItem}
                 readOnly={readOnly}
-                resourceBibleTabs={resourceBibleTabs}
+                resourceBibleTab={resourceBibleTab}
                 selectedPanel={selectedPanel}
                 sourceVerses={sourceVerses}
                 verses={verses}
@@ -1014,7 +1019,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               <div className='bg-background sticky top-0 z-10 min-w-0 px-6 py-3'>
                 <BibleTabList
                   activeTabId={activeBibleTabId}
-                  resourceTabs={resourceBibleTabs}
+                  resourceTab={resourceBibleTab}
                   sourceLabel={projectItem.bibleName}
                   onClose={handleBibleTabClose}
                   onSelect={handleBibleTabSelect}
