@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { type ProjectUser } from '@/features/projects/hooks/useProjectUsers';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { ChapterAssignmentStatus } from '@/lib/types';
 
 interface AssignUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  projectId?: number;
   selectedDrafter: string;
   selectedPeerChecker: string;
   onDrafterChange: (value: string) => void;
@@ -86,6 +88,7 @@ export const TruncatedDropdownText = ({
 export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   isOpen,
   onClose,
+  projectId,
   selectedDrafter,
   selectedPeerChecker,
   onDrafterChange,
@@ -98,6 +101,13 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   onAssign,
   selectedAssignmentsStatuses,
 }) => {
+  const { getStageLabel, getRoleLabel, isStageEnabled } = useProjectWorkflow(projectId);
+  const draftingName = getStageLabel('draft', 'Drafting');
+  const drafterRoleName = getRoleLabel('draft', 'Drafter');
+  const peerCheckEnabled = isStageEnabled('peer_check');
+  const peerCheckName = peerCheckEnabled ? getStageLabel('peer_check', 'Peer Check') : undefined;
+  const peerCheckerRoleName = getRoleLabel('peer_check', 'Peer Checker');
+
   const hasPeerCheckStatus = selectedAssignmentsStatuses.some(
     status => status === ChapterAssignmentStatus.PEER_CHECK
   );
@@ -116,7 +126,8 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   const hasCompleteStatus = selectedAssignmentsStatuses.some(
     status => status === ChapterAssignmentStatus.COMPLETE
   );
-  const hasCompleteSelection = !!selectedDrafter && !!selectedPeerChecker;
+
+  const hasCompleteSelection = !!selectedDrafter && (!peerCheckEnabled || !!selectedPeerChecker);
   const isDraftingComplete = selectedAssignmentsStatuses.some(
     status =>
       status !== ChapterAssignmentStatus.NOT_STARTED && status !== ChapterAssignmentStatus.DRAFT
@@ -130,6 +141,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
     hasConsultantCheckStatus ||
     hasCompleteStatus;
   const isPeerCheckerDisabled =
+    !peerCheckEnabled ||
     hasCommunityReviewStatus ||
     hasLinguistCheckStatus ||
     hasTheologicalCheckStatus ||
@@ -140,7 +152,10 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
     (!selectedDrafter && !selectedPeerChecker) || isDraftingComplete || usersLoading || isAssigning;
 
   const isSubmitDisabled =
-    !hasCompleteSelection || isPeerCheckerDisabled || usersLoading || isAssigning;
+    !hasCompleteSelection ||
+    (peerCheckEnabled && isPeerCheckerDisabled) ||
+    usersLoading ||
+    isAssigning;
 
   const handleReset = () => {
     onDrafterChange('');
@@ -158,7 +173,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
         <div>
           <div className='mt-1 mb-2 flex items-center gap-1'>
             <span className='text-sm text-red-500'>*</span>
-            <label className='block text-sm font-medium'>Drafter</label>
+            <label className='block text-sm font-medium'>{drafterRoleName || draftingName}</label>
           </div>
           <Select
             disabled={isDrafterDisabled || usersLoading}
@@ -182,7 +197,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
                     {usersLoading
                       ? 'Loading users...'
                       : isDrafterDisabled
-                        ? 'Cannot modify drafter for this status'
+                        ? `Cannot modify ${draftingName.toLowerCase()} for this status`
                         : 'Select a User'}
                   </span>
                 )}
@@ -200,51 +215,54 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
           </Select>
         </div>
 
-        {/* Peer Checker */}
-        <div>
-          <div className='mb-2 flex items-center gap-1'>
-            <span className='text-sm text-red-500'>*</span>
-            <label className='block text-sm font-medium'>Peer Checker</label>
+        {peerCheckName && (
+          <div>
+            <div className='mb-2 flex items-center gap-1'>
+              <span className='text-sm text-red-500'>*</span>
+              <label className='block text-sm font-medium'>
+                {peerCheckerRoleName || peerCheckName}
+              </label>
+            </div>
+            <Select
+              disabled={isPeerCheckerDisabled || usersLoading}
+              value={selectedPeerChecker}
+              onValueChange={onPeerCheckerChange}
+            >
+              <SelectTrigger className='bg-background text-foreground border-input w-full'>
+                <SelectValue placeholder={usersLoading ? 'Loading users...' : 'Select a User'}>
+                  {selectedPeerChecker ? (
+                    <div className='flex w-full'>
+                      <TruncatedDropdownText
+                        className='w-full max-w-[280px] text-left sm:max-w-[350px]'
+                        text={
+                          allProjectUsers.find(pu => pu.userId.toString() === selectedPeerChecker)
+                            ?.displayName ?? ''
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <span className='text-muted-foreground'>
+                      {usersLoading
+                        ? 'Loading users...'
+                        : isPeerCheckerDisabled
+                          ? `Cannot modify ${peerCheckName.toLowerCase()} for this status`
+                          : 'Select a User'}
+                    </span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {availablePeerCheckers.map(pu => (
+                  <SelectItem key={pu.userId} value={pu.userId.toString()}>
+                    <div className='w-[250px] sm:w-[350px]'>
+                      <TruncatedDropdownText text={pu.displayName} />
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            disabled={isPeerCheckerDisabled || usersLoading}
-            value={selectedPeerChecker}
-            onValueChange={onPeerCheckerChange}
-          >
-            <SelectTrigger className='bg-background text-foreground border-input w-full'>
-              <SelectValue placeholder={usersLoading ? 'Loading users...' : 'Select a User'}>
-                {selectedPeerChecker ? (
-                  <div className='flex w-full'>
-                    <TruncatedDropdownText
-                      className='w-full max-w-[280px] text-left sm:max-w-[350px]'
-                      text={
-                        allProjectUsers.find(pu => pu.userId.toString() === selectedPeerChecker)
-                          ?.displayName ?? ''
-                      }
-                    />
-                  </div>
-                ) : (
-                  <span className='text-muted-foreground'>
-                    {usersLoading
-                      ? 'Loading users...'
-                      : isPeerCheckerDisabled
-                        ? 'Cannot modify peer checker for this status'
-                        : 'Select a User'}
-                  </span>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {availablePeerCheckers.map(pu => (
-                <SelectItem key={pu.userId} value={pu.userId.toString()}>
-                  <div className='w-[250px] sm:w-[350px]'>
-                    <TruncatedDropdownText text={pu.displayName} />
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        )}
 
         <DialogFooter className='flex gap-2'>
           <Button disabled={isResetDisabled} onClick={handleReset}>

@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { useChapterAssignmentsByUserId } from '@/hooks/useChapterAssignment';
 import { getStatusDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
@@ -62,6 +63,14 @@ const TruncatedProjectCell = ({ text, isNavigating }: { text: string; isNavigati
       </TooltipContent>
     </Tooltip>
   );
+};
+
+const ChapterStatusCell: React.FC<{ projectId: number; chapterStatus: string }> = ({
+  projectId,
+  chapterStatus,
+}) => {
+  const { getStageLabel } = useProjectWorkflow(projectId);
+  return <>{getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel)}</>;
 };
 
 const TruncatedTextCell = ({ text }: { text: string }) => {
@@ -182,16 +191,19 @@ export function UserHomePage() {
       .map(([name]) => ({ value: name, label: name }));
   }, [currentData]);
 
+  const primaryProjectId = currentData[0]?.projectId;
+  const { getStageLabel } = useProjectWorkflow(primaryProjectId);
+
   const statusOptions = useMemo(() => {
     const seen = new Set<string>();
     for (const item of currentData) seen.add(item.chapterStatus);
     return CHAPTER_STATUS_ORDER.filter((s): s is ChapterAssignmentStatusType => seen.has(s)).map(
       s => ({
         value: s,
-        label: getStatusDisplay(s),
+        label: getStatusDisplay(s, getStageLabel),
       })
     );
-  }, [currentData]);
+  }, [currentData, getStageLabel]);
 
   const filteredData = useMemo(() => {
     let result = currentData;
@@ -369,7 +381,10 @@ export function UserHomePage() {
                             {item.chapterNumber}
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
-                            {getStatusDisplay(item.chapterStatus as ChapterAssignmentStatusType)}
+                            <ChapterStatusCell
+                              chapterStatus={item.chapterStatus}
+                              projectId={item.projectId}
+                            />
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>
                             <TruncatedTextCell

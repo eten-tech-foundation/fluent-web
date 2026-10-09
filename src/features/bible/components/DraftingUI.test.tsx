@@ -973,8 +973,8 @@ describe('DraftingUI', () => {
       />
     );
 
-    // Find submit button in header (which is labeled with "Send to Peer Checking")
-    const submitBtn = screen.getByRole('button', { name: /Send to Peer Checking/i });
+    // Find submit button in header (which is labeled with "Send to Peer Check")
+    const submitBtn = screen.getByRole('button', { name: /Send to Peer Check/i });
     expect(submitBtn).toBeEnabled();
 
     await user.click(submitBtn);

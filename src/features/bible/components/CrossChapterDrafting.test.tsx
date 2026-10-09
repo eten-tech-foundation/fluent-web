@@ -208,7 +208,7 @@ describe('cross-chapter drafting integration', () => {
     );
 
     const editor = await screen.findByRole('textbox', { name: 'Translation for verse 38' });
-    const submit = screen.getByRole('button', { name: 'Send to Peer Checking' });
+    const submit = screen.getByRole('button', { name: 'Send to Peer Check' });
     expect(submit).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('Loading the rest of the pericope');
     await translator.type(editor, 'My current chapter draft');
@@ -287,7 +287,7 @@ describe('cross-chapter drafting integration', () => {
     expect(await screen.findByText('Source Mark 8:31')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(editor).toHaveValue('Keep my new text');
-    expect(screen.getByRole('button', { name: 'Send to Peer Checking' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
     expect(within(context).getAllByText('Not drafted')).toHaveLength(8);
     expect(within(context).queryByRole('textbox')).not.toBeInTheDocument();
@@ -334,7 +334,7 @@ describe('cross-chapter drafting integration', () => {
     const next = await screen.findByRole('button', { name: 'Next Pericope' }, { timeout: 3000 });
     expect(await screen.findByText('Source Mark 8:31')).toBeInTheDocument();
     expect(next).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Send to Peer Checking' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
     expect(within(context).getAllByText('Not drafted')).toHaveLength(8);
 
@@ -347,7 +347,7 @@ describe('cross-chapter drafting integration', () => {
       'border-primary'
     );
     expect(saved).toEqual([]);
-    expect(screen.getByRole('button', { name: 'Send to Peer Checking' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
   });
 });
 
