@@ -1,4 +1,13 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +20,7 @@ import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiS
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
+import { useChapterViewAvailability } from '@/features/bible/hooks/useChapterViewAvailability';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
@@ -19,7 +29,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
-import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { pendingAiAutoFills, targetFor } from '@/features/bible/lib/ai-autofill';
 import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
 import {
   canSetPericopeTitle,
@@ -34,7 +44,6 @@ import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag } from '@/features/flags';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
-import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -87,9 +96,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
   const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
-  // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
-  // other views' rows level, and a chapter has no rows to keep level (#397).
-  const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
+  const setDisplayMode = useAppStore(state => state.setDisplayMode);
 
   const addVerseMutation = useAddTranslatedVerse();
   const submitChapterMutation = useSubmitChapter();
@@ -254,12 +261,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     moveToNextVerse,
     revealNextVerse,
     updateButtonPosition,
+    resizeAndPosition,
   } = useDrafting({
     sourceVerses,
     targetVerses,
     readOnly,
+    displayMode,
     onSave: saveVerse,
   });
+
+  const chapterViewAvailable = useChapterViewAvailability({ projectItem, sourceVerses, verses });
+  // Chapter uses a shared scroll container instead of the per-column verse layout (#397).
+  const isChapterMode = displayMode === 'chapter' && chapterViewAvailable;
+
+  // A saved preference cannot open an incomplete chapter. Local edits remain in useDrafting
+  // when clearing a verse returns the translator to the verse surface.
+  useLayoutEffect(() => {
+    if (displayMode === 'chapter' && !chapterViewAvailable) {
+      setDisplayMode('verse');
+    }
+  }, [displayMode, chapterViewAvailable, setDisplayMode]);
 
   const verseMapping = useMemo(() => {
     const mapping: Record<number, number> = {};
@@ -310,8 +331,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // immediately request and refill them while the translator is still working.
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
   const touchedTitlesRef = useRef(new Set<number>());
-  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
-  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+  const manualAiEnable = useAppStore(state => state.manualAiEnable);
+  const handledManualEnableRef = useRef(manualAiEnable?.revision);
+  const isAiJustEnabled =
+    manualAiEnable?.assignmentId === projectItem.chapterAssignmentId &&
+    manualAiEnable.revision !== handledManualEnableRef.current;
 
   const {
     suggestions: aiSuggestions,
@@ -458,7 +482,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
-  // Reset assignment-local state without remounting and discarding pending verse saves.
+  // Initialize assignment-local resource state. The keyed draft flushes pending verse saves
+  // before unmounting; its replacement starts with the next assignment's content.
   useEffect(() => {
     setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
     setResourceBibleTab(null);
@@ -663,8 +688,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   );
 
   useEffect(() => {
-    const justEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
-    wasAiEnabledRef.current = projectItem.isAiEnabled;
+    const justEnabled = isAiJustEnabled;
+    handledManualEnableRef.current = manualAiEnable?.revision;
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
     // An explicit opt-in is a new request for every empty input. While AI stays
@@ -696,7 +721,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedVerseNumbers: userTouchedVersesRef.current,
     });
     const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
-    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const firstTarget = firstSource ? targetFor(firstSource.verseNumber, verses) : undefined;
     const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
     const titleFill =
       currentPericopeGroup?.pericopeTitle?.trim() &&
@@ -752,6 +777,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     verses,
     handleTextChange,
     projectItem.isAiEnabled,
+    isAiJustEnabled,
+    manualAiEnable,
     projectItem.projectUnitId,
     projectItem.chapterAssignmentId,
     projectItem.chapterNumber,
@@ -1134,6 +1161,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           textareaRefs={textareaRefs}
                           verseRefs={verseRefs}
                           verses={verses}
+                          onLayoutChange={resizeAndPosition}
                         />
                       )}
                     </>

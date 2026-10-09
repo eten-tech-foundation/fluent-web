@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DisplayModeToggle } from '@/components/DisplayModeToggle';
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
 import type { SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
@@ -310,6 +311,7 @@ const defaultDraftingHookResult = (overrides = {}) => ({
   moveToNextVerse: vi.fn(),
   revealNextVerse: vi.fn(),
   updateButtonPosition: vi.fn(),
+  resizeAndPosition: vi.fn(),
   ...overrides,
 });
 
@@ -374,6 +376,7 @@ describe('DraftingUI', () => {
     // Default to Verse Mode
     useAppStore.setState({
       displayMode: 'verse',
+      manualAiEnable: null,
       userdetail: { id: 1, username: 'testuser', role: 'Project Translator' } as unknown as User,
     });
 
@@ -1408,6 +1411,50 @@ describe('DraftingUI', () => {
 
     const titleSuggestion = { pericopeNumber: '1', bibleTextId: 101, suggestedText: 'La creación' };
 
+    it('fills a verse and title without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one', 2: 'Verse two' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, 'Verse one', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        pericopeNumber: '1',
+        wasUsed: false,
+      });
+    });
+
+    it('fills a title arriving before scripture without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, '', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+    });
+
     it('fills title and first verse in one save without putting title words in scripture', () => {
       mockUseAiSuggestions.mockReturnValue({
         suggestions: { 1: 'Verse one', 2: 'Verse two' },
@@ -1573,6 +1620,42 @@ describe('DraftingUI', () => {
         headings: [{ marker: 's1', text: 'New title' }, ...bodyHeadings],
       });
     });
+
+    it.each([undefined, [{ marker: 'p', offset: 0 }]])(
+      'saves a cleared final title with valid markers while preserving paragraphs %j',
+      async paragraphs => {
+        const authored: TargetVerse[] = [
+          {
+            verseNumber: 1,
+            content: 'My scripture',
+            markers: {
+              headings: [{ marker: 's1', text: 'My title' }],
+              ...(paragraphs ? { paragraphs } : {}),
+            },
+          },
+          { verseNumber: 2, content: 'My other verse' },
+        ];
+        mockUseDrafting.mockReturnValue(
+          defaultDraftingHookResult({ verses: authored, handleTextChange })
+        );
+        const mutateAsync = vi.fn().mockResolvedValue(undefined);
+        mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync, isPending: false });
+        renderWithAi();
+        await userEvent.setup().clear(screen.getByLabelText('Section title'));
+        const expectedMarkers = paragraphs ? { paragraphs } : null;
+        expect(handleTextChange).toHaveBeenLastCalledWith(1, 'My scripture', expectedMarkers);
+        const { onSave } = mockUseDrafting.mock.calls.at(-1)?.[0] as {
+          onSave: (verse: number, payload: SavePayload) => Promise<void>;
+        };
+        await onSave(1, { content: 'My scripture', markers: expectedMarkers });
+        expect(mutateAsync).toHaveBeenCalledWith({
+          verseData: expect.objectContaining({
+            content: 'My scripture',
+            markers: expectedMarkers,
+          }) as unknown,
+        });
+      }
+    );
 
     it('preserves saved verse content without accepting an AI verse for a title-only fill', async () => {
       mockUseDrafting.mockReturnValue(
@@ -1940,6 +2023,67 @@ describe('DraftingUI', () => {
       expect(options.touchedTitleVerseNumbers).toContain(1);
     });
 
+    it('preserves cleared verses and titles when failed opt-out restores AI without manual opt-in', async () => {
+      const authored: TargetVerse[] = [
+        {
+          verseNumber: 1,
+          content: 'My draft',
+          markers: { headings: [{ marker: 's1', text: 'My title' }] },
+        },
+        { verseNumber: 2, content: 'Keep my text' },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: authored, handleTextChange })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Suggestion for 1', 2: 'Suggestion for 2' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      const view = renderWithAi();
+      const user = userEvent.setup();
+      await user.clear(screen.getByLabelText('Translation for verse 1'));
+      await user.clear(screen.getByLabelText('Section title'));
+      const cleared: TargetVerse[] = [EMPTY_PERICOPE[0], authored[1]];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: cleared, handleTextChange })
+      );
+      const rerenderWithAi = (isAiEnabled: boolean) =>
+        view.rerender(
+          <DraftingUI
+            projectItem={{ ...mockProjectItem, isAiEnabled }}
+            sourceVerses={mockSourceVerses}
+            targetVerses={cleared}
+            userdetail={{ id: 1 } as User}
+          />
+        );
+      rerenderWithAi(false);
+      handleTextChange.mockClear();
+      mockTrackAiUsage.mockClear();
+      rerenderWithAi(true);
+      expect(handleTextChange).not.toHaveBeenCalled();
+      expect(mockTrackAiUsage).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('');
+      expect(screen.getByLabelText('Section title')).toHaveValue('');
+      expect(screen.getByLabelText('Translation for verse 2')).toHaveValue('Keep my text');
+      const options = mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+        touchedTitleVerseNumbers: number[];
+      };
+      expect(options.touchedTitleVerseNumbers).toContain(1);
+
+      // Only a confirmed manual enable releases these empty inputs. Authored scripture stays intact.
+      act(() =>
+        useAppStore.setState({
+          manualAiEnable: { assignmentId: mockProjectItem.chapterAssignmentId, revision: 1 },
+        })
+      );
+      expect(handleTextChange).toHaveBeenCalledTimes(1);
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+    });
+
     it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {
       config.features.rtePericope = true;
       const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
@@ -2214,7 +2358,35 @@ describe('DraftingUI', () => {
       config.features.rtePericope = false;
     });
 
+    it('returns a saved Chapter preference to Verse for incomplete content', () => {
+      config.features.rtePericope = true;
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      render(
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue(
+        mockTargetVerses[0].content
+      );
+      expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+    });
+
     it('holds the pane open while the chapter chunk is still on the wire', async () => {
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Translated text' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
       config.features.rtePericope = true;
       useAppStore.setState({ displayMode: 'chapter' });
 
@@ -2235,6 +2407,38 @@ describe('DraftingUI', () => {
 
       expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
       expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+    });
+
+    it('uses live edits for Chapter and preserves them when clearing a verse disables it', async () => {
+      config.features.rtePericope = true;
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Local translation' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      chapterChunk.deliver();
+      const ui = () => (
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      const { rerender } = render(ui());
+      expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Chapter' })).not.toHaveAttribute('aria-disabled');
+      const edited = [complete[0], { ...complete[1], content: '' }];
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: edited }));
+      rerender(ui());
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('Local translation');
     });
   });
 });

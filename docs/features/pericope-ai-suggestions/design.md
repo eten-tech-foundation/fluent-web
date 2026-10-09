@@ -12,6 +12,9 @@ be available before enabling this web change.
 ## Loading and preservation
 
 Both pericope surfaces populate every empty, untouched verse in the active group.
+Verse mode applies the same empty-input rule to the focused source verse.
+This includes source verses without a persisted translation row; the API does not return
+empty placeholders for them. A section title may also arrive before that first row exists.
 Saved and locally edited text remain unchanged. A single `queue-pericopes` request identifies
 the active and next source-backed groups; the API resolves their verse ranges and queues
 missing verse drafts and eligible titles. Suggestions for the next group are fetched into
@@ -29,6 +32,13 @@ content stays in the draft and continues through normal autosave. Enabling AI ag
 the active group and permits any currently empty input to receive a suggestion. During an
 enabled session, manually clearing an input does not immediately refill it.
 
+Manual opt-in waits for the assignment update to succeed before enabling suggestion requests.
+Opt-out stops new fills immediately. Closing Settings does not discard the pending update or
+its rollback, and reopening it keeps the switch disabled until all manual and automatic updates
+settle, including updates from a previous assignment. Only a successful manual enable permits
+cleared inputs to fill again; restoring a failed opt-out preserves their interaction state. A late
+response updates only the assignment it belongs to, preserving any newer project fields.
+
 ## Section titles
 
 A group with a source title displays a separate Section title input. Its value is the first
@@ -44,7 +54,8 @@ title requests no heading suggestion. Groups whose scripture was already fully s
 do not request an optional title or show title-only generation errors. A title can still arrive
 after verses generated during the current session. The input uses the same 300-character, single-line
 validation as the existing heading editor. Invalid input stays visible for correction and is
-not saved. The API independently validates generated text and tracks the selected pericope
+not saved. Clearing the last title omits the empty headings array and keeps any paragraphs;
+if no structure remains, the save sends `markers: null`. The API independently validates generated text and tracks the selected pericope
 set, so an older set's in-flight result cannot become the current title.
 
 When a verse suggestion and title arrive together, one draft update carries both. This
