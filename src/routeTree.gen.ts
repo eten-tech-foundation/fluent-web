@@ -25,6 +25,7 @@ import { Route as AuthenticatedProjectsProjectIdIndexRouteImport } from './route
 import { Route as AuthenticatedOrganizationsOrgIdIndexRouteImport } from './routes/_authenticated/organizations/$orgId/index'
 import { Route as AuthenticatedViewBookIdChapterNumberRouteImport } from './routes/_authenticated/view/$bookId/$chapterNumber'
 import { Route as AuthenticatedTranslationBookIdChapterNumberRouteImport } from './routes/_authenticated/translation/$bookId/$chapterNumber'
+import { Route as AuthenticatedAudioBookIdChapterNumberRouteImport } from './routes/_authenticated/audio/$bookId/$chapterNumber'
 import { Route as AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport } from './routes/_authenticated/projects/$projectId/milestones/$milestoneId'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -112,6 +113,12 @@ const AuthenticatedTranslationBookIdChapterNumberRoute =
     path: '/translation/$bookId/$chapterNumber',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAudioBookIdChapterNumberRoute =
+  AuthenticatedAudioBookIdChapterNumberRouteImport.update({
+    id: '/audio/$bookId/$chapterNumber',
+    path: '/audio/$bookId/$chapterNumber',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProjectsProjectIdMilestonesMilestoneIdRoute =
   AuthenticatedProjectsProjectIdMilestonesMilestoneIdRouteImport.update({
     id: '/projects/$projectId/milestones/$milestoneId',
@@ -131,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/organizations/': typeof AuthenticatedOrganizationsIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
+  '/audio/$bookId/$chapterNumber': typeof AuthenticatedAudioBookIdChapterNumberRoute
   '/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
@@ -149,6 +157,7 @@ export interface FileRoutesByTo {
   '/organizations': typeof AuthenticatedOrganizationsIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/audio/$bookId/$chapterNumber': typeof AuthenticatedAudioBookIdChapterNumberRoute
   '/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/organizations/$orgId': typeof AuthenticatedOrganizationsOrgIdIndexRoute
@@ -169,6 +178,7 @@ export interface FileRoutesById {
   '/_authenticated/organizations/': typeof AuthenticatedOrganizationsIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/audio/$bookId/$chapterNumber': typeof AuthenticatedAudioBookIdChapterNumberRoute
   '/_authenticated/translation/$bookId/$chapterNumber': typeof AuthenticatedTranslationBookIdChapterNumberRoute
   '/_authenticated/view/$bookId/$chapterNumber': typeof AuthenticatedViewBookIdChapterNumberRoute
   '/_authenticated/organizations/$orgId/': typeof AuthenticatedOrganizationsOrgIdIndexRoute
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/organizations/'
     | '/projects/'
     | '/users/'
+    | '/audio/$bookId/$chapterNumber'
     | '/translation/$bookId/$chapterNumber'
     | '/view/$bookId/$chapterNumber'
     | '/organizations/$orgId/'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/projects'
     | '/users'
+    | '/audio/$bookId/$chapterNumber'
     | '/translation/$bookId/$chapterNumber'
     | '/view/$bookId/$chapterNumber'
     | '/organizations/$orgId'
@@ -226,6 +238,7 @@ export interface FileRouteTypes {
     | '/_authenticated/organizations/'
     | '/_authenticated/projects/'
     | '/_authenticated/users/'
+    | '/_authenticated/audio/$bookId/$chapterNumber'
     | '/_authenticated/translation/$bookId/$chapterNumber'
     | '/_authenticated/view/$bookId/$chapterNumber'
     | '/_authenticated/organizations/$orgId/'
@@ -355,6 +368,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTranslationBookIdChapterNumberRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/audio/$bookId/$chapterNumber': {
+      id: '/_authenticated/audio/$bookId/$chapterNumber'
+      path: '/audio/$bookId/$chapterNumber'
+      fullPath: '/audio/$bookId/$chapterNumber'
+      preLoaderRoute: typeof AuthenticatedAudioBookIdChapterNumberRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/projects/$projectId/milestones/$milestoneId': {
       id: '/_authenticated/projects/$projectId/milestones/$milestoneId'
       path: '/projects/$projectId/milestones/$milestoneId'
@@ -371,6 +391,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrganizationsIndexRoute: typeof AuthenticatedOrganizationsIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedAudioBookIdChapterNumberRoute: typeof AuthenticatedAudioBookIdChapterNumberRoute
   AuthenticatedTranslationBookIdChapterNumberRoute: typeof AuthenticatedTranslationBookIdChapterNumberRoute
   AuthenticatedViewBookIdChapterNumberRoute: typeof AuthenticatedViewBookIdChapterNumberRoute
   AuthenticatedOrganizationsOrgIdIndexRoute: typeof AuthenticatedOrganizationsOrgIdIndexRoute
@@ -384,6 +405,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrganizationsIndexRoute: AuthenticatedOrganizationsIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedAudioBookIdChapterNumberRoute:
+    AuthenticatedAudioBookIdChapterNumberRoute,
   AuthenticatedTranslationBookIdChapterNumberRoute:
     AuthenticatedTranslationBookIdChapterNumberRoute,
   AuthenticatedViewBookIdChapterNumberRoute:

@@ -455,6 +455,42 @@ export const CHAPTER_STATUS_ORDER: ChapterAssignmentStatus[] = [
   ChapterAssignmentStatus.COMPLETE,
 ];
 
+export interface VerseAudioTake {
+  id: number;
+  uploadedBy: number;
+  contentType: string;
+  sizeBytes: number;
+  durationSeconds: number | null;
+  contentHash: string;
+  downloadUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VerseAudioRecording {
+  id: number;
+  projectUnitId: number;
+  bibleTextId: number;
+  uploadedBy: number;
+  contentType: string;
+  sizeBytes: number;
+  durationSeconds: number | null;
+  versionToken: number;
+  conflictStatus: 'clean' | 'conflict' | 'resolved';
+  activeTakeId: number | null;
+  verseNumber: number;
+
+  downloadUrl: string;
+  takes: VerseAudioTake[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChapterAudioResponse {
+  items: VerseAudioRecording[];
+  hasConflict: boolean;
+}
+
 export type SortOption = 'recent' | 'title' | 'targetLanguage';
 
 export type StatusFilter = 'all' | 'potentially_stalled' | 'not_assigned';

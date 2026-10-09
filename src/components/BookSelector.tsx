@@ -162,7 +162,7 @@ export function BibleBookMultiSelectPopover({
                       </div>
                       {book.hasAudio && (
                         <Badge
-                          className='bg-success/15 text-success hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
+                          className='bg-success/15 text-success-subtle-foreground hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
                           variant='outline'
                         >
                           <Headphones className='h-3 w-3' />

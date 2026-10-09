@@ -101,11 +101,18 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-foreground: var(--success-subtle-foreground);
+  --color-success-subtle-border: var(--success-subtle-border);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+  --color-warning-subtle-border: var(--warning-subtle-border);
   --color-warning-border: var(--warning-border);
   --color-warning-surface: var(--warning-surface);
   --color-warning-surface-foreground: var(--warning-surface-foreground);
+  --color-warning-banner-foreground: var(--warning-banner-foreground);
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-info: var(--info);
@@ -170,12 +177,19 @@
 
   --success: #11875d;
   --success-foreground: #ffffff;
+  --success-subtle: #d1fae5;
+  --success-subtle-foreground: #11875d;
+  --success-subtle-border: #11875d;
 
   --warning: #e48f06;
   --warning-foreground: #ffffff;
+  --warning-subtle: #fff6d6;
+  --warning-subtle-foreground: #e48f06;
+  --warning-subtle-border: #e48f06;
   --warning-border: #e48f06;
   --warning-surface: #fff6d6;
   --warning-surface-foreground: #7c2d12;
+  --warning-banner-foreground: #7c2d12;
 
   --error: #d64545;
   --error-foreground: #ffffff;
@@ -271,12 +285,19 @@
 
   --success: #17b26a;
   --success-foreground: #ffffff;
+  --success-subtle: #123526;
+  --success-subtle-foreground: #17b26a;
+  --success-subtle-border: #17b26a;
 
   --warning: #e48f06;
   --warning-foreground: #ffffff;
+  --warning-subtle: #3a2f10;
+  --warning-subtle-foreground: #e48f06;
+  --warning-subtle-border: #e48f06;
   --warning-border: #e48f06;
   --warning-surface: #3a2f10;
   --warning-surface-foreground: #e48f06;
+  --warning-banner-foreground: #e48f06;
 
   --error: #f04438;
   --error-foreground: #ffffff;
