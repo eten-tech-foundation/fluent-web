@@ -4,6 +4,10 @@ These are the rules the current code and tests rely on. Each one names the code 
 a test that pins it, so a change can be checked against it. If a change has to break a rule, say
 so in the PR and update this file in the same PR.
 
+Two of them look like bugs but are intentional: role checks in the browser only shape the UI (see
+[Permissions](#permissions)), and when two people edit the same chapter the last save wins (see
+[Saving](#saving)).
+
 ## Permissions
 
 [fluent-api](https://github.com/eten-tech-foundation/fluent-api) decides what a user may do. The browser uses roles only to choose what to show, so a
