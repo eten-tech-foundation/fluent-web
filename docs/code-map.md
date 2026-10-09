@@ -6,7 +6,7 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
 
 ## Outside this repo
 
-- fluent-api is the only backend. Calls go to `${config.api.url}/<path>` with
+- [fluent-api](https://github.com/eten-tech-foundation/fluent-api) is the only backend. Calls go to `${config.api.url}/<path>` with
   `credentials: 'include'`. There is no shared API client: each feature keeps its fetch functions
   and React Query hooks in its own `hooks/` folder. Sign-in goes through better-auth at
   `config.api.auth_url` (`src/lib/auth-client.ts`).
@@ -14,7 +14,7 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   `src/features/rte/`. `package.json` pins its exact version.
 - Aquifer and YouVersion data comes through fluent-api's `/aquifer` and `/youversion` proxies.
   Only image and audio URLs inside Aquifer content load straight from a third party.
-- The repeated word check runs in fluent-api, which hands it to fluent-ai.
+- The repeated word check runs in [fluent-api](https://github.com/eten-tech-foundation/fluent-api), which hands it to [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai).
 - Errors and telemetry go through `Logger` (`src/lib/services/logger.ts`) to Application Insights
   (`src/lib/services/appInsights.ts`).
 

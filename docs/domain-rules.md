@@ -6,7 +6,7 @@ so in the PR and update this file in the same PR.
 
 ## Permissions
 
-fluent-api decides what a user may do. The browser uses roles only to choose what to show, so a
+[fluent-api](https://github.com/eten-tech-foundation/fluent-api) decides what a user may do. The browser uses roles only to choose what to show, so a
 check here never replaces one in the API.
 
 - Role checks compare the names in `ROLES` (`src/lib/types.ts`) through the helpers in
@@ -19,7 +19,7 @@ check here never replaces one in the API.
   checks `context.auth.canManageOrgs` (global SuperAdmin). Both values come from
   `src/features/root/AppRouter.tsx`. Tests: `src/features/auth/route-guards.test.ts` › "redirects
   when user cannot view users".
-- Part of chapter assignment is only checked in the browser. fluent-api's `assign-selected`
+- Part of chapter assignment is only checked in the browser. [fluent-api](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/domains/projects/chapter-assignments/project-chapter-assignments.route.ts#L231-L298)'s `assign-selected`
   checks the permission, project access, organization membership and that the drafter and peer
   checker are different people. It doesn't check that both are Project Translators or that the
   chapter's status still allows the change. `src/features/projects/components/AssignUsersDialog.tsx`
@@ -40,7 +40,7 @@ check here never replaces one in the API.
   `src/features/auth/LoginPage.test.tsx` › "ignores non-internal returnTo targets after sign-in".
 - The session cookie is the only credential. API calls send `credentials: 'include'` and no keys
   or tokens, because every `VITE_*` value ends up in the bundle. Aquifer and YouVersion data comes
-  through fluent-api's `/aquifer` and `/youversion` proxies. Tests:
+  through fluent-api's [`/aquifer`](https://github.com/eten-tech-foundation/fluent-api/tree/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/domains/aquifer-resources) and [`/youversion`](https://github.com/eten-tech-foundation/fluent-api/tree/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/domains/youversion) proxies. Tests:
   `src/features/resources/hooks/useYouVersion.test.ts` › "routes fetchYouVersionBibles through
   fluent-api proxy with credentials and no client API key header";
   `src/features/resources/hooks/useAquiferResources.test.ts` › "routes fetchAllLanguages through
@@ -73,7 +73,7 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   under [Saving](#saving)). Tests: `src/features/rte/lib/pericope-usj.test.ts` › "reports a verse
   emptied by the translator, rather than dropping it" and "reports a markers-only change so a new
   paragraph reaches the server".
-- Headings follow fluent-api's `verseMarkersSchema`: at most 4 per verse, 1 to 300 characters,
+- Headings follow fluent-api's [`verseMarkersSchema`](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/db/schema.ts#L478): at most 4 per verse, 1 to 300 characters,
   no backslash or line break. `HEADING_MARKERS` in `src/features/rte/lib/heading-markers.ts`
   mirrors the API's `USFM_HEADING_MARKERS`, so change both repos together. While a heading is
   invalid the editor shows an error and doesn't save. Tests:
@@ -94,7 +94,7 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   `src/features/rte/lib/clipboard-shortcuts.test.tsx`,
   `src/features/rte/lib/format-heading.test.tsx` and
   `src/features/rte/lib/scoped-block-format.test.ts`.
-- A project created from USFM sends the files as `usfmFiles` and `bookId: []`, and fluent-api
+- A project created from USFM sends the files as `usfmFiles` and `bookId: []`, and [fluent-api](https://github.com/eten-tech-foundation/fluent-api)
   takes the books from the files. The import tab (`src/features/projects/lib/usfm-validate.ts`) is
   all or nothing: one file that isn't USFM, has no book code or repeats a book clears the whole
   batch. Tests: `src/features/projects/components/CreateProjectModal.submit.test.tsx` › "drops a
@@ -120,7 +120,7 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   ones are skipped and the header shows a banner. Tests:
   `src/features/bible/hooks/useBibleTextDebounce.test.ts` › "cancels pending saves and skips new
   saves when a 403 permission error occurs" and "retries a failed save with its markers intact".
-- A save sends plain text and optional `markers`, never USJ. fluent-api replaces the stored
+- A save sends plain text and optional `markers`, never USJ. [fluent-api](https://github.com/eten-tech-foundation/fluent-api) replaces the stored
   markers with what the request carries and clears them when the field is missing, so every save
   path has to decide which markers to send. A textarea edit keeps the verse's headings and drops
   its paragraph offsets (`handleTextChange` in `src/features/bible/hooks/useDrafting.ts`). Tests:
@@ -134,7 +134,7 @@ The drafting page saves one verse at a time with `POST /translated-verses`
 - Saves carry no version, so when two people edit the same chapter the last save wins.
   `useChapterPresence` only warns the second editor, and only in the community review, linguist,
   theological and consultant check stages. No test covers the warning.
-- Status changes happen in fluent-api. The page only calls `PATCH /chapter-assignments/:id/submit`.
+- Status changes happen in [fluent-api](https://github.com/eten-tech-foundation/fluent-api). The page only calls `PATCH /chapter-assignments/:id/submit`.
   Tests: `src/features/bible/components/DraftingUI.test.tsx` › "triggers submit workflow when
   translation is complete and submit button is clicked".
 - A pericope that crosses into the next or previous chapter shows the other chapter's verses read
@@ -173,14 +173,14 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   organization needs the org id in its key. No test covers this.
 - Assigning chapters updates `['chapterAssignments', projectId]` right away and rolls back on
   error (`src/hooks/useChapterAssignment.ts`). Removing a project member or making them an
-  Observer rewrites the cached assignments the way fluent-api does: their drafter slot clears in
+  Observer rewrites the cached assignments the way [fluent-api](https://github.com/eten-tech-foundation/fluent-api) does: their drafter slot clears in
   not started and draft, their peer checker slot also in peer check
   (`src/features/projects/hooks/useProjectUsers.ts`). If the API rule changes, change this too.
   Tests: `src/features/projects/components/AssignProjectUser.test.tsx` › "renders extended warning
   banner copy when member has active assignments".
 - The repeated word check reruns after every successful save, because a counter that goes up
   after each save is part of its query key. It doesn't poll. The request and response types in
-  `src/features/checks/checks.types.ts` copy fluent-ai's contract in snake_case, so don't rename
+  `src/features/checks/checks.types.ts` copy [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai)'s contract in snake_case, so don't rename
   them. Tests: `src/features/checks/hooks/useRepeatedWordsCheck.test.ts` › "re-runs the check when
   saveCounter changes" and "sends project_id as a string (fluent-ai requires str, not int)".
 - AI suggestions run only when AI is on, the chapter is in Draft and the page isn't read only. The
@@ -196,9 +196,9 @@ The drafting page saves one verse at a time with `POST /translated-verses`
 
 ## Feature flags
 
-- Runtime flags come from fluent-api's `GET /config/features` and fail closed: a flag reads as
+- Runtime flags come from fluent-api's [`GET /config/features`](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/routes/config.route.ts) and fail closed: a flag reads as
   off while loading, on error, or when the API doesn't list it. A new flag goes in `FeatureName`
-  and `failClosedFeatures` (`src/features/flags/flags.types.ts`), matching fluent-api's `FLAGS`.
+  and `failClosedFeatures` (`src/features/flags/flags.types.ts`), matching fluent-api's [`FLAGS`](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/lib/features.ts#L78).
   Use `useFeatureFlag` or `FeatureGate`, and also put the flag in the query's `enabled`, because
   `FeatureGate` only hides rendering. Tests: `src/features/flags/useFeatureFlags.test.tsx` › "fails
   closed (all flags off) when the endpoint errors".
