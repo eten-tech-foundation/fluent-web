@@ -12,19 +12,30 @@ interface ColorInfo {
   displayName: string;
 }
 
-interface ProgressSubSegment {
+export interface ProgressSubSegment {
   label: string;
   percentage: number;
 }
 
-interface ProgressSegment {
+export interface ProgressSegment {
   status: string;
   displayName: string;
   count: number;
+  percentage: number;
   widthPercentage: number;
   color: string;
   subSegments?: ProgressSubSegment[];
 }
+
+export const formatProgressPercentage = (percentage: number, count = 0): string => {
+  if (count > 0 && percentage > 0 && percentage < 3) {
+    if (percentage % 1 === 0) {
+      return `${percentage}%`;
+    }
+    return `${Number(percentage.toFixed(1))}%`;
+  }
+  return `${Math.round(percentage)}%`;
+};
 
 interface LegendItem {
   key: string;
@@ -175,14 +186,17 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         const existing = segmentsByKey.get(key);
         if (existing) {
           existing.count += count;
-          existing.widthPercentage = (existing.count / totalChapters) * 100;
+          existing.percentage = (existing.count / totalChapters) * 100;
+          existing.widthPercentage = existing.count > 0 ? Math.max(existing.percentage, 3) : 0;
           return;
         }
+        const percentage = (count / totalChapters) * 100;
         segmentsByKey.set(key, {
           status: key,
           displayName: stepColor.displayName,
           count,
-          widthPercentage: (count / totalChapters) * 100,
+          percentage,
+          widthPercentage: count > 0 ? Math.max(percentage, 3) : 0,
           color: stepColor.color,
         });
       });
@@ -209,7 +223,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         const rawPercentages = orderedSteps.map(
           step => ((chapterStatusCounts[step.id] ?? 0) / totalChapters) * 100
         );
-        const roundedTotal = Math.round(advancedSegment.widthPercentage);
+        const roundedTotal = Math.round(advancedSegment.percentage);
         const roundedPercentages = distributeRoundedPercentages(rawPercentages, roundedTotal);
 
         advancedSegment.subSegments = orderedSteps.map((step, index) => ({
