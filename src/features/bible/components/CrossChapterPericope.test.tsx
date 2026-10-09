@@ -149,7 +149,7 @@ describe('cross-chapter pericope display', () => {
       selectedPanel: 2,
       pericopes: [localGroup],
       fullPericopes: [localGroup],
-      resourceBibleError: true,
+      bibleContentError: true,
     });
     expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
     expect(screen.queryByText('No content available')).not.toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('cross-chapter pericope display', () => {
     renderChapter(8, {
       selectedPanel: 2,
       bibleVerseMap: new Map([[31, 'Retained reference verse']]),
-      resourceBibleError: true,
+      bibleContentError: true,
     });
     expect(screen.getByText('Retained reference verse')).not.toHaveClass('text-muted-foreground');
     expect(screen.getAllByText('Unable to load Bible content.')).toHaveLength(7);
@@ -178,7 +178,7 @@ describe('cross-chapter pericope display', () => {
   });
 
   it('shows loading for neighboring reference verses while the Bible selection is pending', () => {
-    renderChapter(8, { selectedPanel: 2, resourceBibleLoading: true });
+    renderChapter(8, { selectedPanel: 2, bibleContentLoading: true });
     const referenceGroup = screen.getByRole('button', { name: /8:31.*Loading/ });
     expect(within(referenceGroup).getAllByText('Loading...')).toHaveLength(9);
     expect(within(referenceGroup).queryByText('No content available')).not.toBeInTheDocument();
@@ -197,7 +197,7 @@ describe('cross-chapter pericope display', () => {
       pericopes: [localGroup],
       fullPericopes: [localGroup],
       bibleVerseMap: new Map([[31, 'Loaded reference verse']]),
-      resourceBibleLoading: true,
+      bibleContentLoading: true,
     });
     expect(screen.getByText('Loaded reference verse')).not.toHaveClass('text-muted-foreground');
     expect(screen.getByText('Loading...')).toHaveClass('text-muted-foreground', 'text-sm');
@@ -307,7 +307,7 @@ describe('cross-chapter pericope display', () => {
       renderChapter(8, {
         selectedPanel: 2,
         bibleVerseMap: new Map([[31, content]]),
-        resourceBibleLoading: loading,
+        bibleContentLoading: loading,
       });
       const resourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
       const resourceText = within(resourceColumn).getByText('8:31').nextElementSibling!;
