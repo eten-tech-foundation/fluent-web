@@ -105,6 +105,13 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   manual book selection when the submit carries usfm files";
   `src/features/projects/components/UsfmImportTab.test.tsx` › "imports nothing when one file of
   several is not USFM".
+- Speech is synthesized only for a Bible whose `ttsLicenseStatus` is `allowed`. `forbidden`,
+  `unknown` and a missing status all bar it, and `licenceBar` in
+  `src/features/tts/resolver/licenceFence.ts` is the one place that reads the status. A barred
+  Bible still plays its recording. Tests:
+  `src/features/tts/hooks/useSourceTtsPlayback.licence.test.ts` › "never synthesizes a barred
+  Bible, and says why instead of failing silently" and "refuses synthesis when no licence reached
+  the page at all".
 
 ## Saving
 
@@ -206,6 +213,16 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   Use `useFeatureFlag` or `FeatureGate`, and also put the flag in the query's `enabled`, because
   `FeatureGate` only hides rendering. Tests: `src/features/flags/useFeatureFlags.test.tsx` › "fails
   closed (all flags off) when the endpoint errors".
+- The `/debug` page can force a flag on or off in this browser. Overrides live in localStorage,
+  never reach the API and work in every environment, production included. Only `useFeatureFlags`
+  reads them (`src/features/flags/flagOverrides.ts`), and they reach queries as well as rendering,
+  so the API still has to enforce whatever a flag guards. Tests:
+  `src/features/flags/useFeatureFlags.test.tsx` › "reaches side effects, not just render: a gated
+  query actually fires (O3)".
+- Audio controls read `useAudioEnabled` (`src/features/tts/settings/useAudioEnabled.ts`), which
+  combines the `sourceAudio` flag with the Hide Audio setting. A new audio control uses it instead
+  of reading the flag. Tests: `src/features/bible/components/DraftingUI.ttsFlag.test.tsx` › "keeps
+  the controls hidden when the API publishes the flag off".
 - Build-time flags (`VITE_RTE_PERICOPE`, `VITE_USFM_IMPORT`) are read through
   `config.features` in `src/lib/config.ts`. Vite inlines them, so each deploy is its own build
   (`.github/workflows/deploy.yml`). Tests pin them off in `vite.config.ts`, and a suite that needs

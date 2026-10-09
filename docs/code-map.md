@@ -14,6 +14,9 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   `src/features/rte/`. `package.json` pins its exact version.
 - Aquifer and YouVersion data comes through fluent-api's `/aquifer` and `/youversion` proxies.
   Only image and audio URLs inside Aquifer content load straight from a third party.
+- Bible audio is looked up through fluent-api as well, but the player loads the file URLs it gets
+  back: a recording plays from the provider's URL and generated speech from the URL that
+  `POST /ai/tts/generate` returns.
 - The repeated word check runs in [fluent-api](https://github.com/eten-tech-foundation/fluent-api), which hands it to [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai).
 - Errors and telemetry go through `Logger` (`src/lib/services/logger.ts`) to Application Insights
   (`src/lib/services/appInsights.ts`).
@@ -71,12 +74,21 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   calls `POST /ai/tools/greek-room/repeated-words`, `hooks/useSuppressions.ts` keeps the findings a
   translator dismissed (`GET|PUT /self/settings` and the chapter's editor state) and
   `components/ChecksPanel.tsx` shows the results. The runtime flag `repeatedWordCheck` turns it on.
+- `src/features/tts/`: audio for the source and reference Bibles on the drafting page, with verse,
+  pericope and chapter players and the Hide Audio setting. `resolver/` picks a recording or
+  synthesized speech for each verse, and `resolver/licenceFence.ts` decides whether speech may be
+  synthesized. It calls `GET /projects/:id/playback-audio/:bookCode/:chapter`,
+  `GET /projects/:id/reference-audio/:bibleKey/:bookCode/:chapter`,
+  `GET /projects/:id/bible-resources/:bibleKey` and `POST /ai/tts/generate`. The runtime flag
+  `sourceAudio` turns it on, and `PlaybackRegistryProvider` in `src/routes/__root.tsx` lets only
+  one player run at a time. The design is in `docs/features/audio-playback/design.md`.
 - `src/features/organizations/`: the SuperAdmin organization pages and the Org Manager invite
   (`GET|POST /organizations`, `POST /users/invite`).
 - `src/features/users/`: the Users page for the active organization. It changes org-level roles
   with `PATCH /organizations/:orgId/users/:userId` and profiles with `PATCH /users/:id`.
 - `src/features/flags/`: runtime feature flags from `GET /config/features`, plus the `/debug`
-  page.
+  page, where a flag can be forced on or off in this browser (`flagOverrides.ts`).
+  `FlagOverrideChip` stays on screen while an override is active.
 - `src/features/profile/` and `src/features/legal/`: the profile editor and the static legal
   pages.
 
