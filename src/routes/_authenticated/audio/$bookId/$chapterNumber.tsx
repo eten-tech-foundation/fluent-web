@@ -6,7 +6,7 @@ import { type ProjectItem } from '@/lib/types';
 import { hydrationPromise, useAppStore } from '@/store/store';
 
 export const Route = createFileRoute('/_authenticated/audio/$bookId/$chapterNumber')({
-  loader: async ({ location }) => {
+  loader: async ({ location, params }) => {
     await hydrationPromise;
     const { userdetail, currentProjectItem, setCurrentProjectItem } = useAppStore.getState();
 
@@ -32,6 +32,12 @@ export const Route = createFileRoute('/_authenticated/audio/$bookId/$chapterNumb
     }
 
     if (!projectItem) {
+      throw redirect({ to: '/' });
+    }
+
+    const routeBookId = Number(params.bookId);
+    const routeChapterNumber = Number(params.chapterNumber);
+    if (projectItem.bookId !== routeBookId || projectItem.chapterNumber !== routeChapterNumber) {
       throw redirect({ to: '/' });
     }
 

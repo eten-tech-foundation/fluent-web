@@ -152,7 +152,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
               {selectedMeta.provider.toUpperCase()}
             </p>
             {selectedMeta.hasAudio ? (
-              <p className='text-success-foreground flex items-center gap-1.5 pt-1 text-xs font-medium'>
+              <p className='text-success-subtle-foreground flex items-center gap-1.5 pt-1 text-xs font-medium'>
                 <Headphones className='h-3.5 w-3.5' />
                 Audio available — included as offline source
               </p>
@@ -295,7 +295,7 @@ export const SourceBiblePicker: React.FC<SourceBiblePickerProps> = ({
                               <div className='flex items-center gap-2'>
                                 {bible.hasAudio && (
                                   <Badge
-                                    className='bg-success/15 text-success-foreground hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
+                                    className='bg-success/15 text-success-subtle-foreground hover:bg-success/20 shrink-0 gap-1 border-0 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-none'
                                     variant='outline'
                                   >
                                     <Headphones className='h-3 w-3' />

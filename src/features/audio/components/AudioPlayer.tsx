@@ -36,8 +36,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   // Pause when parent signals another take has started
   useEffect(() => {
-    if (shouldPause && isPlaying) {
-      audioRef.current?.pause();
+    const audio = audioRef.current;
+    if (shouldPause && (isPlaying || (audio && !audio.paused))) {
+      audio?.pause();
       setIsPlaying(false);
     }
   }, [shouldPause, isPlaying]);

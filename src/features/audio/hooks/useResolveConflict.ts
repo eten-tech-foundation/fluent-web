@@ -82,7 +82,7 @@ export const useResolveConflict = () => {
       });
 
       // Invalidate in background to refetch fresh pre-signed URLs
-      void queryClient.invalidateQueries({ queryKey: qk, refetchType: 'none' });
+      void queryClient.invalidateQueries({ queryKey: qk });
     },
   });
 };

@@ -60,6 +60,7 @@ export const useChapterAudio = (
       (options?.enabled ?? true) && !!projectUnitId && !!bibleId && !!bookId && !!chapterNumber,
     // Refetch every 10 min to get fresh pre-signed URLs before the 15-min R2 expiry
     staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
   });
 };
