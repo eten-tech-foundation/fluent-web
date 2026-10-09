@@ -65,7 +65,7 @@ export function ScrubBar({ spans, verseRefs, position, disabled = false, onSeek 
         setDraft(null);
         keyboardDraft.current = null;
       }}
-      onKeyDown={event => {
+      onKeyDown={(event: React.KeyboardEvent) => {
         if (!seekKeys.has(event.key)) return;
         // Radix normally commits every keydown. This bar commits on release instead.
         event.preventDefault();
@@ -87,7 +87,7 @@ export function ScrubBar({ spans, verseRefs, position, disabled = false, onSeek 
         keyboardDraft.current = next;
         setDraft(next);
       }}
-      onKeyUp={event => {
+      onKeyUp={(event: React.KeyboardEvent) => {
         if (!seekKeys.has(event.key) || keyboardDraft.current === null) return;
         event.preventDefault();
         commit([keyboardDraft.current]);
@@ -96,7 +96,7 @@ export function ScrubBar({ spans, verseRefs, position, disabled = false, onSeek 
         setDraft(null);
         keyboardDraft.current = null;
       }}
-      onValueChange={values => {
+      onValueChange={(values: number[]) => {
         if (!inert) setDraft(values[0]);
       }}
       onValueCommit={commit}
