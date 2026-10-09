@@ -13,6 +13,16 @@ function length(node: string | MarkerObject): number {
   return 1;
 }
 
+/** Where the next verse marker at or after `from` starts in its block, in delta units. */
+function nextVerseOffset(block: MarkerObject, from: number): number | undefined {
+  let offset = 0;
+  for (const child of block.content ?? []) {
+    if (offset >= from && typeof child !== 'string' && child.type === 'verse') return offset;
+    offset += length(child);
+  }
+  return undefined;
+}
+
 /** Insert at a caret only: a toolbar action must never replace selected scripture. */
 export function insertParagraph(editor: EditorRef): boolean {
   const selection = editor.getSelection();
@@ -87,6 +97,24 @@ export function insertParagraph(editor: EditorRef): boolean {
   const before = usj.content.slice(0, Number(index)).reduce((sum, child) => sum + length(child), 0);
   const tail = length(block) - 1 - inside;
   if (tail < 0) return false;
+  // Only the rest of the caret's verse becomes prose. A later verse in the same Poetry block keeps
+  // the block's original closing newline, and with it the Poetry style, so its saved row (which
+  // continues the current paragraph when it has no markers) still reloads as Poetry.
+  const nextVerse = block.marker === 'p' ? undefined : nextVerseOffset(block, inside);
+  if (nextVerse !== undefined) {
+    editor.applyUpdate(
+      [
+        { retain: before + inside },
+        { insert: '\n', attributes: { para: { style: block.marker ?? 'p' } } },
+        nextVerse > inside ? { retain: nextVerse - inside } : { insert: '  ' },
+        { insert: '\n', attributes: { para: { style: 'p' } } },
+      ],
+      'local'
+    );
+    editor.setSelection({ start: { jsonPath: `$.content[${Number(index) + 1}]`, offset: 0 } });
+    editor.getSelection();
+    return true;
+  }
   if (tail === 0 && block.marker !== 'p') {
     editor.applyUpdate(
       [

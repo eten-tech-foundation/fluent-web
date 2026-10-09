@@ -7,25 +7,48 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { insertParagraph } from './insert-paragraph';
 import { pericopeVersesToUsj, usjToPericopeVerses } from './pericope-usj';
 
+import type { PericopeVerseText } from './pericope-usj';
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
+import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 
 type OffsetLocation = Extract<
   NonNullable<ReturnType<EditorRef['getSelection']>>['start'],
   { offset: number }
 >;
 
-async function setup(marker = 'p', text = 'First words. Last words.') {
-  const ref = createRef<EditorRef>();
-  const rows = [
-    {
-      verseNumber: 1,
-      text,
-      markers: {
-        paragraphs: [{ marker, offset: 0 }],
-        headings: [{ marker: 's1', text: 'Whole title' }],
-      },
+function verseOne(marker: string, text: string): PericopeVerseText {
+  return {
+    verseNumber: 1,
+    text,
+    markers: {
+      paragraphs: [{ marker, offset: 0 }],
+      headings: [{ marker: 's1', text: 'Whole title' }],
     },
-  ];
+  };
+}
+
+const secondVerse: PericopeVerseText = { verseNumber: 2, text: 'Second verse.', markers: null };
+
+const markerOf = (node: Usj['content'][number]) =>
+  typeof node === 'string' ? undefined : node.marker;
+
+function paragraphOfVerse(usj: Usj, verse: string): string | undefined {
+  const para = usj.content.find(
+    node =>
+      typeof node !== 'string' &&
+      node.content?.some(
+        item => typeof item !== 'string' && item.type === 'verse' && item.number === verse
+      )
+  );
+  return para && markerOf(para);
+}
+
+async function setup(marker = 'p', text = 'First words. Last words.') {
+  return renderRows([verseOne(marker, text)]);
+}
+
+async function renderRows(rows: PericopeVerseText[]) {
+  const ref = createRef<EditorRef>();
   const onUsjChange = vi.fn();
   const view = render(
     <Editorial
@@ -110,6 +133,58 @@ describe('explicit paragraph insertion in Editorial', () => {
     expect(editor.getUsj()!.content[2]).toMatchObject({ marker });
     expect(editor.getUsj()!.content[3]).toMatchObject({ marker: 'p' });
     expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
+  });
+
+  it('keeps a later verse in the same Poetry block as Poetry after save and reload', async () => {
+    const rows = [verseOne('q2', 'First words. Last words.'), secondVerse];
+    const { editor, select, container, onUsjChange } = await renderRows(rows);
+    await select('$.content[2].content[1]', 13);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(4));
+    expect(
+      editor
+        .getUsj()!
+        .content.slice(2)
+        .map(node => markerOf(node))
+    ).toEqual(['q2', 'p', 'q2']);
+    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
+
+    const saved = usjToPericopeVerses(onUsjChange.mock.lastCall![0]);
+    expect(saved[0].markers?.paragraphs).toEqual([
+      { marker: 'q2', offset: 0 },
+      { marker: 'p', offset: 13 },
+    ]);
+    expect(saved[1]).toEqual({
+      verseNumber: 2,
+      text: 'Second verse.',
+      markers: { paragraphs: [{ marker: 'q2', offset: 0 }] },
+    });
+    expect(paragraphOfVerse(pericopeVersesToUsj(saved, 1, 'GEN'), '2')).toBe('q2');
+
+    const reloaded = await renderRows(saved);
+    const lines = reloaded.container.querySelectorAll('[data-marker="q2"]');
+    expect(lines[lines.length - 1]).toHaveTextContent('Second verse.');
+  });
+
+  it('inserts between two verses of one Poetry block without moving the second', async () => {
+    const rows = [verseOne('q2', 'First words. Last words.'), secondVerse];
+    const { editor, select, container, onUsjChange } = await renderRows(rows);
+    await select('$.content[2].content[1]', 24);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(4));
+    expect(
+      editor
+        .getUsj()!
+        .content.slice(2)
+        .map(node => markerOf(node))
+    ).toEqual(['q2', 'p', 'q2']);
+    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
+
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(5));
+    const saved = usjToPericopeVerses(onUsjChange.mock.lastCall![0]);
+    expect(saved.map(verse => verse.text)).toEqual(['First words. Last words.', 'Second verse.']);
+    expect(paragraphOfVerse(pericopeVersesToUsj(saved, 1, 'GEN'), '2')).toBe('q2');
   });
 
   it('never replaces a selected range', async () => {
