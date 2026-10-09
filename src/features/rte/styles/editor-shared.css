@@ -1,11 +1,16 @@
 /*
- * What every surface that mounts the editor has to undo, whichever view it belongs to.
+ * Shared editor styling: what every surface that mounts the editor needs, whichever view it
+ * belongs to. Two kinds of rule live here, the theme reset and the shared typography.
  *
- * The vendored stylesheets are Platform.Bible's standalone look: a white page with its own chrome,
- * painting its own background and its own text colour. Inside Fluent the editor is one element
- * among others and has to follow the app's theme instead, so this reset is not a property of the
- * pericope boxes or of the chapter surface — it is a property of mounting that editor at all, and
- * a copy of it per view is a copy to forget to extend.
+ * The theme reset: the vendored stylesheets are Platform.Bible's standalone look, a white page with
+ * its own chrome, painting its own background and its own text colour. Inside Fluent the editor is
+ * one element among others and has to follow the app's theme instead, so this reset is not a
+ * property of the pericope boxes or of the chapter surface — it is a property of mounting that
+ * editor at all, and a copy of it per view is a copy to forget to extend.
+ *
+ * The shared typography: body text, verse numbers and the section heading hierarchy look the same
+ * in Chapter view and in the pericope boxes, for the same reason. Layout that only one surface
+ * wants stays in that surface's sheet.
  *
  * Keyed on `.rte-editor`, which each wrapper puts on the element the editor mounts inside.
  */
