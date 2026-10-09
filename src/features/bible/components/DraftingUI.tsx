@@ -43,12 +43,13 @@ import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsC
 import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag, useFeatureFlags } from '@/features/flags';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { useReferenceChapterTexts } from '@/features/resources/hooks/useReferenceChapterTexts';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
-  ServerTtsEngine,
   RecordedNoticeDialog,
+  ServerTtsEngine,
   type SourceAudioRow,
   useAudioEnabled,
   usePlaybackRegistry,
@@ -672,8 +673,29 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
   const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);
 
-  const buttonText =
+  const { workflowConfig, getStageLabel } = useProjectWorkflow(projectItem.projectId);
+
+  let buttonText =
     ChapterAssignmentStatusNextAction[projectItem.chapterStatus as ChapterAssignmentStatus];
+
+  if (workflowConfig.length > 0) {
+    const currentIndex = workflowConfig.findIndex(
+      step =>
+        step.id === projectItem.chapterStatus ||
+        step.stageId?.toString() === projectItem.chapterStatus
+    );
+    if (currentIndex !== -1 && currentIndex < workflowConfig.length - 1) {
+      const nextStep = workflowConfig[currentIndex + 1];
+      if (nextStep.id === 'complete') {
+        buttonText = t('markAsComplete', 'Mark as Complete');
+      } else {
+        const nextLabel = nextStep.label
+          ? getStageLabel(nextStep.id, nextStep.label)
+          : getStageLabel(nextStep.id);
+        buttonText = `Send to ${nextLabel}`;
+      }
+    }
+  }
 
   const handleSubmit = useCallback(async () => {
     if (!isTranslationComplete) return;

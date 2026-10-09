@@ -157,6 +157,29 @@ export function isProjectManager(
   });
 }
 
+/**
+ * True if the user is a Project Manager for the given projectId, excluding Organization Managers
+ * (Org Manager, Org Owner) as required for the Manage Workflow dialog access.
+ */
+export function isProjectManagerOnly(
+  activeGrants: UserGrant[],
+  projectId: number | null | undefined
+): boolean {
+  if (!projectId) return false;
+  return activeGrants.some(g => {
+    if (g.roleName === 'Org Manager' || g.roleName === 'Org Owner') return false;
+    if (g.roleName === 'Project Manager') {
+      return (
+        g.projectId === null ||
+        g.projectId === undefined ||
+        g.projectId === projectId ||
+        g.projectId === Number(projectId)
+      );
+    }
+    return g.roleName === 'SuperAdmin';
+  });
+}
+
 export function isOrgMemberOnly(activeGrants: UserGrant[]): boolean {
   return activeGrants.length > 0 && activeGrants.every(g => g.roleName === 'Org Member');
 }

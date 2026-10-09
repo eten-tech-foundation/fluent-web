@@ -5,7 +5,14 @@ import {
   type ConnectivityProfile,
 } from '@/lib/types';
 
-export const getStatusDisplay = (status: ChapterAssignmentStatus): string => {
+export const getStatusDisplay = (
+  status: ChapterAssignmentStatus,
+  getStageLabel?: (status: string) => string
+): string => {
+  if (getStageLabel) {
+    const custom = getStageLabel(status);
+    if (custom) return custom;
+  }
   return ChapterAssignmentStatusDisplay[status] || status;
 };
 

@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import useProgressBar from '@/features/projects/hooks/useProgressBar';
+import useProgressBar, { formatProgressPercentage } from '@/features/projects/hooks/useProgressBar';
 import { useUserProjects } from '@/features/projects/hooks/useProjects';
 import { type Project } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -35,14 +35,37 @@ const ProjectProgressBar: React.FC<{ project: Project }> = ({ project }) => {
   return (
     <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
       {segments.map((segment, index) => (
-        <div
-          key={`${segment.status}-${index}`}
-          className='transition-all'
-          style={{
-            width: `${segment.widthPercentage}%`,
-            backgroundColor: segment.color,
-          }}
-        />
+        <Tooltip key={`${segment.status}-${index}`}>
+          <TooltipTrigger asChild>
+            <div
+              className='h-full transition-all hover:brightness-110'
+              style={{
+                width: `${segment.widthPercentage}%`,
+                minWidth: segment.count > 0 ? '3%' : undefined,
+                backgroundColor: segment.color,
+              }}
+            />
+          </TooltipTrigger>
+          <TooltipContent side='top'>
+            {segment.subSegments && segment.subSegments.length > 0 ? (
+              <div className='flex flex-col gap-1'>
+                <p className='mb-1 border-b pb-1 font-bold'>
+                  {formatProgressPercentage(segment.percentage, segment.count)}{' '}
+                  {segment.displayName}
+                </p>
+                {segment.subSegments.map((sub, idx) => (
+                  <p key={idx} className='text-xs'>
+                    {sub.label}: {formatProgressPercentage(sub.percentage)}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p>
+                {formatProgressPercentage(segment.percentage, segment.count)} {segment.displayName}
+              </p>
+            )}
+          </TooltipContent>
+        </Tooltip>
       ))}
     </div>
   );

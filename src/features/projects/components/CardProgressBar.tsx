@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import useProgressBar from '@/features/projects/hooks/useProgressBar';
+import useProgressBar, { formatProgressPercentage } from '@/features/projects/hooks/useProgressBar';
 import { type ChapterStatusCounts, type WorkflowStep } from '@/lib/types';
 
 interface CardProgressBarProps {
@@ -26,18 +26,44 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
   if (variant === 'mini') {
     return (
       <div className='flex items-center gap-2'>
-        <div className='flex h-1.5 w-16 overflow-hidden rounded-full bg-slate-100'>
-          {segments.map((segment, index) => (
-            <div
-              key={`${segment.status}-${index}`}
-              className='h-full first:rounded-l-full last:rounded-r-full hover:brightness-110'
-              style={{
-                width: `${segment.widthPercentage}%`,
-                backgroundColor: segment.color,
-              }}
-            />
-          ))}
-        </div>
+        <TooltipProvider delayDuration={200}>
+          <div className='flex h-1.5 w-16 overflow-hidden rounded-full bg-slate-100'>
+            {segments.map((segment, index) => (
+              <Tooltip key={`${segment.status}-${index}`}>
+                <TooltipTrigger asChild>
+                  <div
+                    className='h-full first:rounded-l-full last:rounded-r-full hover:brightness-110'
+                    style={{
+                      width: `${segment.widthPercentage}%`,
+                      minWidth: segment.count > 0 ? '3%' : undefined,
+                      backgroundColor: segment.color,
+                    }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side='top'>
+                  {segment.subSegments && segment.subSegments.length > 0 ? (
+                    <div className='flex flex-col gap-1'>
+                      <p className='mb-1 border-b pb-1 font-bold'>
+                        {formatProgressPercentage(segment.percentage, segment.count)}{' '}
+                        {segment.displayName}
+                      </p>
+                      {segment.subSegments.map((sub, idx) => (
+                        <p key={idx} className='text-xs'>
+                          {sub.label}: {formatProgressPercentage(sub.percentage)}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>
+                      {formatProgressPercentage(segment.percentage, segment.count)}{' '}
+                      {segment.displayName}
+                    </p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
         <span className='text-xs font-medium text-slate-500'>
           {Math.round(totalProgressPercentage)}%
         </span>
@@ -56,6 +82,7 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
                   className='h-full first:rounded-l-full last:rounded-r-full hover:brightness-110'
                   style={{
                     width: `${segment.widthPercentage}%`,
+                    minWidth: segment.count > 0 ? '3%' : undefined,
                     backgroundColor: segment.color,
                   }}
                 />
@@ -64,17 +91,19 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
                 {segment.subSegments && segment.subSegments.length > 0 ? (
                   <div className='flex flex-col gap-1'>
                     <p className='mb-1 border-b pb-1 font-bold'>
-                      {Math.round(segment.widthPercentage)}% {segment.displayName}
+                      {formatProgressPercentage(segment.percentage, segment.count)}{' '}
+                      {segment.displayName}
                     </p>
                     {segment.subSegments.map((sub, idx) => (
                       <p key={idx} className='text-xs'>
-                        {sub.label}: {Math.round(sub.percentage)}%
+                        {sub.label}: {formatProgressPercentage(sub.percentage)}
                       </p>
                     ))}
                   </div>
                 ) : (
                   <p>
-                    {Math.round(segment.widthPercentage)}% {segment.displayName}
+                    {formatProgressPercentage(segment.percentage, segment.count)}{' '}
+                    {segment.displayName}
                   </p>
                 )}
               </TooltipContent>
