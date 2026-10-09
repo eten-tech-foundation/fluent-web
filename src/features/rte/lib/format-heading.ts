@@ -3,7 +3,7 @@ import { isHeadingMarker } from './heading-markers';
 import type { EditorRef, SelectionRange } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 
-const blockIndex = (path: string) => /^\$\.content\[(\d+)\]/.exec(path)?.[1];
+export const blockIndex = (path: string) => /^\$\.content\[(\d+)\]/.exec(path)?.[1];
 
 /** Block formats must not sweep a heading and scripture into the same paragraph kind. */
 export function selectionSpansBlocks(selection: SelectionRange | undefined): boolean {
