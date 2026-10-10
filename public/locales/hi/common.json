@@ -42,6 +42,8 @@
   "noContentAvailable": "बाइबल के इस वर्शन में इस हिस्से में कोई कंटेंट नहीं है।",
   "formatBar": "फ़ॉर्मेटिंग",
   "blockParagraph": "अनुच्छेद",
+  "insertParagraph": "अनुच्छेद जोड़ें",
+  "insertParagraphHint": "कर्सर रखें, फिर अनुच्छेद जोड़ें। चयनित पाठ सुरक्षित रहता है।",
   "blockSectionHeading": "अनुभाग शीर्षक",
   "headingBeforeVerse": "पद {{verseNumber}} से पहले",
   "headingText": "शीर्षक का पाठ",
