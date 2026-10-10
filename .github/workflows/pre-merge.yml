@@ -3,8 +3,8 @@ name: Pre-merge
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+    branches: [main, fix/519-rte-qa]
 
 permissions:
   contents: read
