@@ -1,12 +1,13 @@
 import { createRef, useState, type RefObject } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useVerseCursorRestore } from '@/features/rte/hooks/useVerseCursorRestore';
 import { pericopeVersesToUsj, type PericopeVerseText } from '@/features/rte/lib/pericope-usj';
+import { remapTextSelection } from '@/features/rte/lib/remap-text-selection';
 import { scopeBlockFormatToVerse } from '@/features/rte/lib/scoped-block-format';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
@@ -35,12 +36,15 @@ function Harness({ editorRef }: { editorRef: RefObject<EditorRef | null> }) {
     chapterNum: 1,
     verseNum: 1,
   });
-  const { restoreAfterLoad } = useVerseCursorRestore(scrRef, setScrRef);
+  const { restoreAfterLoad } = useVerseCursorRestore(scrRef, setScrRef, editorRef);
 
   const format = (): void => {
     const scoped = scopeBlockFormatToVerse(rows, 2, 'q1');
-    editorRef.current?.setUsj(pericopeVersesToUsj(scoped!.updated, 1, 'GEN'));
-    restoreAfterLoad(2);
+    const before = editorRef.current?.getUsj();
+    const selection = editorRef.current?.getSelection();
+    const after = pericopeVersesToUsj(scoped!.updated, 1, 'GEN');
+    editorRef.current?.setUsj(after);
+    restoreAfterLoad(2, remapTextSelection(before, after, selection));
   };
 
   return (
@@ -79,4 +83,35 @@ describe('useVerseCursorRestore', () => {
     editorRef.current?.formatPara('p');
     await waitFor(() => expect(blockMarkers(editorRef.current)).toEqual(['c', 'p', 'p', 'p']));
   });
+});
+
+describe('scoped Poetry selection', () => {
+  it.each([undefined, 11])(
+    'keeps the text offset and range after splitting a verse (end %s)',
+    async end => {
+      const editorRef = createRef<EditorRef | null>();
+      render(<Harness editorRef={editorRef} />);
+      await waitFor(() => expect(editorRef.current?.getUsj()).toBeTruthy());
+      await userEvent.click(screen.getByText('put the cursor in verse 2'));
+      const start = { jsonPath: '$.content[1].content[3]' as const, offset: 8 };
+      const selection = { start, ...(end === undefined ? {} : { end: { ...start, offset: end } }) };
+      await act(async () => {
+        editorRef.current?.setSelection(selection);
+      });
+      await waitFor(() => expect(editorRef.current?.getSelection()?.start).toEqual(start));
+      await userEvent.click(screen.getByText('format verse 2'));
+      await waitFor(() => expect(blockMarkers(editorRef.current)).toEqual(['c', 'p', 'q1', 'p']));
+      await waitFor(() =>
+        expect(editorRef.current?.getSelection()?.start).toEqual({
+          jsonPath: '$.content[2].content[1]',
+          offset: 8,
+        })
+      );
+      if (end !== undefined)
+        expect(editorRef.current?.getSelection()?.end).toEqual({
+          jsonPath: '$.content[2].content[1]',
+          offset: end,
+        });
+    }
+  );
 });

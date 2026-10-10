@@ -1,5 +1,5 @@
-import { blockIndex } from './format-heading';
 import { isHeadingMarker } from './heading-markers';
+import { blockIndex } from './usj-path';
 
 import type { DeltaOp, EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { MarkerObject, Usj } from '@eten-tech-foundation/scripture-utilities';

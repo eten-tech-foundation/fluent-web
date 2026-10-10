@@ -14,7 +14,9 @@ export function useSyncGlobalAiSetting(
 ) {
   const aiAutoEnablePreferences = useAppStore(state => state.aiAutoEnablePreferences);
   const userdetail = useAppStore(state => state.userdetail);
-  const setIsAiSyncPending = useAppStore(state => state.setIsAiSyncPending);
+  const beginAiSync = useAppStore(state => state.beginAiSync);
+  const endAiSync = useAppStore(state => state.endAiSync);
+  const setAiEnabledFor = useAppStore(state => state.setAiEnabledFor);
 
   const { mutateAsync: toggleAiAsync } = useToggleChapterAi(
     chapterAssignmentId ?? 0,
@@ -65,23 +67,19 @@ export function useSyncGlobalAiSetting(
 
       const enableAi = async () => {
         try {
-          setIsAiSyncPending(true);
+          beginAiSync();
           await toggleAiAsync(true);
           hasSyncedRef.current = chapterAssignmentId;
           syncingIdsRef.current.delete(chapterAssignmentId);
 
-          const latestStore = useAppStore.getState();
-          if (latestStore.currentProjectItem?.chapterAssignmentId === chapterAssignmentId) {
-            latestStore.setCurrentProjectItem({
-              ...latestStore.currentProjectItem,
-              isAiEnabled: true,
-            });
+          if (useAppStore.getState().userdetail?.id === userdetail.id) {
+            setAiEnabledFor(chapterAssignmentId, true);
           }
         } catch {
           syncingIdsRef.current.delete(chapterAssignmentId);
           failedIdsRef.current.add(chapterAssignmentId);
         } finally {
-          setIsAiSyncPending(false);
+          endAiSync();
         }
       };
 
@@ -99,6 +97,8 @@ export function useSyncGlobalAiSetting(
     toggleAiAsync,
     isReadOnly,
     projectItem,
-    setIsAiSyncPending,
+    beginAiSync,
+    endAiSync,
+    setAiEnabledFor,
   ]);
 }
