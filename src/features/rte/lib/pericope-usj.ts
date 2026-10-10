@@ -1,5 +1,6 @@
 import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
 
+import { PARAGRAPH_MARKER } from './block-types';
 import { isHeadingMarker } from './heading-markers';
 
 import type { MarkerObject, Usj } from '@eten-tech-foundation/scripture-utilities';
@@ -15,7 +16,6 @@ export interface PericopeVerseText {
 
 const USJ_TYPE = 'USJ';
 const USJ_VERSION = '3.1';
-const DEFAULT_PARAGRAPH_MARKER = 'p';
 
 /**
  * Builds the USJ document the editor renders for one pericope.
@@ -47,7 +47,7 @@ export function pericopeVersesToUsj(
     const opening = paragraphs.find(paragraph => paragraph.offset === 0);
     if (opening) openPara(opening.marker);
     // The chapter's first verse carries no marker of its own: the classic default paragraph.
-    else if (!para || headings.length > 0) openPara(DEFAULT_PARAGRAPH_MARKER);
+    else if (!para || headings.length > 0) openPara(PARAGRAPH_MARKER);
 
     const sid = bookCode ? `${bookCode} ${chapterNumber}:${verse.verseNumber}` : undefined;
     para?.content?.push({
@@ -134,7 +134,7 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
     if (typeof node === 'string') continue;
     const marker = node as MarkerObject;
     if (marker.type !== 'para' || !marker.content) continue;
-    let paraMarker = marker.marker ?? DEFAULT_PARAGRAPH_MARKER;
+    let paraMarker = marker.marker ?? PARAGRAPH_MARKER;
     let body = marker.content;
     if (isHeadingMarker(paraMarker)) {
       // Some imported documents omit the body paragraph and nest a verse in the heading.
@@ -146,7 +146,7 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
       currentVerse = undefined;
       if (firstVerse < 0) continue;
       body = body.slice(firstVerse);
-      paraMarker = DEFAULT_PARAGRAPH_MARKER;
+      paraMarker = PARAGRAPH_MARKER;
     }
 
     let buffer = '';

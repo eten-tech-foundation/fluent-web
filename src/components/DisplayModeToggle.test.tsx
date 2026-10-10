@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { config } from '@/lib/config';
+import { type ProjectItem } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { DisplayModeToggle } from './DisplayModeToggle';
@@ -9,8 +13,14 @@ import { DisplayModeToggle } from './DisplayModeToggle';
 // #396: the drafting settings toggle gains Chapter as a third option. Switching only changes how
 // the chapter is presented, so these tests assert the selection, never any content mutation.
 
+const i18n = createInstance();
+
 function renderToggle() {
-  render(<DisplayModeToggle />);
+  render(
+    <I18nextProvider i18n={i18n}>
+      <DisplayModeToggle />
+    </I18nextProvider>
+  );
   return { user: userEvent.setup() };
 }
 
@@ -23,8 +33,173 @@ function focusedRadios() {
 }
 
 describe('DisplayModeToggle', () => {
-  beforeEach(() => {
-    useAppStore.setState({ displayMode: 'verse' });
+  const initialFeatureFlag = config.features.rtePericope;
+  afterEach(() => {
+    config.features.rtePericope = initialFeatureFlag;
+  });
+
+  beforeEach(async () => {
+    await i18n.init({ lng: 'en', resources: { en: { translation: {} } } });
+    config.features.rtePericope = true;
+    useAppStore.setState({
+      displayMode: 'verse',
+      currentProjectItem: { chapterAssignmentId: 396 } as ProjectItem,
+      chapterViewAvailability: { chapterAssignmentId: 396, available: true },
+    });
+  });
+
+  it('blocks Chapter while the chapter is missing, loading, or incomplete', async () => {
+    useAppStore.setState({ chapterViewAvailability: null });
+    const { user } = renderToggle();
+    const chapter = screen.getByRole('radio', { name: 'Chapter' });
+    expect(chapter).toHaveAttribute('aria-disabled', 'true');
+    await user.click(chapter);
+    expect(useAppStore.getState().displayMode).toBe('verse');
+    act(() => chapter.focus());
+    await user.keyboard('{Enter} ');
+    expect(useAppStore.getState().displayMode).toBe('verse');
+  });
+
+  it('explains the disabled option on hover and focus', async () => {
+    useAppStore.setState({
+      chapterViewAvailability: { chapterAssignmentId: 396, available: false },
+    });
+    const { user } = renderToggle();
+    const chapter = screen.getByRole('radio', { name: 'Chapter' });
+    const explanation = 'Chapter view is available once all verses have content.';
+    await user.hover(chapter);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(explanation);
+    await user.unhover(chapter);
+    await user.tab();
+    await user.keyboard('{ArrowRight}{ArrowRight}');
+    expect(chapter).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(explanation);
+    expect(toggle()).toHaveAccessibleDescription(explanation);
+  });
+
+  it('lets arrows focus disabled Chapter for its explanation without selecting it', async () => {
+    useAppStore.setState({ chapterViewAvailability: null });
+    const { user } = renderToggle();
+    await user.tab();
+    await user.keyboard('{ArrowRight}{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
+    expect(useAppStore.getState().displayMode).toBe('pericope');
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Chapter view is available once all verses have content.'
+    );
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Verse' })).toHaveFocus();
+    expect(useAppStore.getState().displayMode).toBe('verse');
+  });
+
+  it('ignores availability published for another assignment', () => {
+    useAppStore.setState({
+      chapterViewAvailability: { chapterAssignmentId: 397, available: true },
+    });
+    renderToggle();
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('restores a tab stop when a saved Chapter preference is unavailable', async () => {
+    useAppStore.setState({ displayMode: 'chapter', chapterViewAvailability: null });
+    const { user } = renderToggle();
+    await user.tab();
+    expect(screen.getByRole('radio', { name: 'Verse' })).toHaveFocus();
+  });
+
+  it('updates the option when local content becomes complete and then empty', async () => {
+    useAppStore.setState({ chapterViewAvailability: null });
+    const { user } = renderToggle();
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute('aria-disabled', 'true');
+    act(() =>
+      useAppStore
+        .getState()
+        .setChapterViewAvailability({ chapterAssignmentId: 396, available: true })
+    );
+    await user.click(screen.getByRole('radio', { name: 'Chapter' }));
+    expect(useAppStore.getState().displayMode).toBe('chapter');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    act(() =>
+      useAppStore
+        .getState()
+        .setChapterViewAvailability({ chapterAssignmentId: 396, available: false })
+    );
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('explains when the Chapter editor is not enabled in this environment', async () => {
+    config.features.rtePericope = false;
+    useAppStore.setState({ chapterViewAvailability: null });
+    const { user } = renderToggle();
+    await user.hover(screen.getByRole('radio', { name: 'Chapter' }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Chapter view is not available in this environment.'
+    );
+  });
+
+  it('shows expected and missing verses without needing hover, and explains them on keyboard focus', async () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: [4, 25],
+      },
+    });
+    const { user } = renderToggle();
+    const status = screen.getByRole('status');
+    expect(status).toBeVisible();
+    expect(status).toHaveTextContent('23 of 25 have content. Missing content: 4, 25.');
+    await user.tab();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(status.textContent!);
+    await user.keyboard('{Enter} ');
+    expect(useAppStore.getState().displayMode).toBe('verse');
+  });
+
+  it('keeps long consecutive missing verse lists readable', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 176,
+        missingVerseNumbers: Array.from({ length: 176 }, (_, index) => index + 1),
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '0 of 176 have content. Missing content: 1-176.'
+    );
+  });
+
+  it('does not reuse missing verse details from another assignment', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 397,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: [25],
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).not.toHaveTextContent('25');
+  });
+
+  it('distinguishes unverified data from missing translation content', () => {
+    useAppStore.setState({
+      chapterViewAvailability: {
+        chapterAssignmentId: 396,
+        available: false,
+        expectedVerseCount: 25,
+        missingVerseNumbers: null,
+      },
+    });
+    renderToggle();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Chapter content could not be verified. Reopen the chapter to try again.'
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent('Missing content');
   });
 
   it('offers exactly the three views, in order', () => {

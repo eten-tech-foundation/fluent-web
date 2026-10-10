@@ -8,6 +8,7 @@ import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 import { BibleTabList, type ResourceBibleTab } from './BibleTabList';
 import { PericopeText } from './PericopeText';
+import '../styles/source-fonts.css';
 
 interface DraftingChapterViewProps {
   sourceVerses: Source[];
@@ -111,7 +112,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
             <h4 className='mb-3 text-2xl font-bold text-slate-800 dark:text-slate-100'>
               {projectItem.chapterNumber}
             </h4>
-            <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+            <p className='source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
               {sourceVerses.map(verse => (
                 <React.Fragment key={verse.verseNumber}>
                   <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
