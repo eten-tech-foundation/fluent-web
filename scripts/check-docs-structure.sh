@@ -7,7 +7,7 @@ if [[ ! -d docs ]]; then
   exit 1
 fi
 
-allowed=(agents features runbooks guides tasks)
+allowed=(agents adr features runbooks guides tasks)
 status=0
 shopt -s nullglob dotglob
 
