@@ -44,6 +44,14 @@ describe('pericope titles', () => {
     });
   });
 
+  it('uses null when clearing the only heading leaves no structure', () => {
+    expect(withPericopeTitle({ headings: [title] }, '')).toBeNull();
+  });
+
+  it('omits the emptied headings array while preserving paragraph markers', () => {
+    expect(withPericopeTitle({ headings: [title], paragraphs }, '')).toEqual({ paragraphs });
+  });
+
   it('round-trips the title around body edits without moving existing headings', () => {
     const original = { headings: [reference, title, subtitle], paragraphs };
     expect(withoutPericopeTitle(original)).toEqual({ headings: [reference, subtitle], paragraphs });
