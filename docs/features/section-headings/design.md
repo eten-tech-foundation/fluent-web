@@ -30,6 +30,10 @@ heading insertion use the same local-delta path. Text and existing embeds stay i
 and the selection is remapped without reloading the USJ. Document reloads remain for navigation
 and external fills, not translator formatting actions.
 
+Because nothing reloads, text typed right after a level change stays in the heading at its new
+level. `applyUpdate` is marked EXPERIMENTAL in platform-editor 0.8.15. Whoever upgrades the editor
+should recheck this call and the immediate-typing tests listed below.
+
 ## API dependency
 
 Heading persistence requires the work from [API #320](https://github.com/eten-tech-foundation/fluent-api/pull/320),
@@ -44,4 +48,8 @@ Regression coverage checks heading/verse separation, ordered headings on empty v
 heading/verse repair, poetry offsets, title-only edits and deletion, textarea preservation and
 autosave. Component tests exercise insertion/cancel, invalid edit recovery and readonly behavior.
 Real Editorial tests cover level persistence and refusal of selections crossing heading/verse blocks.
+They also type immediately after switching a heading to `s2`, `s3` or `s4` and check that the saved
+text keeps the new level, and they drive the H3/H4 toolbar buttons in ChapterEditor, type right
+away, and check that the other headings and scripture are unchanged. A stylesheet test checks that
+all four levels render differently in both editing surfaces.
 Browser verification uses the production ChapterEditor and PericopeEditor with local save fixtures.
