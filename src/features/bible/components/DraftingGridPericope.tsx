@@ -43,7 +43,8 @@ interface DraftingGridPericopeProps {
   fullPericopes?: PericopeGroup[];
   contextChapters?: Map<number, PericopeContextChapter>;
   resourceBibleId?: string;
-  resourceBibleLoading?: boolean;
+  bibleContentLoading?: boolean;
+  bibleContentError?: boolean;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -454,7 +455,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   fullPericopes,
   contextChapters,
   resourceBibleId,
-  resourceBibleLoading = false,
+  bibleContentLoading = false,
+  bibleContentError = false,
   pericopes,
   sourceVerses,
   verses,
@@ -523,15 +525,13 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 </h4>
                 {showResourcePlaceholder ? (
                   <div className='bg-muted flex min-h-32 w-full items-center justify-center rounded-lg border-2 p-5'>
-                    {resourceBibleLoading ? (
+                    {bibleContentLoading ? (
                       <Loader2
                         aria-label={t('loading', 'Loading...')}
                         className='text-muted-foreground h-6 w-6 animate-spin'
                       />
                     ) : (
-                      <p className='text-muted-foreground text-center text-sm'>
-                        {t('noContentAvailable', 'No content available')}
-                      </p>
+                      <PericopeText className='text-center' isError={bibleContentError} />
                     )}
                   </div>
                 ) : (
@@ -593,9 +593,11 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                           const loading =
                             selectedPanel === 1
                               ? !isCurrentChapter && context?.sourceIsLoading
-                              : resourceBibleLoading;
+                              : bibleContentLoading;
                           const failed =
-                            selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
+                            selectedPanel === 1
+                              ? !isCurrentChapter && context?.sourceIsError
+                              : isCurrentChapter && bibleContentError;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>

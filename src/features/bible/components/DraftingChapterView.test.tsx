@@ -49,24 +49,23 @@ const sourceVerses: Source[] = [
   { id: 102, verseNumber: 2, text: 'The earth was formless.' },
 ];
 
-const resourceBibleTabs: ResourceBibleTab[] = [
-  {
-    id: 'aq-alternative',
-    label: 'Alternative Bible',
-    language: 'eng',
-    verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
-    isLoading: false,
-    isError: false,
-  },
-  {
-    id: 'yv-empty',
-    label: 'Empty Bible',
-    language: 'eng',
-    verses: [],
-    isLoading: false,
-    isError: false,
-  },
-];
+const alternativeBibleTab: ResourceBibleTab = {
+  id: 'aq-alternative',
+  label: 'Alternative Bible',
+  language: 'eng',
+  verses: [{ verseNumber: 1, text: 'Alternative beginning.' }],
+  isLoading: false,
+  isError: false,
+};
+
+const emptyBibleTab: ResourceBibleTab = {
+  id: 'yv-empty',
+  label: 'Empty Bible',
+  language: 'eng',
+  verses: [],
+  isLoading: false,
+  isError: false,
+};
 
 const commonProps = {
   sourceVerses,
@@ -74,7 +73,7 @@ const commonProps = {
   projectItem,
   readOnly: false,
   bibleVerseMap: new Map<number, string>(),
-  resourceBibleTabs,
+  resourceBibleTab: alternativeBibleTab,
   bibleContentLoading: false,
   bibleContentError: false,
   handleTextChange: vi.fn(),
@@ -100,10 +99,16 @@ describe('DraftingChapterView', () => {
   });
 
   it('keeps the source tab available when a resource Bible has no passage content', () => {
-    render(<DraftingChapterView {...commonProps} activeBibleTabId='yv-empty' selectedPanel={2} />);
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        activeBibleTabId='yv-empty'
+        resourceBibleTab={emptyBibleTab}
+        selectedPanel={2}
+      />
+    );
 
     expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Empty Bible' })).toHaveAttribute(
       'aria-selected',
       'true'
@@ -113,7 +118,7 @@ describe('DraftingChapterView', () => {
     ).toBeInTheDocument();
   });
 
-  it('returns to the source without removing either resource tab', async () => {
+  it('returns to the source without removing the selected resource tab', async () => {
     const user = userEvent.setup();
     const onBibleTabSelect = vi.fn();
     const { rerender } = render(
@@ -141,7 +146,6 @@ describe('DraftingChapterView', () => {
 
     expect(screen.getByText('In the beginning.')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Empty Bible' })).toBeInTheDocument();
   });
   it('shows a resource error instead of unavailable content in chapter mode', () => {
     render(
@@ -165,11 +169,67 @@ describe('DraftingChapterView', () => {
         activeBibleTabId='aq-alternative'
         bibleContentError={state === 'error'}
         bibleContentLoading={state === 'loading'}
-        bibleVerseMap={new Map([[1, 'Cached chapter text']])}
+        bibleVerseMap={
+          new Map([
+            [1, 'Cached chapter text'],
+            [2, 'Cached second verse'],
+          ])
+        }
         selectedPanel={2}
       />
     );
     expect(screen.getByText('Cached chapter text')).toBeInTheDocument();
     expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+  });
+  it.each([undefined, '', '   '])(
+    'shows the missing-passage message beside available verses (%s)',
+    missingText => {
+      const bibleVerseMap = new Map([[1, 'Available reference text']]);
+      if (missingText !== undefined) bibleVerseMap.set(2, missingText);
+      render(
+        <DraftingChapterView
+          {...commonProps}
+          activeBibleTabId='aq-alternative'
+          bibleVerseMap={bibleVerseMap}
+          selectedPanel={2}
+        />
+      );
+      expect(screen.getByText('Available reference text')).toBeInTheDocument();
+      expect(
+        screen.getByText("This Bible verse doesn't have content for this passage.")
+      ).toBeInTheDocument();
+      expect(screen.queryByText('The earth was formless.')).not.toBeInTheDocument();
+    }
+  );
+
+  it('shows unavailable content when only verses outside the displayed passage exist', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        activeBibleTabId='aq-alternative'
+        bibleVerseMap={new Map([[99, 'Outside the displayed passage']])}
+        selectedPanel={2}
+      />
+    );
+    expect(
+      screen.getByText("This Bible verse doesn't have content for this passage.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Outside the displayed passage')).not.toBeInTheDocument();
+  });
+
+  it('does not report unavailable content while the resource is loading', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        bibleContentLoading
+        activeBibleTabId='aq-alternative'
+        selectedPanel={2}
+      />
+    );
+    expect(
+      screen.queryByText("This Bible verse doesn't have content for this passage.")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
+    expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
   });
 });

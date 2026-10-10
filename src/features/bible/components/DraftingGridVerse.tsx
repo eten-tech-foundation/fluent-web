@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
 import { type Source, type TargetVerse } from '@/lib/types';
 
+import { PericopeText } from './PericopeText';
+
 import '../styles/source-fonts.css';
 
 interface DraftingTargetColumnProps {
@@ -119,6 +121,8 @@ interface DraftingGridVerseProps {
   readOnly: boolean;
   selectedPanel: 1 | 2;
   bibleVerseMap: Map<number, string>;
+  bibleContentLoading: boolean;
+  bibleContentError: boolean;
   effectiveRevealedVerses: Set<number>;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
@@ -140,6 +144,8 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   readOnly,
   selectedPanel,
   bibleVerseMap,
+  bibleContentLoading,
+  bibleContentError,
   effectiveRevealedVerses,
   textareaRefs,
   verseRefs,
@@ -153,7 +159,6 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
   isAiActive,
   suggestionStatus,
 }) => {
-  const { t } = useTranslation();
   useLayoutEffect(() => {
     if (readOnly) return;
     // Pericope loading/error/empty states can mount these rows without changing displayMode.
@@ -198,15 +203,13 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
                 </div>
               ) : (
                 <div className={getPericopeStyle(verse.verseNumber, false, 'bg-muted')}>
-                  {bibleVerseMap.has(verse.verseNumber) ? (
-                    <p className='min-h-12 leading-relaxed'>
-                      {bibleVerseMap.get(verse.verseNumber)}
-                    </p>
-                  ) : (
-                    <p className='text-muted-foreground min-h-12 leading-relaxed'>
-                      {t('noContentAvailable')}
-                    </p>
-                  )}
+                  <p className='min-h-12 leading-relaxed'>
+                    <PericopeText
+                      content={bibleVerseMap.get(verse.verseNumber)}
+                      isError={bibleContentError}
+                      isLoading={bibleContentLoading}
+                    />
+                  </p>
                 </div>
               )}
             </div>
