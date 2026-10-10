@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
@@ -82,8 +83,10 @@ export function ChapterEditor({
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Marker protection must register first so a blocked deletion never reaches the forward-delete fix.
   useProtectedVerseMarkers(containerRef);
   useNativeRtlSelection(containerRef, readOnly);
+  useForwardTextDeletion(containerRef, editorRef, readOnly);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const headingSelectionRef = useRef<SelectionRange | undefined>(undefined);
   const loadedKeyRef = useRef(contentKey);
