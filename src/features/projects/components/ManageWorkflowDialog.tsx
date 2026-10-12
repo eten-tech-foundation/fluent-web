@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,17 +27,26 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   onClose,
   chapterAssignments,
 }) => {
-  const { workflowConfig, updateWorkflowConfig, isUpdating } = useProjectWorkflow(projectId);
+  const { workflowConfig, updateWorkflowConfig, isUpdating, isLoading, isLoadedFromServer } =
+    useProjectWorkflow(projectId);
   const [intermediateSteps, setIntermediateSteps] = useState<WorkflowStep[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  const isReady = isLoadedFromServer;
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
+    }
+
+    if (!isInitializedRef.current && isReady && workflowConfig.length > 0) {
       const middle = workflowConfig.filter(
         step => step.id !== 'not_started' && step.id !== 'complete'
       );
@@ -45,8 +55,9 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
       setEditingValue('');
       setErrorMessage('');
       setDraggedIndex(null);
+      isInitializedRef.current = true;
     }
-  }, [isOpen, workflowConfig]);
+  }, [isOpen, workflowConfig, isReady]);
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -248,6 +259,11 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   };
 
   const handleSave = async () => {
+    if (!isReady) {
+      toast.error('Cannot save workflow before its configuration is loaded from the server.');
+      return;
+    }
+
     const notStartedStep = workflowConfig.find(s => s.id === 'not_started') ?? {
       id: 'not_started',
       label: 'Not Started',
@@ -266,6 +282,8 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
       onClose();
     } catch (err) {
       Logger.logException(err, { context: 'Failed to save workflow configuration' });
+      const message = err instanceof Error ? err.message : 'Failed to save workflow configuration.';
+      toast.error(message);
     }
   };
 
@@ -279,130 +297,148 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
-      <DialogContent className='sm:max-w-[480px]'>
+      <DialogContent aria-describedby={undefined} className='sm:max-w-[480px]'>
         <DialogHeader className='flex flex-row items-center justify-between pb-2'>
           <DialogTitle className='text-xl font-bold'>Manage Workflow</DialogTitle>
         </DialogHeader>
 
-        <div className='max-h-[60vh] space-y-3 overflow-y-auto py-2 pr-1'>
-          {/* Fixed Top Bookend Card: Not Started */}
-          <div className='border-border bg-muted/60 text-muted-foreground w-full rounded-md border px-4 py-3.5 text-center text-sm font-bold shadow-2xs select-none'>
-            {workflowConfig.find(s => s.id === 'not_started')?.label ?? 'Not Started'}
+        {isLoading ? (
+          <div className='flex h-48 items-center justify-center gap-2'>
+            <Loader2 className='text-muted-foreground h-5 w-5 animate-spin' />
+            <span className='text-muted-foreground text-sm font-medium'>Loading workflow...</span>
           </div>
+        ) : !isReady ? (
+          <div className='flex h-48 flex-col items-center justify-center gap-2 text-center'>
+            <p className='text-destructive text-sm font-semibold'>
+              Unable to load workflow configuration from server.
+            </p>
+            <p className='text-muted-foreground text-xs'>
+              Editing is disabled to prevent duplicate or conflicting stages.
+            </p>
+          </div>
+        ) : (
+          <div className='max-h-[60vh] space-y-3 overflow-y-auto py-2 pr-1'>
+            {/* Fixed Top Bookend Card: Not Started */}
+            <div className='border-border bg-muted/60 text-muted-foreground w-full rounded-md border px-4 py-3.5 text-center text-sm font-bold shadow-2xs select-none'>
+              {workflowConfig.find(s => s.id === 'not_started')?.label ?? 'Not Started'}
+            </div>
 
-          {/* Intermediate Configured Stages */}
-          {intermediateSteps.map((step, index) => {
-            const posLocked = isPositionLocked(step);
-            const deletable = canDeleteStage(step);
-            const isEditing = editingId === step.id;
-            const isBeingDragged = draggedIndex === index;
+            {/* Intermediate Configured Stages */}
+            {intermediateSteps.map((step, index) => {
+              const posLocked = isPositionLocked(step);
+              const deletable = canDeleteStage(step);
+              const isEditing = editingId === step.id;
+              const isBeingDragged = draggedIndex === index;
 
-            return (
-              <div
-                key={step.id}
-                className={`group-stage-card border-border bg-card text-card-foreground flex w-full items-center justify-between rounded-md border px-4 py-3.5 text-sm font-bold shadow-2xs transition-all ${
-                  isBeingDragged ? 'border-primary opacity-40' : 'hover:border-accent-foreground/20'
-                }`}
-                onDragEnd={handleDragEnd}
-                onDragOver={e => handleDragOver(e, index)}
-              >
-                <div className='mr-2 flex w-full items-center gap-3'>
-                  {!posLocked && (
-                    <div
-                      draggable
-                      className='text-muted-foreground hover:text-foreground flex shrink-0 cursor-grab items-center transition-colors active:cursor-grabbing'
-                      onDragStart={e => handleDragStart(e, index)}
+              return (
+                <div
+                  key={step.id}
+                  className={`group-stage-card border-border bg-card text-card-foreground flex w-full items-center justify-between rounded-md border px-4 py-3.5 text-sm font-bold shadow-2xs transition-all ${
+                    isBeingDragged
+                      ? 'border-primary opacity-40'
+                      : 'hover:border-accent-foreground/20'
+                  }`}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={e => handleDragOver(e, index)}
+                >
+                  <div className='mr-2 flex w-full items-center gap-3'>
+                    {!posLocked && (
+                      <div
+                        draggable
+                        className='text-muted-foreground hover:text-foreground flex shrink-0 cursor-grab items-center transition-colors active:cursor-grabbing'
+                        onDragStart={e => handleDragStart(e, index)}
+                      >
+                        <GripVertical className='h-4 w-4' />
+                      </div>
+                    )}
+
+                    {isEditing ? (
+                      <div className='w-full'>
+                        <Input
+                          ref={inputRef}
+                          className='border-primary bg-background text-foreground w-full rounded-md border px-2.5 py-1 text-sm font-bold shadow-xs outline-none'
+                          value={editingValue}
+                          onBlur={() => handleBlur(step.id)}
+                          onChange={e => handleInputChange(e.target.value, step.id)}
+                          onKeyDown={e => handleKeyDown(e, step.id)}
+                        />
+                        {errorMessage && (
+                          <p className='text-destructive mt-1 text-left text-xs font-semibold'>
+                            {errorMessage}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span
+                        className='hover:text-primary cursor-pointer text-left font-bold transition-colors'
+                        title='Click to rename stage'
+                        onClick={() => handleStartEdit(step)}
+                      >
+                        {step.label}
+                      </span>
+                    )}
+                  </div>
+
+                  {deletable && (
+                    <button
+                      className='text-muted-foreground hover:text-destructive shrink-0 rounded-md p-1 transition-colors'
+                      title='Delete stage'
+                      type='button'
+                      onClick={() => handleDeleteStage(step.id)}
                     >
-                      <GripVertical className='h-4 w-4' />
-                    </div>
-                  )}
-
-                  {isEditing ? (
-                    <div className='w-full'>
-                      <Input
-                        ref={inputRef}
-                        className='border-primary bg-background text-foreground w-full rounded-md border px-2.5 py-1 text-sm font-bold shadow-xs outline-none'
-                        value={editingValue}
-                        onBlur={() => handleBlur(step.id)}
-                        onChange={e => handleInputChange(e.target.value, step.id)}
-                        onKeyDown={e => handleKeyDown(e, step.id)}
-                      />
-                      {errorMessage && (
-                        <p className='text-destructive mt-1 text-left text-xs font-semibold'>
-                          {errorMessage}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <span
-                      className='hover:text-primary cursor-pointer text-left font-bold transition-colors'
-                      title='Click to rename stage'
-                      onClick={() => handleStartEdit(step)}
-                    >
-                      {step.label}
-                    </span>
+                      <Trash2 className='h-4 w-4' />
+                    </button>
                   )}
                 </div>
+              );
+            })}
 
-                {deletable && (
-                  <button
-                    className='text-muted-foreground hover:text-destructive shrink-0 rounded-md p-1 transition-colors'
-                    title='Delete stage'
-                    type='button'
-                    onClick={() => handleDeleteStage(step.id)}
+            {/* + Add Stage Button Card */}
+            {canAddStage ? (
+              <button
+                className='border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed px-4 py-3.5 text-center text-sm font-bold transition-colors'
+                type='button'
+                onClick={handleAddStage}
+              >
+                <Plus className='h-4 w-4' /> Add Stage
+              </button>
+            ) : (
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className='w-full'>
+                      <button
+                        disabled
+                        className='border-border bg-muted/30 text-muted-foreground flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-md border border-dashed px-4 py-3.5 text-center text-sm font-bold opacity-60'
+                        type='button'
+                      >
+                        <Plus className='h-4 w-4' /> Add Stage
+                      </button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    align='center'
+                    className='bg-popover text-popover-foreground border-border rounded-md border px-3 py-1.5 text-xs font-semibold shadow-md'
+                    side='top'
                   >
-                    <Trash2 className='h-4 w-4' />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                    {hasCompletedChapter
+                      ? 'Cannot add stages once chapters have reached completion.'
+                      : 'You already have 10 stages.'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
-          {/* + Add Stage Button Card */}
-          {canAddStage ? (
-            <button
-              className='border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed px-4 py-3.5 text-center text-sm font-bold transition-colors'
-              type='button'
-              onClick={handleAddStage}
-            >
-              <Plus className='h-4 w-4' /> Add Stage
-            </button>
-          ) : (
-            <TooltipProvider delayDuration={100}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className='w-full'>
-                    <button
-                      disabled
-                      className='border-border bg-muted/30 text-muted-foreground flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-md border border-dashed px-4 py-3.5 text-center text-sm font-bold opacity-60'
-                      type='button'
-                    >
-                      <Plus className='h-4 w-4' /> Add Stage
-                    </button>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  align='center'
-                  className='bg-popover text-popover-foreground border-border rounded-md border px-3 py-1.5 text-xs font-semibold shadow-md'
-                  side='top'
-                >
-                  {hasCompletedChapter
-                    ? 'Cannot add stages once chapters have reached completion.'
-                    : 'You already have 10 stages.'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-
-          {/* Fixed Bottom Bookend Card: Complete */}
-          <div className='border-border bg-muted/60 text-muted-foreground w-full rounded-md border px-4 py-3.5 text-center text-sm font-bold shadow-2xs select-none'>
-            {workflowConfig.find(s => s.id === 'complete')?.label ?? 'Complete'}
+            {/* Fixed Bottom Bookend Card: Complete */}
+            <div className='border-border bg-muted/60 text-muted-foreground w-full rounded-md border px-4 py-3.5 text-center text-sm font-bold shadow-2xs select-none'>
+              {workflowConfig.find(s => s.id === 'complete')?.label ?? 'Complete'}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Footer Done Action */}
         <div className='flex justify-end pt-4'>
-          <Button disabled={isUpdating} onClick={handleSave}>
+          <Button disabled={isUpdating || isLoading || !isReady} onClick={handleSave}>
             {isUpdating ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : null}
             Done
           </Button>

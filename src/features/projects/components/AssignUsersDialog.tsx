@@ -108,54 +108,31 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   const peerCheckName = peerCheckEnabled ? getStageLabel('peer_check', 'Peer Check') : undefined;
   const peerCheckerRoleName = getRoleLabel('peer_check', 'Peer Checker');
 
-  const hasPeerCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.PEER_CHECK
-  );
-  const hasCommunityReviewStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.COMMUNITY_REVIEW
-  );
-  const hasLinguistCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.LINGUIST_CHECK
-  );
-  const hasTheologicalCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.THEOLOGICAL_CHECK
-  );
-  const hasConsultantCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.CONSULTANT_CHECK
-  );
-  const hasCompleteStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.COMPLETE
-  );
-
   const hasCompleteSelection = !!selectedDrafter && (!peerCheckEnabled || !!selectedPeerChecker);
   const isDraftingComplete = selectedAssignmentsStatuses.some(
     status =>
       status !== ChapterAssignmentStatus.NOT_STARTED && status !== ChapterAssignmentStatus.DRAFT
   );
 
-  const isDrafterDisabled =
-    hasPeerCheckStatus ||
-    hasCommunityReviewStatus ||
-    hasLinguistCheckStatus ||
-    hasTheologicalCheckStatus ||
-    hasConsultantCheckStatus ||
-    hasCompleteStatus;
+  const isDrafterDisabled = isDraftingComplete;
   const isPeerCheckerDisabled =
     !peerCheckEnabled ||
-    hasCommunityReviewStatus ||
-    hasLinguistCheckStatus ||
-    hasTheologicalCheckStatus ||
-    hasConsultantCheckStatus ||
-    hasCompleteStatus;
+    selectedAssignmentsStatuses.some(
+      status =>
+        status !== ChapterAssignmentStatus.NOT_STARTED &&
+        status !== ChapterAssignmentStatus.DRAFT &&
+        status !== ChapterAssignmentStatus.PEER_CHECK
+    );
 
   const isResetDisabled =
     (!selectedDrafter && !selectedPeerChecker) || isDraftingComplete || usersLoading || isAssigning;
 
+  const allAssignableRolesDisabled = peerCheckEnabled
+    ? isDrafterDisabled && isPeerCheckerDisabled
+    : isDrafterDisabled;
+
   const isSubmitDisabled =
-    !hasCompleteSelection ||
-    (peerCheckEnabled && isPeerCheckerDisabled) ||
-    usersLoading ||
-    isAssigning;
+    !hasCompleteSelection || allAssignableRolesDisabled || usersLoading || isAssigning;
 
   const handleReset = () => {
     onDrafterChange('');

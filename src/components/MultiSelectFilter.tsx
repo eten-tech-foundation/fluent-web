@@ -78,6 +78,46 @@ export function MultiSelectFilter({
     handleOpenChange(false);
   };
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = contentRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const scrollEl = scrollRef.current;
+      if (!scrollEl) {
+        e.preventDefault();
+        return;
+      }
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+      if (scrollHeight <= clientHeight) {
+        e.preventDefault();
+        return;
+      }
+
+      const isOverScroll = scrollEl.contains(e.target as Node);
+      if (!isOverScroll) {
+        scrollEl.scrollTop += e.deltaY;
+        e.preventDefault();
+        return;
+      }
+
+      const atTop = e.deltaY < 0 && scrollTop <= 0;
+      const atBottom = e.deltaY > 0 && scrollTop + clientHeight >= scrollHeight - 1;
+      if (atTop || atBottom) {
+        e.preventDefault();
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [open]);
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
@@ -96,9 +136,10 @@ export function MultiSelectFilter({
       </PopoverTrigger>
 
       <PopoverContent
+        ref={contentRef}
         align='start'
         className={cn(
-          'text-popover-foreground pointer-events-auto overflow-x-hidden rounded-md border p-1 shadow-md',
+          'text-popover-foreground pointer-events-auto overflow-x-hidden overscroll-contain rounded-md border p-1 shadow-md',
           contentClassName ?? 'w-72'
         )}
         sideOffset={4}
@@ -108,27 +149,23 @@ export function MultiSelectFilter({
         onCloseAutoFocus={e => e.preventDefault()}
         onOpenAutoFocus={e => e.preventDefault()}
       >
-        <div
+        <button
           className={cn(
-            'overflow-x-hidden',
-            options.length > 6 ? 'max-h-56 overflow-y-auto' : 'h-auto overflow-y-hidden'
+            'hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm transition-colors',
+            !isActive ? 'text-primary font-medium' : 'text-foreground font-medium'
           )}
-          onTouchMove={e => e.stopPropagation()}
-          onWheel={e => e.stopPropagation()}
+          type='button'
+          onClick={clearAll}
         >
-          <button
-            className={cn(
-              'hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm transition-colors',
-              !isActive ? 'text-primary font-medium' : 'text-foreground font-medium'
-            )}
-            type='button'
-            onClick={clearAll}
-          >
-            {label}
-          </button>
+          {label}
+        </button>
 
-          <div className='bg-border -mx-1 my-1 h-px' />
+        <div className='bg-border -mx-1 my-1 h-px' />
 
+        <div
+          ref={scrollRef}
+          className='max-h-56 overflow-x-hidden overflow-y-auto overscroll-contain'
+        >
           {options.length === 0 ? (
             <div className='text-muted-foreground px-2 py-1.5 text-sm'>No options available</div>
           ) : (

@@ -94,4 +94,31 @@ describe('useProgressBar', () => {
     expect(peerCheckSegment?.percentage).toBe(1);
     expect(peerCheckSegment?.widthPercentage).toBe(3);
   });
+
+  it('respects custom renamed stage labels in advanced checks subSegments', () => {
+    const customConfig: WorkflowStep[] = [
+      { id: 'not_started', label: 'Not Started' },
+      { id: 'draft', label: 'Drafting' },
+      { id: 'peer_check', label: 'Peer Check' },
+      { id: 'community_review', label: 'Community Review' },
+      { id: 'linguist_check', label: 'Language Review' },
+      { id: 'theological_check', label: 'Theological Check' },
+      { id: 'consultant_check', label: 'Consultant Check' },
+      { id: 'complete', label: 'Complete' },
+    ];
+    const { result } = renderHook(() => useProgressBar(customConfig));
+
+    const chapterStatusCounts = {
+      linguist_check: 10,
+      complete: 90,
+    };
+
+    const segments = result.current.calculateProgressSegments(chapterStatusCounts);
+    const advancedSegment = segments.find(s => s.status === 'advanced_check');
+
+    expect(advancedSegment).toBeDefined();
+    const linguistSub = advancedSegment?.subSegments?.find(s => s.label === 'Language Review');
+    expect(linguistSub).toBeDefined();
+    expect(linguistSub?.percentage).toBe(10);
+  });
 });

@@ -185,13 +185,16 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
       const isAssignedDrafter = assignment.assignedUser?.id === userdetail.id;
       const isAssignedPeerChecker = assignment.peerChecker?.id === userdetail.id;
 
+      const isPostPeer =
+        status !== ChapterAssignmentStatus.NOT_STARTED &&
+        status !== ChapterAssignmentStatus.DRAFT &&
+        status !== ChapterAssignmentStatus.PEER_CHECK &&
+        status !== ChapterAssignmentStatus.COMPLETE;
+
       const canEdit =
         (isAssignedDrafter && status === ChapterAssignmentStatus.DRAFT) ||
         (isAssignedPeerChecker && status === ChapterAssignmentStatus.PEER_CHECK) ||
-        status === ChapterAssignmentStatus.COMMUNITY_REVIEW ||
-        status === ChapterAssignmentStatus.LINGUIST_CHECK ||
-        status === ChapterAssignmentStatus.THEOLOGICAL_CHECK ||
-        status === ChapterAssignmentStatus.CONSULTANT_CHECK;
+        isPostPeer;
 
       const route = canEdit
         ? '/translation/$bookId/$chapterNumber'

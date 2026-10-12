@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
@@ -13,12 +13,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
+import {
+  DEFAULT_WORKFLOW_STEPS,
+  useProjectsWorkflows,
+  useProjectWorkflow,
+} from '@/features/projects/hooks/useProjectWorkflow';
 import { useChapterAssignmentsByUserId } from '@/hooks/useChapterAssignment';
 import { getStatusDisplay } from '@/lib/formatters';
 import { Logger } from '@/lib/services/logger';
 import {
-  CHAPTER_STATUS_ORDER,
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
   type User,
   type UserChapterAssignment,
@@ -65,11 +68,15 @@ const TruncatedProjectCell = ({ text, isNavigating }: { text: string; isNavigati
   );
 };
 
-const ChapterStatusCell: React.FC<{ projectId: number; chapterStatus: string }> = ({
-  projectId,
-  chapterStatus,
-}) => {
+const ChapterStatusCell: React.FC<{
+  projectId: number;
+  chapterStatus: string;
+  statusLabel?: string;
+}> = ({ projectId, chapterStatus, statusLabel }) => {
   const { getStageLabel } = useProjectWorkflow(projectId);
+  if (statusLabel) {
+    return <>{statusLabel}</>;
+  }
   return <>{getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel)}</>;
 };
 
@@ -191,19 +198,47 @@ export function UserHomePage() {
       .map(([name]) => ({ value: name, label: name }));
   }, [currentData]);
 
-  const primaryProjectId = currentData[0]?.projectId;
-  const { getStageLabel } = useProjectWorkflow(primaryProjectId);
+  const projectIds = useMemo(() => {
+    return Array.from(new Set(currentData.map(item => item.projectId).filter(Boolean)));
+  }, [currentData]);
+
+  const workflowsMap = useProjectsWorkflows(projectIds);
+
+  const getRowStatusLabel = useCallback(
+    (item: UserChapterAssignment): string => {
+      const steps = workflowsMap.get(item.projectId) ?? DEFAULT_WORKFLOW_STEPS;
+      const step = steps.find(s => s.id === item.chapterStatus);
+      if (step?.label) return step.label;
+      return getStatusDisplay(item.chapterStatus as ChapterAssignmentStatusType);
+    },
+    [workflowsMap]
+  );
 
   const statusOptions = useMemo(() => {
-    const seen = new Set<string>();
-    for (const item of currentData) seen.add(item.chapterStatus);
-    return CHAPTER_STATUS_ORDER.filter((s): s is ChapterAssignmentStatusType => seen.has(s)).map(
-      s => ({
-        value: s,
-        label: getStatusDisplay(s, getStageLabel),
+    const seenLabels = new Set<string>();
+    for (const item of currentData) {
+      const label = getRowStatusLabel(item);
+      if (label) seenLabels.add(label);
+    }
+
+    return Array.from(seenLabels)
+      .sort((a, b) => {
+        const indexA = DEFAULT_WORKFLOW_STEPS.findIndex(
+          s => s.label.toLowerCase() === a.toLowerCase() || s.id.toLowerCase() === a.toLowerCase()
+        );
+        const indexB = DEFAULT_WORKFLOW_STEPS.findIndex(
+          s => s.label.toLowerCase() === b.toLowerCase() || s.id.toLowerCase() === b.toLowerCase()
+        );
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b);
       })
-    );
-  }, [currentData, getStageLabel]);
+      .map(label => ({
+        value: label,
+        label,
+      }));
+  }, [currentData, getRowStatusLabel]);
 
   const filteredData = useMemo(() => {
     let result = currentData;
@@ -215,10 +250,10 @@ export function UserHomePage() {
       });
     }
     if (selectedStatuses.length > 0) {
-      result = result.filter(item => selectedStatuses.includes(item.chapterStatus));
+      result = result.filter(item => selectedStatuses.includes(getRowStatusLabel(item)));
     }
     return result;
-  }, [currentData, selectedBooks, selectedStatuses]);
+  }, [currentData, selectedBooks, selectedStatuses, getRowStatusLabel]);
 
   const hasActiveFilters = selectedBooks.length > 0 || selectedStatuses.length > 0;
   const isFilteredEmpty = hasActiveFilters && filteredData.length === 0 && currentData.length > 0;
@@ -384,6 +419,7 @@ export function UserHomePage() {
                             <ChapterStatusCell
                               chapterStatus={item.chapterStatus}
                               projectId={item.projectId}
+                              statusLabel={getRowStatusLabel(item)}
                             />
                           </TableCell>
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm whitespace-nowrap'>

@@ -1,4 +1,10 @@
-import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  QueryClient,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
@@ -36,6 +42,93 @@ const fallbackQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 });
 
+export const fetchProjectWorkflow = async (projectId?: number | null): Promise<WorkflowStep[]> => {
+  if (!projectId) return DEFAULT_WORKFLOW_STEPS;
+  try {
+    // Try fetching from dedicated /projects/:projectId/workflow-stages endpoint
+    const stagesRes = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => null);
+
+    if (stagesRes?.ok) {
+      interface ApiWorkflowStage {
+        id: string;
+        label: string;
+        stageId?: number;
+        position?: number;
+        isFixed?: boolean;
+        isLocked?: boolean;
+      }
+      const stagesData = (await stagesRes.json()) as ApiWorkflowStage[];
+      if (Array.isArray(stagesData) && stagesData.length > 0) {
+        return stagesData.map(s => ({
+          id: s.id,
+          label: s.label,
+          stageId: s.stageId,
+          position: s.position,
+          isFixed: s.isFixed,
+          isLocked: s.isLocked,
+          roleName: s.label,
+          enabled: true,
+        })) as WorkflowStep[];
+      }
+    }
+
+    // Fallback to GET /projects/:projectId
+    const response = await fetch(`${config.api.url}/projects/${projectId}`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { workflowConfig?: WorkflowStep[] };
+      if (
+        data.workflowConfig &&
+        Array.isArray(data.workflowConfig) &&
+        data.workflowConfig.length > 0
+      ) {
+        return data.workflowConfig;
+      }
+    }
+  } catch (err) {
+    Logger.warn('Failed to fetch project workflow config, falling back to defaults', {
+      error: String(err),
+    });
+  }
+  return DEFAULT_WORKFLOW_STEPS;
+};
+
+export function useProjectsWorkflows(projectIds: number[]) {
+  let queryClient: QueryClient;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    queryClient = useQueryClient();
+  } catch {
+    queryClient = fallbackQueryClient;
+  }
+
+  return useQueries(
+    {
+      queries: projectIds.map(id => ({
+        queryKey: ['project-workflow', id],
+        queryFn: () => fetchProjectWorkflow(id),
+        staleTime: 5 * 60 * 1000,
+        enabled: id > 0,
+      })),
+      combine: results => {
+        const map = new Map<number, WorkflowStep[]>();
+        projectIds.forEach((id, index) => {
+          map.set(id, results[index]?.data ?? DEFAULT_WORKFLOW_STEPS);
+        });
+        return map;
+      },
+    },
+    queryClient
+  );
+}
+
 export function useProjectWorkflow(projectId?: number | null) {
   let queryClient: QueryClient;
   try {
@@ -49,63 +142,7 @@ export function useProjectWorkflow(projectId?: number | null) {
   const query = useQuery(
     {
       queryKey: ['project-workflow', projectId],
-      queryFn: async () => {
-        if (!projectId) return DEFAULT_WORKFLOW_STEPS;
-        try {
-          // Try fetching from dedicated /projects/:projectId/workflow-stages endpoint
-          const stagesRes = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          }).catch(() => null);
-
-          if (stagesRes?.ok) {
-            interface ApiWorkflowStage {
-              id: string;
-              label: string;
-              stageId?: number;
-              position?: number;
-              isFixed?: boolean;
-              isLocked?: boolean;
-            }
-            const stagesData = (await stagesRes.json()) as ApiWorkflowStage[];
-            if (Array.isArray(stagesData) && stagesData.length > 0) {
-              return stagesData.map(s => ({
-                id: s.id,
-                label: s.label,
-                stageId: s.stageId,
-                position: s.position,
-                isFixed: s.isFixed,
-                isLocked: s.isLocked,
-                roleName: s.label,
-                enabled: true,
-              })) as WorkflowStep[];
-            }
-          }
-
-          // Fallback to GET /projects/:projectId
-          const response = await fetch(`${config.api.url}/projects/${projectId}`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (response.ok) {
-            const data = (await response.json()) as { workflowConfig?: WorkflowStep[] };
-            if (
-              data.workflowConfig &&
-              Array.isArray(data.workflowConfig) &&
-              data.workflowConfig.length > 0
-            ) {
-              return data.workflowConfig;
-            }
-          }
-        } catch (err) {
-          Logger.warn('Failed to fetch project workflow config, falling back to defaults', {
-            error: String(err),
-          });
-        }
-        return DEFAULT_WORKFLOW_STEPS;
-      },
+      queryFn: () => fetchProjectWorkflow(projectId),
       enabled: !!projectId,
     },
     queryClient
@@ -202,22 +239,45 @@ export function useProjectWorkflow(projectId?: number | null) {
         if (!projectId) throw new Error('Project ID required');
 
         // Sync directly against dedicated /projects/:projectId/workflow-stages endpoints
-        const initialSteps = query.data ?? DEFAULT_WORKFLOW_STEPS;
+        const initialSteps = query.data;
+        if (
+          !initialSteps ||
+          initialSteps === DEFAULT_WORKFLOW_STEPS ||
+          !initialSteps.some(step => step.stageId !== undefined)
+        ) {
+          throw new Error(
+            'Cannot save workflow before its configuration is loaded from the server'
+          );
+        }
+
+        interface ApiErrorResponse {
+          message?: string;
+        }
+
+        const parseErrorMessage = async (res: Response, fallback: string): Promise<string> => {
+          try {
+            const data = (await res.json()) as ApiErrorResponse;
+            return data.message ?? fallback;
+          } catch {
+            return fallback;
+          }
+        };
 
         // 1. Delete removed stages
         const finalStageIds = new Set(workflowConfig.map(s => s.stageId).filter(Boolean));
         for (const step of initialSteps) {
           if (step.stageId && !finalStageIds.has(step.stageId) && !step.isFixed) {
-            try {
-              await fetch(
-                `${config.api.url}/projects/${projectId}/workflow-stages/${step.stageId}`,
-                {
-                  method: 'DELETE',
-                  credentials: 'include',
-                }
+            const delRes = await fetch(
+              `${config.api.url}/projects/${projectId}/workflow-stages/${step.stageId}`,
+              {
+                method: 'DELETE',
+                credentials: 'include',
+              }
+            );
+            if (!delRes.ok) {
+              throw new Error(
+                await parseErrorMessage(delRes, `Failed to delete stage "${step.label}"`)
               );
-            } catch (e) {
-              Logger.warn(`Failed to delete stage ${step.stageId}`, { error: String(e) });
             }
           }
         }
@@ -227,23 +287,19 @@ export function useProjectWorkflow(projectId?: number | null) {
         for (const step of workflowConfig) {
           if (!step.stageId && step.id !== 'not_started' && step.id !== 'complete') {
             // New stage
-            try {
-              const addRes = await fetch(
-                `${config.api.url}/projects/${projectId}/workflow-stages`,
-                {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ displayName: step.label }),
-                }
+            const addRes = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ displayName: step.label }),
+            });
+            if (!addRes.ok) {
+              throw new Error(
+                await parseErrorMessage(addRes, `Failed to add stage "${step.label}"`)
               );
-              if (addRes.ok) {
-                const created = (await addRes.json()) as { stageId?: number };
-                if (created.stageId) activeStageIds.push(created.stageId);
-              }
-            } catch (e) {
-              Logger.warn(`Failed to add stage ${step.label}`, { error: String(e) });
             }
+            const created = (await addRes.json()) as { stageId?: number };
+            if (created.stageId) activeStageIds.push(created.stageId);
           } else {
             const targetStageId = step.stageId ?? initialSteps.find(s => s.id === step.id)?.stageId;
             if (targetStageId) {
@@ -258,18 +314,19 @@ export function useProjectWorkflow(projectId?: number | null) {
                 step.id !== 'not_started' &&
                 step.id !== 'complete'
               ) {
-                try {
-                  await fetch(
-                    `${config.api.url}/projects/${projectId}/workflow-stages/${targetStageId}`,
-                    {
-                      method: 'PATCH',
-                      credentials: 'include',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ displayName: step.label }),
-                    }
+                const patchRes = await fetch(
+                  `${config.api.url}/projects/${projectId}/workflow-stages/${targetStageId}`,
+                  {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ displayName: step.label }),
+                  }
+                );
+                if (!patchRes.ok) {
+                  throw new Error(
+                    await parseErrorMessage(patchRes, `Failed to rename stage to "${step.label}"`)
                   );
-                } catch (e) {
-                  Logger.warn(`Failed to rename stage ${targetStageId}`, { error: String(e) });
                 }
               }
             }
@@ -278,15 +335,17 @@ export function useProjectWorkflow(projectId?: number | null) {
 
         // 3. Reorder if numeric IDs available
         if (activeStageIds.length > 0) {
-          try {
-            await fetch(`${config.api.url}/projects/${projectId}/workflow-stages/reorder`, {
+          const reorderRes = await fetch(
+            `${config.api.url}/projects/${projectId}/workflow-stages/reorder`,
+            {
               method: 'PUT',
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ stageIds: activeStageIds }),
-            });
-          } catch (e) {
-            Logger.warn('Failed to reorder stages', { error: String(e) });
+            }
+          );
+          if (!reorderRes.ok) {
+            throw new Error(await parseErrorMessage(reorderRes, 'Failed to reorder stages'));
           }
         }
       },
@@ -318,10 +377,17 @@ export function useProjectWorkflow(projectId?: number | null) {
 
   const enabledStages = workflowConfig.filter(step => step.enabled !== false);
 
+  const isLoadedFromServer = Boolean(
+    query.isSuccess &&
+    query.data !== DEFAULT_WORKFLOW_STEPS &&
+    query.data.some(step => step.stageId !== undefined)
+  );
+
   return {
     ...query,
     workflowConfig,
     enabledStages,
+    isLoadedFromServer,
     getStageLabel,
     getRoleLabel,
     isStageEnabled,

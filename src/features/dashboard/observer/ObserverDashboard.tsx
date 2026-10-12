@@ -35,15 +35,18 @@ const ProjectProgressBar: React.FC<{ project: Project }> = ({ project }) => {
   return (
     <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
       {segments.map((segment, index) => (
-        <Tooltip key={`${segment.status}-${index}`}>
+        <Tooltip key={`${segment.status}-${index}`} disableHoverableContent>
           <TooltipTrigger asChild>
             <div
-              className='h-full transition-all hover:brightness-110'
+              aria-label={`${formatProgressPercentage(segment.percentage, segment.count)} ${segment.displayName}`}
+              className='focus-visible:ring-ring h-full transition-all hover:brightness-110 focus-visible:ring-1 focus-visible:outline-none'
+              role='img'
               style={{
                 width: `${segment.widthPercentage}%`,
                 minWidth: segment.count > 0 ? '3%' : undefined,
                 backgroundColor: segment.color,
               }}
+              tabIndex={0}
             />
           </TooltipTrigger>
           <TooltipContent side='top'>

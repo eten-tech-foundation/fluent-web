@@ -146,11 +146,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      className='border-input bg-background text-foreground hover:border-primary flex h-10 w-10 items-center justify-center rounded-md border-2 p-0 transition-colors hover:bg-transparent'
+                      aria-label='More options'
+                      className='text-primary h-10 w-10 p-0'
                       title='More actions'
                       variant='outline'
                     >
-                      <EllipsisVertical className='h-5 w-5' strokeWidth={2.5} />
+                      <EllipsisVertical className='h-5 w-5' />
                       <span className='sr-only'>More options</span>
                     </Button>
                   </DropdownMenuTrigger>

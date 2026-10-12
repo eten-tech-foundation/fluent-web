@@ -182,6 +182,8 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         const key = getPhaseKey(step.id, idx);
         const count = chapterStatusCounts[step.id] ?? 0;
         const stepColor = colors[step.id];
+        const displayName = stepColor.displayName;
+        const color = stepColor.color;
 
         const existing = segmentsByKey.get(key);
         if (existing) {
@@ -193,12 +195,28 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         const percentage = (count / totalChapters) * 100;
         segmentsByKey.set(key, {
           status: key,
-          displayName: stepColor.displayName,
+          displayName,
           count,
           percentage,
           widthPercentage: count > 0 ? Math.max(percentage, 3) : 0,
-          color: stepColor.color,
+          color,
         });
+      });
+
+      // Include any statuses in chapterStatusCounts not covered in workflowConfig
+      Object.entries(chapterStatusCounts).forEach(([status, count]) => {
+        if (!workflowConfig.some(s => s.id === status) && count > 0) {
+          const key = status;
+          const percentage = (count / totalChapters) * 100;
+          segmentsByKey.set(key, {
+            status: key,
+            displayName: status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            count,
+            percentage,
+            widthPercentage: Math.max(percentage, 3),
+            color: LIME_COLOR,
+          });
+        }
       });
 
       const advancedSegment = segmentsByKey.get(ADVANCED_CHECK_KEY);
@@ -227,7 +245,9 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         const roundedPercentages = distributeRoundedPercentages(rawPercentages, roundedTotal);
 
         advancedSegment.subSegments = orderedSteps.map((step, index) => ({
-          label: ADVANCED_CHECK_SUB_LABELS[step.id as ChapterAssignmentStatus] ?? step.label,
+          label: step.label.trim()
+            ? step.label
+            : (ADVANCED_CHECK_SUB_LABELS[step.id as ChapterAssignmentStatus] ?? step.id),
           percentage: roundedPercentages[index],
         }));
       }

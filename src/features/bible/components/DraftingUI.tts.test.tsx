@@ -435,7 +435,7 @@ beforeEach(() => {
   setHideAudio(false);
   useAppStore.setState({ displayMode: 'verse' });
   vi.clearAllMocks();
-  mockFeatureFlag.mockReturnValue(true);
+  mockFeatureFlag.mockImplementation(() => true);
   ttsRows = [];
   capturedPlaybackOptions = undefined;
   realPlayback = false;
@@ -1172,10 +1172,18 @@ describe('DraftingUI — keyboard shortcuts', () => {
   it('Alt+P and play-from-here share the impossible button reason and start nothing', async () => {
     realPlayback = true;
     renderDrafting();
+    const playButton = await screen.findByRole('button', { name: 'Play verse 1' });
+    await waitFor(() => {
+      expect(registry.getSnapshot(playback.verseKey('1')!)).toBeDefined();
+    });
+    // Wait a tick for any pending effects to settle before overriding impossible state
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
     act(() => registry.setImpossible(playback.verseKey('1')!, 'Licence forbids audio.'));
     await userEvent.keyboard('{Alt>}p{/Alt}');
     await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
-    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await userEvent.click(playButton);
     expect(toastError).toHaveBeenCalledTimes(3);
     expect(toastError.mock.calls.every(([reason]) => reason === 'Licence forbids audio.')).toBe(
       true
