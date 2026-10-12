@@ -1,30 +1,61 @@
 import React from 'react';
 
 import { Check, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { type VerseAudioTake } from '@/lib/types';
 
 import AudioPlayer from './AudioPlayer';
+
+interface SelectAsDraftButtonProps {
+  /** Whether the resolve mutation is currently in-flight for this take. */
+  isResolving?: boolean;
+  /** Whether the action should be disabled (e.g. missing bibleTextId). */
+  disabled?: boolean;
+  /** Called when the user clicks "Select as Draft". */
+  onSelect: () => void;
+}
+
+export const SelectAsDraftButton: React.FC<SelectAsDraftButtonProps> = ({
+  isResolving = false,
+  disabled = false,
+  onSelect,
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      className='mt-3 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+      disabled={isResolving || disabled}
+      style={{
+        borderColor: 'var(--primary)',
+        color: 'var(--primary)',
+        backgroundColor: 'transparent',
+      }}
+      type='button'
+      onClick={onSelect}
+    >
+      <Check className='h-4 w-4' />
+      {isResolving ? t('selecting', 'Selecting…') : t('selectAsDraft', 'Select as Draft')}
+    </button>
+  );
+};
 
 interface TakeCardProps {
   take: VerseAudioTake;
   takeNumber: number;
   /** Display name for the uploader. Pass undefined for single-contributor passages. */
   contributorName?: string;
+  /** Whether this take is currently marked as the active draft. */
   isActiveDraft: boolean;
-  /** Whether this take is currently being played. */
-  isPlaying: boolean;
-  onPlay: (takeId: number) => void;
   /** Whether another take is playing (signals this card to pause). */
   shouldPause: boolean;
-  /** When true, show the "Select as Draft" button. Only shown in conflict passages. */
-  isConflict?: boolean;
-  /** When true, the current user is a PM and may resolve conflicts. */
-  isPM?: boolean;
-  /** Called when the PM clicks "Select as Draft". */
-  onSelectAsDraft?: (takeId: number) => void;
-  /** Whether the resolve mutation is currently in-flight for this take. */
-  isResolving?: boolean;
+  /** Called when this take starts playing. */
+  onPlay: (takeId: number) => void;
+  /** Called when this take pauses or finishes playback. */
+  onPause?: () => void;
+  /** Optional action slot (e.g. SelectAsDraftButton for conflict resolution). */
+  action?: React.ReactNode;
 }
 
 const TakeCard: React.FC<TakeCardProps> = ({
@@ -33,12 +64,11 @@ const TakeCard: React.FC<TakeCardProps> = ({
   contributorName,
   isActiveDraft,
   onPlay,
+  onPause,
   shouldPause,
-  isConflict = false,
-  isPM = false,
-  onSelectAsDraft,
-  isResolving = false,
+  action,
 }) => {
+  const { t } = useTranslation();
   const recordedDate = new Date(take.createdAt).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -66,9 +96,11 @@ const TakeCard: React.FC<TakeCardProps> = ({
           )}
           <span className='text-muted-foreground text-xs'>
             {contributorName ? null : (
-              <span className='text-foreground text-sm font-semibold'>Take {takeNumber}&nbsp;</span>
+              <span className='text-foreground text-sm font-semibold'>
+                {t('takeNumber', 'Take {{number}} ', { number: takeNumber })}
+              </span>
             )}
-            Recorded {recordedDate}
+            {t('recordedDate', 'Recorded {{date}}', { date: recordedDate })}
           </span>
         </div>
 
@@ -86,7 +118,7 @@ const TakeCard: React.FC<TakeCardProps> = ({
             >
               <path d='M5 13l4 4L19 7' strokeLinecap='round' strokeLinejoin='round' />
             </svg>
-            Current Draft
+            {t('currentDraft', 'Current Draft')}
           </span>
         )}
       </div>
@@ -97,26 +129,12 @@ const TakeCard: React.FC<TakeCardProps> = ({
         initialDuration={take.durationSeconds}
         shouldPause={shouldPause}
         src={take.downloadUrl}
+        onPause={onPause}
         onPlay={() => onPlay(take.id)}
       />
 
-      {/* Select as Draft — only visible to PMs on conflict passages; hidden once resolved */}
-      {isConflict && isPM && !isActiveDraft && (
-        <button
-          className='mt-3 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60'
-          disabled={isResolving}
-          style={{
-            borderColor: 'var(--primary)',
-            color: 'var(--primary)',
-            backgroundColor: 'transparent',
-          }}
-          type='button'
-          onClick={() => onSelectAsDraft?.(take.id)}
-        >
-          <Check className='h-4 w-4' />
-          {isResolving ? 'Selecting…' : 'Select as Draft'}
-        </button>
-      )}
+      {/* Action slot (e.g. Select as Draft button) */}
+      {action}
     </div>
   );
 };

@@ -204,16 +204,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // Fetch chapter audio to know whether to show the "View Audio" button.
   // The hook auto-refetches every 10 min so R2 pre-signed URLs stay fresh.
-  const {
-    data: chapterAudioData,
-    isLoading: isAudioLoading,
-    isError: isAudioError,
-  } = useChapterAudio(
-    projectItem.projectUnitId,
-    projectItem.bibleId,
-    projectItem.bookId,
-    projectItem.chapterNumber
-  );
+  const { data: chapterAudioData, isLoading: isAudioLoading } = useChapterAudio(projectItem);
   const hasAnyAudio = (chapterAudioData?.items.length ?? 0) > 0;
   const hasUnresolvedAudioConflict = chapterAudioData?.hasConflict ?? false;
 
@@ -690,12 +681,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const totalSourceVerses = sourceVerses.length;
   const versesWithText = verses.filter(v => v.content.trim() !== '').length;
   const progressPercentage = (versesWithText / totalSourceVerses) * 100;
-  // Block submission if audio is loading/errored or there are any unresolved audio conflicts in this chapter (#383)
-  const isTranslationComplete =
-    versesWithText === totalSourceVerses &&
-    !isAudioLoading &&
-    !isAudioError &&
-    !hasUnresolvedAudioConflict;
+  // Block submission only if there are unresolved audio conflicts in this chapter (spec #383)
+  const isTranslationComplete = versesWithText === totalSourceVerses && !hasUnresolvedAudioConflict;
 
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
   const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);

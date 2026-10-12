@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Pause, Play } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { formatClock, usePlaybackRegistry } from '@/features/tts';
 
 interface AudioPlayerProps {
   /** Playback URL for this take. */
@@ -9,6 +12,8 @@ interface AudioPlayerProps {
   initialDuration?: number | null;
   /** Called when this player starts playing, so the parent can pause others. */
   onPlay?: () => void;
+  /** Called when this player pauses or stops playing. */
+  onPause?: () => void;
   /**
    * External signal: when this changes to true the player should pause.
    * Controlled by the parent when another take starts playing.
@@ -20,51 +25,106 @@ interface AudioPlayerProps {
 
 /**
  * Minimal audio player that wraps the native HTMLAudioElement.
+ * Integrates with the shared PlaybackRegistry for app-wide exclusivity.
  */
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
   src,
   initialDuration,
   onPlay,
+  onPause,
   shouldPause = false,
   accentColor,
 }) => {
+  const { t } = useTranslation();
+  const registry = usePlaybackRegistry();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const releaseRef = useRef<(() => void) | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration ?? 0);
   const [isLoading, setIsLoading] = useState(false);
 
+  const pausePlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+    }
+    setIsPlaying(false);
+    setIsLoading(false);
+    if (releaseRef.current) {
+      releaseRef.current();
+      releaseRef.current = null;
+    }
+    onPause?.();
+  }, [onPause]);
+
   // Pause when parent signals another take has started
   useEffect(() => {
     const audio = audioRef.current;
     if (shouldPause && (isPlaying || (audio && !audio.paused))) {
-      audio?.pause();
-      setIsPlaying(false);
+      pausePlayback();
     }
-  }, [shouldPause, isPlaying]);
+  }, [shouldPause, isPlaying, pausePlayback]);
+
+  // Cleanup on unmount or src change
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+      if (releaseRef.current) {
+        releaseRef.current();
+        releaseRef.current = null;
+      }
+    };
+  }, [src]);
 
   const handleToggle = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
+      pausePlayback();
     } else {
       onPlay?.();
       setIsLoading(true);
+
+      // Claim exclusivity in the shared registry before starting playback.
+      // Any other claimant (e.g. drafting audio or another take) will be paused.
+      releaseRef.current?.();
+      releaseRef.current = registry.claim(() => {
+        const el = audioRef.current;
+        if (el) el.pause();
+        setIsPlaying(false);
+        setIsLoading(false);
+        releaseRef.current = null;
+        onPause?.();
+      });
+
       void audio
         .play()
         .then(() => {
+          // If evicted from the registry while waiting for the play promise:
+          if (!releaseRef.current) {
+            audio.pause();
+            setIsPlaying(false);
+            setIsLoading(false);
+            return;
+          }
           setIsPlaying(true);
           setIsLoading(false);
         })
         .catch(() => {
           setIsPlaying(false);
           setIsLoading(false);
+          if (releaseRef.current) {
+            releaseRef.current();
+            releaseRef.current = null;
+          }
         });
     }
-  }, [isPlaying, onPlay]);
+  }, [isPlaying, onPlay, onPause, pausePlayback, registry]);
 
   const handleTimeUpdate = useCallback(() => {
     setCurrentTime(audioRef.current?.currentTime ?? 0);
@@ -78,7 +138,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     setIsPlaying(false);
     setCurrentTime(0);
     if (audioRef.current) audioRef.current.currentTime = 0;
-  }, []);
+    if (releaseRef.current) {
+      releaseRef.current();
+      releaseRef.current = null;
+    }
+    onPause?.();
+  }, [onPause]);
 
   const handleSeek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -90,13 +155,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     },
     [duration]
   );
-
-  const formatTime = (s: number) => {
-    if (!isFinite(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
 
   const progress = duration > 0 ? currentTime / duration : 0;
   const filled = accentColor ?? 'var(--primary)';
@@ -118,7 +176,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
       {/* Play / Pause button */}
       <button
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t('pause', 'Pause') : t('play', 'Play')}
         className='flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-60'
         disabled={isLoading}
         style={{ backgroundColor: filled }}
@@ -136,7 +194,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
       {/* Waveform progress bar */}
       <div
-        aria-label='Seek audio'
+        aria-label={t('seekAudio', 'Seek audio')}
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={Math.round(progress * 100)}
@@ -171,7 +229,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
       {/* Duration */}
       <span className='text-muted-foreground w-8 shrink-0 text-right text-xs tabular-nums'>
-        {formatTime(isPlaying || currentTime > 0 ? currentTime : duration)}
+        {formatClock(isPlaying || currentTime > 0 ? currentTime : duration)}
       </span>
     </div>
   );

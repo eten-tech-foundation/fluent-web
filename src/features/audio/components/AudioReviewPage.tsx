@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getRouteApi, useRouter } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, ChevronLeft, Loader2, MicOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useResolveConflict } from '@/features/audio/hooks/useResolveConflict';
@@ -13,7 +14,7 @@ import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { type ProjectItem, type VerseAudioRecording } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
-import TakeCard from './TakeCard';
+import TakeCard, { SelectAsDraftButton } from './TakeCard';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,30 +80,33 @@ const PassageListItem: React.FC<PassageListItemProps> = ({
 };
 
 // ---------------------------------------------------------------------------
-// Inner hook: target verses (reuses query options already cached by the loader)
-// ---------------------------------------------------------------------------
-
-function useTargetVerses(projectUnitId: number, bookId: number, chapterNumber: number) {
-  return useQuery({
-    ...targetTextQueryOptions(projectUnitId, bookId, chapterNumber),
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 const routeApi = getRouteApi('/_authenticated/audio/$bookId/$chapterNumber');
+
+interface Passage {
+  id: string;
+  label: string;
+  verseNumbers: number[];
+  recordings: VerseAudioRecording[];
+  hasConflict: boolean;
+  wasConflicted: boolean;
+}
+
+const isPassage = (passage: Passage | null): passage is Passage => passage !== null;
 
 interface AudioReviewPageProps {
   projectItem?: ProjectItem;
 }
 
 const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem }) => {
+  const { t } = useTranslation();
   const loaderData = routeApi.useLoaderData();
   const projectItem = propItem ?? loaderData.projectItem;
   const router = useRouter();
   const displayMode = useAppStore(state => state.displayMode);
+  const setDisplayMode = useAppStore(state => state.setDisplayMode);
   const userdetail = useAppStore(state => state.userdetail);
 
   // Only PMs may resolve conflicts (spec #383).
@@ -113,12 +117,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
   // ---------- Data fetching ----------
 
-  const { data: audioData, isLoading: audioLoading } = useChapterAudio(
-    projectItem.projectUnitId,
-    projectItem.bibleId,
-    projectItem.bookId,
-    projectItem.chapterNumber
-  );
+  const { data: audioData, isLoading: audioLoading } = useChapterAudio(projectItem);
 
   const { data: projectUsers } = useProjectUsers(projectItem.projectId);
 
@@ -129,10 +128,8 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     displayMode === 'pericope'
   );
 
-  const { data: targetVerses } = useTargetVerses(
-    projectItem.projectUnitId,
-    projectItem.bookId,
-    projectItem.chapterNumber
+  const { data: targetVerses } = useQuery(
+    targetTextQueryOptions(projectItem.projectUnitId, projectItem.bookId, projectItem.chapterNumber)
   );
 
   // ---------- Resolve conflict mutation ----------
@@ -153,12 +150,12 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
    * A "passage" is either a single verse (verse/chapter mode) or a pericope group.
    * Each entry carries the set of VerseAudioRecording rows that belong to it.
    */
-  const passages = useMemo(() => {
+  const passages: Passage[] = useMemo(() => {
     const recordings = audioData?.items ?? [];
 
     if (displayMode === 'pericope' && pericopes && pericopes.length > 0) {
       return pericopes
-        .map(group => {
+        .map((group): Passage | null => {
           const groupVerseNums = new Set(group.verses.map(v => v.verseNumber));
           const groupRecordings = recordings.filter(r => groupVerseNums.has(r.verseNumber));
           if (groupRecordings.length === 0) return null;
@@ -166,7 +163,9 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           const startVerse = group.verses[0]?.verseNumber;
           const endVerse = group.verses[group.verses.length - 1]?.verseNumber;
           const label =
-            startVerse === endVerse ? `Verse ${startVerse}` : `Verses ${startVerse}–${endVerse}`;
+            startVerse === endVerse
+              ? t('verseLabel', 'Verse {{verse}}', { verse: startVerse })
+              : t('versesLabel', 'Verses {{start}}–{{end}}', { start: startVerse, end: endVerse });
 
           const hasConflictNow = groupRecordings.some(isConflict);
           // 'resolved' is set by the API when the conflict was explicitly resolved
@@ -176,30 +175,28 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           return {
             id: `pericope-${group.pericopeNumber}`,
             label,
+            verseNumbers: group.verses.map(v => v.verseNumber),
             recordings: groupRecordings,
             hasConflict: hasConflictNow,
             wasConflicted,
           };
         })
-        .filter(Boolean) as Array<{
-        id: string;
-        label: string;
-        recordings: VerseAudioRecording[];
-        hasConflict: boolean;
-        wasConflicted: boolean;
-      }>;
+        .filter(isPassage);
     }
 
     // Verse / chapter mode: one row per verse
-    return recordings.map(r => ({
-      id: `verse-${r.verseNumber}`,
-      label: `Verse ${r.verseNumber}`,
-      recordings: [r],
-      hasConflict: isConflict(r),
-      // 'resolved' status is set by the API on successful conflict resolution.
-      wasConflicted: isResolved(r),
-    }));
-  }, [audioData, displayMode, pericopes]);
+    return recordings.map(
+      (r): Passage => ({
+        id: `verse-${r.verseNumber}`,
+        label: t('verseLabel', 'Verse {{verse}}', { verse: r.verseNumber }),
+        verseNumbers: [r.verseNumber],
+        recordings: [r],
+        hasConflict: isConflict(r),
+        // 'resolved' status is set by the API on successful conflict resolution.
+        wasConflicted: isResolved(r),
+      })
+    );
+  }, [audioData, displayMode, pericopes, t]);
 
   // ---------- All-resolved chip ----------
 
@@ -244,7 +241,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
   const selectedTargetText = useMemo(() => {
     if (!targetVerses || !selectedPassage) return null;
-    const verseNums = new Set(selectedPassage.recordings.map(r => r.verseNumber));
+    const verseNums = new Set(selectedPassage.verseNumbers);
     return targetVerses.filter(v => verseNums.has(v.verseNumber));
   }, [targetVerses, selectedPassage]);
 
@@ -256,6 +253,10 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     setPlayingTakeId(takeId);
   }, []);
 
+  const handlePause = useCallback((takeId: number) => {
+    setPlayingTakeId(prev => (prev === takeId ? null : prev));
+  }, []);
+
   // ---------- Conflict resolution ----------
 
   const handleSelectAsDraft = useCallback(
@@ -263,15 +264,9 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
       setResolvingTakeId(take.id);
       resolveMutation.mutate(
         {
-          projectUnitId: projectItem.projectUnitId,
+          key: projectItem,
           bibleTextId: take.bibleTextId,
           takeId: take.id,
-          cacheKey: {
-            projectUnitId: projectItem.projectUnitId,
-            bibleId: projectItem.bibleId,
-            bookId: projectItem.bookId,
-            chapterNumber: projectItem.chapterNumber,
-          },
         },
         {
           onSettled: () => setResolvingTakeId(null),
@@ -301,7 +296,9 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     return (
       <div className='text-muted-foreground flex h-screen flex-col items-center justify-center gap-3'>
         <MicOff className='h-10 w-10' />
-        <p className='text-sm'>No recorded takes found for this chapter.</p>
+        <p className='text-sm'>
+          {t('noRecordedTakesFound', 'No recorded takes found for this chapter.')}
+        </p>
       </div>
     );
   }
@@ -313,7 +310,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
       {/* ── Page header ─────────────────────────────────────── */}
       <header className='border-border flex shrink-0 items-center gap-3 border-b px-6 py-4'>
         <button
-          aria-label='Back'
+          aria-label={t('back', 'Back')}
           className='text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-colors'
           type='button'
           onClick={handleBack}
@@ -322,7 +319,10 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         </button>
 
         <h1 className='text-foreground text-xl font-bold'>
-          Audio — {projectItem.book} {projectItem.chapterNumber}
+          {t('audioReviewHeader', 'Audio — {{book}} {{chapter}}', {
+            book: projectItem.book,
+            chapter: projectItem.chapterNumber,
+          })}
         </h1>
 
         {/* All Resolved chip */}
@@ -336,7 +336,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             }}
           >
             <CheckCircle2 className='h-3.5 w-3.5' />
-            All Resolved
+            {t('allResolved', 'All Resolved')}
           </span>
         )}
       </header>
@@ -350,7 +350,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         <aside className='border-border flex w-[200px] shrink-0 flex-col overflow-hidden border-r'>
           <div className='shrink-0 px-6 pt-6 pb-2'>
             <p className='text-muted-foreground text-xs font-semibold tracking-wider uppercase'>
-              Units
+              {t('units', 'Units')}
             </p>
           </div>
           <div
@@ -385,14 +385,22 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           <div className='flex shrink-0 flex-col gap-4 px-6 pt-6 pb-4'>
             <div>
               <h2 className='text-foreground text-base font-semibold'>
-                {selectedHasConflict ? 'Conflicting Takes' : 'Recorded Takes'}
+                {selectedHasConflict
+                  ? t('conflictingTakes', 'Conflicting Takes')
+                  : t('recordedTakes', 'Recorded Takes')}
               </h2>
               <p className='text-muted-foreground mt-0.5 text-sm'>
                 {selectedHasConflict
-                  ? 'Select one take as the active draft. All recordings are retained.'
+                  ? t(
+                      'conflictingTakesDesc',
+                      'Select one take as the active draft. All recordings are retained.'
+                    )
                   : effectivePassage.wasConflicted
-                    ? 'This conflict has been resolved. All recordings are retained.'
-                    : 'Listen to every recorded take for this passage.'}
+                    ? t(
+                        'resolvedTakesDesc',
+                        'This conflict has been resolved. All recordings are retained.'
+                      )
+                    : t('recordedTakesDesc', 'Listen to every recorded take for this passage.')}
               </p>
             </div>
 
@@ -411,7 +419,12 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                   className='mt-0.5 h-4 w-4 shrink-0'
                   style={{ color: 'var(--warning-border)' }}
                 />
-                <span>This passage has conflicting takes — select one to resolve.</span>
+                <span>
+                  {t(
+                    'conflictBanner',
+                    'This passage has conflicting takes — select one to resolve.'
+                  )}
+                </span>
               </div>
             )}
           </div>
@@ -423,17 +436,26 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           >
             {displayMode === 'pericope' ? (
               <p className='text-muted-foreground text-sm font-normal'>
-                Recorded by verse. Switch to Verse view to view these takes.
+                {t('recordedByVerse', 'Recorded by verse.')}{' '}
+                <button
+                  className='text-primary hover:text-primary/80 cursor-pointer font-medium underline'
+                  type='button'
+                  onClick={() => setDisplayMode('verse')}
+                >
+                  {t('switchToVerseView', 'Switch to Verse view')}
+                </button>{' '}
+                {t('toReviewTheseTakes', 'to review these takes.')}
               </p>
             ) : selectedTakes.length === 0 ? (
-              <p className='text-muted-foreground text-sm'>No audio drafts available.</p>
+              <p className='text-muted-foreground text-sm'>
+                {t('noAudioDraftsAvailable', 'No audio drafts available.')}
+              </p>
             ) : (
               <div className='flex flex-col gap-3'>
                 {(() => {
-                  // Show contributor names when >1 unique uploader, OR when the passage
-                  // is in conflict (spec: conflict takes always show who recorded each one)
+                  // Show contributor names only when the passage has takes from more than one contributor (spec #383)
                   const uniqueUploaders = new Set(selectedTakes.map(t => t.uploadedBy));
-                  const showContributor = uniqueUploaders.size > 1 || selectedHasConflict;
+                  const showContributor = uniqueUploaders.size > 1;
 
                   // Find the bibleTextId for each take by looking in the recordings
                   const takeBibleTextMap = new Map<number, number>();
@@ -443,29 +465,44 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                     }
                   }
 
-                  return selectedTakes.map((take, idx) => (
-                    <TakeCard
-                      key={take.id}
-                      contributorName={
-                        showContributor ? (userMap.get(take.uploadedBy) ?? 'Unknown') : undefined
-                      }
-                      isActiveDraft={take.id === activeTakeId}
-                      isConflict={selectedHasConflict}
-                      isPlaying={playingTakeId === take.id}
-                      isPM={isPM}
-                      isResolving={resolvingTakeId === take.id}
-                      shouldPause={playingTakeId !== null && playingTakeId !== take.id}
-                      take={take}
-                      takeNumber={idx + 1}
-                      onPlay={handlePlay}
-                      onSelectAsDraft={() =>
-                        handleSelectAsDraft({
-                          id: take.id,
-                          bibleTextId: takeBibleTextMap.get(take.id) ?? 0,
-                        })
-                      }
-                    />
-                  ));
+                  return selectedTakes.map((take, idx) => {
+                    const bibleTextId = takeBibleTextMap.get(take.id);
+                    const canResolveAsDraft =
+                      isPM && selectedHasConflict && take.id !== activeTakeId;
+
+                    return (
+                      <TakeCard
+                        key={take.id}
+                        action={
+                          canResolveAsDraft ? (
+                            <SelectAsDraftButton
+                              disabled={bibleTextId === undefined}
+                              isResolving={resolvingTakeId === take.id}
+                              onSelect={() => {
+                                if (bibleTextId !== undefined) {
+                                  handleSelectAsDraft({
+                                    id: take.id,
+                                    bibleTextId,
+                                  });
+                                }
+                              }}
+                            />
+                          ) : undefined
+                        }
+                        contributorName={
+                          showContributor
+                            ? (userMap.get(take.uploadedBy) ?? t('unknown', 'Unknown'))
+                            : undefined
+                        }
+                        isActiveDraft={take.id === activeTakeId}
+                        shouldPause={playingTakeId !== null && playingTakeId !== take.id}
+                        take={take}
+                        takeNumber={idx + 1}
+                        onPause={() => handlePause(take.id)}
+                        onPlay={handlePlay}
+                      />
+                    );
+                  });
                 })()}
               </div>
             )}
@@ -476,9 +513,11 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         <section className='flex min-w-0 flex-1 flex-col overflow-hidden'>
           {/* Column heading — pinned, never scrolls */}
           <div className='shrink-0 px-6 pt-6 pb-4'>
-            <h2 className='text-foreground text-base font-semibold'>Draft Text</h2>
+            <h2 className='text-foreground text-base font-semibold'>
+              {t('draftText', 'Draft Text')}
+            </h2>
             <p className='text-muted-foreground mt-0.5 text-sm'>
-              Target-language draft for this passage
+              {t('draftTextSubtitle', 'Target-language draft for this passage')}
             </p>
           </div>
 
@@ -506,7 +545,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
               </div>
             ) : (
               <p className='text-muted-foreground text-sm italic'>
-                No draft text yet for this passage.
+                {t('noDraftTextYet', 'No draft text yet for this passage.')}
               </p>
             )}
           </div>

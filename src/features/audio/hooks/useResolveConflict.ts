@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { chapterAudioQueryKey, type ChapterAudioKey } from '@/features/audio/hooks/useChapterAudio';
 import { config } from '@/lib/config';
 import { type ChapterAudioResponse, type VerseAudioRecording } from '@/lib/types';
 
@@ -7,17 +8,10 @@ import { type ChapterAudioResponse, type VerseAudioRecording } from '@/lib/types
 // Types
 // ---------------------------------------------------------------------------
 
-interface ResolveConflictArgs {
-  projectUnitId: number;
+export interface ResolveConflictArgs {
+  key: ChapterAudioKey;
   bibleTextId: number;
   takeId: number;
-  /** For optimistic cache update — identifies which chapterAudio cache entry to patch. */
-  cacheKey: {
-    projectUnitId: number;
-    bibleId: number;
-    bookId: number;
-    chapterNumber: number;
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -25,16 +19,19 @@ interface ResolveConflictArgs {
 // ---------------------------------------------------------------------------
 
 const resolveConflict = async ({
-  projectUnitId,
+  key,
   bibleTextId,
   takeId,
 }: ResolveConflictArgs): Promise<VerseAudioRecording> => {
-  const res = await fetch(`${config.api.url}/verse-audio/${projectUnitId}/${bibleTextId}/resolve`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ takeId }),
-  });
+  const res = await fetch(
+    `${config.api.url}/verse-audio/${key.projectUnitId}/${bibleTextId}/resolve`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ takeId }),
+    }
+  );
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
@@ -52,8 +49,9 @@ const resolveConflict = async ({
  * Mutation that designates a take as the active draft and clears a conflict.
  *
  * On success it patches the cached `chapterAudio` query so the UI updates
- * immediately without a round-trip refetch. The query is also invalidated so
- * background data stays fresh.
+ * immediately without a round-trip refetch. Both `chapterAudio` and
+ * `chapterAssignments` queries are invalidated so background data and the
+ * chapter-list conflict indicator stay fresh.
  */
 export const useResolveConflict = () => {
   const queryClient = useQueryClient();
@@ -62,14 +60,7 @@ export const useResolveConflict = () => {
     mutationFn: resolveConflict,
 
     onSuccess: (updatedRecording, variables) => {
-      const { cacheKey } = variables;
-      const qk = [
-        'chapterAudio',
-        cacheKey.projectUnitId,
-        cacheKey.bibleId,
-        cacheKey.bookId,
-        cacheKey.chapterNumber,
-      ];
+      const qk = chapterAudioQueryKey(variables.key);
 
       // Patch the cached chapter audio so the conflict indicator clears immediately
       queryClient.setQueryData<ChapterAudioResponse>(qk, old => {
@@ -83,6 +74,9 @@ export const useResolveConflict = () => {
 
       // Invalidate in background to refetch fresh pre-signed URLs
       void queryClient.invalidateQueries({ queryKey: qk });
+
+      // Invalidate chapter assignments so the chapter-list conflict indicator clears
+      void queryClient.invalidateQueries({ queryKey: ['chapterAssignments'] });
     },
   });
 };

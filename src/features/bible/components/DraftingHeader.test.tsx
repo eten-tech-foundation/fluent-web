@@ -72,4 +72,27 @@ describe('DraftingHeader', () => {
 
     expect(onToggleResources).toHaveBeenCalledOnce();
   });
+
+  it('renders View Audio button when user is PM and audio exists', () => {
+    render(<DraftingHeader {...defaultProps} hasAnyAudio={true} isPM={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+    expect(audioButton).not.toBeDisabled();
+  });
+
+  it('renders disabled View Audio button with spinner while audio is loading', () => {
+    render(<DraftingHeader {...defaultProps} isAudioLoading={true} isPM={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+    expect(audioButton).toBeDisabled();
+  });
+
+  it('renders View Audio button in readOnly mode when user is PM and audio exists', () => {
+    render(<DraftingHeader {...defaultProps} hasAnyAudio={true} isPM={true} readOnly={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+  });
 });

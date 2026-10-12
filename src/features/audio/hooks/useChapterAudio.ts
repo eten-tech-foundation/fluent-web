@@ -4,15 +4,34 @@ import { config } from '@/lib/config';
 import { type ChapterAudioResponse } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ChapterAudioKey {
+  projectUnitId: number;
+  bibleId: number;
+  bookId: number;
+  chapterNumber: number;
+}
+
+export const chapterAudioQueryKey = (key: Partial<ChapterAudioKey> | null | undefined) => [
+  'chapterAudio',
+  key?.projectUnitId,
+  key?.bibleId,
+  key?.bookId,
+  key?.chapterNumber,
+];
+
+// ---------------------------------------------------------------------------
 // Fetch function
 // ---------------------------------------------------------------------------
 
-const fetchChapterAudio = async (
-  projectUnitId: number,
-  bibleId: number,
-  bookId: number,
-  chapterNumber: number
-): Promise<ChapterAudioResponse> => {
+const fetchChapterAudio = async ({
+  projectUnitId,
+  bibleId,
+  bookId,
+  chapterNumber,
+}: ChapterAudioKey): Promise<ChapterAudioResponse> => {
   const params = new URLSearchParams({
     projectUnitId: projectUnitId.toString(),
     bibleId: bibleId.toString(),
@@ -42,22 +61,22 @@ const fetchChapterAudio = async (
  * Query refetches before they go stale and the audio player gets a 403.
  */
 export const useChapterAudio = (
-  projectUnitId: number | undefined | null,
-  bibleId: number | undefined | null,
-  bookId: number | undefined | null,
-  chapterNumber: number | undefined | null,
+  key: Partial<ChapterAudioKey> | null | undefined,
   options?: { enabled?: boolean }
 ) => {
+  const isCompleteKey = Boolean(
+    key?.projectUnitId && key.bibleId && key.bookId && key.chapterNumber
+  );
+
   return useQuery<ChapterAudioResponse>({
-    queryKey: ['chapterAudio', projectUnitId, bibleId, bookId, chapterNumber],
+    queryKey: chapterAudioQueryKey(key),
     queryFn: () => {
-      if (!projectUnitId || !bibleId || !bookId || !chapterNumber) {
+      if (!key?.projectUnitId || !key.bibleId || !key.bookId || !key.chapterNumber) {
         throw new Error('projectUnitId, bibleId, bookId and chapterNumber are required');
       }
-      return fetchChapterAudio(projectUnitId, bibleId, bookId, chapterNumber);
+      return fetchChapterAudio(key as ChapterAudioKey);
     },
-    enabled:
-      (options?.enabled ?? true) && !!projectUnitId && !!bibleId && !!bookId && !!chapterNumber,
+    enabled: (options?.enabled ?? true) && isCompleteKey,
     // Refetch every 10 min to get fresh pre-signed URLs before the 15-min R2 expiry
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,

@@ -37,6 +37,36 @@ interface DraftingHeaderProps {
   onSubmit: () => Promise<void>;
 }
 
+interface ViewAudioButtonProps {
+  isAudioLoading: boolean;
+  onClick: () => void;
+}
+
+export const ViewAudioButton: React.FC<ViewAudioButtonProps> = ({ isAudioLoading, onClick }) => {
+  const { t } = useTranslation();
+
+  return (
+    <Button
+      className={
+        isAudioLoading
+          ? 'flex cursor-not-allowed items-center gap-2 opacity-60'
+          : 'border-primary text-primary hover:bg-primary/10 hover:text-primary flex cursor-pointer items-center gap-2'
+      }
+      disabled={isAudioLoading}
+      type='button'
+      variant='outline'
+      onClick={onClick}
+    >
+      {isAudioLoading ? (
+        <Loader className='h-4 w-4 animate-spin' />
+      ) : (
+        <Headphones className='h-4 w-4' />
+      )}
+      {t('viewAudio', 'View Audio')}
+    </Button>
+  );
+};
+
 export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   projectItem,
   readOnly,
@@ -154,24 +184,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
             </TooltipProvider>
 
             {isPM && (isAudioLoading || hasAnyAudio) && (
-              <Button
-                className={
-                  isAudioLoading
-                    ? 'flex cursor-not-allowed items-center gap-2 opacity-60'
-                    : 'border-primary text-primary hover:bg-primary/10 hover:text-primary flex cursor-pointer items-center gap-2'
-                }
-                disabled={isAudioLoading}
-                type='button'
-                variant='outline'
-                onClick={handleViewAudio}
-              >
-                {isAudioLoading ? (
-                  <Loader className='h-4 w-4 animate-spin' />
-                ) : (
-                  <Headphones className='h-4 w-4' />
-                )}
-                {t('viewAudio', 'View Audio')}
-              </Button>
+              <ViewAudioButton isAudioLoading={isAudioLoading} onClick={handleViewAudio} />
             )}
 
             {!isComplete && isDraft && (
@@ -203,24 +216,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
 
         {readOnly && isPM && (isAudioLoading || hasAnyAudio) && (
           <div className='flex flex-1 items-center justify-end'>
-            <Button
-              className={
-                isAudioLoading
-                  ? 'flex cursor-not-allowed items-center gap-2 opacity-60'
-                  : 'border-primary text-primary hover:bg-primary/10 hover:text-primary flex cursor-pointer items-center gap-2'
-              }
-              disabled={isAudioLoading}
-              type='button'
-              variant='outline'
-              onClick={handleViewAudio}
-            >
-              {isAudioLoading ? (
-                <Loader className='h-4 w-4 animate-spin' />
-              ) : (
-                <Headphones className='h-4 w-4' />
-              )}
-              {t('viewAudio', 'View Audio')}
-            </Button>
+            <ViewAudioButton isAudioLoading={isAudioLoading} onClick={handleViewAudio} />
           </div>
         )}
       </div>
