@@ -1,12 +1,21 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 
+import type { EditorRef, SelectionRange } from '@eten-tech-foundation/platform-editor';
 import type { SerializedVerseRef } from '@sillsdev/scripture';
 
 /** A reference the plugin has no verse to place the cursor in, which is how a verse is re-announced. */
 export const NO_VERSE = 0;
 
 /**
- * Puts the cursor back in a verse after the editor's document has been reloaded.
+ * Puts the selection back after the editor's document has been reloaded.
+ * A mapped text selection keeps both offsets; marker positions fall back to the verse reference.
  *
  * Reloading leaves the editor with no selection at all, and `ScriptureReferencePlugin` places the
  * cursor only when the verse it is handed *changes* — so getting the same verse back means letting
@@ -20,8 +29,12 @@ export const NO_VERSE = 0;
  */
 export function useVerseCursorRestore(
   scrRef: SerializedVerseRef,
-  setScrRef: Dispatch<SetStateAction<SerializedVerseRef>>
-): { restoreAfterLoad: (verseNum: number) => void; cancelRestore: () => void } {
+  setScrRef: Dispatch<SetStateAction<SerializedVerseRef>>,
+  editorRef?: RefObject<EditorRef | null>
+): {
+  restoreAfterLoad: (verseNum: number, selection?: SelectionRange) => void;
+  cancelRestore: () => void;
+} {
   const pendingVerseRef = useRef<number | undefined>(undefined);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -42,15 +55,21 @@ export function useVerseCursorRestore(
   }, [scrRef, setScrRef]);
 
   const restoreAfterLoad = useCallback(
-    (verseNum: number) => {
+    (verseNum: number, selection?: SelectionRange) => {
       cancelRestore();
       timerRef.current = setTimeout(() => {
         timerRef.current = undefined;
+        if (selection && editorRef?.current) {
+          editorRef.current.setSelection(selection);
+          // Commit the selection-only transaction before the next input/autosave transaction.
+          editorRef.current.getSelection();
+          return;
+        }
         pendingVerseRef.current = verseNum;
         setScrRef(current => ({ ...current, verseNum: NO_VERSE }));
       }, 0);
     },
-    [cancelRestore, setScrRef]
+    [cancelRestore, editorRef, setScrRef]
   );
 
   return { restoreAfterLoad, cancelRestore };

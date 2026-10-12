@@ -2,12 +2,25 @@ import { createRef } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { act, render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatHeadingLevel } from './format-heading';
 import { pericopeVersesToUsj, usjToPericopeVerses } from './pericope-usj';
 
 import type { EditorRef, SelectionRange } from '@eten-tech-foundation/platform-editor';
+
+const rect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
+const rects = Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects');
+beforeEach(() => {
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+});
+afterEach(() => {
+  if (rect) Object.defineProperty(Range.prototype, 'getBoundingClientRect', rect);
+  else Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect');
+  if (rects) Object.defineProperty(Range.prototype, 'getClientRects', rects);
+  else Reflect.deleteProperty(Range.prototype, 'getClientRects');
+});
 
 const rows = [
   { verseNumber: 1, text: 'First verse.', markers: { paragraphs: [{ marker: 'q2', offset: 0 }] } },
@@ -41,19 +54,16 @@ async function setup(selection: SelectionRange) {
     ref,
     container,
     onChange,
-    save: (usj: Parameters<EditorRef['setUsj']>[0]) => {
-      onChange(usjToPericopeVerses(usj));
-    },
   };
 }
 
 describe('heading levels in the real editor', () => {
   it('changes the heading while preserving scripture and saves its level', async () => {
-    const { ref, container, onChange, save } = await setup({
+    const { ref, container, onChange } = await setup({
       start: { jsonPath: '$.content[2].content[0]', offset: 3 },
     });
     act(() => {
-      formatHeadingLevel(ref.current!, 's3', save);
+      formatHeadingLevel(ref.current!, 's3');
     });
     await waitFor(() =>
       expect(container.querySelector('[data-marker="s3"]')).toHaveTextContent('Title')
@@ -76,11 +86,9 @@ describe('heading levels in the real editor', () => {
       start: { jsonPath: '$.content[2].content[0]', offset: 4 },
       end: { jsonPath: '$.content[1].content[1]', offset: 2 },
     });
-    const save = vi.fn();
     act(() => {
-      expect(formatHeadingLevel(ref.current!, 's3', save)).toBeUndefined();
+      expect(formatHeadingLevel(ref.current!, 's3')).toBeUndefined();
     });
-    expect(save).not.toHaveBeenCalled();
     expect(container.querySelector('[data-marker="q2"]')).toHaveTextContent('First verse.');
     expect(container.querySelector('[data-marker="s1"]')).toHaveTextContent('Title');
     expect(container.querySelector('[data-marker="s3"]')).toBeNull();

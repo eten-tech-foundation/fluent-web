@@ -23,18 +23,20 @@ RTE edits are checked against the API's limits: four headings per verse, 300 cha
 and no backslashes or line breaks. An invalid edit stays visible with an error and does not enter
 autosave until corrected. Structural reloads and external fills are suspended while it is invalid.
 
-Editorial 0.8.15 does not emit a change for a level-only update to a heading with a single text leaf.
-Fluent therefore rewrites that one USJ paragraph, reports the change explicitly, and restores the
-selection after the editor reload. This uses the same document reload approach as scoped verse
-formatting; it does not add a separate undo history for structural reloads.
+Editorial 0.8.15 does not emit a change for a native level-only update to a heading with a single
+text leaf. Fluent applies that paragraph attribute through `applyUpdate` with source `local`, which
+reports the edit and records it in Editorial's native undo history. Scoped body formatting and
+heading insertion use the same local-delta path. Text and existing embeds stay in the document,
+and the selection is remapped without reloading the USJ. Document reloads remain for navigation
+and external fills, not translator formatting actions.
 
 ## API dependency
 
-This web change requires [API #320](https://github.com/eten-tech-foundation/fluent-api/pull/320),
-which completes heading preservation in import, chapter content and export. API #320 depends on
-[API #305](https://github.com/eten-tech-foundation/fluent-api/pull/305). Both PRs are still open and
-not deployed. Merge API #305, then API #320, and deploy the API support before enabling this web
-change. No new endpoint or migration is needed. API and editor package changes are outside this PR.
+Heading persistence requires the work from [API #320](https://github.com/eten-tech-foundation/fluent-api/pull/320),
+which was integrated into [API #305](https://github.com/eten-tech-foundation/fluent-api/pull/305).
+API #305 merged into main on October 2, 2026. Deployment of that API support must be verified
+separately before enabling these web changes. No new endpoint or migration is introduced here.
+Unsupported inline/apparatus preservation remains a separate [storage limitation](../rte-review-followup/review.md).
 
 ## Validation
 

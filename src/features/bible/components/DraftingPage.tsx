@@ -34,12 +34,14 @@ const DraftingPage: React.FC = () => {
 
   const loaderData = rawLoaderData as LoaderData | undefined;
 
-  // Safer null-guard: returns undefined when loaderData is not yet available
-  const projectItem = loaderData
-    ? currentProjectItem?.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId
-      ? currentProjectItem
-      : loaderData.projectItem
-    : undefined;
+  // A cancelled load can finish while another assignment is loading. Keep its editor
+  // unmounted so stale content and Chapter availability cannot appear for the selected task.
+  const projectItem =
+    loaderData &&
+    (!currentProjectItem ||
+      currentProjectItem.chapterAssignmentId === loaderData.projectItem.chapterAssignmentId)
+      ? (currentProjectItem ?? loaderData.projectItem)
+      : undefined;
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const targetProjectId = projectItem?.projectId;

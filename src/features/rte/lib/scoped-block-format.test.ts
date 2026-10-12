@@ -53,8 +53,8 @@ describe('scopeBlockFormatToVerse', () => {
       verse(2, 'Second.'),
       verse(3, 'Third.'),
     ];
-    const { updated } = scopeBlockFormatToVerse(inPoetry, 2, 's1')!;
-    expect(updated[1].markers?.paragraphs).toEqual([{ marker: 's1', offset: 0 }]);
+    const { updated } = scopeBlockFormatToVerse(inPoetry, 2, 'p')!;
+    expect(updated[1].markers?.paragraphs).toEqual([{ marker: 'p', offset: 0 }]);
     expect(updated[2].markers?.paragraphs).toEqual([{ marker: 'q1', offset: 0 }]);
   });
 
