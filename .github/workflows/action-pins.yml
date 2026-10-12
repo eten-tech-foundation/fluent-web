@@ -21,6 +21,10 @@
 name: Action pins
 
 on:
+  # `branches: [main]` is load-bearing. Under pull_request_target the workflow
+  # definition comes from the PR's target branch, so limiting the trigger to
+  # main keeps the trusted definition on a protected branch. Do not widen it to
+  # shared or feature branches, unlike pre-merge.yml and actionlint.yml.
   pull_request_target:
     types: [opened, synchronize, reopened]
     branches: [main]
