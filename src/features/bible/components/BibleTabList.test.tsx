@@ -6,17 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BibleTabList, SOURCE_BIBLE_TAB_ID } from './BibleTabList';
 
-const resourceTabs = [
-  { id: 'aq-1', label: 'ULT' },
-  { id: 'yv-2', label: 'NIV' },
-];
+const resourceTab = { id: 'yv-2', label: 'NIV' };
 
 function ControlledTabs({ onSelect }: { onSelect: (id: string) => void }) {
   const [activeTabId, setActiveTabId] = useState('yv-2');
   return (
     <BibleTabList
       activeTabId={activeTabId}
-      resourceTabs={resourceTabs}
+      resourceTab={resourceTab}
       sourceLabel='WEB'
       onClose={vi.fn()}
       onSelect={id => {
@@ -28,39 +25,36 @@ function ControlledTabs({ onSelect }: { onSelect: (id: string) => void }) {
 }
 
 describe('BibleTabList', () => {
-  it('keeps the source Bible first when several resource Bibles are open', () => {
+  it('keeps the source Bible first beside the selected resource Bible', () => {
     render(
       <BibleTabList
         activeTabId='yv-2'
-        resourceTabs={resourceTabs}
+        resourceTab={resourceTab}
         sourceLabel='WEB'
         onClose={vi.fn()}
         onSelect={vi.fn()}
       />
     );
 
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB', 'ULT', 'NIV']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB', 'NIV']);
     expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.queryByRole('button', { name: 'Close WEB' })).not.toBeInTheDocument();
   });
 
-  it('pins the source outside the horizontally scrolling resource tabs', () => {
+  it('shows only the source when no resource Bible is open', () => {
     render(
       <BibleTabList
-        activeTabId='yv-2'
-        resourceTabs={resourceTabs}
+        activeTabId={SOURCE_BIBLE_TAB_ID}
+        resourceTab={null}
         sourceLabel='WEB'
         onClose={vi.fn()}
         onSelect={vi.fn()}
       />
     );
 
-    const sourceTab = screen.getByRole('tab', { name: 'WEB' });
-    const resourceScroller = screen.getByRole('group', { name: 'Open resource Bibles' });
-
-    expect(resourceScroller).not.toContainElement(sourceTab);
-    expect(resourceScroller).toContainElement(screen.getByRole('tab', { name: 'ULT' }));
-    expect(resourceScroller).toContainElement(screen.getByRole('tab', { name: 'NIV' }));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB']);
+    expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('group', { name: 'Open resource Bibles' })).not.toBeInTheDocument();
   });
 
   it('selects the source and resource tabs by their stable ids', async () => {
@@ -70,25 +64,24 @@ describe('BibleTabList', () => {
     render(<ControlledTabs onSelect={onSelect} />);
 
     await user.click(screen.getByRole('tab', { name: 'WEB' }));
-    await user.click(screen.getByRole('tab', { name: 'ULT' }));
+    await user.click(screen.getByRole('tab', { name: 'NIV' }));
 
-    expect(onSelect.mock.calls).toEqual([[SOURCE_BIBLE_TAB_ID], ['aq-1']]);
+    expect(onSelect.mock.calls).toEqual([[SOURCE_BIBLE_TAB_ID], ['yv-2']]);
   });
 
-  it('moves focus and selection across every tab with the keyboard', async () => {
+  it('moves focus and selection between the source and resource with the keyboard', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
 
     render(<ControlledTabs onSelect={onSelect} />);
 
     const sourceTab = screen.getByRole('tab', { name: 'WEB' });
-    const firstResourceTab = screen.getByRole('tab', { name: 'ULT' });
     const lastResourceTab = screen.getByRole('tab', { name: 'NIV' });
 
     lastResourceTab.focus();
     await user.keyboard('{ArrowLeft}');
-    expect(firstResourceTab).toHaveFocus();
-    expect(onSelect).toHaveBeenLastCalledWith('aq-1');
+    expect(sourceTab).toHaveFocus();
+    expect(onSelect).toHaveBeenLastCalledWith(SOURCE_BIBLE_TAB_ID);
 
     await user.keyboard('{Home}');
     expect(sourceTab).toHaveFocus();
@@ -106,7 +99,7 @@ describe('BibleTabList', () => {
     render(
       <BibleTabList
         activeTabId='yv-2'
-        resourceTabs={resourceTabs}
+        resourceTab={resourceTab}
         sourceLabel='WEB'
         onClose={onClose}
         onSelect={vi.fn()}

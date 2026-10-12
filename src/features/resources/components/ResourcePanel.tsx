@@ -204,7 +204,12 @@ export const ResourcePanel: React.FC<ResourcePanelProps> = ({
   // on reference changes that carry identical content.
   const prevBibleVersesStringRef = useRef<string>('');
   useEffect(() => {
-    if (!isBibleResource || !selectedBible) return;
+    if (!selectedBible) {
+      // A reopened tab starts empty, so republish even unchanged cached content.
+      prevBibleVersesStringRef.current = '';
+      return;
+    }
+    if (!isBibleResource) return;
     const versesString = `${selectedBible.id}:${JSON.stringify(bibleVerses)}`;
     if (prevBibleVersesStringRef.current === versesString) return;
     prevBibleVersesStringRef.current = versesString;

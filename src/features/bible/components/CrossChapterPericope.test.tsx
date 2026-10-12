@@ -1,12 +1,13 @@
 import { type ComponentProps } from 'react';
 
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DraftingGridPericope } from '@/features/bible/components/DraftingGridPericope';
 import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
 import { config } from '@/lib/config';
 import type { PericopeGroup, ProjectItem, Source } from '@/lib/types';
+import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/i18n';
 
 const fullGroup: PericopeGroup = {
   pericopeNumber: '29_2',
@@ -90,6 +91,8 @@ const renderChapter = (
 };
 
 describe('cross-chapter pericope display', () => {
+  beforeAll(initDraftingTestI18n);
+
   afterEach(() => {
     config.features.rtePericope = false;
     vi.clearAllMocks();
@@ -132,7 +135,7 @@ describe('cross-chapter pericope display', () => {
       ],
     });
     const localColumn = screen.getAllByRole('heading', { name: '8:1' })[0].parentElement!;
-    const placeholder = within(localColumn).getByText('No content available');
+    const placeholder = within(localColumn).getByText(NO_CONTENT_MESSAGE);
     expect(placeholder).toHaveClass('text-muted-foreground', 'text-sm');
     expect(placeholder.parentElement).toHaveClass('bg-muted');
     expect(within(localColumn).queryByRole('button')).not.toBeInTheDocument();
@@ -140,19 +143,48 @@ describe('cross-chapter pericope display', () => {
     expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
   });
 
+  it('shows resource provider errors instead of an empty local passage', () => {
+    const localGroup = {
+      ...fullGroup,
+      verses: [{ chapterNumber: 8, verseNumber: 31 }],
+    };
+    renderChapter(8, {
+      selectedPanel: 2,
+      pericopes: [localGroup],
+      fullPericopes: [localGroup],
+      bibleContentError: true,
+    });
+    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
+  });
+
+  it('scopes resource provider errors to missing current-chapter verses', () => {
+    renderChapter(8, {
+      selectedPanel: 2,
+      bibleVerseMap: new Map([[31, 'Retained reference verse']]),
+      bibleContentError: true,
+    });
+    expect(screen.getByText('Retained reference verse')).not.toHaveClass('text-muted-foreground');
+    expect(screen.getAllByText('Unable to load Bible content.')).toHaveLength(7);
+    expect(screen.getAllByText(NO_CONTENT_MESSAGE)).toHaveLength(1);
+    expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
+  });
+
   it('distinguishes missing resource verses from scripture text', () => {
     renderChapter(8, { selectedPanel: 2, bibleVerseMap: new Map([[31, 'Reference Mark 8:31']]) });
     expect(screen.getByText('Reference Mark 8:31')).not.toHaveClass('text-muted-foreground');
-    for (const placeholder of screen.getAllByText('No content available')) {
+    for (const placeholder of screen.getAllByText(NO_CONTENT_MESSAGE)) {
       expect(placeholder).toHaveClass('text-muted-foreground', 'text-sm');
     }
   });
 
   it('shows loading for neighboring reference verses while the Bible selection is pending', () => {
-    renderChapter(8, { selectedPanel: 2, resourceBibleLoading: true });
+    renderChapter(8, { selectedPanel: 2, bibleContentLoading: true });
     const referenceGroup = screen.getByRole('button', { name: /8:31.*Loading/ });
     expect(within(referenceGroup).getAllByText('Loading...')).toHaveLength(9);
-    expect(within(referenceGroup).queryByText('No content available')).not.toBeInTheDocument();
+    expect(within(referenceGroup).queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
   });
 
   it('keeps loaded local reference verses visible while other verses are pending', () => {
@@ -168,7 +200,7 @@ describe('cross-chapter pericope display', () => {
       pericopes: [localGroup],
       fullPericopes: [localGroup],
       bibleVerseMap: new Map([[31, 'Loaded reference verse']]),
-      resourceBibleLoading: true,
+      bibleContentLoading: true,
     });
     expect(screen.getByText('Loaded reference verse')).not.toHaveClass('text-muted-foreground');
     expect(screen.getByText('Loading...')).toHaveClass('text-muted-foreground', 'text-sm');
@@ -231,7 +263,7 @@ describe('cross-chapter pericope display', () => {
       />
     );
     expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
-    expect(screen.getByText('No content available')).toBeInTheDocument();
+    expect(screen.getByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
   });
 
@@ -265,8 +297,8 @@ describe('cross-chapter pericope display', () => {
       const currentText = within(sourceColumn).getByText('8:31').nextElementSibling!;
       const neighborText = within(sourceColumn).getByText('9:1').nextElementSibling!;
 
-      expect(currentText.textContent).toBe('No content available');
-      expect(neighborText.textContent).toBe(loading ? 'Loading...' : 'No content available');
+      expect(currentText.textContent).toBe(NO_CONTENT_MESSAGE);
+      expect(neighborText.textContent).toBe(loading ? 'Loading...' : NO_CONTENT_MESSAGE);
       expect(currentText).toHaveClass('text-muted-foreground', 'text-sm');
       expect(neighborText).toHaveClass('text-muted-foreground', 'text-sm');
     }
@@ -278,12 +310,12 @@ describe('cross-chapter pericope display', () => {
       renderChapter(8, {
         selectedPanel: 2,
         bibleVerseMap: new Map([[31, content]]),
-        resourceBibleLoading: loading,
+        bibleContentLoading: loading,
       });
       const resourceColumn = screen.getAllByRole('heading', { name: '8:31–9:1' })[0].parentElement!;
       const resourceText = within(resourceColumn).getByText('8:31').nextElementSibling!;
 
-      expect(resourceText.textContent).toBe(loading ? 'Loading...' : 'No content available');
+      expect(resourceText.textContent).toBe(loading ? 'Loading...' : NO_CONTENT_MESSAGE);
       expect(resourceText).toHaveClass('text-muted-foreground', 'text-sm');
     }
   );
