@@ -1,6 +1,7 @@
 /*
- * Fits the editor into the drafting page's pericope boxes. The theme reset every surface needs
- * lives in `editor-shared.css`; what is left here is what only a pericope box wants.
+ * Fits the editor into the drafting page's pericope boxes. The theme reset and the typography
+ * every surface shares live in `editor-shared.css`; what is left here is what only a pericope box
+ * wants.
  */
 
 /* Chapter number: correct to carry in the USJ (it keeps verse references resolvable), wrong to
