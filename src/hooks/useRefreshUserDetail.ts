@@ -12,7 +12,7 @@ import { useAppStore } from '@/store/store';
  */
 export function useRefreshUserDetail() {
   const { user: authUser } = useAuth();
-  const { userdetail, setUserDetail } = useAppStore();
+  const { userdetail, setUserDetail, setRoleChangeWarning } = useAppStore();
   const { mutate: fetchUserDetails, mutateAsync: fetchUserDetailsAsync } =
     useGetUserDetailsMutation();
 
@@ -31,19 +31,32 @@ export function useRefreshUserDetail() {
       const orgGrants = activeOrgId != null ? grants.filter(g => g.orgId === activeOrgId) : [];
 
       // Preserve the user's previously-selected role if it is still valid.
-      const functionalGrant = orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
+      const editingGrant = orgGrants.find(
+        g => g.roleName !== ROLES.ORG_MEMBER && g.roleName !== ROLES.PROJECT_OBSERVER
+      );
+      const functionalGrant = editingGrant ?? orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
       const savedRole = userdetail?.role;
       const isSavedRoleFunctional =
         savedRole &&
         savedRole !== ROLES.ORG_MEMBER &&
         orgGrants.some(g => g.roleName === savedRole);
 
-      const savedGrant = isSavedRoleFunctional
-        ? orgGrants.find(g => g.roleName === savedRole)
-        : undefined;
+      // If savedRole was Project Observer but the user now has an editing/functional grant (e.g. Project Translator),
+      // prefer the editing grant over keeping the user stuck as an Observer.
+      const shouldUpgradeFromObserver =
+        savedRole === ROLES.PROJECT_OBSERVER && editingGrant !== undefined;
+
+      const savedGrant =
+        isSavedRoleFunctional && !shouldUpgradeFromObserver
+          ? orgGrants.find(g => g.roleName === savedRole)
+          : undefined;
 
       const activeGrant =
         savedGrant ?? functionalGrant ?? (orgGrants.length > 0 ? orgGrants[0] : undefined);
+
+      if (editingGrant !== undefined) {
+        setRoleChangeWarning(false);
+      }
 
       setUserDetail({
         id: freshUser.id,
@@ -57,7 +70,7 @@ export function useRefreshUserDetail() {
         status: freshUser.status,
       });
     },
-    [setUserDetail, userdetail?.role]
+    [setUserDetail, setRoleChangeWarning, userdetail?.role]
   );
 
   const refresh = useCallback(() => {

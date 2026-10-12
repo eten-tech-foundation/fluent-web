@@ -223,9 +223,9 @@ export function UserMultiSelect({
               return (
                 <label
                   key={user.id}
-                  className={`hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm ${
+                  className={`hover:bg-popover-hover flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
                     checked
-                      ? 'bg-accent text-accent-foreground font-semibold'
+                      ? 'bg-popover-hover text-popover-foreground font-semibold'
                       : 'text-popover-foreground'
                   }`}
                 >

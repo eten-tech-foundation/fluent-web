@@ -48,7 +48,16 @@ vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
   useAiSuggestions: () => external.ai,
   useTrackAiUsage: () => external.trackAi,
 }));
-vi.mock('@/features/flags', () => ({ useFeatureFlag: () => false }));
+vi.mock('@/features/flags', () => ({
+  useFeatureFlag: () => false,
+  useFeatureFlags: () => ({ features: { sourceAudio: false }, overrides: {} }),
+}));
+vi.mock('@/features/tts', async importOriginal => ({
+  ...(await importOriginal()),
+  usePlaybackRegistry: () => ({ silenceAll: () => {} }),
+  useSourceTtsPlayback: () => ({ activeVerseRef: null }),
+  useTtsKeyboardShortcuts: () => {},
+}));
 
 const i18n = createInstance();
 const originalRteFlag = config.features.rtePericope;
@@ -341,3 +350,8 @@ describe('cross-chapter drafting integration', () => {
     expect(screen.getByRole('button', { name: 'Send to Peer Checking' })).toBeDisabled();
   });
 });
+
+vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
+  useReferenceChapterTexts: () => new Map(),
+}));

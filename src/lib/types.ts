@@ -24,6 +24,16 @@ export interface User {
   isActive?: boolean;
 }
 
+export interface Organization {
+  id: number;
+  name: string;
+  createdAt: string | null;
+}
+
+export interface OrganizationSummary extends Organization {
+  orgManagerCount: number;
+}
+
 export interface AssignmentUser {
   id: number;
   displayName: string;
@@ -51,6 +61,7 @@ export interface Project {
   lastChapterActivity: string;
   chapterStatusCounts: ChapterStatusCounts;
   workflowConfig: WorkflowStep[];
+  milestoneCount?: number;
   pericopeSetId?: number | null;
 }
 
@@ -81,7 +92,7 @@ export interface UsfmFilePayload {
 export interface CreateProject {
   id: number;
   name: string;
-  bibleId: number;
+  sourceBibleId: number;
   bookId: number[];
   organization: number;
   createdBy: number;
@@ -102,7 +113,22 @@ export interface Chapter {
   totalVerses?: number;
 }
 
-export interface ChapterAssignmentProgress {
+/** Source-Bible playback facts carried unchanged through every drafting entry path. */
+export interface BiblePlaybackMetadata {
+  /** Canonical provider-qualified text identity, when the API can identify it. */
+  textBibleKey?: string | null;
+  /** Explicit selected recording identity; it does not imply synthesis permission. */
+  selectedRecordingKey?: string | null;
+  /**
+   * Whether anyone may synthesize speech from this Bible, never a user permission.
+   * Optional for compatibility with an older API; absence remains uncleared.
+   */
+  ttsLicenseStatus?: 'allowed' | 'forbidden' | 'unknown';
+  /** Human-curated attribution for this Bible, shown with its audio. */
+  licenseNotice?: string | null;
+}
+
+export interface ChapterAssignmentProgress extends BiblePlaybackMetadata {
   bibleId: number;
   bookId: number;
   bookCode: string;
@@ -127,6 +153,7 @@ export interface ChapterAssignmentProgress {
   updatedAt?: Date | null;
   isSubmitted?: boolean;
   submittedTime?: Date | null;
+  hasConflict?: boolean;
 }
 
 export interface Book {
@@ -135,7 +162,7 @@ export interface Book {
   engDisplayName: string;
 }
 
-export interface ProjectItem {
+export interface ProjectItem extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
@@ -311,7 +338,7 @@ export interface DraftingUIProps {
   readOnly?: boolean;
 }
 
-export interface UserChapterAssignment {
+export interface UserChapterAssignment extends BiblePlaybackMetadata {
   chapterAssignmentId: number;
   projectId: number;
   projectName: string;
@@ -345,6 +372,7 @@ export enum ChapterAssignmentStatus {
 }
 export const ROLES = {
   SUPER_ADMIN: 'SuperAdmin',
+  ORG_OWNER: 'Org Owner',
   ORG_MANAGER: 'Org Manager',
   PROJECT_MANAGER: 'Project Manager',
   PROJECT_TRANSLATOR: 'Project Translator',
@@ -359,6 +387,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.PROJECT_MANAGER]: 'Project Manager',
   [ROLES.PROJECT_TRANSLATOR]: 'Translator',
   [ROLES.SUPER_ADMIN]: 'SuperAdmin',
+  [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
   [ROLES.ORG_MEMBER]: 'Organization Member',

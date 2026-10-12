@@ -1,20 +1,30 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
-import { useMatch } from '@tanstack/react-router';
+import { useMatch, useNavigate } from '@tanstack/react-router';
 import { Loader } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
-import { getActiveGrants } from '@/lib/grant-utils';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
+import { getActiveGrants, hasGrantForProject, ORG_LEVEL_ROLES } from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
+import { DraftingAudioPageBoundary } from './DraftingAudioPageBoundary';
 import { DraftingUI } from './DraftingUI';
 
 type LoaderData = Awaited<ReturnType<typeof translationLoader>>;
 
 const DraftingPage: React.FC = () => {
-  const { userdetail, currentProjectItem } = useAppStore();
+  const userdetail = useAppStore(state => state.userdetail);
+  const currentProjectItem = useAppStore(state => state.currentProjectItem);
+  const setRoleChangeWarning = useAppStore(state => state.setRoleChangeWarning);
+  const { refresh: refreshUserDetail } = useRefreshUserDetail();
+
+  useEffect(() => {
+    refreshUserDetail();
+  }, [refreshUserDetail]);
 
   const translationMatch = useMatch({
     from: '/_authenticated/translation/$bookId/$chapterNumber',
@@ -54,8 +64,7 @@ const DraftingPage: React.FC = () => {
     // 1. Org-level managers are never restricted to observer read-only
     const isOrgManager = activeGrants.some(
       g =>
-        (g.projectId === null || g.projectId === undefined) &&
-        ['Org Manager', 'Org Owner', 'SuperAdmin'].includes(g.roleName)
+        (g.projectId === null || g.projectId === undefined) && ORG_LEVEL_ROLES.includes(g.roleName)
     );
     if (isOrgManager) return false;
 
@@ -71,8 +80,35 @@ const DraftingPage: React.FC = () => {
     return userdetail?.role === ROLES.PROJECT_OBSERVER;
   }, [activeGrants, targetProjectId, userdetail?.role]);
 
+  const hasProjectGrant = useMemo(() => {
+    if (!targetProjectId || !userdetail) return true;
+    return hasGrantForProject(activeGrants, targetProjectId);
+  }, [activeGrants, targetProjectId, userdetail]);
+
   // Observer view or explicit /view route is ALWAYS read-only
   const isReadOnly = !!viewMatch || isObserverForProject;
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (targetProjectId && !hasProjectGrant) {
+      toast.error('You have been removed from this project.');
+      setRoleChangeWarning(false);
+      void navigate({ to: '/', replace: true });
+      return;
+    }
+
+    if (!!translationMatch && isObserverForProject) {
+      setRoleChangeWarning(true);
+    }
+  }, [
+    translationMatch,
+    isObserverForProject,
+    hasProjectGrant,
+    targetProjectId,
+    navigate,
+    setRoleChangeWarning,
+  ]);
 
   // Sync the user's global AI auto-enable preference to this chapter.
   // Must be called after isReadOnly is derived — the hook skips syncing for read-only views.
@@ -93,14 +129,19 @@ const DraftingPage: React.FC = () => {
   }
 
   return (
-    <DraftingUI
-      key={projectItem.chapterAssignmentId}
-      projectItem={projectItem}
-      readOnly={isReadOnly}
-      sourceVerses={loaderData.sourceVerses}
-      targetVerses={loaderData.targetVerses}
-      userdetail={userdetail}
-    />
+    <DraftingAudioPageBoundary
+      key={translationMatch ? 'translation' : 'view'}
+      pageKey={String(projectItem.chapterAssignmentId)}
+    >
+      <DraftingUI
+        key={projectItem.chapterAssignmentId}
+        projectItem={projectItem}
+        readOnly={isReadOnly}
+        sourceVerses={loaderData.sourceVerses}
+        targetVerses={loaderData.targetVerses}
+        userdetail={userdetail}
+      />
+    </DraftingAudioPageBoundary>
   );
 };
 

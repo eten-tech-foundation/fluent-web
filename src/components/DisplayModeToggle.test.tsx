@@ -32,12 +32,9 @@ function focusedRadios() {
   return screen.getAllByRole('radio').filter(radio => radio === document.activeElement);
 }
 
-describe('DisplayModeToggle', () => {
-  const initialFeatureFlag = config.features.rtePericope;
-  afterEach(() => {
-    config.features.rtePericope = initialFeatureFlag;
-  });
+const originalRteFlag = config.features.rtePericope;
 
+describe('DisplayModeToggle', () => {
   beforeEach(async () => {
     await i18n.init({ lng: 'en', resources: { en: { translation: {} } } });
     config.features.rtePericope = true;
@@ -127,16 +124,6 @@ describe('DisplayModeToggle', () => {
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('explains when the Chapter editor is not enabled in this environment', async () => {
-    config.features.rtePericope = false;
-    useAppStore.setState({ chapterViewAvailability: null });
-    const { user } = renderToggle();
-    await user.hover(screen.getByRole('radio', { name: 'Chapter' }));
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Chapter view is not available in this environment.'
-    );
-  });
-
   it('shows expected and missing verses without needing hover, and explains them on keyboard focus', async () => {
     useAppStore.setState({
       chapterViewAvailability: {
@@ -200,6 +187,10 @@ describe('DisplayModeToggle', () => {
       'Chapter content could not be verified. Reopen the chapter to try again.'
     );
     expect(screen.getByRole('status')).not.toHaveTextContent('Missing content');
+  });
+
+  afterEach(() => {
+    config.features.rtePericope = originalRteFlag;
   });
 
   it('offers exactly the three views, in order', () => {
@@ -332,5 +323,46 @@ describe('DisplayModeToggle', () => {
     await user.keyboard('{ArrowLeft}');
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
     expect(useAppStore.getState().displayMode).toBe('chapter');
+  });
+
+  // With the RTE flag off the chapter surface cannot work, so its option is removed from the
+  // group rather than shown disabled (#314).
+  describe('when the RTE flag is off', () => {
+    beforeEach(() => {
+      config.features.rtePericope = false;
+    });
+
+    it('offers only the two non-RTE views', () => {
+      renderToggle();
+
+      const options = screen.getAllByRole('radio').map(option => option.textContent);
+      expect(options).toEqual(['Verse', 'Pericope']);
+      expect(screen.queryByRole('radio', { name: 'Chapter' })).not.toBeInTheDocument();
+    });
+
+    it('wraps the arrow keys around the two remaining options', async () => {
+      const { user } = renderToggle();
+      await user.tab();
+
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Pericope' })).toHaveFocus();
+      expect(useAppStore.getState().displayMode).toBe('pericope');
+
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('radio', { name: 'Verse' })).toHaveFocus();
+      expect(useAppStore.getState().displayMode).toBe('verse');
+    });
+
+    it('checks nothing but keeps a tab stop when the stored mode is not offered', () => {
+      useAppStore.setState({ displayMode: 'chapter' });
+      renderToggle();
+
+      const options = screen.getAllByRole('radio');
+      expect(options.map(option => option.getAttribute('aria-checked'))).toEqual([
+        'false',
+        'false',
+      ]);
+      expect(options.map(option => option.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    });
   });
 });

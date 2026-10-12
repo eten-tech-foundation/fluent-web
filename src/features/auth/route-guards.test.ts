@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 import { type AuthContext } from '@/lib/router-context';
 import { Route as AuthenticatedRoute } from '@/routes/_authenticated';
+import { Route as OrganizationDetailRoute } from '@/routes/_authenticated/organizations/$orgId/index';
+import { Route as OrganizationsRoute } from '@/routes/_authenticated/organizations/index';
 import { Route as UsersRoute } from '@/routes/_authenticated/users/index';
 import { Route as LoginRoute } from '@/routes/login';
 
 interface GuardArgs {
   context: { auth: AuthContext };
   location: { href: string };
+  params?: { orgId?: string };
   search?: { returnTo?: string };
 }
 type Guard = (args: GuardArgs) => unknown;
@@ -27,6 +30,8 @@ const authContext = (overrides: Partial<AuthContext> = {}): AuthContext => ({
 const authGuard = AuthenticatedRoute.options.beforeLoad as unknown as Guard;
 const usersGuard = UsersRoute.options.beforeLoad as unknown as Guard;
 const loginGuard = LoginRoute.options.beforeLoad as unknown as Guard;
+const organizationsGuard = OrganizationsRoute.options.beforeLoad as unknown as Guard;
+const organizationDetailGuard = OrganizationDetailRoute.options.beforeLoad as unknown as Guard;
 
 /** Run a guard and return the thrown redirect, or null if it passed through. */
 function captureRedirect(guard: Guard, args: GuardArgs): unknown {
@@ -146,5 +151,43 @@ describe('_authenticated/users route guard', () => {
       location: { href: '/users' },
     });
     expect(thrown).toBeNull();
+  });
+});
+
+describe.each([
+  { href: '/organizations', guardName: 'list', guard: () => organizationsGuard },
+  {
+    href: '/organizations/7',
+    guardName: 'detail',
+    guard: () => organizationDetailGuard,
+  },
+])('_authenticated/organizations $guardName route guard', ({ href, guard }) => {
+  const run = (canManageOrgs: boolean, params?: GuardArgs['params']) =>
+    captureRedirect(guard(), {
+      context: { auth: authContext({ isAuthenticated: true, canManageOrgs }) },
+      location: { href },
+      params,
+    });
+
+  it('redirects users who cannot manage orgs to /', () => {
+    const thrown = run(false, { orgId: '7' });
+    expect(isRedirect(thrown)).toBe(true);
+    expect((thrown as RedirectShape).options?.to).toBe('/');
+  });
+
+  it('lets users who can manage orgs through', () => {
+    expect(run(true, { orgId: '7' })).toBeNull();
+  });
+});
+
+describe('_authenticated/organizations/$orgId param validation', () => {
+  it.each(['abc', '1.5', '0', '-3'])('redirects invalid orgId "%s" to /organizations', orgId => {
+    const thrown = captureRedirect(organizationDetailGuard, {
+      context: { auth: authContext({ isAuthenticated: true, canManageOrgs: true }) },
+      location: { href: `/organizations/${orgId}` },
+      params: { orgId },
+    });
+    expect(isRedirect(thrown)).toBe(true);
+    expect((thrown as RedirectShape).options?.to).toBe('/organizations');
   });
 });

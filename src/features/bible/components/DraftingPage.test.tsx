@@ -17,6 +17,17 @@ const saveVerse = vi.hoisted(() =>
 
 vi.mock('@tanstack/react-router', () => ({
   useMatch: ({ from }: { from: string }) => (from.includes('/translation/') ? match : undefined),
+  useNavigate: () => vi.fn(),
+}));
+
+// The page refreshes the user's grants on mount (#511); these tests drive the store directly.
+vi.mock('@/hooks/useRefreshUserDetail', () => ({
+  useRefreshUserDetail: () => ({ refresh: () => {} }),
+}));
+
+// The audio page boundary only needs a registry to report the page to.
+vi.mock('@/features/tts', () => ({
+  usePlaybackRegistry: () => ({ setPageKey: () => {}, endPage: () => {} }),
 }));
 
 vi.mock('@/features/bible/hooks/useSyncGlobalAiSetting', () => ({

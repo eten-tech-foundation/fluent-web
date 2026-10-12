@@ -46,7 +46,21 @@ vi.mock('@/features/bible/hooks/useAiSuggestions', () => ({
   useAiSuggestions: () => external.ai,
   useTrackAiUsage: () => external.trackAi,
 }));
-vi.mock('@/features/flags', () => ({ useFeatureFlag: () => false }));
+vi.mock('@/features/flags', () => ({
+  useFeatureFlag: () => false,
+  useFeatureFlags: () => ({ features: { sourceAudio: false }, overrides: {} }),
+}));
+// Source audio is off here; stub its hooks the same way CrossChapterDrafting.test does.
+vi.mock('@/features/tts', async importOriginal => ({
+  ...(await importOriginal()),
+  usePlaybackRegistry: () => ({ silenceAll: () => {} }),
+  useSourceTtsPlayback: () => ({ activeVerseRef: null }),
+  useTtsKeyboardShortcuts: () => {},
+}));
+vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
+  useReferenceChapterTexts: () => new Map(),
+}));
 
 const i18n = createInstance();
 const originalRteFlag = config.features.rtePericope;

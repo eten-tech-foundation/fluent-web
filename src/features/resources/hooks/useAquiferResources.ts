@@ -284,7 +284,7 @@ const fetchAquiferBibles = async (languageCode: string): Promise<AquiferBible[]>
   return (await response.json()) as AquiferBible[];
 };
 
-const fetchAquiferBibleText = async (
+export const fetchAquiferBibleText = async (
   bibleId: number,
   bookCode: string,
   chapter: number

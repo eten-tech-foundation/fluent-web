@@ -28,7 +28,6 @@ vi.mock('./ProjectFormFields', () => ({
           onFieldChange('title', 'Genesis');
           onFieldChange('targetLanguage', 2);
           onFieldChange('pericopeSetId', 1);
-          onFieldChange('books', [1]);
         }}
       >
         Complete fields
@@ -86,7 +85,9 @@ describe('CreateProjectModal submission', () => {
         );
       } else {
         expect(onSave.mock.calls[0][0]).not.toHaveProperty('usfmFiles');
-        expect(onSave.mock.calls[0][0].books).toEqual([1]);
+        // ProjectFormFields has no book picker (books moved to per-milestone selection), so the
+        // New tab always submits an empty list — this just confirms the field is present as [].
+        expect(onSave.mock.calls[0][0].books).toEqual([]);
       }
       await act(async () => {
         finish();
@@ -134,7 +135,9 @@ describe('CreateProjectModal submission', () => {
     const { user } = renderWithProviders(
       <CreateProjectModal isOpen onClose={vi.fn()} onSave={onSave} />
     );
-    // Pick books on the New tab first: formData is shared, so the selection survives the switch.
+    // ProjectFormFields has no book picker anymore (see the earlier comment), so there is no
+    // manual selection to drop here in the first place — this now just guards that books stays
+    // empty end-to-end when submitting through the Import tab.
     await user.click(screen.getByText('Complete fields'));
     await user.click(screen.getByRole('tab', { name: 'importTab' }));
     await dropGenesis();

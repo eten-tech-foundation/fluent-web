@@ -19,6 +19,7 @@ export const router = createRouter({
       isLoading: true,
       isManager: false,
       canViewUsers: false,
+      canManageOrgs: false,
     } satisfies RouterContext['auth'],
   },
 });

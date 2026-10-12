@@ -1,9 +1,13 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 
 import { Loader2 } from 'lucide-react';
 
 import { ChapterEditor } from '@/features/rte/components/ChapterEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
+import {
+  PericopePlayer,
+  type PericopePlayerProps,
+} from '@/features/tts/components/TtsGroupControls';
 import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 import { BibleTabList, type ResourceBibleTab } from './BibleTabList';
@@ -29,6 +33,12 @@ interface DraftingChapterViewProps {
     markers?: PericopeVerseText['markers']
   ) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
+  chapterVerseRefs?: readonly string[];
+  playback?: PericopePlayerProps['playback'];
+  activeAudioVerseRef?: string | null;
+  sourceVerseRefs?: React.RefObject<Record<number, HTMLElement | null>>;
+  sourceViewportRef?: React.Ref<HTMLDivElement>;
+  onPlayerMounted?: (mounted: boolean) => void;
 }
 
 /**
@@ -55,7 +65,20 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   onBibleTabClose,
   handleTextChange,
   handleActiveVerseChange,
+  chapterVerseRefs,
+  playback,
+  activeAudioVerseRef,
+  sourceVerseRefs,
+  sourceViewportRef,
+  onPlayerMounted,
 }) => {
+  const hasPlayer = Boolean(playback && chapterVerseRefs);
+  useEffect(() => {
+    if (!hasPlayer) return;
+    onPlayerMounted?.(true);
+    return () => onPlayerMounted?.(false);
+  }, [hasPlayer, onPlayerMounted]);
+
   const hasBibleContent = sourceVerses.some(verse => bibleVerseMap.get(verse.verseNumber)?.trim());
 
   const editorVerses = useMemo<PericopeVerseText[]>(
@@ -86,7 +109,10 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   return (
     <div
       className='grid h-full min-h-0 w-full'
-      style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gridTemplateRows: 'auto 1fr' }}
+      style={{
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+        gridTemplateRows: hasPlayer ? 'auto auto 1fr' : 'auto 1fr',
+      }}
     >
       <div className='bg-background min-w-0 px-6 py-3'>
         <BibleTabList
@@ -98,7 +124,23 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         />
       </div>
 
-      <div className='min-h-0 overflow-y-auto px-6 py-4' style={{ scrollbarGutter: 'stable' }}>
+      {playback && chapterVerseRefs && (
+        <div className='bg-background z-10 col-start-1 row-start-2 flex min-w-0 items-center border-b px-6 py-2'>
+          <PericopePlayer
+            groupLabel={String(projectItem.chapterNumber)}
+            kind='chapter'
+            playback={playback}
+            verseRefs={chapterVerseRefs}
+          />
+        </div>
+      )}
+
+      <div
+        ref={sourceViewportRef}
+        className='min-h-0 overflow-y-auto px-6 py-4'
+        data-testid='chapter-source-viewport'
+        style={{ scrollbarGutter: 'stable' }}
+      >
         {selectedPanel === 2 && !hasBibleContent && bibleContentLoading ? (
           <div className='flex h-full items-center justify-center'>
             <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
@@ -114,7 +156,23 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
             </h4>
             <p className='source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
               {sourceVerses.map(verse => (
-                <React.Fragment key={verse.verseNumber}>
+                <span
+                  key={verse.verseNumber}
+                  ref={element => {
+                    if (sourceVerseRefs?.current)
+                      sourceVerseRefs.current[verse.verseNumber] = element;
+                  }}
+                  className={
+                    activeAudioVerseRef === String(verse.verseNumber)
+                      ? 'bg-primary/10 rounded-sm'
+                      : undefined
+                  }
+                  data-testid={
+                    activeAudioVerseRef === String(verse.verseNumber)
+                      ? 'tts-active-chapter-verse'
+                      : undefined
+                  }
+                >
                   <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
                     {verse.verseNumber}
                   </span>
@@ -129,7 +187,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
                       />
                     )}
                   </span>
-                </React.Fragment>
+                </span>
               ))}
             </p>
           </>
@@ -137,7 +195,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
       </div>
 
       <div
-        className='border-border col-start-2 row-span-2 row-start-1 min-h-0 min-w-0 border-l'
+        className={`border-border col-start-2 row-start-1 min-h-0 min-w-0 border-l ${hasPlayer ? 'row-span-3' : 'row-span-2'}`}
         style={{ scrollbarGutter: 'stable' }}
       >
         <ChapterEditor

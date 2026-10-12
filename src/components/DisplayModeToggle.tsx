@@ -60,9 +60,8 @@ export const DisplayModeToggle: React.FC = () => {
   const labelId = useId();
   const explanationId = useId();
   const missing = availability?.missingVerseNumbers;
-  const explanation = !config.features.rtePericope
-    ? t('chapterViewDisabled', 'Chapter view is not available in this environment.')
-    : missing === null
+  const explanation =
+    missing === null
       ? t(
           'chapterViewUnverified',
           'Chapter content could not be verified. Reopen the chapter to try again.'
@@ -78,12 +77,20 @@ export const DisplayModeToggle: React.FC = () => {
         : t('chapterViewUnavailable', 'Chapter view is available once all verses have content.');
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
+  // The chapter surface is RTE-backed, so the flag removes the option entirely rather than
+  // showing a view that cannot work (#314). Read at render, not module scope, so tests can
+  // flip the flag.
+  const modes = config.features.rtePericope
+    ? DISPLAY_MODES
+    : DISPLAY_MODES.filter(option => option.mode !== 'chapter');
+  // Nothing to explain when the option is not offered at all.
+  const showExplanation = config.features.rtePericope && !chapterAvailable;
+
   // Roving tabindex: the whole group is one tab stop, and Tab enters it at the checked option.
   // Falling back to the first option keeps a tab stop even if the store ever holds a mode this
   // toggle does not offer, which would otherwise strand keyboard users outside the control.
-  const checkedIndex = DISPLAY_MODES.findIndex(option => option.mode === displayMode);
-  const isDisabled = (index: number) =>
-    DISPLAY_MODES[index].mode === 'chapter' && !chapterAvailable;
+  const checkedIndex = modes.findIndex(option => option.mode === displayMode);
+  const isDisabled = (index: number) => modes[index].mode === 'chapter' && !chapterAvailable;
   const tabStopIndex = checkedIndex === -1 || isDisabled(checkedIndex) ? 0 : checkedIndex;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -95,9 +102,9 @@ export const DisplayModeToggle: React.FC = () => {
     // Enabled options follow focus. The ends wrap, and preventDefault stops vertical arrows
     // from scrolling the settings dialog.
     event.preventDefault();
-    const nextIndex = (index + step + DISPLAY_MODES.length) % DISPLAY_MODES.length;
+    const nextIndex = (index + step + modes.length) % modes.length;
     // Disabled Chapter stays reachable so keyboard users can read its tooltip.
-    if (!isDisabled(nextIndex)) setDisplayMode(DISPLAY_MODES[nextIndex].mode);
+    if (!isDisabled(nextIndex)) setDisplayMode(modes[nextIndex].mode);
     optionRefs.current[nextIndex]?.focus();
   };
 
@@ -108,12 +115,12 @@ export const DisplayModeToggle: React.FC = () => {
           {t('display', 'Display')}
         </span>
         <div
-          aria-describedby={!chapterAvailable ? explanationId : undefined}
+          aria-describedby={showExplanation ? explanationId : undefined}
           aria-labelledby={labelId}
           className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
           role='radiogroup'
         >
-          {DISPLAY_MODES.map((option, index) => {
+          {modes.map((option, index) => {
             const disabled = isDisabled(index);
             const button = (
               <button
@@ -157,7 +164,7 @@ export const DisplayModeToggle: React.FC = () => {
             );
           })}
         </div>
-        {!chapterAvailable && (
+        {showExplanation && (
           <span className='text-muted-foreground w-full text-sm' id={explanationId} role='status'>
             {explanation}
           </span>

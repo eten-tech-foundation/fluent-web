@@ -30,11 +30,9 @@ coverage
 
 # Environment files
 .env
-.env.development
-.env.staging
-.env.production
-.env.test.local
+*.env.*
 !.env.example
+!.env.test
 
 # Generated files
 stats.html

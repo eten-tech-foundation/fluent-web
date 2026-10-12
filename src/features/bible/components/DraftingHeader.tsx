@@ -106,7 +106,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
                     aria-pressed={showResources}
                     className={`relative flex cursor-pointer items-center gap-2 ${
                       !showResources
-                        ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary'
+                        ? 'border-primary text-primary hover:bg-primary/10 hover:text-primary border-2'
                         : ''
                     }`}
                     type='button'

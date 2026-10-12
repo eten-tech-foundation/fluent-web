@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 
 import { Loader2 } from 'lucide-react';
 
@@ -9,6 +9,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { TipTapRenderer } from '@/features/resources/components/TipTapRenderer';
+import { useAudioEnabled } from '@/features/tts/settings/useAudioEnabled';
 import {
   type AudioContent,
   type AudioStep,
@@ -62,8 +63,50 @@ interface TextResourceAccordionItemProps {
   sourceData?: ProjectItem;
   openItem: string[];
   selectedLanguage?: string;
+  audioEnabled: boolean;
   onResourceClick: (resourceId: number, parentResourceId?: number | null) => void;
 }
+
+interface ResourceStepAudioProps {
+  alignClass: string;
+  enabled: boolean;
+  mp3Url: string;
+  stepNumber?: number;
+  webmUrl?: string;
+}
+
+/** The native player has no registry, so its own ref must silence it before removal. */
+const ResourceStepAudio = ({
+  alignClass,
+  enabled,
+  mp3Url,
+  stepNumber,
+  webmUrl,
+}: ResourceStepAudioProps) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useLayoutEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (!audio) return;
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [enabled]);
+
+  if (!enabled) return null;
+
+  return (
+    <div className='mt-4 border-t border-gray-200 pt-3'>
+      <div className={`mb-2 text-xs ${alignClass}`}>Audio for Step {stepNumber}</div>
+      <audio ref={audioRef} controls className='w-full'>
+        {webmUrl && <source src={webmUrl} type='audio/webm' />}
+        <source src={mp3Url} type='audio/mpeg' />
+        Your browser does not support the audio element.
+      </audio>
+    </div>
+  );
+};
 
 const TextResourceAccordionItem: React.FC<TextResourceAccordionItemProps> = ({
   sv,
@@ -76,6 +119,7 @@ const TextResourceAccordionItem: React.FC<TextResourceAccordionItemProps> = ({
   sourceData,
   openItem,
   selectedLanguage,
+  audioEnabled,
   onResourceClick,
 }) => {
   const alignClass = direction === 'RTL' ? 'text-right' : 'text-left';
@@ -253,16 +297,13 @@ const TextResourceAccordionItem: React.FC<TextResourceAccordionItemProps> = ({
                       ) : null}
 
                       {audioStep && (
-                        <div className='mt-4 border-t border-gray-200 pt-3'>
-                          <div className={`mb-2 text-xs ${alignClass}`}>
-                            Audio for Step {stepNumber}
-                          </div>
-                          <audio controls className='w-full'>
-                            {webmStep?.url && <source src={webmStep.url} type='audio/webm' />}
-                            <source src={audioStep.url} type='audio/mpeg' />
-                            Your browser does not support the audio element.
-                          </audio>
-                        </div>
+                        <ResourceStepAudio
+                          alignClass={alignClass}
+                          enabled={audioEnabled}
+                          mp3Url={audioStep.url}
+                          stepNumber={stepNumber}
+                          webmUrl={webmStep?.url}
+                        />
                       )}
                     </div>
                   );
@@ -294,6 +335,7 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
   selectedLanguage,
 }) => {
   const dirAttr = direction.toLowerCase() as 'ltr' | 'rtl';
+  const audioEnabled = useAudioEnabled();
 
   return (
     <div className='h-full space-y-2' dir={dirAttr}>
@@ -301,6 +343,7 @@ export const TextResourceAccordion: React.FC<TextResourceAccordionProps> = ({
         {resources.map(sv => (
           <TextResourceAccordionItem
             key={sv.id}
+            audioEnabled={audioEnabled}
             direction={direction}
             guideContents={guideContents}
             isTQ={resourceId === 'UWTranslationQuestions'}

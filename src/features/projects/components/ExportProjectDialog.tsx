@@ -141,7 +141,7 @@ export const ExportProjectDialog: React.FC<ExportProjectDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className='flex max-h-[80vh] flex-col sm:max-w-2xl'>
         <DialogHeader className='flex-shrink-0'>
-          <DialogTitle className='flex items-center justify-between'>Export Project</DialogTitle>
+          <DialogTitle className='flex items-center justify-between'>Export Milestone</DialogTitle>
         </DialogHeader>
 
         <div className='flex flex-1 flex-col overflow-hidden'>

@@ -22,9 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { roleOptions } from '@/lib/constants/roles';
+import { ORG_INVITE_ROLE_OPTIONS, ORG_ROLE_OPTIONS } from '@/lib/constants/roles';
+import { getOrgLevelRoleName } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
+import { ROLES, type User } from '@/lib/types';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -34,7 +35,12 @@ interface UserModalProps {
   error?: string | null;
   mode: 'create' | 'edit';
   isLoading?: boolean;
-  disableRoleSelection?: boolean;
+  /** 'editable' renders the role dropdown, 'disabled' renders it read-only, 'hidden' omits it. */
+  roleField?: 'editable' | 'disabled' | 'hidden';
+  /** Org the role change applies to — used to resolve the edit-mode role. */
+  activeOrgId?: number | null;
+  /** Lowercased emails of existing org members — blocks duplicate invites. */
+  existingEmails?: ReadonlySet<string>;
 }
 
 interface FormData {
@@ -56,7 +62,9 @@ export const UserModal: React.FC<UserModalProps> = ({
   mode,
   error = null,
   isLoading = false,
-  disableRoleSelection = false,
+  roleField = 'editable',
+  activeOrgId = null,
+  existingEmails,
 }) => {
   const { t } = useTranslation();
 
@@ -68,18 +76,20 @@ export const UserModal: React.FC<UserModalProps> = ({
     role: '',
     status: 'invited',
   });
+  const [initialRole, setInitialRole] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       if (mode === 'edit' && user) {
-        const activeGrant =
-          user.orgGrants?.find(g => g.orgId === user.lastActiveOrgId) ??
-          user.grants?.find(g => g.orgId === user.lastActiveOrgId) ??
-          user.orgGrants?.[0] ??
-          user.grants?.[0];
+        // The Users page manages org-level roles only (D1): a project-scoped
+        // role like Project Manager is never a dropdown value here. A member
+        // with no org-level role is 'Org Member' — selecting it demotes.
+        const initialRoleName =
+          roleField === 'hidden'
+            ? ''
+            : (getOrgLevelRoleName(user.orgGrants ?? user.grants, activeOrgId) ?? ROLES.ORG_MEMBER);
 
-        const initialRoleName = activeGrant?.roleName ?? user.role;
-
+        setInitialRole(initialRoleName);
         setFormData({
           username: user.username,
           firstName: user.firstName ?? '',
@@ -89,6 +99,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           status: user.status ?? '',
         });
       } else {
+        setInitialRole('');
         setFormData({
           username: '',
           firstName: '',
@@ -99,7 +110,7 @@ export const UserModal: React.FC<UserModalProps> = ({
         });
       }
     }
-  }, [isOpen, user, mode]);
+  }, [isOpen, user, mode, activeOrgId, roleField]);
 
   const emailSchema = z.string().email();
 
@@ -112,14 +123,17 @@ export const UserModal: React.FC<UserModalProps> = ({
     }
   };
 
+  const isDuplicateEmail =
+    mode === 'create' && (existingEmails?.has(formData.email.trim().toLowerCase()) ?? false);
+
   const isFormValid = (): boolean => {
     const hasUsername = Boolean(formData.username.trim());
     const hasValidEmail = Boolean(formData.email.trim()) && isEmailValid(formData.email.trim());
-    const hasValidRole = Boolean(
-      formData.role && formData.role.trim() !== '' && formData.role !== 'No Role'
-    );
+    const hasValidRole =
+      roleField === 'hidden' ||
+      Boolean(formData.role && formData.role.trim() !== '' && formData.role !== 'No Role');
 
-    return hasUsername && hasValidEmail && hasValidRole;
+    return hasUsername && hasValidEmail && hasValidRole && !isDuplicateEmail;
   };
 
   const handleSubmit = async (): Promise<void> => {
@@ -130,6 +144,11 @@ export const UserModal: React.FC<UserModalProps> = ({
         await onSave(formData as unknown as Omit<User, 'id'>);
       }
     } catch (error) {
+      // The dialog stays open; restore the role dropdown to the pre-submit
+      // value so a failed role save doesn't appear to have applied.
+      if (mode === 'edit') {
+        setFormData(prev => ({ ...prev, role: initialRole }));
+      }
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
         source: 'handle user submit',
       });
@@ -162,6 +181,11 @@ export const UserModal: React.FC<UserModalProps> = ({
               value={formData.email}
               onChange={e => updateFormData('email', e.target.value.toLowerCase())}
             />
+            {isDuplicateEmail && (
+              <p className='text-sm text-red-600' role='alert'>
+                {t('userAlreadyInOrg')}
+              </p>
+            )}
           </div>
 
           <div className='grid gap-3'>
@@ -169,7 +193,7 @@ export const UserModal: React.FC<UserModalProps> = ({
               <span style={{ color: 'red' }}>*</span> {t('username')}
             </Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='username'
               value={formData.username}
               onChange={e => updateFormData('username', e.target.value)}
@@ -180,7 +204,7 @@ export const UserModal: React.FC<UserModalProps> = ({
           <div className='grid gap-3'>
             <Label htmlFor='firstName'>{t('firstName')}</Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='firstName'
               value={formData.firstName}
               onChange={e => updateFormData('firstName', e.target.value)}
@@ -190,30 +214,35 @@ export const UserModal: React.FC<UserModalProps> = ({
           <div className='grid gap-3'>
             <Label htmlFor='lastName'>{t('lastName')}</Label>
             <Input
-              className='bg-white'
+              className='bg-background text-foreground border-input'
               id='lastName'
               value={formData.lastName}
               onChange={e => updateFormData('lastName', e.target.value)}
             />
           </div>
 
-          <div className='disabled grid gap-3'>
-            <Label className='gap-1' htmlFor='role'>
-              <span style={{ color: 'red' }}>*</span> {t('role')}
-            </Label>
-            <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
-              <SelectTrigger className='w-full bg-white' disabled={disableRoleSelection}>
-                <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
-              </SelectTrigger>
-              <SelectContent>
-                {roleOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {roleField !== 'hidden' && (
+            <div className='disabled grid gap-3'>
+              <Label className='gap-1' htmlFor='role'>
+                <span style={{ color: 'red' }}>*</span> {t('role')}
+              </Label>
+              <Select value={formData.role} onValueChange={value => updateFormData('role', value)}>
+                <SelectTrigger
+                  className='bg-background text-foreground border-input w-full'
+                  disabled={roleField === 'disabled'}
+                >
+                  <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(mode === 'edit' ? ORG_ROLE_OPTIONS : ORG_INVITE_ROLE_OPTIONS).map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

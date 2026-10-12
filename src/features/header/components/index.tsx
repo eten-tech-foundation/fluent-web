@@ -29,6 +29,10 @@ const Header: React.FC = () => {
   const onNavigateToProjects = () => {
     void navigate({ to: '/projects' });
   };
+
+  const onNavigateToOrganizations = () => {
+    void navigate({ to: '/organizations' });
+  };
   const handleEditProfile = () => {
     void navigate({
       to: location.pathname,
@@ -55,6 +59,7 @@ const Header: React.FC = () => {
             <div className='relative flex items-center pl-[18px]'>
               <MainMenu
                 onDashboardClick={onNavigateToDashboard}
+                onOrganizationsClick={onNavigateToOrganizations}
                 onProjectsClick={onNavigateToProjects}
                 onUsersClick={onNavigateToUsers}
               >
