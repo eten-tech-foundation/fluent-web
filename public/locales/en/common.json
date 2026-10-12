@@ -42,6 +42,8 @@
   "noContentAvailable": "This Bible verse doesn't have content for this passage.",
   "formatBar": "Formatting",
   "blockParagraph": "Paragraph",
+  "insertParagraph": "Insert paragraph",
+  "insertParagraphHint": "Place the cursor, then insert a paragraph. Selected text is kept.",
   "blockSectionHeading": "Section Heading",
   "headingBeforeVerse": "Before verse {{verseNumber}}",
   "headingText": "Heading text",

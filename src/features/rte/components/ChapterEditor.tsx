@@ -14,6 +14,7 @@ import {
   MAX_HEADINGS_PER_VERSE,
   type HeadingError,
 } from '../lib/heading-markers';
+import { insertParagraph } from '../lib/insert-paragraph';
 import {
   changedVerses,
   pericopeVersesToUsj,
@@ -331,6 +332,9 @@ export function ChapterEditor({
               }
               disabled={Boolean(headingError)}
               onFormat={handleFormat}
+              onInsertParagraph={() => {
+                if (editorRef.current && !headingError) insertParagraph(editorRef.current);
+              }}
             />
           )}
         </div>
