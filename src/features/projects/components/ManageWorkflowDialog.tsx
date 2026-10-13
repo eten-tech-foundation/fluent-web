@@ -25,6 +25,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   projectId,
   isOpen,
   onClose,
+  chapterAssignments,
 }) => {
   const { t } = useTranslation();
   const {
@@ -46,6 +47,11 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
 
   const isReady = isLoadedFromServer;
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const hasCompletedChapter =
+    chapterAssignments?.some(
+      assignment => assignment.status === ChapterAssignmentStatus.COMPLETE
+    ) ?? false;
 
   useEffect(() => {
     if (!isOpen) {
@@ -248,7 +254,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   };
 
   const handleAddStage = async () => {
-    if (intermediateSteps.length >= 10) return;
+    if (intermediateSteps.length >= 10 || hasCompletedChapter) return;
 
     const newName = generateUniqueName('New Stage');
     const tempId = `custom_${Date.now()}`;
@@ -260,8 +266,8 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
     };
 
     setIntermediateSteps(prev => [...prev, newStep]);
-    setEditingId(tempId);
-    setEditingValue(newName);
+    setEditingId(null);
+    setEditingValue('');
     setErrorMessage('');
 
     try {
@@ -272,6 +278,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
           prev.map(s => (s.id === tempId ? { ...s, stageId: created.stageId, id: createdId } : s))
         );
         setEditingId(createdId);
+        setEditingValue(newName);
       }
     } catch (err) {
       Logger.logException(err, { context: 'Failed to add workflow stage' });
@@ -280,6 +287,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
       toast.error(message);
       setIntermediateSteps(prev => prev.filter(s => s.id !== tempId));
       setEditingId(null);
+      setEditingValue('');
     }
   };
 
@@ -368,7 +376,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
     onClose();
   };
 
-  const canAddStage = intermediateSteps.length < 10;
+  const canAddStage = intermediateSteps.length < 10 && !hasCompletedChapter;
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
@@ -537,7 +545,12 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
                     className='bg-popover text-popover-foreground border-border rounded-md border px-3 py-1.5 text-xs font-semibold shadow-md'
                     side='top'
                   >
-                    {t('manageWorkflow.stageLimitReached', 'You already have 10 stages.')}
+                    {hasCompletedChapter
+                      ? t(
+                          'manageWorkflow.cannotAddCompleted',
+                          'Cannot add stages once chapters have reached completion.'
+                        )
+                      : t('manageWorkflow.stageLimitReached', 'You already have 10 stages.')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

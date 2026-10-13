@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManageWorkflowDialog } from '@/features/projects/components/ManageWorkflowDialog';
 import { type WorkflowStep } from '@/features/projects/hooks/useProjectWorkflow';
 import { Logger } from '@/lib/services/logger';
+import { ChapterAssignmentStatus, type ChapterAssignmentProgress } from '@/lib/types';
 import { fireEvent, render, screen } from '@/test/render';
 
 vi.mock('sonner', () => ({
@@ -159,7 +160,7 @@ describe('ManageWorkflowDialog', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('adds a new stage and calls addStage', async () => {
+  it('adds a new stage, calls addStage, and enters edit mode once created', async () => {
     const user = userEvent.setup();
     render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
@@ -167,6 +168,40 @@ describe('ManageWorkflowDialog', () => {
     await user.click(addBtn);
 
     expect(mockAddStage).toHaveBeenCalledWith('New Stage');
+    expect(await screen.findByRole('textbox')).toHaveValue('New Stage');
+  });
+
+  it('disables Add Stage when a chapter has reached completion', () => {
+    const completedAssignments: ChapterAssignmentProgress[] = [
+      {
+        bibleId: 1,
+        bookId: 1,
+        bookCode: 'GEN',
+        sourceLangCode: 'eng',
+        targetLangCode: 'eng',
+        bookNameEng: 'Genesis',
+        chapterNumber: 1,
+        status: ChapterAssignmentStatus.COMPLETE,
+        assignedUser: null,
+        peerChecker: null,
+        projectUnitId: 1,
+        assignmentId: 1,
+        totalVerses: 10,
+        completedVerses: 10,
+      },
+    ];
+
+    render(
+      <ManageWorkflowDialog
+        chapterAssignments={completedAssignments}
+        isOpen={true}
+        projectId={1}
+        onClose={vi.fn()}
+      />
+    );
+
+    const addBtn = screen.getByRole('button', { name: /Add Stage/i });
+    expect(addBtn).toBeDisabled();
   });
 
   it('disables Add Stage when 10 intermediate stages exist', () => {
