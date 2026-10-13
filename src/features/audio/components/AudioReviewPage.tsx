@@ -12,7 +12,7 @@ import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPerico
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { type ProjectItem, type VerseAudioRecording } from '@/lib/types';
-import { useAppStore } from '@/store/store';
+import { type DisplayMode, useAppStore } from '@/store/store';
 
 import TakeCard, { SelectAsDraftButton } from './TakeCard';
 
@@ -105,8 +105,8 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   const loaderData = routeApi.useLoaderData();
   const projectItem = propItem ?? loaderData.projectItem;
   const router = useRouter();
-  const displayMode = useAppStore(state => state.displayMode);
-  const setDisplayMode = useAppStore(state => state.setDisplayMode);
+  const initialDisplayMode = useAppStore(state => state.displayMode);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(initialDisplayMode);
   const userdetail = useAppStore(state => state.userdetail);
 
   // Only PMs may resolve conflicts (spec #383).
@@ -222,6 +222,23 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     [selectedPassage]
   );
 
+  // Map each take.id to its parent recording's bibleTextId
+  const takeBibleTextMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const recording of selectedPassage?.recordings ?? []) {
+      for (const take of recording.takes) {
+        map.set(take.id, recording.bibleTextId);
+      }
+    }
+    return map;
+  }, [selectedPassage]);
+
+  // Show contributor names only when the passage has takes from more than one contributor (spec #383)
+  const showContributor = useMemo(() => {
+    const uniqueUploaders = new Set(selectedTakes.map(t => t.uploadedBy));
+    return uniqueUploaders.size > 1;
+  }, [selectedTakes]);
+
   /**
    * Active take id — look across all recordings in the passage.
    * In verse mode there's always exactly one recording; in pericope mode
@@ -244,18 +261,6 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     const verseNums = new Set(selectedPassage.verseNumbers);
     return targetVerses.filter(v => verseNums.has(v.verseNumber));
   }, [targetVerses, selectedPassage]);
-
-  // ---------- Single-take playback gate ----------
-
-  const [playingTakeId, setPlayingTakeId] = useState<number | null>(null);
-
-  const handlePlay = useCallback((takeId: number) => {
-    setPlayingTakeId(takeId);
-  }, []);
-
-  const handlePause = useCallback((takeId: number) => {
-    setPlayingTakeId(prev => (prev === takeId ? null : prev));
-  }, []);
 
   // ---------- Conflict resolution ----------
 
@@ -434,6 +439,11 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             className='min-h-0 flex-1 overflow-y-auto px-6 pb-6'
             style={{ scrollbarGutter: 'stable' }}
           >
+            {/* TODO(fluent-api#377): Spec: "List takes as normal for a pericope recorded as a pericope".
+                Currently, recordings are stored at verse grain, so pericope view prompts the user
+                to switch to Verse view to review and resolve individual verse takes. Once the upstream
+                granularity field lands (fluent-api#377), check recording granularity here to list
+                pericope-grain takes directly. */}
             {displayMode === 'pericope' ? (
               <p className='text-muted-foreground text-sm font-normal'>
                 {t('recordedByVerse', 'Recorded by verse.')}{' '}
@@ -452,58 +462,40 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
               </p>
             ) : (
               <div className='flex flex-col gap-3'>
-                {(() => {
-                  // Show contributor names only when the passage has takes from more than one contributor (spec #383)
-                  const uniqueUploaders = new Set(selectedTakes.map(t => t.uploadedBy));
-                  const showContributor = uniqueUploaders.size > 1;
+                {selectedTakes.map((take, idx) => {
+                  const bibleTextId = takeBibleTextMap.get(take.id);
+                  const canResolveAsDraft = isPM && selectedHasConflict && take.id !== activeTakeId;
 
-                  // Find the bibleTextId for each take by looking in the recordings
-                  const takeBibleTextMap = new Map<number, number>();
-                  for (const recording of selectedPassage?.recordings ?? []) {
-                    for (const take of recording.takes) {
-                      takeBibleTextMap.set(take.id, recording.bibleTextId);
-                    }
-                  }
-
-                  return selectedTakes.map((take, idx) => {
-                    const bibleTextId = takeBibleTextMap.get(take.id);
-                    const canResolveAsDraft =
-                      isPM && selectedHasConflict && take.id !== activeTakeId;
-
-                    return (
-                      <TakeCard
-                        key={take.id}
-                        action={
-                          canResolveAsDraft ? (
-                            <SelectAsDraftButton
-                              disabled={bibleTextId === undefined}
-                              isResolving={resolvingTakeId === take.id}
-                              onSelect={() => {
-                                if (bibleTextId !== undefined) {
-                                  handleSelectAsDraft({
-                                    id: take.id,
-                                    bibleTextId,
-                                  });
-                                }
-                              }}
-                            />
-                          ) : undefined
-                        }
-                        contributorName={
-                          showContributor
-                            ? (userMap.get(take.uploadedBy) ?? t('unknown', 'Unknown'))
-                            : undefined
-                        }
-                        isActiveDraft={take.id === activeTakeId}
-                        shouldPause={playingTakeId !== null && playingTakeId !== take.id}
-                        take={take}
-                        takeNumber={idx + 1}
-                        onPause={() => handlePause(take.id)}
-                        onPlay={handlePlay}
-                      />
-                    );
-                  });
-                })()}
+                  return (
+                    <TakeCard
+                      key={take.id}
+                      action={
+                        canResolveAsDraft ? (
+                          <SelectAsDraftButton
+                            disabled={bibleTextId === undefined}
+                            isResolving={resolvingTakeId === take.id}
+                            onSelect={() => {
+                              if (bibleTextId !== undefined) {
+                                handleSelectAsDraft({
+                                  id: take.id,
+                                  bibleTextId,
+                                });
+                              }
+                            }}
+                          />
+                        ) : undefined
+                      }
+                      contributorName={
+                        showContributor
+                          ? (userMap.get(take.uploadedBy) ?? t('unknown', 'Unknown'))
+                          : undefined
+                      }
+                      isActiveDraft={take.id === activeTakeId}
+                      take={take}
+                      takeNumber={idx + 1}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

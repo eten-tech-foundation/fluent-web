@@ -681,7 +681,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const totalSourceVerses = sourceVerses.length;
   const versesWithText = verses.filter(v => v.content.trim() !== '').length;
   const progressPercentage = (versesWithText / totalSourceVerses) * 100;
-  // Block submission only if there are unresolved audio conflicts in this chapter (spec #383)
+  // Block submission only if there are known unresolved audio conflicts in this chapter (spec #383).
+  // Deliberately does not block on audio query errors/loading so written text submission is not
+  // held hostage if the audio service is unavailable or in error.
   const isTranslationComplete = versesWithText === totalSourceVerses && !hasUnresolvedAudioConflict;
 
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);

@@ -5,15 +5,7 @@ import { PlaybackRegistryProvider, usePlaybackRegistry } from '@/features/tts';
 
 import AudioPlayer from './AudioPlayer';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, defaultValue?: string, options?: Record<string, unknown>) =>
-      (defaultValue ?? _key).replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
-        String(options?.[name] ?? '')
-      ),
-    i18n: { language: 'en', changeLanguage: vi.fn() },
-  }),
-}));
+vi.mock('react-i18next', () => import('@/test/i18n'));
 
 describe('AudioPlayer with PlaybackRegistry', () => {
   let playStub: ReturnType<typeof vi.spyOn>;
@@ -71,32 +63,33 @@ describe('AudioPlayer with PlaybackRegistry', () => {
     expect(screen.getByRole('button', { name: /Play/i })).toBeInTheDocument();
   });
 
-  it('pauses and releases claim when shouldPause becomes true', async () => {
-    const onPause = vi.fn();
+  it('pauses another claimant when a second AudioPlayer starts playing', async () => {
+    const onPause1 = vi.fn();
+    const onPause2 = vi.fn();
 
-    const { rerender } = render(
+    render(
       <PlaybackRegistryProvider>
-        <AudioPlayer shouldPause={false} src='https://example.com/audio.mp3' onPause={onPause} />
+        <AudioPlayer src='https://example.com/audio1.mp3' onPause={onPause1} />
+        <AudioPlayer src='https://example.com/audio2.mp3' onPause={onPause2} />
       </PlaybackRegistryProvider>
     );
 
-    const playButton = screen.getByRole('button', { name: /Play/i });
+    const [play1, play2] = screen.getAllByRole('button', { name: /Play/i });
+
+    // Player 1 plays
     await act(async () => {
-      fireEvent.click(playButton);
+      fireEvent.click(play1);
+    });
+    expect(screen.getAllByRole('button', { name: /Pause/i })).toHaveLength(1);
+
+    // Player 2 plays -> player 1 should be paused by registry eviction
+    await act(async () => {
+      fireEvent.click(play2);
     });
 
-    expect(screen.getByRole('button', { name: /Pause/i })).toBeInTheDocument();
-
-    // Parent signals another take started playing
-    rerender(
-      <PlaybackRegistryProvider>
-        <AudioPlayer shouldPause={true} src='https://example.com/audio.mp3' onPause={onPause} />
-      </PlaybackRegistryProvider>
-    );
-
     expect(pauseStub).toHaveBeenCalled();
-    expect(onPause).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: /Play/i })).toBeInTheDocument();
+    expect(onPause1).toHaveBeenCalledTimes(1);
+    expect(onPause2).not.toHaveBeenCalled();
   });
 
   it('releases registry claim on user pause', async () => {
@@ -135,5 +128,33 @@ describe('AudioPlayer with PlaybackRegistry', () => {
       capturedRegistry!.claim(otherPause);
     });
     expect(onPause).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports keyboard navigation via ArrowRight, ArrowLeft, Home, and End', async () => {
+    render(
+      <PlaybackRegistryProvider>
+        <AudioPlayer initialDuration={100} src='https://example.com/audio.mp3' />
+      </PlaybackRegistryProvider>
+    );
+
+    const slider = screen.getByRole('slider', { name: /Seek audio/i });
+    expect(slider).toHaveAttribute('tabIndex', '0');
+    expect(slider).toHaveAttribute('aria-valuenow', '0');
+
+    // ArrowRight steps forward (5 seconds / 5%)
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(slider).toHaveAttribute('aria-valuenow', '5');
+
+    // End steps to duration
+    fireEvent.keyDown(slider, { key: 'End' });
+    expect(slider).toHaveAttribute('aria-valuenow', '100');
+
+    // ArrowLeft steps backward
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' });
+    expect(slider).toHaveAttribute('aria-valuenow', '95');
+
+    // Home steps to 0
+    fireEvent.keyDown(slider, { key: 'Home' });
+    expect(slider).toHaveAttribute('aria-valuenow', '0');
   });
 });

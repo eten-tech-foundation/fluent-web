@@ -48,10 +48,8 @@ interface TakeCardProps {
   contributorName?: string;
   /** Whether this take is currently marked as the active draft. */
   isActiveDraft: boolean;
-  /** Whether another take is playing (signals this card to pause). */
-  shouldPause: boolean;
   /** Called when this take starts playing. */
-  onPlay: (takeId: number) => void;
+  onPlay?: (takeId: number) => void;
   /** Called when this take pauses or finishes playback. */
   onPause?: () => void;
   /** Optional action slot (e.g. SelectAsDraftButton for conflict resolution). */
@@ -65,7 +63,6 @@ const TakeCard: React.FC<TakeCardProps> = ({
   isActiveDraft,
   onPlay,
   onPause,
-  shouldPause,
   action,
 }) => {
   const { t } = useTranslation();
@@ -96,9 +93,11 @@ const TakeCard: React.FC<TakeCardProps> = ({
           )}
           <span className='text-muted-foreground text-xs'>
             {contributorName ? null : (
-              <span className='text-foreground text-sm font-semibold'>
-                {t('takeNumber', 'Take {{number}} ', { number: takeNumber })}
-              </span>
+              <>
+                <span className='text-foreground text-sm font-semibold'>
+                  {t('takeNumber', 'Take {{number}}', { number: takeNumber })}
+                </span>{' '}
+              </>
             )}
             {t('recordedDate', 'Recorded {{date}}', { date: recordedDate })}
           </span>
@@ -127,10 +126,9 @@ const TakeCard: React.FC<TakeCardProps> = ({
       <AudioPlayer
         accentColor={accentColor}
         initialDuration={take.durationSeconds}
-        shouldPause={shouldPause}
         src={take.downloadUrl}
         onPause={onPause}
-        onPlay={() => onPlay(take.id)}
+        onPlay={onPlay ? () => onPlay(take.id) : undefined}
       />
 
       {/* Action slot (e.g. Select as Draft button) */}

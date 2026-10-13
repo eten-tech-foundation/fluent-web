@@ -14,11 +14,6 @@ interface AudioPlayerProps {
   onPlay?: () => void;
   /** Called when this player pauses or stops playing. */
   onPause?: () => void;
-  /**
-   * External signal: when this changes to true the player should pause.
-   * Controlled by the parent when another take starts playing.
-   */
-  shouldPause?: boolean;
   /** Accent colour for the waveform fill / progress. */
   accentColor?: string;
 }
@@ -32,7 +27,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   initialDuration,
   onPlay,
   onPause,
-  shouldPause = false,
   accentColor,
 }) => {
   const { t } = useTranslation();
@@ -57,14 +51,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
     onPause?.();
   }, [onPause]);
-
-  // Pause when parent signals another take has started
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (shouldPause && (isPlaying || (audio && !audio.paused))) {
-      pausePlayback();
-    }
-  }, [shouldPause, isPlaying, pausePlayback]);
 
   // Cleanup on unmount or src change
   useEffect(() => {
@@ -145,15 +131,63 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     onPause?.();
   }, [onPause]);
 
-  const handleSeek = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  const seekTo = useCallback(
+    (newTime: number) => {
       const audio = audioRef.current;
       if (!audio || !duration) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      audio.currentTime = ratio * duration;
+      const clamped = Math.max(0, Math.min(duration, newTime));
+      audio.currentTime = clamped;
+      setCurrentTime(clamped);
     },
     [duration]
+  );
+
+  const handleSeek = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      seekTo(ratio * duration);
+    },
+    [duration, seekTo]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!duration) return;
+      // Step by 5 seconds, or 5% of duration if shorter
+      const step = Math.min(5, Math.max(1, duration * 0.05));
+      const pageStep = step * 2;
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowUp':
+          e.preventDefault();
+          seekTo(currentTime + step);
+          break;
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          e.preventDefault();
+          seekTo(currentTime - step);
+          break;
+        case 'PageUp':
+          e.preventDefault();
+          seekTo(currentTime + pageStep);
+          break;
+        case 'PageDown':
+          e.preventDefault();
+          seekTo(currentTime - pageStep);
+          break;
+        case 'Home':
+          e.preventDefault();
+          seekTo(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          seekTo(duration);
+          break;
+      }
+    },
+    [currentTime, duration, seekTo]
   );
 
   const progress = duration > 0 ? currentTime / duration : 0;
@@ -198,9 +232,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={Math.round(progress * 100)}
-        className='relative flex h-8 flex-1 cursor-pointer items-end gap-[2px]'
+        aria-valuetext={formatClock(currentTime)}
+        className='focus-visible:ring-ring relative flex h-8 flex-1 cursor-pointer items-end gap-[2px] rounded-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
         role='slider'
+        tabIndex={0}
         onClick={handleSeek}
+        onKeyDown={handleKeyDown}
       >
         {Array.from({ length: BARS }).map((_, i) => {
           // Vary heights for a waveform silhouette

@@ -1,6 +1,6 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode } from 'react';
 
-import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -120,16 +120,12 @@ describe('useResolveConflict', () => {
       )
     );
 
-    let client: QueryClient;
-    function Wrapper({ children }: { children: ReactNode }) {
-      const [qc] = useState(() => {
-        client = createTestQueryClient();
-        return client;
-      });
-      return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-    }
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
 
-    const { result } = renderHook(() => useResolveConflict(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useResolveConflict(), { wrapper });
 
     await expect(
       result.current.mutateAsync({

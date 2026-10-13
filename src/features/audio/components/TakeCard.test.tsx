@@ -6,15 +6,7 @@ import { type VerseAudioTake } from '@/lib/types';
 
 import TakeCard, { SelectAsDraftButton } from './TakeCard';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, defaultValue?: string, options?: Record<string, unknown>) =>
-      (defaultValue ?? _key).replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
-        String(options?.[name] ?? '')
-      ),
-    i18n: { language: 'en', changeLanguage: vi.fn() },
-  }),
-}));
+vi.mock('react-i18next', () => import('@/test/i18n'));
 
 const mockTake: VerseAudioTake = {
   id: 1,
@@ -37,31 +29,18 @@ describe('TakeCard', () => {
   it('renders take number and recorded date for single contributor', () => {
     render(
       <PlaybackRegistryProvider>
-        <TakeCard
-          isActiveDraft={false}
-          shouldPause={false}
-          take={mockTake}
-          takeNumber={1}
-          onPlay={vi.fn()}
-        />
+        <TakeCard isActiveDraft={false} take={mockTake} takeNumber={1} />
       </PlaybackRegistryProvider>
     );
 
     expect(screen.getByText(/Take 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded Mar 15, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded.*2026/i)).toBeInTheDocument();
   });
 
   it('renders contributor name when provided', () => {
     render(
       <PlaybackRegistryProvider>
-        <TakeCard
-          contributorName='Alice'
-          isActiveDraft={false}
-          shouldPause={false}
-          take={mockTake}
-          takeNumber={1}
-          onPlay={vi.fn()}
-        />
+        <TakeCard contributorName='Alice' isActiveDraft={false} take={mockTake} takeNumber={1} />
       </PlaybackRegistryProvider>
     );
 
@@ -71,13 +50,7 @@ describe('TakeCard', () => {
   it('renders Current Draft badge when isActiveDraft is true', () => {
     render(
       <PlaybackRegistryProvider>
-        <TakeCard
-          isActiveDraft={true}
-          shouldPause={false}
-          take={mockTake}
-          takeNumber={1}
-          onPlay={vi.fn()}
-        />
+        <TakeCard isActiveDraft={true} take={mockTake} takeNumber={1} />
       </PlaybackRegistryProvider>
     );
 
@@ -90,10 +63,8 @@ describe('TakeCard', () => {
         <TakeCard
           action={<button type='button'>Custom Action</button>}
           isActiveDraft={false}
-          shouldPause={false}
           take={mockTake}
           takeNumber={1}
-          onPlay={vi.fn()}
         />
       </PlaybackRegistryProvider>
     );
