@@ -53,6 +53,9 @@ export const AiTranslationSettings: React.FC = () => {
         () => true,
         () => false
       );
+      // Preferences are keyed by user, so the initiating user's preference can be
+      // restored on failure even if someone else has signed in since.
+      if (!didUpdate && userdetail) setAiAutoEnablePreference(userdetail.id, priorUserPreference);
       // The request can settle after Settings closes or navigation changes the
       // assignment. Never restore a captured project over the current one.
       if (useAppStore.getState().userdetail?.id !== userdetail?.id) return;
@@ -63,7 +66,6 @@ export const AiTranslationSettings: React.FC = () => {
         if (useAppStore.getState().currentProjectItem?.chapterAssignmentId === assignmentId) {
           setLocalAiState(previousIsAiEnabled ?? false);
         }
-        if (userdetail) setAiAutoEnablePreference(userdetail.id, priorUserPreference);
         setAiEnabledFor(assignmentId, previousIsAiEnabled);
         toast.error('Could not update AI translation suggestions. Please try again.');
       }

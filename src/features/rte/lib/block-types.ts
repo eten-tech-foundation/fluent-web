@@ -6,7 +6,7 @@
  * survive the round trip and be in the API's allowlist. Markers that arrive in imported content
  * but are not authorable (`\ms`, `\li`, `\q3`) report as "other" in the bar and retain
  * their supported paragraph/heading metadata. Arbitrary USFM structures are not represented by
- * the current verse-row contract; see docs/features/rte-review-followup/review.md.
+ * the current verse-row contract; see docs/features/rte-review-followup/design.md.
  */
 
 export type BlockKind = 'paragraph' | 'heading' | 'poetry' | 'other';

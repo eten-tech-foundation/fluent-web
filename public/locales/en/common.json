@@ -71,6 +71,8 @@
   "chapter": "Chapter",
   "chapterViewMissingContent": "Chapter view needs content in all {{total}} verses. {{completed}} of {{total}} have content. Missing content: {{verses}}. Continue in Verse or Pericope view.",
   "chapterViewUnverified": "Chapter content could not be verified. Reopen the chapter to try again.",
+  "chapterLoadFailed": "Refresh the page to try again.",
+  "refresh": "Refresh",
   "chapterViewUnavailable": "Chapter view is available once all verses have content.",
   "mainMenu": "Main menu",
   "userMenu": "User menu",

@@ -40,7 +40,7 @@ Heading persistence requires the work from [API #320](https://github.com/eten-te
 which was integrated into [API #305](https://github.com/eten-tech-foundation/fluent-api/pull/305).
 API #305 merged into main on October 2, 2026. Deployment of that API support must be verified
 separately before enabling these web changes. No new endpoint or migration is introduced here.
-Unsupported inline/apparatus preservation remains a separate [storage limitation](../rte-review-followup/review.md).
+Unsupported inline/apparatus preservation remains a separate [storage limitation](../rte-review-followup/design.md).
 
 ## Validation
 

@@ -191,4 +191,20 @@ describe('AI translation toggle', () => {
     expect(useAppStore.getState().manualAiEnable).toBeNull();
     expect(useAppStore.getState().aiAutoEnablePreferences).toEqual({ 42: false });
   });
+
+  it('restores the initiating user preference when an opt-out fails after the user changes', async () => {
+    useAppStore.setState({
+      currentProjectItem: { ...item, isAiEnabled: true },
+      aiAutoEnablePreferences: { 42: true },
+    });
+    const pending = delayPatch();
+    render(<AiTranslationSettings />);
+    fireEvent.click(screen.getByRole('switch'));
+    await waitFor(() => expect(pending.requests).toEqual([false]));
+    expect(useAppStore.getState().aiAutoEnablePreferences).toEqual({ 42: false });
+    act(() => useAppStore.setState({ userdetail: { ...user, id: 43 } }));
+    await act(async () => pending.finish(HttpResponse.json({}, { status: 500 })));
+    await waitFor(() => expect(screen.getByRole('switch')).not.toBeDisabled());
+    expect(useAppStore.getState().aiAutoEnablePreferences).toEqual({ 42: true });
+  });
 });
