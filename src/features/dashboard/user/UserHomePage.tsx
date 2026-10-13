@@ -228,9 +228,9 @@ export function UserHomePage() {
         order = 999;
       }
       const label = getRowStatusLabel(item);
-      const existing = statusMap.get(statusId);
+      const existing = statusMap.get(label);
       if (!existing || order < existing.order) {
-        statusMap.set(statusId, { label: existing?.label ?? label, order });
+        statusMap.set(label, { label, order });
       }
     }
 
@@ -239,8 +239,8 @@ export function UserHomePage() {
         if (a.order !== b.order) return a.order - b.order;
         return a.label.localeCompare(b.label);
       })
-      .map(([id, { label }]) => ({
-        value: id,
+      .map(([label]) => ({
+        value: label,
         label,
       }));
   }, [currentData, workflowsMap, getRowStatusLabel]);
@@ -255,10 +255,14 @@ export function UserHomePage() {
       });
     }
     if (selectedStatuses.length > 0) {
-      result = result.filter(item => selectedStatuses.includes(item.chapterStatus));
+      result = result.filter(
+        item =>
+          selectedStatuses.includes(item.chapterStatus) ||
+          selectedStatuses.includes(getRowStatusLabel(item))
+      );
     }
     return result;
-  }, [currentData, selectedBooks, selectedStatuses]);
+  }, [currentData, selectedBooks, selectedStatuses, getRowStatusLabel]);
 
   const hasActiveFilters = selectedBooks.length > 0 || selectedStatuses.length > 0;
   const isFilteredEmpty = hasActiveFilters && filteredData.length === 0 && currentData.length > 0;

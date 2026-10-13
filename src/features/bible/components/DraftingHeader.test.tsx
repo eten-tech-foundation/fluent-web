@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DraftingHeader } from '@/features/bible/components/DraftingHeader';
 import { ChapterAssignmentStatus, type ProjectItem } from '@/lib/types';
+import { renderWithProviders as render } from '@/test/render';
 
 const mockProjectItem: ProjectItem = {
   chapterAssignmentId: 1,

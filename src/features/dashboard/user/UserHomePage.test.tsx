@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { config } from '@/lib/config';
 import { type User, type UserChapterAssignment } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
+import { renderWithProviders as render } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 

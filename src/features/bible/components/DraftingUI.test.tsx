@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render as renderUi, screen, waitFor, within } from '@testing-library/react';
@@ -22,10 +22,20 @@ import {
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
+import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
-const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
+function TestProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createTestQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackRegistryProvider>{children}</PlaybackRegistryProvider>
+    </QueryClientProvider>
+  );
+}
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: TestProviders });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
