@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import useProgressBar, { formatProgressPercentage } from '@/features/projects/hooks/useProgressBar';
+import { ProgressBarTrack } from '@/features/projects/components/ProgressBarTrack';
+import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { type ChapterStatusCounts, type WorkflowStep } from '@/lib/types';
 
 interface CardProgressBarProps {
@@ -26,63 +26,7 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
   if (variant === 'mini') {
     return (
       <div className='flex items-center gap-2'>
-        <TooltipProvider disableHoverableContent delayDuration={100} skipDelayDuration={300}>
-          <div className='flex h-1.5 w-16 overflow-hidden rounded-full bg-slate-100'>
-            {segments.length === 0 ? (
-              <Tooltip disableHoverableContent>
-                <TooltipTrigger asChild>
-                  <div
-                    aria-label='0% Not Started'
-                    className='focus-visible:ring-ring h-full w-full cursor-pointer focus-visible:ring-1 focus-visible:outline-none'
-                    role='img'
-                    tabIndex={0}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side='top'>
-                  <p>0% Not Started</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              segments.map((segment, index) => (
-                <Tooltip key={`${segment.status}-${index}`} disableHoverableContent>
-                  <TooltipTrigger asChild>
-                    <div
-                      aria-label={`${formatProgressPercentage(segment.percentage, segment.count)} ${segment.displayName}`}
-                      className='focus-visible:ring-ring h-full cursor-pointer first:rounded-l-full last:rounded-r-full hover:brightness-110 focus-visible:ring-1 focus-visible:outline-none'
-                      role='img'
-                      style={{
-                        width: `${segment.widthPercentage}%`,
-                        minWidth: segment.count > 0 ? '4px' : undefined,
-                        backgroundColor: segment.color,
-                      }}
-                      tabIndex={0}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side='top'>
-                    {segment.subSegments && segment.subSegments.length > 0 ? (
-                      <div className='flex flex-col gap-1'>
-                        <p className='mb-1 border-b pb-1 font-bold'>
-                          {formatProgressPercentage(segment.percentage, segment.count)}{' '}
-                          {segment.displayName}
-                        </p>
-                        {segment.subSegments.map((sub, idx) => (
-                          <p key={idx} className='text-xs'>
-                            {sub.label}: {formatProgressPercentage(sub.percentage)}
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>
-                        {formatProgressPercentage(segment.percentage, segment.count)}{' '}
-                        {segment.displayName}
-                      </p>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              ))
-            )}
-          </div>
-        </TooltipProvider>
+        <ProgressBarTrack showEmptyTooltip className='h-1.5 w-16' segments={segments} />
         <span className='text-xs font-medium text-slate-500'>
           {Math.round(totalProgressPercentage)}%
         </span>
@@ -92,63 +36,7 @@ export const CardProgressBar: React.FC<CardProgressBarProps> = ({
 
   return (
     <div className='flex w-full flex-col gap-3'>
-      <TooltipProvider disableHoverableContent delayDuration={100} skipDelayDuration={300}>
-        <div className='flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100'>
-          {segments.length === 0 ? (
-            <Tooltip disableHoverableContent>
-              <TooltipTrigger asChild>
-                <div
-                  aria-label='0% Not Started'
-                  className='focus-visible:ring-ring h-full w-full cursor-pointer focus-visible:ring-1 focus-visible:outline-none'
-                  role='img'
-                  tabIndex={0}
-                />
-              </TooltipTrigger>
-              <TooltipContent side='top'>
-                <p>0% Not Started</p>
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            segments.map((segment, index) => (
-              <Tooltip key={`${segment.status}-${index}`} disableHoverableContent>
-                <TooltipTrigger asChild>
-                  <div
-                    aria-label={`${formatProgressPercentage(segment.percentage, segment.count)} ${segment.displayName}`}
-                    className='focus-visible:ring-ring h-full cursor-pointer first:rounded-l-full last:rounded-r-full hover:brightness-110 focus-visible:ring-1 focus-visible:outline-none'
-                    role='img'
-                    style={{
-                      width: `${segment.widthPercentage}%`,
-                      minWidth: segment.count > 0 ? '3%' : undefined,
-                      backgroundColor: segment.color,
-                    }}
-                    tabIndex={0}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side='top'>
-                  {segment.subSegments && segment.subSegments.length > 0 ? (
-                    <div className='flex flex-col gap-1'>
-                      <p className='mb-1 border-b pb-1 font-bold'>
-                        {formatProgressPercentage(segment.percentage, segment.count)}{' '}
-                        {segment.displayName}
-                      </p>
-                      {segment.subSegments.map((sub, idx) => (
-                        <p key={idx} className='text-xs'>
-                          {sub.label}: {formatProgressPercentage(sub.percentage)}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p>
-                      {formatProgressPercentage(segment.percentage, segment.count)}{' '}
-                      {segment.displayName}
-                    </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            ))
-          )}
-        </div>
-      </TooltipProvider>
+      <ProgressBarTrack showEmptyTooltip className='h-2.5 w-full' segments={segments} />
 
       {!hideLegend && (
         <div className='grid grid-cols-2 gap-x-8 gap-y-2 pt-1'>

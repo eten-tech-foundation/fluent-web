@@ -1,14 +1,9 @@
-import {
-  QueryClient,
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { parseErrorMessage } from '@/lib/api-utils';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
-import { ChapterAssignmentStatusDisplay } from '@/lib/types';
+import { ChapterAssignmentStatus, ChapterAssignmentStatusDisplay } from '@/lib/types';
 
 export interface WorkflowStep {
   id: string;
@@ -23,33 +18,104 @@ export interface WorkflowStep {
 }
 
 export const DEFAULT_WORKFLOW_STEPS: WorkflowStep[] = [
-  { id: 'not_started', label: 'Not Started', enabled: true, isFixed: true },
-  { id: 'draft', label: 'Draft', roleName: 'Drafter', enabled: true, isFixed: true },
-  { id: 'peer_check', label: 'Peer Check', roleName: 'Peer Checker', enabled: true, isFixed: true },
+  { id: ChapterAssignmentStatus.NOT_STARTED, label: 'Not Started', enabled: true, isFixed: true },
   {
-    id: 'community_review',
+    id: ChapterAssignmentStatus.DRAFT,
+    label: 'Drafting',
+    roleName: 'Drafter',
+    enabled: true,
+    isFixed: true,
+  },
+  {
+    id: ChapterAssignmentStatus.PEER_CHECK,
+    label: 'Peer Check',
+    roleName: 'Peer Checker',
+    enabled: true,
+    isFixed: true,
+  },
+  {
+    id: ChapterAssignmentStatus.COMMUNITY_REVIEW,
     label: 'Community Review',
     roleName: 'Community Reviewer',
     enabled: true,
   },
-  { id: 'linguist_check', label: 'Linguist Check', roleName: 'Linguist', enabled: true },
-  { id: 'theological_check', label: 'Theological Check', roleName: 'Theologian', enabled: true },
-  { id: 'consultant_check', label: 'Consultant Check', roleName: 'Consultant', enabled: true },
-  { id: 'complete', label: 'Complete', enabled: true, isFixed: true },
+  {
+    id: ChapterAssignmentStatus.LINGUIST_CHECK,
+    label: 'Linguist Check',
+    roleName: 'Linguist',
+    enabled: true,
+  },
+  {
+    id: ChapterAssignmentStatus.THEOLOGICAL_CHECK,
+    label: 'Theological Check',
+    roleName: 'Theologian',
+    enabled: true,
+  },
+  {
+    id: ChapterAssignmentStatus.CONSULTANT_CHECK,
+    label: 'Consultant Check',
+    roleName: 'Consultant',
+    enabled: true,
+  },
+  { id: ChapterAssignmentStatus.COMPLETE, label: 'Complete', enabled: true, isFixed: true },
 ];
 
-const fallbackQueryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-});
+export const projectWorkflowKey = (projectId?: number | string | null) =>
+  ['project-workflow', projectId != null ? Number(projectId) : null] as const;
+
+export const apiFetch = async (path: string, options: RequestInit = {}) => {
+  return fetch(`${config.api.url}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  });
+};
+
+export const addWorkflowStageApi = async (projectId: number, displayName: string) => {
+  const res = await apiFetch(`/projects/${projectId}/workflow-stages`, {
+    method: 'POST',
+    body: JSON.stringify({ displayName }),
+  });
+  if (!res.ok) await parseErrorMessage(res, 'Failed to add stage');
+  return (await res.json()) as { stageId?: number; label?: string; id?: string };
+};
+
+export const renameWorkflowStageApi = async (
+  projectId: number,
+  stageId: number,
+  displayName: string
+) => {
+  const res = await apiFetch(`/projects/${projectId}/workflow-stages/${stageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  });
+  if (!res.ok) await parseErrorMessage(res, `Failed to rename stage to "${displayName}"`);
+  return (await res.json()) as Record<string, unknown>;
+};
+
+export const deleteWorkflowStageApi = async (projectId: number, stageId: number) => {
+  const res = await apiFetch(`/projects/${projectId}/workflow-stages/${stageId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await parseErrorMessage(res, 'Failed to delete stage');
+  return (await res.json().catch(() => ({}))) as Record<string, unknown>;
+};
+
+export const reorderWorkflowStagesApi = async (projectId: number, stageIds: number[]) => {
+  const res = await apiFetch(`/projects/${projectId}/workflow-stages/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify({ stageIds }),
+  });
+  if (!res.ok) await parseErrorMessage(res, 'Failed to reorder stages');
+  return (await res.json()) as Record<string, unknown>;
+};
 
 export const fetchProjectWorkflow = async (projectId?: number | null): Promise<WorkflowStep[]> => {
   if (!projectId) return DEFAULT_WORKFLOW_STEPS;
   try {
     // Try fetching from dedicated /projects/:projectId/workflow-stages endpoint
-    const stagesRes = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
+    const stagesRes = await apiFetch(`/projects/${projectId}/workflow-stages`, {
       method: 'GET',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
     }).catch(() => null);
 
     if (stagesRes?.ok) {
@@ -70,17 +136,15 @@ export const fetchProjectWorkflow = async (projectId?: number | null): Promise<W
           position: s.position,
           isFixed: s.isFixed,
           isLocked: s.isLocked,
-          roleName: s.label,
+          roleName: DEFAULT_WORKFLOW_STEPS.find(d => d.id === s.id)?.roleName ?? s.label,
           enabled: true,
         })) as WorkflowStep[];
       }
     }
 
     // Fallback to GET /projects/:projectId
-    const response = await fetch(`${config.api.url}/projects/${projectId}`, {
+    const response = await apiFetch(`/projects/${projectId}`, {
       method: 'GET',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
     });
     if (response.ok) {
       const data = (await response.json()) as { workflowConfig?: WorkflowStep[] };
@@ -101,18 +165,12 @@ export const fetchProjectWorkflow = async (projectId?: number | null): Promise<W
 };
 
 export function useProjectsWorkflows(projectIds: number[]) {
-  let queryClient: QueryClient;
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    queryClient = useQueryClient();
-  } catch {
-    queryClient = fallbackQueryClient;
-  }
+  const queryClient = useQueryClient();
 
   return useQueries(
     {
       queries: projectIds.map(id => ({
-        queryKey: ['project-workflow', id],
+        queryKey: projectWorkflowKey(id),
         queryFn: () => fetchProjectWorkflow(id),
         staleTime: 5 * 60 * 1000,
         enabled: id > 0,
@@ -130,19 +188,13 @@ export function useProjectsWorkflows(projectIds: number[]) {
 }
 
 export function useProjectWorkflow(projectId?: number | null) {
-  let queryClient: QueryClient;
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    queryClient = useQueryClient();
-  } catch {
-    // Isolated unit tests rendering component without QueryClientProvider
-    queryClient = fallbackQueryClient;
-  }
+  const queryClient = useQueryClient();
 
   const query = useQuery(
     {
-      queryKey: ['project-workflow', projectId],
+      queryKey: projectWorkflowKey(projectId),
       queryFn: () => fetchProjectWorkflow(projectId),
+      staleTime: 5 * 60 * 1000,
       enabled: !!projectId,
     },
     queryClient
@@ -150,7 +202,7 @@ export function useProjectWorkflow(projectId?: number | null) {
 
   const invalidateQueries = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['project-workflow', projectId] }),
+      queryClient.invalidateQueries({ queryKey: projectWorkflowKey(projectId) }),
       queryClient.invalidateQueries({ queryKey: ['projectDetails', String(projectId)] }),
       queryClient.invalidateQueries({ queryKey: ['projects'] }),
     ]);
@@ -160,14 +212,7 @@ export function useProjectWorkflow(projectId?: number | null) {
     {
       mutationFn: async (displayName: string) => {
         if (!projectId) throw new Error('Project ID required');
-        const res = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ displayName }),
-        });
-        if (!res.ok) throw new Error('Failed to add stage');
-        return (await res.json()) as Record<string, unknown>;
+        return addWorkflowStageApi(projectId, displayName);
       },
       onSuccess: invalidateQueries,
     },
@@ -178,17 +223,7 @@ export function useProjectWorkflow(projectId?: number | null) {
     {
       mutationFn: async ({ stageId, displayName }: { stageId: number; displayName: string }) => {
         if (!projectId) throw new Error('Project ID required');
-        const res = await fetch(
-          `${config.api.url}/projects/${projectId}/workflow-stages/${stageId}`,
-          {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ displayName }),
-          }
-        );
-        if (!res.ok) throw new Error('Failed to rename stage');
-        return (await res.json()) as Record<string, unknown>;
+        return renameWorkflowStageApi(projectId, stageId, displayName);
       },
       onSuccess: invalidateQueries,
     },
@@ -199,16 +234,7 @@ export function useProjectWorkflow(projectId?: number | null) {
     {
       mutationFn: async (stageId: number) => {
         if (!projectId) throw new Error('Project ID required');
-        const res = await fetch(
-          `${config.api.url}/projects/${projectId}/workflow-stages/${stageId}`,
-          {
-            method: 'DELETE',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
-        if (!res.ok) throw new Error('Failed to delete stage');
-        return (await res.json()) as Record<string, unknown>;
+        return deleteWorkflowStageApi(projectId, stageId);
       },
       onSuccess: invalidateQueries,
     },
@@ -219,135 +245,7 @@ export function useProjectWorkflow(projectId?: number | null) {
     {
       mutationFn: async (stageIds: number[]) => {
         if (!projectId) throw new Error('Project ID required');
-        const res = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages/reorder`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stageIds }),
-        });
-        if (!res.ok) throw new Error('Failed to reorder stages');
-        return (await res.json()) as Record<string, unknown>;
-      },
-      onSuccess: invalidateQueries,
-    },
-    queryClient
-  );
-
-  const updateMutation = useMutation(
-    {
-      mutationFn: async (workflowConfig: WorkflowStep[]) => {
-        if (!projectId) throw new Error('Project ID required');
-
-        // Sync directly against dedicated /projects/:projectId/workflow-stages endpoints
-        const initialSteps = query.data;
-        if (
-          !initialSteps ||
-          initialSteps === DEFAULT_WORKFLOW_STEPS ||
-          !initialSteps.some(step => step.stageId !== undefined)
-        ) {
-          throw new Error(
-            'Cannot save workflow before its configuration is loaded from the server'
-          );
-        }
-
-        interface ApiErrorResponse {
-          message?: string;
-        }
-
-        const parseErrorMessage = async (res: Response, fallback: string): Promise<string> => {
-          try {
-            const data = (await res.json()) as ApiErrorResponse;
-            return data.message ?? fallback;
-          } catch {
-            return fallback;
-          }
-        };
-
-        // 1. Delete removed stages
-        const finalStageIds = new Set(workflowConfig.map(s => s.stageId).filter(Boolean));
-        for (const step of initialSteps) {
-          if (step.stageId && !finalStageIds.has(step.stageId) && !step.isFixed) {
-            const delRes = await fetch(
-              `${config.api.url}/projects/${projectId}/workflow-stages/${step.stageId}`,
-              {
-                method: 'DELETE',
-                credentials: 'include',
-              }
-            );
-            if (!delRes.ok) {
-              throw new Error(
-                await parseErrorMessage(delRes, `Failed to delete stage "${step.label}"`)
-              );
-            }
-          }
-        }
-
-        // 2. Add new stages & rename modified stages
-        const activeStageIds: number[] = [];
-        for (const step of workflowConfig) {
-          if (!step.stageId && step.id !== 'not_started' && step.id !== 'complete') {
-            // New stage
-            const addRes = await fetch(`${config.api.url}/projects/${projectId}/workflow-stages`, {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ displayName: step.label }),
-            });
-            if (!addRes.ok) {
-              throw new Error(
-                await parseErrorMessage(addRes, `Failed to add stage "${step.label}"`)
-              );
-            }
-            const created = (await addRes.json()) as { stageId?: number };
-            if (created.stageId) activeStageIds.push(created.stageId);
-          } else {
-            const targetStageId = step.stageId ?? initialSteps.find(s => s.id === step.id)?.stageId;
-            if (targetStageId) {
-              activeStageIds.push(targetStageId);
-              // Check if renamed (allowed for any stage except bookends: not_started, complete)
-              const original = initialSteps.find(
-                s => s.stageId === targetStageId || s.id === step.id
-              );
-              if (
-                original &&
-                original.label !== step.label &&
-                step.id !== 'not_started' &&
-                step.id !== 'complete'
-              ) {
-                const patchRes = await fetch(
-                  `${config.api.url}/projects/${projectId}/workflow-stages/${targetStageId}`,
-                  {
-                    method: 'PATCH',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ displayName: step.label }),
-                  }
-                );
-                if (!patchRes.ok) {
-                  throw new Error(
-                    await parseErrorMessage(patchRes, `Failed to rename stage to "${step.label}"`)
-                  );
-                }
-              }
-            }
-          }
-        }
-
-        // 3. Reorder if numeric IDs available
-        if (activeStageIds.length > 0) {
-          const reorderRes = await fetch(
-            `${config.api.url}/projects/${projectId}/workflow-stages/reorder`,
-            {
-              method: 'PUT',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ stageIds: activeStageIds }),
-            }
-          );
-          if (!reorderRes.ok) {
-            throw new Error(await parseErrorMessage(reorderRes, 'Failed to reorder stages'));
-          }
-        }
+        return reorderWorkflowStagesApi(projectId, stageIds);
       },
       onSuccess: invalidateQueries,
     },
@@ -391,13 +289,11 @@ export function useProjectWorkflow(projectId?: number | null) {
     getStageLabel,
     getRoleLabel,
     isStageEnabled,
-    updateWorkflowConfig: updateMutation.mutateAsync,
     addStage: addStageMutation.mutateAsync,
     renameStage: renameStageMutation.mutateAsync,
     deleteStage: deleteStageMutation.mutateAsync,
     reorderStages: reorderStagesMutation.mutateAsync,
     isUpdating:
-      updateMutation.isPending ||
       addStageMutation.isPending ||
       renameStageMutation.isPending ||
       deleteStageMutation.isPending ||

@@ -18,7 +18,12 @@ export const ORG_LEVEL_ROLES = [
 ] as readonly string[];
 
 /** All roles that carry management privileges (project create, user view, etc). */
-const MANAGER_ROLES = ['Project Manager', 'Org Manager', 'Org Owner', 'SuperAdmin'];
+const MANAGER_ROLES: readonly string[] = [
+  ROLES.PROJECT_MANAGER,
+  ROLES.ORG_MANAGER,
+  ROLES.ORG_OWNER,
+  ROLES.SUPER_ADMIN,
+];
 
 /**
  * True if the user holds a global SuperAdmin grant (orgId == null, projectId == null).
@@ -167,8 +172,8 @@ export function isProjectManagerOnly(
 ): boolean {
   if (!projectId) return false;
   return activeGrants.some(g => {
-    if (g.roleName === 'Org Manager' || g.roleName === 'Org Owner') return false;
-    if (g.roleName === 'Project Manager') {
+    if (g.roleName === ROLES.ORG_MANAGER || g.roleName === ROLES.ORG_OWNER) return false;
+    if (g.roleName === ROLES.PROJECT_MANAGER) {
       return (
         g.projectId === null ||
         g.projectId === undefined ||
@@ -176,20 +181,24 @@ export function isProjectManagerOnly(
         g.projectId === Number(projectId)
       );
     }
-    return g.roleName === 'SuperAdmin';
+    return g.roleName === ROLES.SUPER_ADMIN;
   });
 }
 
 export function isOrgMemberOnly(activeGrants: UserGrant[]): boolean {
-  return activeGrants.length > 0 && activeGrants.every(g => g.roleName === 'Org Member');
+  return activeGrants.length > 0 && activeGrants.every(g => g.roleName === ROLES.ORG_MEMBER);
 }
 
 /** True if the user's currently-selected role is Project Observer. */
 export function isObserver(activeGrants: UserGrant[]): boolean {
-  return activeGrants.some(g => g.roleName === 'Project Observer');
+  return activeGrants.some(g => g.roleName === ROLES.PROJECT_OBSERVER);
 }
 
-const ROLES_WITH_USER_VIEW = ['Org Manager', 'Org Owner', 'SuperAdmin'];
+const ROLES_WITH_USER_VIEW: readonly string[] = [
+  ROLES.ORG_MANAGER,
+  ROLES.ORG_OWNER,
+  ROLES.SUPER_ADMIN,
+];
 /**
  * Alias: can the user view the /users table?
  * Same as canViewUsers — all manager roles have USER_VIEW.

@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_WORKFLOW_STEPS,
   useProjectWorkflow,
-  type WorkflowStep,
 } from '@/features/projects/hooks/useProjectWorkflow';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
@@ -77,7 +76,7 @@ describe('useProjectWorkflow', () => {
     expect(result.current.getRoleLabel('draft')).toBe('Drafting');
   });
 
-  it('handles updateWorkflowConfig by making proper DELETE, POST, PATCH, and PUT requests', async () => {
+  it('provides addStage, renameStage, deleteStage, and reorderStages mutations', async () => {
     let deleteCalledWith: string | null = null;
     let postBody: { displayName?: string } | null = null;
     let patchBody: { displayName?: string } | null = null;
@@ -108,27 +107,25 @@ describe('useProjectWorkflow', () => {
     const { result } = renderHook(() => useProjectWorkflow(100), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // Update config:
-    // - Remove 'community_review' (stageId 4)
-    // - Rename 'draft' to 'Initial Drafting'
-    // - Add new stage 'Field Testing'
-    const newConfig: WorkflowStep[] = [
-      { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
-      { id: 'draft', label: 'Initial Drafting', stageId: 2, position: 1, isFixed: true },
-      { id: 'peer_check', label: 'Peer Check', stageId: 3, position: 2, isFixed: true },
-      { id: 'custom_new', label: 'Field Testing', enabled: true },
-      { id: 'complete', label: 'Complete', stageId: 5, position: 4, isFixed: true },
-    ];
-
-    await result.current.updateWorkflowConfig(newConfig);
-
-    expect(deleteCalledWith).toBe('4');
+    // Test addStage
+    const added = await result.current.addStage('Field Testing');
     expect(postBody).toEqual({ displayName: 'Field Testing' });
+    expect(added).toEqual({ stageId: 99, label: 'Field Testing', id: 'custom_99' });
+
+    // Test renameStage
+    await result.current.renameStage({ stageId: 2, displayName: 'Initial Drafting' });
     expect(patchBody).toEqual({ displayName: 'Initial Drafting' });
+
+    // Test deleteStage
+    await result.current.deleteStage(4);
+    expect(deleteCalledWith).toBe('4');
+
+    // Test reorderStages
+    await result.current.reorderStages([1, 2, 3, 99, 5]);
     expect(reorderBody).toEqual({ stageIds: [1, 2, 3, 99, 5] });
   });
 
-  it('throws and surfaces backend error message when a sync request fails', async () => {
+  it('throws and surfaces backend error message when a mutation request fails', async () => {
     server.use(
       http.get(`${config.api.url}/projects/101/workflow-stages`, () =>
         HttpResponse.json(mockApiStages)
@@ -144,31 +141,8 @@ describe('useProjectWorkflow', () => {
     const { result } = renderHook(() => useProjectWorkflow(101), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const newConfigWithExtra: WorkflowStep[] = [
-      ...mockApiStages,
-      { id: 'new_stage', label: 'Extra Stage' },
-    ];
-
-    await expect(result.current.updateWorkflowConfig(newConfigWithExtra)).rejects.toThrow(
+    await expect(result.current.addStage('Extra Stage')).rejects.toThrow(
       'Maximum of 10 configurable workflow stages reached'
-    );
-  });
-
-  it('blocks updateWorkflowConfig when workflow fell back to default steps without server IDs', async () => {
-    server.use(
-      http.get(
-        `${config.api.url}/projects/999/workflow-stages`,
-        () => new HttpResponse(null, { status: 500 })
-      ),
-      http.get(`${config.api.url}/projects/999`, () => new HttpResponse(null, { status: 500 }))
-    );
-
-    const { result } = renderHook(() => useProjectWorkflow(999), { wrapper: Wrapper });
-    await waitFor(() => expect(result.current.workflowConfig).toEqual(DEFAULT_WORKFLOW_STEPS));
-    expect(result.current.isLoadedFromServer).toBe(false);
-
-    await expect(result.current.updateWorkflowConfig(DEFAULT_WORKFLOW_STEPS)).rejects.toThrow(
-      'Cannot save workflow before its configuration is loaded from the server'
     );
   });
 });

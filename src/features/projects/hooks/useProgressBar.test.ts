@@ -38,7 +38,7 @@ describe('useProgressBar', () => {
     { id: 'complete', label: 'Complete' },
   ];
 
-  it('enforces a minimum width of 3% for stages with ongoing work under 3%', () => {
+  it('calculates segment percentages accurately without artificial inflation', () => {
     const { result } = renderHook(() => useProgressBar(workflowConfig));
 
     // 100 total chapters: 99 not started, 1 in draft (1%)
@@ -52,8 +52,8 @@ describe('useProgressBar', () => {
 
     expect(draftSegment).toBeDefined();
     expect(draftSegment?.count).toBe(1);
-    expect(draftSegment?.percentage).toBe(1); // exact percentage
-    expect(draftSegment?.widthPercentage).toBe(3); // minimum 3% width for visibility/hover
+    expect(draftSegment?.percentage).toBe(1);
+    expect(draftSegment?.widthPercentage).toBe(1);
   });
 
   it('keeps widthPercentage dynamic when work progress is more than 3%', () => {
@@ -71,31 +71,10 @@ describe('useProgressBar', () => {
     expect(draftSegment).toBeDefined();
     expect(draftSegment?.count).toBe(20);
     expect(draftSegment?.percentage).toBe(20);
-    expect(draftSegment?.widthPercentage).toBe(20); // dynamic
+    expect(draftSegment?.widthPercentage).toBe(20);
   });
 
-  it('handles multiple stages with small percentages by giving each min 3% width while retaining exact percentages', () => {
-    const { result } = renderHook(() => useProgressBar(workflowConfig));
-
-    // 100 total: 98 not started, 1 draft (1%), 1 peer_check (1%)
-    const chapterStatusCounts = {
-      not_started: 98,
-      draft: 1,
-      peer_check: 1,
-    };
-
-    const segments = result.current.calculateProgressSegments(chapterStatusCounts);
-    const draftSegment = segments.find(s => s.status === 'draft');
-    const peerCheckSegment = segments.find(s => s.status === 'peer_check');
-
-    expect(draftSegment?.percentage).toBe(1);
-    expect(draftSegment?.widthPercentage).toBe(3);
-
-    expect(peerCheckSegment?.percentage).toBe(1);
-    expect(peerCheckSegment?.widthPercentage).toBe(3);
-  });
-
-  it('respects custom renamed stage labels in advanced checks subSegments', () => {
+  it('preserves raw subsegment percentages and counts in advanced checks', () => {
     const customConfig: WorkflowStep[] = [
       { id: 'not_started', label: 'Not Started' },
       { id: 'draft', label: 'Drafting' },
@@ -103,22 +82,34 @@ describe('useProgressBar', () => {
       { id: 'community_review', label: 'Community Review' },
       { id: 'linguist_check', label: 'Language Review' },
       { id: 'theological_check', label: 'Theological Check' },
-      { id: 'consultant_check', label: 'Consultant Check' },
       { id: 'complete', label: 'Complete' },
     ];
     const { result } = renderHook(() => useProgressBar(customConfig));
 
+    // 250 chapters: 1 in linguist_check (0.4%), 10 in theological_check (4%)
     const chapterStatusCounts = {
-      linguist_check: 10,
-      complete: 90,
+      linguist_check: 1,
+      theological_check: 10,
+      complete: 239,
     };
 
     const segments = result.current.calculateProgressSegments(chapterStatusCounts);
     const advancedSegment = segments.find(s => s.status === 'advanced_check');
 
     expect(advancedSegment).toBeDefined();
-    const linguistSub = advancedSegment?.subSegments?.find(s => s.label === 'Language Review');
-    expect(linguistSub).toBeDefined();
-    expect(linguistSub?.percentage).toBe(10);
+    // Subsegments must follow configured order: linguist_check then theological_check
+    expect(advancedSegment?.subSegments).toHaveLength(2);
+    expect(advancedSegment?.subSegments?.[0]).toEqual({
+      label: 'Language Review',
+      percentage: 0.4,
+      count: 1,
+    });
+    expect(advancedSegment?.subSegments?.[1]).toEqual({
+      label: 'Theological Check',
+      percentage: 4,
+      count: 10,
+    });
+    // consultant_check was not configured and must not appear as a placeholder
+    expect(advancedSegment?.subSegments?.find(s => s.label.includes('consultant'))).toBeUndefined();
   });
 });

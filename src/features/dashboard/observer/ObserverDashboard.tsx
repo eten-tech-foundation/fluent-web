@@ -13,7 +13,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import useProgressBar, { formatProgressPercentage } from '@/features/projects/hooks/useProgressBar';
+import { ProgressBarTrack } from '@/features/projects/components/ProgressBarTrack';
+import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { useUserProjects } from '@/features/projects/hooks/useProjects';
 import { type Project } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -28,50 +29,7 @@ const ProjectProgressBar: React.FC<{ project: Project }> = ({ project }) => {
   const { calculateProgressSegments } = useProgressBar(project.workflowConfig);
   const segments = calculateProgressSegments(project.chapterStatusCounts);
 
-  if (segments.length === 0) {
-    return <div className='bg-primary/10 h-[7px] w-full rounded-full' />;
-  }
-
-  return (
-    <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
-      {segments.map((segment, index) => (
-        <Tooltip key={`${segment.status}-${index}`} disableHoverableContent>
-          <TooltipTrigger asChild>
-            <div
-              aria-label={`${formatProgressPercentage(segment.percentage, segment.count)} ${segment.displayName}`}
-              className='focus-visible:ring-ring h-full transition-all hover:brightness-110 focus-visible:ring-1 focus-visible:outline-none'
-              role='img'
-              style={{
-                width: `${segment.widthPercentage}%`,
-                minWidth: segment.count > 0 ? '3%' : undefined,
-                backgroundColor: segment.color,
-              }}
-              tabIndex={0}
-            />
-          </TooltipTrigger>
-          <TooltipContent side='top'>
-            {segment.subSegments && segment.subSegments.length > 0 ? (
-              <div className='flex flex-col gap-1'>
-                <p className='mb-1 border-b pb-1 font-bold'>
-                  {formatProgressPercentage(segment.percentage, segment.count)}{' '}
-                  {segment.displayName}
-                </p>
-                {segment.subSegments.map((sub, idx) => (
-                  <p key={idx} className='text-xs'>
-                    {sub.label}: {formatProgressPercentage(sub.percentage)}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p>
-                {formatProgressPercentage(segment.percentage, segment.count)} {segment.displayName}
-              </p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      ))}
-    </div>
-  );
+  return <ProgressBarTrack className='h-[7px] w-full' segments={segments} />;
 };
 
 const TruncatedText: React.FC<{ text: string }> = ({ text }) => {

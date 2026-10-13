@@ -1,11 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
-import {
-  ADVANCED_CHECK_SUB_LABELS,
-  ADVANCED_CHECK_SUB_STATUSES,
-  ChapterAssignmentStatus,
-  type WorkflowStep,
-} from '@/lib/types';
+import { ADVANCED_CHECK_SUB_LABELS, ChapterAssignmentStatus, type WorkflowStep } from '@/lib/types';
 
 interface ColorInfo {
   color: string;
@@ -15,6 +10,7 @@ interface ColorInfo {
 export interface ProgressSubSegment {
   label: string;
   percentage: number;
+  count: number;
 }
 
 export interface ProgressSegment {
@@ -66,21 +62,6 @@ const ADVANCED_CHECK_KEY = 'advanced_check';
 const ADVANCED_CHECK_LABEL = 'Advanced Checks';
 
 const CORE_TRIO = ['draft', 'peer_check', 'community_review'];
-
-const distributeRoundedPercentages = (rawValues: number[], targetTotal: number): number[] => {
-  const floors = rawValues.map(v => Math.floor(v));
-  const remainder = targetTotal - floors.reduce((sum, v) => sum + v, 0);
-
-  const byFraction = rawValues
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac);
-
-  const result = [...floors];
-  for (let k = 0; k < remainder && k < byFraction.length; k++) {
-    result[byFraction[k].i] += 1;
-  }
-  return result;
-};
 
 const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
   // Determine the last index among the core trio in workflowConfig
@@ -189,7 +170,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
         if (existing) {
           existing.count += count;
           existing.percentage = (existing.count / totalChapters) * 100;
-          existing.widthPercentage = existing.count > 0 ? Math.max(existing.percentage, 3) : 0;
+          existing.widthPercentage = existing.percentage;
           return;
         }
         const percentage = (count / totalChapters) * 100;
@@ -198,7 +179,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
           displayName,
           count,
           percentage,
-          widthPercentage: count > 0 ? Math.max(percentage, 3) : 0,
+          widthPercentage: percentage,
           color,
         });
       });
@@ -213,7 +194,7 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
             displayName: status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
             count,
             percentage,
-            widthPercentage: Math.max(percentage, 3),
+            widthPercentage: percentage,
             color: LIME_COLOR,
           });
         }
@@ -221,35 +202,21 @@ const useProgressBar = (workflowConfig: WorkflowStep[] = []) => {
 
       const advancedSegment = segmentsByKey.get(ADVANCED_CHECK_KEY);
       if (advancedSegment) {
-        const collapsedSteps = reversedConfig.filter(
-          step =>
-            getPhaseKey(
-              step.id,
-              workflowConfig.findIndex(s => s.id === step.id)
-            ) === ADVANCED_CHECK_KEY
+        const collapsedSteps = workflowConfig.filter(
+          (step, idx) => getPhaseKey(step.id, idx) === ADVANCED_CHECK_KEY
         );
 
-        const orderedSteps: WorkflowStep[] = [
-          ...ADVANCED_CHECK_SUB_STATUSES.map(
-            status => collapsedSteps.find(s => s.id === status) ?? { id: status, label: status }
-          ),
-          ...collapsedSteps.filter(
-            s => !ADVANCED_CHECK_SUB_STATUSES.includes(s.id as ChapterAssignmentStatus)
-          ),
-        ];
-
-        const rawPercentages = orderedSteps.map(
-          step => ((chapterStatusCounts[step.id] ?? 0) / totalChapters) * 100
-        );
-        const roundedTotal = Math.round(advancedSegment.percentage);
-        const roundedPercentages = distributeRoundedPercentages(rawPercentages, roundedTotal);
-
-        advancedSegment.subSegments = orderedSteps.map((step, index) => ({
-          label: step.label.trim()
-            ? step.label
-            : (ADVANCED_CHECK_SUB_LABELS[step.id as ChapterAssignmentStatus] ?? step.id),
-          percentage: roundedPercentages[index],
-        }));
+        advancedSegment.subSegments = collapsedSteps.map(step => {
+          const count = chapterStatusCounts[step.id] ?? 0;
+          const percentage = totalChapters > 0 ? (count / totalChapters) * 100 : 0;
+          return {
+            label: step.label.trim()
+              ? step.label
+              : (ADVANCED_CHECK_SUB_LABELS[step.id as ChapterAssignmentStatus] ?? step.id),
+            percentage,
+            count,
+          };
+        });
       }
 
       return Array.from(segmentsByKey.values()).filter(segment => segment.count > 0);

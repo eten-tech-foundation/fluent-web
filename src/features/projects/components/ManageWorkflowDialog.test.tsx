@@ -1,12 +1,10 @@
 import userEvent from '@testing-library/user-event';
-import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ManageWorkflowDialog } from '@/features/projects/components/ManageWorkflowDialog';
 import { type WorkflowStep } from '@/features/projects/hooks/useProjectWorkflow';
 import { Logger } from '@/lib/services/logger';
-import { ChapterAssignmentStatus, type ChapterAssignmentProgress } from '@/lib/types';
-import { fireEvent, render, screen, waitFor } from '@/test/render';
+import { fireEvent, render, screen } from '@/test/render';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -15,6 +13,10 @@ vi.mock('sonner', () => ({
   },
 }));
 
+const mockAddStage = vi.fn();
+const mockRenameStage = vi.fn();
+const mockDeleteStage = vi.fn();
+const mockReorderStages = vi.fn();
 const mockUpdateWorkflowConfig = vi.fn();
 let mockWorkflowConfig: WorkflowStep[] = [];
 let mockIsUpdating = false;
@@ -25,6 +27,10 @@ vi.mock('@/features/projects/hooks/useProjectWorkflow', () => ({
   DEFAULT_WORKFLOW_STEPS: [],
   useProjectWorkflow: () => ({
     workflowConfig: mockWorkflowConfig,
+    addStage: mockAddStage,
+    renameStage: mockRenameStage,
+    deleteStage: mockDeleteStage,
+    reorderStages: mockReorderStages,
     updateWorkflowConfig: mockUpdateWorkflowConfig,
     isUpdating: mockIsUpdating,
     isLoading: mockIsLoading,
@@ -47,6 +53,10 @@ describe('ManageWorkflowDialog', () => {
     mockIsUpdating = false;
     mockIsLoading = false;
     mockIsLoadedFromServer = undefined;
+    mockAddStage.mockResolvedValue({ stageId: 99, label: 'New Stage', id: 'custom_99' });
+    mockRenameStage.mockResolvedValue({});
+    mockDeleteStage.mockResolvedValue({});
+    mockReorderStages.mockResolvedValue([]);
     mockUpdateWorkflowConfig.mockResolvedValue(undefined);
     vi.spyOn(Logger, 'logException').mockImplementation(() => {});
   });
@@ -77,42 +87,29 @@ describe('ManageWorkflowDialog', () => {
     expect(deleteButtons).toHaveLength(1);
 
     await user.click(deleteButtons[0]);
+    expect(mockDeleteStage).toHaveBeenCalledWith(4);
     expect(screen.queryByText('Community Review')).not.toBeInTheDocument();
   });
 
-  it('prevents deleting a stage if content has reached or passed it', () => {
-    const chapterAssignmentsWithProgress: ChapterAssignmentProgress[] = [
+  it('prevents deleting a stage if it is locked by the server', () => {
+    mockWorkflowConfig = [
+      { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
+      { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
+      { id: 'peer_check', label: 'Peer Check', stageId: 3, position: 2, isFixed: true },
       {
-        assignmentId: 1,
-        projectUnitId: 1,
-        status: 'community_review',
-        bookNameEng: 'Genesis',
-        chapterNumber: 1,
-        bibleId: 1,
-        bookId: 1,
-        bookCode: 'GEN',
-        sourceLangCode: 'eng',
-        targetLangCode: 'fra',
-        assignedUser: null,
-        peerChecker: null,
-        totalVerses: 10,
-        completedVerses: 5,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        submittedTime: null,
+        id: 'community_review',
+        label: 'Community Review',
+        stageId: 4,
+        position: 3,
+        isFixed: false,
+        isLocked: true,
       },
+      { id: 'complete', label: 'Complete', stageId: 5, position: 4, isFixed: true },
     ];
 
-    render(
-      <ManageWorkflowDialog
-        chapterAssignments={chapterAssignmentsWithProgress}
-        isOpen={true}
-        projectId={1}
-        onClose={vi.fn()}
-      />
-    );
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
-    // Because chapter has reached community_review, delete button is hidden
+    // Because community_review is locked by server (reached/passed progress), delete button is hidden
     expect(screen.queryByRole('button', { name: /Delete stage/i })).not.toBeInTheDocument();
   });
 
@@ -121,8 +118,8 @@ describe('ManageWorkflowDialog', () => {
     render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
     // Click on Community Review to edit
-    const stageSpan = screen.getByText('Community Review');
-    await user.click(stageSpan);
+    const stageBtn = screen.getByRole('button', { name: 'Community Review' });
+    await user.click(stageBtn);
 
     const input = screen.getByRole('textbox');
     expect(input).toHaveValue('Community Review');
@@ -131,7 +128,7 @@ describe('ManageWorkflowDialog', () => {
     await user.clear(input);
     expect(screen.getByText('Stage name cannot be empty.')).toBeInTheDocument();
 
-    // 2. Length > 30 validation
+    // 2. Length > 30 validation (trimmed)
     await user.type(input, 'This is a stage name that is far too long to be allowed');
     expect(screen.getByText('Stage names are limited to 30 characters.')).toBeInTheDocument();
 
@@ -144,35 +141,32 @@ describe('ManageWorkflowDialog', () => {
     await user.clear(input);
     await user.type(input, 'Field Review{Enter}');
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.getByText('Field Review')).toBeInTheDocument();
+    expect(mockRenameStage).toHaveBeenCalledWith({ stageId: 4, displayName: 'Field Review' });
   });
 
-  it('cancels renaming when Escape key is pressed', async () => {
+  it('cancels renaming when Escape key is pressed without closing dialog', async () => {
     const user = userEvent.setup();
-    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={onClose} />);
 
-    await user.click(screen.getByText('Community Review'));
+    await user.click(screen.getByRole('button', { name: 'Community Review' }));
     const input = screen.getByRole('textbox');
     await user.clear(input);
     await user.type(input, 'Temporary Name{Escape}');
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByText('Community Review')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('adds a new stage and enters edit mode', async () => {
+  it('adds a new stage and calls addStage', async () => {
     const user = userEvent.setup();
     render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
     const addBtn = screen.getByRole('button', { name: /Add Stage/i });
     await user.click(addBtn);
 
-    const input = screen.getByRole('textbox');
-    expect(input).toHaveValue('New Stage');
-    await user.clear(input);
-    await user.type(input, 'Quality Check{Enter}');
-
-    expect(screen.getByText('Quality Check')).toBeInTheDocument();
+    expect(mockAddStage).toHaveBeenCalledWith('New Stage');
   });
 
   it('disables Add Stage when 10 intermediate stages exist', () => {
@@ -195,43 +189,7 @@ describe('ManageWorkflowDialog', () => {
     expect(addBtn).toBeDisabled();
   });
 
-  it('disables Add Stage when a chapter has reached completion', () => {
-    const completedAssignments: ChapterAssignmentProgress[] = [
-      {
-        assignmentId: 1,
-        projectUnitId: 1,
-        status: ChapterAssignmentStatus.COMPLETE,
-        bookNameEng: 'Genesis',
-        chapterNumber: 1,
-        bibleId: 1,
-        bookId: 1,
-        bookCode: 'GEN',
-        sourceLangCode: 'eng',
-        targetLangCode: 'fra',
-        assignedUser: null,
-        peerChecker: null,
-        totalVerses: 10,
-        completedVerses: 10,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        submittedTime: null,
-      },
-    ];
-
-    render(
-      <ManageWorkflowDialog
-        chapterAssignments={completedAssignments}
-        isOpen={true}
-        projectId={1}
-        onClose={vi.fn()}
-      />
-    );
-
-    const addBtn = screen.getByRole('button', { name: /Add Stage/i });
-    expect(addBtn).toBeDisabled();
-  });
-
-  it('saves workflow configuration and closes dialog on success', async () => {
+  it('closes dialog when Done is clicked', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={onClose} />);
@@ -239,59 +197,10 @@ describe('ManageWorkflowDialog', () => {
     const doneBtn = screen.getByRole('button', { name: /Done/i });
     await user.click(doneBtn);
 
-    expect(mockUpdateWorkflowConfig).toHaveBeenCalledTimes(1);
-    expect(mockUpdateWorkflowConfig).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'not_started', label: 'Not Started' }),
-      expect.objectContaining({ id: 'draft', label: 'Drafting' }),
-      expect.objectContaining({ id: 'peer_check', label: 'Peer Check' }),
-      expect.objectContaining({ id: 'community_review', label: 'Community Review' }),
-      expect.objectContaining({ id: 'complete', label: 'Complete' }),
-    ]);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('displays error toast and keeps dialog open when saving fails', async () => {
-    const user = userEvent.setup();
-    const onClose = vi.fn();
-    mockUpdateWorkflowConfig.mockRejectedValueOnce(
-      new Error('Failed to update: Maximum stages reached')
-    );
-
-    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={onClose} />);
-
-    const doneBtn = screen.getByRole('button', { name: /Done/i });
-    await user.click(doneBtn);
-
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Failed to update: Maximum stages reached');
-    });
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it('preserves user edits across background query refetches while open', async () => {
-    const user = userEvent.setup();
-    const { rerender } = render(
-      <ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />
-    );
-
-    // Delete Community Review
-    const deleteBtn = screen.getByRole('button', { name: /Delete stage/i });
-    await user.click(deleteBtn);
-    expect(screen.queryByText('Community Review')).not.toBeInTheDocument();
-
-    // Simulate background refetch updating mockWorkflowConfig
-    mockWorkflowConfig = [
-      ...defaultTestSteps,
-      { id: 'new_refetched', label: 'Refetched Stage', stageId: 9 },
-    ];
-    rerender(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
-
-    // User's deleted state should STILL be preserved (Community Review is not restored)
-    expect(screen.queryByText('Community Review')).not.toBeInTheDocument();
-    expect(screen.queryByText('Refetched Stage')).not.toBeInTheDocument();
-  });
-
-  it('supports drag-and-drop reordering between unlocked stages and prevents reordering locked stages', () => {
+  it('supports drag-and-drop reordering between unlocked stages and calls reorderStages', () => {
     mockWorkflowConfig = [
       { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
       { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
@@ -323,7 +232,7 @@ describe('ManageWorkflowDialog', () => {
     const customGrip = customCheckEl.querySelector('[draggable="true"]')!;
     expect(customGrip).toBeInTheDocument();
 
-    // Start dragging Custom Check (index 4 in intermediateSteps: [Draft, PeerCheck, CommRev, CustomCheck])
+    // Start dragging Custom Check
     fireEvent.dragStart(customGrip, { dataTransfer });
 
     // Dragging over locked stage (Drafting) should NOT reorder
@@ -333,11 +242,34 @@ describe('ManageWorkflowDialog', () => {
     fireEvent.dragOver(commRevEl, { dataTransfer });
     fireEvent.dragEnd(customCheckEl);
 
-    // After reorder, Custom Check should appear before Community Review
-    const stageTitles = screen
-      .getAllByText(/(Drafting|Peer Check|Community Review|Custom Check)/)
-      .map(el => el.textContent);
-    expect(stageTitles).toEqual(['Drafting', 'Peer Check', 'Custom Check', 'Community Review']);
+    // After reorder, reorderStages should be called with the new order
+    expect(mockReorderStages).toHaveBeenCalled();
+  });
+
+  it('supports keyboard reordering using Arrow keys on grip handle', async () => {
+    const user = userEvent.setup();
+    mockWorkflowConfig = [
+      { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
+      { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
+      { id: 'peer_check', label: 'Peer Check', stageId: 3, position: 2, isFixed: true },
+      {
+        id: 'community_review',
+        label: 'Community Review',
+        stageId: 4,
+        position: 3,
+        isFixed: false,
+      },
+      { id: 'custom_check', label: 'Custom Check', stageId: 5, position: 4, isFixed: false },
+      { id: 'complete', label: 'Complete', stageId: 6, position: 5, isFixed: true },
+    ];
+
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
+
+    const customGrip = screen.getByRole('button', { name: 'Reorder stage Custom Check' });
+    customGrip.focus();
+    await user.keyboard('{ArrowUp}');
+
+    expect(mockReorderStages).toHaveBeenCalledWith([2, 3, 5, 4]);
   });
 
   it('displays loading indicator while workflow is loading', () => {

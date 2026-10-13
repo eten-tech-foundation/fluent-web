@@ -215,30 +215,35 @@ export function UserHomePage() {
   );
 
   const statusOptions = useMemo(() => {
-    const seenLabels = new Set<string>();
+    const statusMap = new Map<string, { label: string; order: number }>();
     for (const item of currentData) {
+      const statusId = item.chapterStatus;
+      if (!statusId) continue;
+      const steps = workflowsMap.get(item.projectId) ?? DEFAULT_WORKFLOW_STEPS;
+      let order = steps.findIndex(s => s.id === statusId);
+      if (order === -1) {
+        order = DEFAULT_WORKFLOW_STEPS.findIndex(s => s.id === statusId);
+      }
+      if (order === -1) {
+        order = 999;
+      }
       const label = getRowStatusLabel(item);
-      if (label) seenLabels.add(label);
+      const existing = statusMap.get(statusId);
+      if (!existing || order < existing.order) {
+        statusMap.set(statusId, { label: existing?.label ?? label, order });
+      }
     }
 
-    return Array.from(seenLabels)
-      .sort((a, b) => {
-        const indexA = DEFAULT_WORKFLOW_STEPS.findIndex(
-          s => s.label.toLowerCase() === a.toLowerCase() || s.id.toLowerCase() === a.toLowerCase()
-        );
-        const indexB = DEFAULT_WORKFLOW_STEPS.findIndex(
-          s => s.label.toLowerCase() === b.toLowerCase() || s.id.toLowerCase() === b.toLowerCase()
-        );
-        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        return a.localeCompare(b);
+    return Array.from(statusMap.entries())
+      .sort(([, a], [, b]) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return a.label.localeCompare(b.label);
       })
-      .map(label => ({
-        value: label,
+      .map(([id, { label }]) => ({
+        value: id,
         label,
       }));
-  }, [currentData, getRowStatusLabel]);
+  }, [currentData, workflowsMap, getRowStatusLabel]);
 
   const filteredData = useMemo(() => {
     let result = currentData;
@@ -250,10 +255,10 @@ export function UserHomePage() {
       });
     }
     if (selectedStatuses.length > 0) {
-      result = result.filter(item => selectedStatuses.includes(getRowStatusLabel(item)));
+      result = result.filter(item => selectedStatuses.includes(item.chapterStatus));
     }
     return result;
-  }, [currentData, selectedBooks, selectedStatuses, getRowStatusLabel]);
+  }, [currentData, selectedBooks, selectedStatuses]);
 
   const hasActiveFilters = selectedBooks.length > 0 || selectedStatuses.length > 0;
   const isFilteredEmpty = hasActiveFilters && filteredData.length === 0 && currentData.length > 0;

@@ -692,7 +692,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         const nextLabel = nextStep.label
           ? getStageLabel(nextStep.id, nextStep.label)
           : getStageLabel(nextStep.id);
-        buttonText = `Send to ${nextLabel}`;
+        buttonText = t('sendToStage', 'Send to {{stage}}', { stage: nextLabel });
       }
     }
   }

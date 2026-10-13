@@ -1176,10 +1176,6 @@ describe('DraftingUI — keyboard shortcuts', () => {
     await waitFor(() => {
       expect(registry.getSnapshot(playback.verseKey('1')!)).toBeDefined();
     });
-    // Wait a tick for any pending effects to settle before overriding impossible state
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 50));
-    });
     act(() => registry.setImpossible(playback.verseKey('1')!, 'Licence forbids audio.'));
     await userEvent.keyboard('{Alt>}p{/Alt}');
     await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');

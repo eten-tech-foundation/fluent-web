@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { parseErrorMessage } from '@/lib/api-utils';
 import { config } from '@/lib/config';
 import type { ChapterAssignmentProgress } from '@/lib/types';
 import { ChapterAssignmentStatus, ROLES } from '@/lib/types';
@@ -54,15 +55,6 @@ export const isRemovableAssignmentForUser = (
   const clearDrafter = isRemovableDrafterAssignment(assignment, userId);
   const clearChecker = isRemovablePeerCheckerAssignment(assignment, userId);
   return { clearDrafter, clearChecker, isRemovable: clearDrafter || clearChecker };
-};
-
-interface ApiErrorResponse {
-  message?: string;
-}
-
-const parseErrorMessage = async (res: Response, fallback: string): Promise<never> => {
-  const error = (await res.json().catch(() => null)) as ApiErrorResponse | null;
-  throw new Error(error?.message ?? fallback);
 };
 
 // -------------------------
