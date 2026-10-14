@@ -361,3 +361,18 @@ textarea:-webkit-autofill:active {
   caret-color: var(--foreground) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
+
+/* Login screen autofill overrides (login page is explicitly light-only) */
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #fafbfc inset !important;
+  -webkit-text-fill-color: #172b4d !important;
+  caret-color: #172b4d !important;
+}
+
+.login-card input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #172b4d !important;
+  caret-color: #172b4d !important;
+}
