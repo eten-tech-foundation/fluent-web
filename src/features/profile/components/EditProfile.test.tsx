@@ -6,7 +6,7 @@ import { config } from '@/lib/config';
 import { ROLES, type User, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
-import { renderWithProviders as render, screen, waitFor } from '@/test/render';
+import { fireEvent, renderWithProviders as render, screen, waitFor } from '@/test/render';
 
 import { EditProfile } from './EditProfile';
 
@@ -88,9 +88,9 @@ describe('EditProfile', () => {
     const onClose = vi.fn();
     const { user } = render(<EditProfile isOpen onClose={onClose} />);
 
-    const firstName = await screen.findByLabelText('firstName');
-    await user.clear(firstName);
-    await user.type(firstName, 'New');
+    // fireEvent.change sets a value outright — user.clear() is unreliable on
+    // this controlled input, so typing could append to 'Old'.
+    fireEvent.change(await screen.findByLabelText('firstName'), { target: { value: 'New' } });
     await user.click(screen.getByRole('button', { name: 'saveUser' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());

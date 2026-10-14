@@ -161,7 +161,7 @@ export const UsersWrapper: React.FC = () => {
               );
             }
           }
-          toast.success(t('userUpdated', { name: selectedUser.username }));
+          toast.success(t('userUpdated', { name: (userData as User).username }));
         }
       } else {
         const userToInvite = userData as Omit<User, 'id'> & {

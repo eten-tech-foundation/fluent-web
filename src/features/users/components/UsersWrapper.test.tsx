@@ -6,7 +6,7 @@ import { config } from '@/lib/config';
 import { ROLES, type User, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
-import { renderWithProviders as render, screen, waitFor } from '@/test/render';
+import { fireEvent, renderWithProviders as render, screen, waitFor } from '@/test/render';
 
 import { UsersWrapper } from './UsersWrapper';
 
@@ -114,7 +114,7 @@ describe('UsersWrapper', () => {
     const patchResponse = {
       id: 1,
       email: 'manager@example.com',
-      username: 'manager1',
+      username: 'manager-renamed',
       firstName: 'New',
       lastName: null,
       createdBy: null,
@@ -134,9 +134,14 @@ describe('UsersWrapper', () => {
 
     const { user } = render(<UsersWrapper />);
 
-    const firstName = await screen.findByLabelText('firstName');
-    await user.clear(firstName);
-    await user.type(firstName, 'New');
+    // The modal re-seeds when the users query resolves (new selectedUser
+    // identity re-runs the seeding effect) — wait for the seed before editing.
+    const username = await screen.findByLabelText(/username/);
+    await waitFor(() => expect(username).toHaveValue('manager1'));
+    // fireEvent.change sets a value outright — user.clear() doesn't empty
+    // this controlled input, so typing would append to 'manager1'.
+    fireEvent.change(username, { target: { value: 'manager-renamed' } });
+    fireEvent.change(screen.getByLabelText('firstName'), { target: { value: 'New' } });
     await user.click(screen.getByRole('button', { name: 'saveUser' }));
 
     await waitFor(() =>
@@ -145,7 +150,8 @@ describe('UsersWrapper', () => {
     expect(getCalled).toBe(true);
     expect(useAppStore.getState().userdetail?.grants).toEqual(caller.grants);
     expect(useAppStore.getState().userdetail?.role).toBe(ROLES.ORG_MANAGER);
-    expect(toast.success).toHaveBeenCalledWith('userUpdated:manager1');
+    // The toast names the submitted username, not the stale pre-edit one.
+    expect(toast.success).toHaveBeenCalledWith('userUpdated:manager-renamed');
   });
 
   it('keeps the dialog open and surfaces the error when the role save fails', async () => {
