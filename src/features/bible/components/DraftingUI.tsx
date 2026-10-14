@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
+import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
@@ -58,6 +59,7 @@ import {
 } from '@/features/tts';
 import { useProviderFacts } from '@/features/tts/resolver/providerFacts';
 import { config } from '@/lib/config';
+import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -200,6 +202,18 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     projectItem.chapterStatus === ChapterAssignmentStatus.THEOLOGICAL_CHECK;
   const isConsultantCheck = projectItem.chapterStatus === ChapterAssignmentStatus.CONSULTANT_CHECK;
   const isComplete = projectItem.chapterStatus === ChapterAssignmentStatus.COMPLETE;
+
+  // Fetch chapter audio to know whether to show the "View Audio" button.
+  // The hook auto-refetches every 10 min so R2 pre-signed URLs stay fresh.
+  const { data: chapterAudioData, isLoading: isAudioLoading } = useChapterAudio(projectItem);
+  const hasAnyAudio = (chapterAudioData?.items.length ?? 0) > 0;
+  const hasUnresolvedAudioConflict = chapterAudioData?.hasConflict ?? false;
+
+  // Derive PM status using the same grant-utils pattern as MilestoneDetailWrapper.
+  const isPM = isProjectManager(
+    getActiveGrants(userdetail.grants, userdetail.lastActiveOrgId),
+    projectItem.projectId
+  );
 
   const { editorName } = useChapterPresence(
     projectItem.chapterAssignmentId,
@@ -668,7 +682,10 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const totalSourceVerses = sourceVerses.length;
   const versesWithText = verses.filter(v => v.content.trim() !== '').length;
   const progressPercentage = (versesWithText / totalSourceVerses) * 100;
-  const isTranslationComplete = versesWithText === totalSourceVerses;
+  // Block submission only if there are known unresolved audio conflicts in this chapter (spec #383).
+  // Deliberately does not block on audio query errors/loading so written text submission is not
+  // held hostage if the audio service is unavailable or in error.
+  const isTranslationComplete = versesWithText === totalSourceVerses && !hasUnresolvedAudioConflict;
 
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
   const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);
@@ -1329,10 +1346,13 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       <DraftingHeader
         activeFindingsCount={activeFindingsCount}
         buttonText={buttonText}
+        hasAnyAudio={hasAnyAudio}
         hasAnyError={hasAnyError}
         isAnythingSaving={isAnythingSaving}
+        isAudioLoading={isAudioLoading}
         isComplete={isComplete}
         isDraft={isDraft}
+        isPM={isPM}
         isTranslationComplete={isTranslationComplete}
         progressPercentage={progressPercentage}
         projectItem={projectItem}

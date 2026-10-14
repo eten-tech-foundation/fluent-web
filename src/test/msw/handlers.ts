@@ -12,4 +12,7 @@ const authUrl = config.api.auth_url;
 export const handlers = [
   // better-auth session check defaults to "not signed in".
   http.get(`${authUrl}/get-session`, () => HttpResponse.json(null)),
+  http.get(`${config.api.url}/verse-audio`, () =>
+    HttpResponse.json({ items: [], hasConflict: false })
+  ),
 ];
