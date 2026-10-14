@@ -6,7 +6,7 @@ import { config } from '@/lib/config';
 import { ROLES, type User, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
-import { renderWithProviders as render, screen, waitFor } from '@/test/render';
+import { fireEvent, renderWithProviders as render, screen, waitFor } from '@/test/render';
 
 import { UsersWrapper } from './UsersWrapper';
 
@@ -17,6 +17,11 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+// refreshAsync() keys its fetch off the session email — supply one.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { email: 'manager@example.com' } }),
+}));
 
 const { mockNavigate, search } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
@@ -99,6 +104,54 @@ describe('UsersWrapper', () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ search: {} }))
     );
+    expect(toast.success).toHaveBeenCalledWith('userUpdated:member1');
+  });
+
+  it("keeps the caller's store grants when they edit their own profile fields", async () => {
+    search.current = { modal: 'edit', userId: 1 };
+
+    // PATCH /users/:id returns no orgGrants/role; the refresh GET attaches them.
+    const patchResponse = {
+      id: 1,
+      email: 'manager@example.com',
+      username: 'manager-renamed',
+      firstName: 'New',
+      lastName: null,
+      createdBy: null,
+      status: 'verified',
+      lastActiveOrgId: 1,
+      createdAt: null,
+      updatedAt: null,
+    };
+    let getCalled = false;
+    server.use(
+      http.patch(`${config.api.url}/users/1`, () => HttpResponse.json(patchResponse)),
+      http.get(`${config.api.url}/users/email/manager@example.com`, () => {
+        getCalled = true;
+        return HttpResponse.json({ ...patchResponse, orgGrants: caller.grants });
+      })
+    );
+
+    const { user } = render(<UsersWrapper />);
+
+    // The modal re-seeds when the users query resolves (new selectedUser
+    // identity re-runs the seeding effect) — wait for the seed before editing.
+    const username = await screen.findByLabelText(/username/);
+    await waitFor(() => expect(username).toHaveValue('manager1'));
+    // fireEvent.change sets a value outright — user.clear() doesn't empty
+    // this controlled input, so typing would append to 'manager1'.
+    fireEvent.change(username, { target: { value: 'manager-renamed' } });
+    fireEvent.change(screen.getByLabelText('firstName'), { target: { value: 'New' } });
+    await user.click(screen.getByRole('button', { name: 'saveUser' }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ search: {} }))
+    );
+    expect(getCalled).toBe(true);
+    expect(useAppStore.getState().userdetail?.grants).toEqual(caller.grants);
+    expect(useAppStore.getState().userdetail?.role).toBe(ROLES.ORG_MANAGER);
+    // The toast names the submitted username, not the stale pre-edit one.
+    expect(toast.success).toHaveBeenCalledWith('userUpdated:manager-renamed');
   });
 
   it('keeps the dialog open and surfaces the error when the role save fails', async () => {

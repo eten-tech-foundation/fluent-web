@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ORG_INVITE_ROLE_OPTIONS, ORG_ROLE_OPTIONS } from '@/lib/constants/roles';
+import { ORG_ROLE_OPTIONS } from '@/lib/constants/roles';
 import { getOrgLevelRoleName } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { ROLES, type User } from '@/lib/types';
@@ -234,7 +234,7 @@ export const UserModal: React.FC<UserModalProps> = ({
                   <SelectValue placeholder={mode === 'create' ? 'Select Role' : undefined} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(mode === 'edit' ? ORG_ROLE_OPTIONS : ORG_INVITE_ROLE_OPTIONS).map(option => (
+                  {ORG_ROLE_OPTIONS.map(option => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

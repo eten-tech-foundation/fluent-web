@@ -8,8 +8,9 @@
  * `useSourceTtsPlayback.test.ts`, so both are stubbed here: this file drives
  * playback state directly and inspects what drafting handed over.
  */
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +33,7 @@ import {
   type User,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -409,6 +411,18 @@ const RegistryProbe = () => {
   return null;
 };
 
+function TestProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createTestQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackRegistryProvider>
+        <RegistryProbe />
+        {children}
+      </PlaybackRegistryProvider>
+    </QueryClientProvider>
+  );
+}
+
 const renderDrafting = (
   projectItem: ProjectItem = mockProjectItem,
   readOnly = false,
@@ -423,12 +437,7 @@ const renderDrafting = (
       userdetail={{ id: 1 } as unknown as User}
     />,
     {
-      wrapper: ({ children }) => (
-        <PlaybackRegistryProvider>
-          <RegistryProbe />
-          {children}
-        </PlaybackRegistryProvider>
-      ),
+      wrapper: TestProviders,
     }
   );
 
@@ -444,7 +453,7 @@ beforeEach(() => {
   setHideAudio(false);
   useAppStore.setState({ displayMode: 'verse' });
   vi.clearAllMocks();
-  mockFeatureFlag.mockReturnValue(true);
+  mockFeatureFlag.mockImplementation(() => true);
   ttsRows = [];
   capturedPlaybackOptions = undefined;
   realPlayback = false;
@@ -1181,10 +1190,14 @@ describe('DraftingUI — keyboard shortcuts', () => {
   it('Alt+P and play-from-here share the impossible button reason and start nothing', async () => {
     realPlayback = true;
     renderDrafting();
+    const playButton = await screen.findByRole('button', { name: 'Play verse 1' });
+    await waitFor(() => {
+      expect(registry.getSnapshot(playback.verseKey('1')!)).toBeDefined();
+    });
     act(() => registry.setImpossible(playback.verseKey('1')!, 'Licence forbids audio.'));
     await userEvent.keyboard('{Alt>}p{/Alt}');
     await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
-    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await userEvent.click(playButton);
     expect(toastError).toHaveBeenCalledTimes(3);
     expect(toastError.mock.calls.every(([reason]) => reason === 'Licence forbids audio.')).toBe(
       true

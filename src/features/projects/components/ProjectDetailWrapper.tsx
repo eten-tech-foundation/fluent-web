@@ -9,7 +9,12 @@ import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
-import { getActiveGrants, hasGrantForProject, isProjectManager } from '@/lib/grant-utils';
+import {
+  getActiveGrants,
+  hasGrantForProject,
+  isProjectManager,
+  isProjectManagerOnly,
+} from '@/lib/grant-utils';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
@@ -50,6 +55,7 @@ export const ProjectDetailWrapper: React.FC = () => {
   // Same check the page uses to show the button, repeated here so `?modal=metadata`
   // typed straight into the URL cannot open the editor for a non-manager.
   const isManager = isProjectManager(activeGrants, project?.id);
+  const isPMOnly = isProjectManagerOnly(activeGrants, project?.id);
 
   const { data: chapterAssignments } = useChapterAssignments(projectId);
   const { data: books } = useProjectBooks(projectId);
@@ -115,6 +121,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         chapterAssignments={chapterAssignments}
         isAddUserOpen={modal === 'add'}
         isManager={isManager}
+        isProjectManagerOnly={isPMOnly}
         milestones={milestones}
         milestonesLoading={milestonesLoading}
         project={project}

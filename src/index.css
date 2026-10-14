@@ -131,6 +131,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #1a1a1a;
   --hover: #e7edf1;
@@ -203,6 +204,7 @@
   --workflow-drafting: #fde047;
   --workflow-peer-check: #ea580c;
   --workflow-community-review: #9333ea;
+  --workflow-custom-stage: #84cc16;
   --workflow-advanced-check: #1d9bf0;
   --workflow-complete: #16a34a;
 
@@ -237,6 +239,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0d1117;
   --foreground: #e6e6e6;
   --hover: #1c222d;
@@ -313,6 +316,7 @@
   --workflow-drafting: #fde047;
   --workflow-peer-check: #ea580c;
   --workflow-community-review: #9333ea;
+  --workflow-custom-stage: #84cc16;
   --workflow-advanced-check: #1d9bf0;
   --workflow-complete: #16a34a;
 }
@@ -341,4 +345,34 @@
 /* Firefox */
 * {
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Prevent browser autofill from overriding input/textarea background and text colors */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset !important;
+  -webkit-text-fill-color: var(--foreground) !important;
+  caret-color: var(--foreground) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Login screen autofill overrides (login page is explicitly light-only) */
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #fafbfc inset !important;
+  -webkit-text-fill-color: #172b4d !important;
+  caret-color: #172b4d !important;
+}
+
+.login-card input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #172b4d !important;
+  caret-color: #172b4d !important;
 }

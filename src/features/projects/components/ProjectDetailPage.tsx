@@ -1,11 +1,17 @@
 import { useState } from 'react';
 
 import { useNavigate } from '@tanstack/react-router';
-import { Loader2, Plus } from 'lucide-react';
+import { EllipsisVertical, Loader2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -25,16 +31,19 @@ import {
 
 import { type Milestone } from '../hooks/useMilestones';
 import { type ProjectDetails } from '../hooks/useProjectDetails';
+import { useProjectWorkflow } from '../hooks/useProjectWorkflow';
 
 import { AddMilestoneDialog } from './AddMilestoneDialog';
 import { AssignProjectUsers } from './AssignProjectUsers';
 import { CardProgressBar } from './CardProgressBar';
+import { ManageWorkflowDialog } from './ManageWorkflowDialog';
 import { TruncatedCardText } from './TruncatedText';
 import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectDetailPageProps {
   project: ProjectDetails;
   isManager: boolean;
+  isProjectManagerOnly?: boolean;
   users: User[] | undefined;
   usersLoading: boolean;
   isAddUserOpen: boolean;
@@ -100,6 +109,7 @@ function getMilestoneDisplayStatus(
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   project,
   isManager,
+  isProjectManagerOnly = isManager,
   users,
   usersLoading,
   isAddUserOpen,
@@ -114,19 +124,48 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  const { workflowConfig } = useProjectWorkflow(project.id);
+
   const [isAddMilestoneOpen, setIsAddMilestoneOpen] = useState(false);
+  const [isManageWorkflowOpen, setIsManageWorkflowOpen] = useState(false);
 
   return (
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
           isManager ? (
-            <Button
-              className='border-primary text-primary hover hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
-              onClick={() => setIsAddMilestoneOpen(true)}
-            >
-              <Plus className='h-4 w-4' /> {t('addMilestone')}
-            </Button>
+            <div className='flex items-center gap-2'>
+              <Button
+                className='border-primary text-primary hover:bg-primary/5 flex items-center gap-2 border-2 bg-transparent px-3 py-1 text-sm font-medium'
+                onClick={() => setIsAddMilestoneOpen(true)}
+              >
+                <Plus className='h-4 w-4' /> {t('addMilestone')}
+              </Button>
+
+              {isProjectManagerOnly && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      aria-label='More options'
+                      className='text-primary h-10 w-10 p-0'
+                      title='More actions'
+                      variant='outline'
+                    >
+                      <EllipsisVertical className='h-5 w-5' />
+                      <span className='sr-only'>More options</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align='end' className='w-48'>
+                    <DropdownMenuItem
+                      className='cursor-pointer text-sm font-medium'
+                      onClick={() => setIsManageWorkflowOpen(true)}
+                    >
+                      Manage Workflow
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           ) : undefined
         }
         title={project.name}
@@ -172,7 +211,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 <div className='mt-2'>
                   <CardProgressBar
                     chapterStatusCounts={project.chapterStatusCounts}
-                    workflowConfig={project.workflowConfig}
+                    workflowConfig={
+                      workflowConfig.length > 0 ? workflowConfig : project.workflowConfig
+                    }
                   />
                 </div>
               </div>
@@ -320,6 +361,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         projectId={project.id}
         sourceBible={project.sourceBibleId}
         onClose={() => setIsAddMilestoneOpen(false)}
+      />
+      <ManageWorkflowDialog
+        chapterAssignments={chapterAssignments}
+        isOpen={isManageWorkflowOpen}
+        projectId={project.id}
+        onClose={() => setIsManageWorkflowOpen(false)}
       />
     </div>
   );

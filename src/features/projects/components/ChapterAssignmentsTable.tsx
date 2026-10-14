@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   type ChapterAssignmentProgress,
@@ -21,6 +22,7 @@ import {
 import { TruncatedTableText } from './TruncatedText';
 
 interface ChapterAssignmentsTableProps {
+  projectId?: number;
   assignments: ChapterAssignmentProgress[];
   isLoading: boolean;
   selectedBook: string;
@@ -38,6 +40,7 @@ const formatProgress = (completedVerses: number, totalVerses: number): string =>
   `${completedVerses} of ${totalVerses}`;
 
 export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = ({
+  projectId,
   assignments,
   isLoading,
   selectedBook,
@@ -47,6 +50,9 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   onRowClick,
   onCheckboxChange,
 }) => {
+  const { getStageLabel, getRoleLabel } = useProjectWorkflow(projectId);
+  const drafterLabel = getRoleLabel('draft', 'Drafter');
+  const peerCheckerLabel = getRoleLabel('peer_check', 'Peer Checker');
   const [sortColumn, setSortColumn] = useState<SortableColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
 
@@ -143,7 +149,7 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                       type='button'
                       onClick={() => handleSort('drafter')}
                     >
-                      Drafter
+                      <TruncatedTableText text={drafterLabel} />
                       {getSortIcon('drafter')}
                     </button>
                   </TableHead>
@@ -156,7 +162,7 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                       type='button'
                       onClick={() => handleSort('peerChecker')}
                     >
-                      <TruncatedTableText text='Peer Checker' />
+                      <TruncatedTableText text={peerCheckerLabel} />
                       {getSortIcon('peerChecker')}
                     </button>
                   </TableHead>
@@ -220,7 +226,10 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                     <TableCell className='text-popover-foreground px-3 py-3 text-xs whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
                       <div className='flex items-center gap-1.5'>
                         <TruncatedTableText
-                          text={getStatusDisplay(assignment.status as ChapterAssignmentStatusType)}
+                          text={getStatusDisplay(
+                            assignment.status as ChapterAssignmentStatusType,
+                            getStageLabel
+                          )}
                         />
                         {isManager && assignment.hasConflict && (
                           <Tooltip>
