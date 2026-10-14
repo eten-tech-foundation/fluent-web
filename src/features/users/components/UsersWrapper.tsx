@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { UserModal } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
 import { RemoveOrgUserBanner } from '@/features/users/components/RemoveOrgUserBanner';
+import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import {
   useCreateUser,
   useRemoveOrgUser,
@@ -28,13 +29,14 @@ export const UsersWrapper: React.FC = () => {
 
   const { modal, userId } = routeApi.useSearch();
 
-  const { userdetail, setUserDetail } = useAppStore();
+  const { userdetail } = useAppStore();
   const { data: users = [], isLoading } = useUsers();
 
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const updateOrgUserRoleMutation = useUpdateOrgUserRole();
   const removeOrgUserMutation = useRemoveOrgUser();
+  const { refreshAsync: refreshUserDetail } = useRefreshUserDetail();
   const [userError, setUserError] = useState<string | null>(null);
 
   const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization ?? null;
@@ -144,21 +146,22 @@ export const UsersWrapper: React.FC = () => {
           });
         }
 
-        if (selectedUser.email === userdetail?.email && res !== selectedUser) {
-          const grants = res.orgGrants ?? res.grants ?? [];
-          const activeGrant = grants.find(g => g.orgId === activeOrgId);
-
-          setUserDetail({
-            id: res.id,
-            email: res.email,
-            username: res.username,
-            role: activeGrant?.roleName ?? res.role,
-            lastActiveOrgId: res.lastActiveOrgId ?? userdetail.lastActiveOrgId,
-            grants: grants,
-            firstName: res.firstName,
-            lastName: res.lastName,
-            status: res.status,
-          });
+        if (res !== selectedUser) {
+          if (selectedUser.email === userdetail?.email) {
+            // Self-edit: resync the store from a full GET. The PATCH /users/:id
+            // response carries no grants or role, so rebuilding userdetail from
+            // it would zero the store's grants and flip every route guard to '/'.
+            // Non-fatal: the save already succeeded, and the next refresh heals.
+            try {
+              await refreshUserDetail();
+            } catch (refreshError) {
+              Logger.logException(
+                refreshError instanceof Error ? refreshError : new Error(String(refreshError)),
+                { source: 'Failed to refresh user details after self-edit' }
+              );
+            }
+          }
+          toast.success(t('userUpdated', { name: selectedUser.username }));
         }
       } else {
         const userToInvite = userData as Omit<User, 'id'> & {

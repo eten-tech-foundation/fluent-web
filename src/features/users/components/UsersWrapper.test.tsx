@@ -18,6 +18,11 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+// refreshAsync() keys its fetch off the session email — supply one.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { email: 'manager@example.com' } }),
+}));
+
 const { mockNavigate, search } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   search: { current: {} as Record<string, unknown> },
@@ -99,6 +104,48 @@ describe('UsersWrapper', () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ search: {} }))
     );
+    expect(toast.success).toHaveBeenCalledWith('userUpdated:member1');
+  });
+
+  it("keeps the caller's store grants when they edit their own profile fields", async () => {
+    search.current = { modal: 'edit', userId: 1 };
+
+    // PATCH /users/:id returns no orgGrants/role; the refresh GET attaches them.
+    const patchResponse = {
+      id: 1,
+      email: 'manager@example.com',
+      username: 'manager1',
+      firstName: 'New',
+      lastName: null,
+      createdBy: null,
+      status: 'verified',
+      lastActiveOrgId: 1,
+      createdAt: null,
+      updatedAt: null,
+    };
+    let getCalled = false;
+    server.use(
+      http.patch(`${config.api.url}/users/1`, () => HttpResponse.json(patchResponse)),
+      http.get(`${config.api.url}/users/email/manager@example.com`, () => {
+        getCalled = true;
+        return HttpResponse.json({ ...patchResponse, orgGrants: caller.grants });
+      })
+    );
+
+    const { user } = render(<UsersWrapper />);
+
+    const firstName = await screen.findByLabelText('firstName');
+    await user.clear(firstName);
+    await user.type(firstName, 'New');
+    await user.click(screen.getByRole('button', { name: 'saveUser' }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ search: {} }))
+    );
+    expect(getCalled).toBe(true);
+    expect(useAppStore.getState().userdetail?.grants).toEqual(caller.grants);
+    expect(useAppStore.getState().userdetail?.role).toBe(ROLES.ORG_MANAGER);
+    expect(toast.success).toHaveBeenCalledWith('userUpdated:manager1');
   });
 
   it('keeps the dialog open and surfaces the error when the role save fails', async () => {
