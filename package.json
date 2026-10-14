@@ -65,6 +65,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.2",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "3.5.0",
     "tailwindcss-animate": "1.0.7",
