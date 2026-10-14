@@ -105,8 +105,17 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   const loaderData = routeApi.useLoaderData();
   const projectItem = propItem ?? loaderData.projectItem;
   const router = useRouter();
-  const initialDisplayMode = useAppStore(state => state.displayMode);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(initialDisplayMode);
+  const globalDisplayMode = useAppStore(state => state.displayMode);
+  const [pageDisplayModeOverride, setPageDisplayModeOverride] = useState<DisplayMode | null>(null);
+  const [prevGlobalDisplayMode, setPrevGlobalDisplayMode] = useState(globalDisplayMode);
+
+  if (prevGlobalDisplayMode !== globalDisplayMode) {
+    setPrevGlobalDisplayMode(globalDisplayMode);
+    setPageDisplayModeOverride(null);
+  }
+
+  const displayMode = pageDisplayModeOverride ?? globalDisplayMode;
+  const setDisplayMode = setPageDisplayModeOverride;
   const userdetail = useAppStore(state => state.userdetail);
 
   // Only PMs may resolve conflicts (spec #383).
