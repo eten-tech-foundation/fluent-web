@@ -7,7 +7,7 @@ import { DraftingGridPericope } from '@/features/bible/components/DraftingGridPe
 import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
 import { config } from '@/lib/config';
 import type { PericopeGroup, ProjectItem, Source } from '@/lib/types';
-import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/i18n';
+import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/drafting-i18n';
 
 const fullGroup: PericopeGroup = {
   pericopeNumber: '29_2',

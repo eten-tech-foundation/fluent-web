@@ -1,23 +1,15 @@
-import { createInstance } from 'i18next';
-import { initReactI18next } from 'react-i18next';
+import { vi } from 'vitest';
 
-import enCommon from '../../public/locales/en/common.json';
+export const useTranslation = () => ({
+  t: (_key: string, defaultValue?: string, options?: Record<string, unknown>) =>
+    (defaultValue ?? _key).replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
+      String(options?.[name] ?? '')
+    ),
+  i18n: { language: 'en', changeLanguage: vi.fn() },
+});
 
-/** The shipped English text for a passage with no Bible content (#471). */
-export const NO_CONTENT_MESSAGE = enCommon.noContentAvailable;
+export const mockI18n = {
+  useTranslation,
+};
 
-/**
- * Serves the empty-passage message from the English locale file so tests assert what users
- * read. Other keys keep their inline fallbacks, as they did with i18n uninitialized.
- */
-export const initDraftingTestI18n = () =>
-  createInstance()
-    .use(initReactI18next)
-    .init({
-      lng: 'en',
-      fallbackLng: 'en',
-      ns: ['common'],
-      defaultNS: 'common',
-      resources: { en: { common: { noContentAvailable: NO_CONTENT_MESSAGE } } },
-      interpolation: { escapeValue: false },
-    });
+export default mockI18n;

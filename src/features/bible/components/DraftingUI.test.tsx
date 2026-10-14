@@ -22,7 +22,7 @@ import {
   type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
-import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/i18n';
+import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/drafting-i18n';
 import { server } from '@/test/msw/server';
 
 import type * as ReactRouter from '@tanstack/react-router';
@@ -60,6 +60,15 @@ const mockUseSaveResourceState = vi.fn();
 const mockUseDrafting = vi.fn();
 const mockUsePericope = vi.fn();
 const mockUsePericopeContext = vi.fn();
+const mockUseChapterAudio = vi.fn().mockReturnValue({
+  data: undefined,
+  isLoading: false,
+  error: null,
+});
+
+vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
+  useChapterAudio: (...args: unknown[]) => mockUseChapterAudio(...args),
+}));
 
 vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
   useAddTranslatedVerse: () => mockUseAddTranslatedVerse() as unknown,

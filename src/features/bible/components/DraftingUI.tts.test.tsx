@@ -65,6 +65,14 @@ vi.mock('react-i18next', () => ({
 }));
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
+vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
+  useChapterAudio: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock('sonner', () => ({ toast: { error: toastError } }));
 vi.mock('@/features/rte/components/ChapterEditor', () => ({
   ChapterEditor: () => <div data-testid='chapter-editor' />,
