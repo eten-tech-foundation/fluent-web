@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import { UserModal } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
-import { RemoveOrgUserBanner } from '@/features/users/components/RemoveOrgUserBanner';
+import { RemoveOrgUserDialog } from '@/features/users/components/RemoveOrgUserDialog';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import {
   useCreateUser,
@@ -209,27 +209,24 @@ export const UsersWrapper: React.FC = () => {
     <>
       <UsersPage
         activeOrgId={activeOrgId}
-        banner={
-          removeTarget ? (
-            <RemoveOrgUserBanner
-              error={removeError}
-              orgId={activeOrgId}
-              pending={removeOrgUserMutation.isPending}
-              user={removeTarget}
-              onCancel={() => {
-                setRemoveTarget(null);
-                setRemoveError(null);
-              }}
-              onConfirm={() => void handleConfirmRemove()}
-            />
-          ) : undefined
-        }
         currentUserEmail={userdetail?.email}
         loading={isLoading}
         users={orgUsers}
         onAddUser={handleAddUser}
         onEditUser={handleEditUser}
         onRemoveUser={handleRemoveUser}
+      />
+
+      <RemoveOrgUserDialog
+        error={removeError}
+        orgId={activeOrgId}
+        pending={removeOrgUserMutation.isPending}
+        user={removeTarget}
+        onCancel={() => {
+          setRemoveTarget(null);
+          setRemoveError(null);
+        }}
+        onConfirm={() => void handleConfirmRemove()}
       />
 
       <UserModal
