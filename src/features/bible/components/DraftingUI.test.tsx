@@ -59,6 +59,30 @@ vi.mock('@tanstack/react-router', async importOriginal => {
   };
 });
 
+// i18n is mocked so accessible names are the inline defaults with interpolated tokens.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (
+      key: string,
+      defaultOrOptions?: string | Record<string, unknown>,
+      maybeOptions?: Record<string, unknown>
+    ) => {
+      const opts =
+        (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
+          ? defaultOrOptions
+          : maybeOptions) ?? {};
+      const template =
+        typeof defaultOrOptions === 'string'
+          ? defaultOrOptions
+          : typeof opts.defaultValue === 'string'
+            ? opts.defaultValue
+            : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(opts[name] ?? ''));
+    },
+    i18n: { language: 'en', changeLanguage: vi.fn() },
+  }),
+}));
+
 // Mock hooks
 const mockUseAddTranslatedVerse = vi.fn();
 const mockUseSubmitChapter = vi.fn();

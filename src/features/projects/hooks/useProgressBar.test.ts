@@ -112,4 +112,20 @@ describe('useProgressBar', () => {
     // consultant_check was not configured and must not appear as a placeholder
     expect(advancedSegment?.subSegments?.find(s => s.label.includes('consultant'))).toBeUndefined();
   });
+
+  it('falls back to default workflow steps when workflowConfig is empty or not provided', () => {
+    const { result } = renderHook(() => useProgressBar([]));
+
+    const chapterStatusCounts = {
+      not_started: 10,
+      draft: 10,
+    };
+
+    const segments = result.current.calculateProgressSegments(chapterStatusCounts);
+    expect(segments.length).toBeGreaterThan(0);
+    expect(segments.find(s => s.status === 'draft')?.count).toBe(10);
+
+    const overall = result.current.calculateOverallProgress(chapterStatusCounts);
+    expect(overall).toBeGreaterThan(0);
+  });
 });

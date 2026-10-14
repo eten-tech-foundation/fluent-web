@@ -122,5 +122,28 @@
   "allBooksOption": "पुस्तकें",
   "moreMilestoneActionsAriaLabel": "अधिक माइलस्टोन कार्रवाइयां",
   "assignmentUpdatedSuccess": "असाइनमेंट सफलतापूर्वक अपडेट किया गया",
-  "assignmentUpdateFailed": "उपयोगकर्ता असाइन करने में विफल"
+  "assignmentUpdateFailed": "उपयोगकर्ता असाइन करने में विफल",
+  "sendToStage": "{{stage}} को भेजें",
+  "markAsComplete": "पूर्ण के रूप में चिह्नित करें",
+  "manageWorkflow": {
+    "title": "कार्यप्रवाह प्रबंधित करें",
+    "done": "हो गया",
+    "addStage": "चरण जोड़ें",
+    "deleteStage": "चरण हटाएं",
+    "clickToRename": "चरण का नाम बदलने के लिए क्लिक करें",
+    "notStarted": "शुरू नहीं हुआ",
+    "complete": "पूर्ण",
+    "stageLimitReached": "आपके पास पहले से ही 10 चरण हैं।",
+    "cannotAddCompleted": "अध्याय पूरे होने के बाद चरण नहीं जोड़े जा सकते।",
+    "loadingWorkflow": "कार्यप्रवाह लोड हो रहा है...",
+    "unableToLoad": "सर्वर से कार्यप्रवाह कॉन्फ़िगरेशन लोड करने में असमर्थ।",
+    "editingDisabled": "डुप्लिकेट या परस्पर विरोधी चरणों को रोकने के लिए संपादन अक्षम है।",
+    "emptyName": "चरण का नाम खाली नहीं हो सकता।",
+    "nameTooLong": "चरण के नाम 30 वर्णों तक सीमित हैं।",
+    "nameMustBeUnique": "चरण का नाम अद्वितीय होना चाहिए।",
+    "addFailed": "चरण जोड़ने में विफल।",
+    "renameFailed": "चरण का नाम बदलने में विफल।",
+    "deleteFailed": "चरण हटाने में विफल।",
+    "reorderFailed": "चरणों को पुनर्व्यवस्थित करने में विफल।"
+  }
 }

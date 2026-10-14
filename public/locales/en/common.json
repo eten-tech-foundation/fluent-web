@@ -165,5 +165,28 @@
   "allBooksOption": "Books",
   "moreMilestoneActionsAriaLabel": "More milestone actions",
   "assignmentUpdatedSuccess": "Assignment updated successfully",
-  "assignmentUpdateFailed": "Failed to assign user"
+  "assignmentUpdateFailed": "Failed to assign user",
+  "sendToStage": "Send to {{stage}}",
+  "markAsComplete": "Mark as Complete",
+  "manageWorkflow": {
+    "title": "Manage Workflow",
+    "done": "Done",
+    "addStage": "Add Stage",
+    "deleteStage": "Delete stage",
+    "clickToRename": "Click to rename stage",
+    "notStarted": "Not Started",
+    "complete": "Complete",
+    "stageLimitReached": "You already have 10 stages.",
+    "cannotAddCompleted": "Cannot add stages once chapters have reached completion.",
+    "loadingWorkflow": "Loading workflow...",
+    "unableToLoad": "Unable to load workflow configuration from server.",
+    "editingDisabled": "Editing is disabled to prevent duplicate or conflicting stages.",
+    "emptyName": "Stage name cannot be empty.",
+    "nameTooLong": "Stage names are limited to 30 characters.",
+    "nameMustBeUnique": "Stage name must be unique.",
+    "addFailed": "Failed to add stage.",
+    "renameFailed": "Failed to rename stage.",
+    "deleteFailed": "Failed to delete stage.",
+    "reorderFailed": "Failed to reorder stages."
+  }
 }

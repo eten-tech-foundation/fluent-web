@@ -92,7 +92,7 @@ describe('ManageWorkflowDialog', () => {
     expect(screen.queryByText('Community Review')).not.toBeInTheDocument();
   });
 
-  it('prevents deleting a stage if it is locked by the server', () => {
+  it('prevents deleting and dragging a stage if it is locked by the server', () => {
     mockWorkflowConfig = [
       { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
       { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
@@ -110,8 +110,11 @@ describe('ManageWorkflowDialog', () => {
 
     render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
-    // Because community_review is locked by server (reached/passed progress), delete button is hidden
+    // Because community_review is locked by server (reached/passed progress), delete button and drag handle are hidden
     expect(screen.queryByRole('button', { name: /Delete stage/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Reorder stage Community Review/i })
+    ).not.toBeInTheDocument();
   });
 
   it('allows renaming a stage and enforces validation rules (empty, length, duplicate)', async () => {
@@ -171,6 +174,30 @@ describe('ManageWorkflowDialog', () => {
     expect(await screen.findByRole('textbox')).toHaveValue('New Stage');
   });
 
+  it('does not allow renaming or deleting a stage while addStage is in flight', async () => {
+    let resolveAdd: (val: { stageId: number; label: string; id: string }) => void;
+    mockAddStage.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveAdd = resolve;
+        })
+    );
+
+    const user = userEvent.setup();
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
+
+    const addBtn = screen.getByRole('button', { name: /Add Stage/i });
+    await user.click(addBtn);
+
+    // Card should be rendered optimistically with pending disabled state
+    const pendingButton = screen.getByRole('button', { name: 'New Stage' });
+    expect(pendingButton).toBeDisabled();
+
+    // Resolving addStage should assign stageId and open the edit textbox
+    resolveAdd!({ stageId: 99, label: 'New Stage', id: 'custom_99' });
+    expect(await screen.findByRole('textbox')).toHaveValue('New Stage');
+  });
+
   it('disables Add Stage when a chapter has reached completion', () => {
     const completedAssignments: ChapterAssignmentProgress[] = [
       {
@@ -199,6 +226,20 @@ describe('ManageWorkflowDialog', () => {
         onClose={vi.fn()}
       />
     );
+
+    const addBtn = screen.getByRole('button', { name: /Add Stage/i });
+    expect(addBtn).toBeDisabled();
+  });
+
+  it('disables Add Stage when Complete stage is locked by the server', () => {
+    mockWorkflowConfig = [
+      { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
+      { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
+      { id: 'peer_check', label: 'Peer Check', stageId: 3, position: 2, isFixed: true },
+      { id: 'complete', label: 'Complete', stageId: 4, position: 3, isFixed: true, isLocked: true },
+    ];
+
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
 
     const addBtn = screen.getByRole('button', { name: /Add Stage/i });
     expect(addBtn).toBeDisabled();
@@ -277,8 +318,42 @@ describe('ManageWorkflowDialog', () => {
     fireEvent.dragOver(commRevEl, { dataTransfer });
     fireEvent.dragEnd(customCheckEl);
 
-    // After reorder, reorderStages should be called with the new order
-    expect(mockReorderStages).toHaveBeenCalled();
+    // After reorder, reorderStages should be called with the full order including bookends
+    expect(mockReorderStages).toHaveBeenCalledWith([1, 2, 3, 5, 4, 6]);
+  });
+
+  it('does not call reorderStages when a stage is dropped back where it started', () => {
+    mockWorkflowConfig = [
+      { id: 'not_started', label: 'Not Started', stageId: 1, position: 0, isFixed: true },
+      { id: 'draft', label: 'Drafting', stageId: 2, position: 1, isFixed: true },
+      { id: 'peer_check', label: 'Peer Check', stageId: 3, position: 2, isFixed: true },
+      {
+        id: 'community_review',
+        label: 'Community Review',
+        stageId: 4,
+        position: 3,
+        isFixed: false,
+      },
+      { id: 'custom_check', label: 'Custom Check', stageId: 5, position: 4, isFixed: false },
+      { id: 'complete', label: 'Complete', stageId: 6, position: 5, isFixed: true },
+    ];
+
+    render(<ManageWorkflowDialog isOpen={true} projectId={1} onClose={vi.fn()} />);
+
+    const dataTransfer = {
+      effectAllowed: 'none',
+      setDragImage: vi.fn(),
+      setData: vi.fn(),
+      getData: vi.fn(),
+    };
+
+    const customCheckEl = screen.getByText('Custom Check').closest('.group-stage-card')!;
+    const customGrip = customCheckEl.querySelector('[draggable="true"]')!;
+
+    fireEvent.dragStart(customGrip, { dataTransfer });
+    fireEvent.dragEnd(customCheckEl);
+
+    expect(mockReorderStages).not.toHaveBeenCalled();
   });
 
   it('supports keyboard reordering using Arrow keys on grip handle', async () => {
@@ -304,7 +379,7 @@ describe('ManageWorkflowDialog', () => {
     customGrip.focus();
     await user.keyboard('{ArrowUp}');
 
-    expect(mockReorderStages).toHaveBeenCalledWith([2, 3, 5, 4]);
+    expect(mockReorderStages).toHaveBeenCalledWith([1, 2, 3, 5, 4, 6]);
   });
 
   it('displays loading indicator while workflow is loading', () => {

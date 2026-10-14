@@ -73,7 +73,7 @@ describe('useProjectWorkflow', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.getStageLabel('draft')).toBe('Drafting');
     expect(result.current.getStageLabel('unknown', 'Fallback Label')).toBe('Fallback Label');
-    expect(result.current.getRoleLabel('draft')).toBe('Drafter');
+    expect(result.current.getRoleLabel('draft')).toBe('Drafting');
   });
 
   it('provides addStage, renameStage, deleteStage, and reorderStages mutations', async () => {

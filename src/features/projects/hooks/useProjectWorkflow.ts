@@ -22,39 +22,39 @@ export const DEFAULT_WORKFLOW_STEPS: WorkflowStep[] = [
   {
     id: ChapterAssignmentStatus.DRAFT,
     label: 'Drafting',
-    roleName: 'Drafter',
+    roleName: 'Drafting',
     enabled: true,
     isFixed: true,
   },
   {
     id: ChapterAssignmentStatus.PEER_CHECK,
     label: 'Peer Check',
-    roleName: 'Peer Checker',
+    roleName: 'Peer Check',
     enabled: true,
     isFixed: true,
   },
   {
     id: ChapterAssignmentStatus.COMMUNITY_REVIEW,
     label: 'Community Review',
-    roleName: 'Community Reviewer',
+    roleName: 'Community Review',
     enabled: true,
   },
   {
     id: ChapterAssignmentStatus.LINGUIST_CHECK,
     label: 'Linguist Check',
-    roleName: 'Linguist',
+    roleName: 'Linguist Check',
     enabled: true,
   },
   {
     id: ChapterAssignmentStatus.THEOLOGICAL_CHECK,
     label: 'Theological Check',
-    roleName: 'Theologian',
+    roleName: 'Theological Check',
     enabled: true,
   },
   {
     id: ChapterAssignmentStatus.CONSULTANT_CHECK,
     label: 'Consultant Check',
-    roleName: 'Consultant',
+    roleName: 'Consultant Check',
     enabled: true,
   },
   { id: ChapterAssignmentStatus.COMPLETE, label: 'Complete', enabled: true, isFixed: true },
@@ -136,7 +136,7 @@ export const fetchProjectWorkflow = async (projectId?: number | null): Promise<W
           position: s.position,
           isFixed: s.isFixed,
           isLocked: s.isLocked,
-          roleName: DEFAULT_WORKFLOW_STEPS.find(d => d.id === s.id)?.roleName ?? s.label,
+          roleName: s.label,
           enabled: true,
         })) as WorkflowStep[];
       }
@@ -263,17 +263,10 @@ export function useProjectWorkflow(projectId?: number | null) {
 
   const getRoleLabel = (roleId: string, fallback?: string): string => {
     const found = workflowConfig.find(step => step.id === roleId || step.roleName === roleId);
+    if (found?.label) return found.label;
     if (found?.roleName) return found.roleName;
     return fallback ?? roleId;
   };
-
-  const isStageEnabled = (stageId: string): boolean => {
-    const found = workflowConfig.find(step => step.id === stageId);
-    if (!found) return true;
-    return found.enabled !== false;
-  };
-
-  const enabledStages = workflowConfig.filter(step => step.enabled !== false);
 
   const isLoadedFromServer = Boolean(
     query.isSuccess &&
@@ -284,11 +277,9 @@ export function useProjectWorkflow(projectId?: number | null) {
   return {
     ...query,
     workflowConfig,
-    enabledStages,
     isLoadedFromServer,
     getStageLabel,
     getRoleLabel,
-    isStageEnabled,
     addStage: addStageMutation.mutateAsync,
     renameStage: renameStageMutation.mutateAsync,
     deleteStage: deleteStageMutation.mutateAsync,

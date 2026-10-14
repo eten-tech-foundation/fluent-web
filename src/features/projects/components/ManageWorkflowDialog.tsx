@@ -13,6 +13,7 @@ import {
 } from '@/features/projects/hooks/useProjectWorkflow';
 import { Logger } from '@/lib/services/logger';
 import { ChapterAssignmentStatus, type ChapterAssignmentProgress } from '@/lib/types';
+import { cn } from '@/lib/ui/utils';
 
 interface ManageWorkflowDialogProps {
   projectId: number;
@@ -47,11 +48,12 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
 
   const isReady = isLoadedFromServer;
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragStartIndexRef = useRef<number | null>(null);
 
   const hasCompletedChapter =
-    chapterAssignments?.some(
-      assignment => assignment.status === ChapterAssignmentStatus.COMPLETE
-    ) ?? false;
+    Boolean(
+      chapterAssignments?.some(assignment => assignment.status === ChapterAssignmentStatus.COMPLETE)
+    ) || workflowConfig.find(s => s.id === ChapterAssignmentStatus.COMPLETE)?.isLocked === true;
 
   useEffect(() => {
     if (!isOpen) {
@@ -79,13 +81,16 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
     }
   }, [editingId]);
 
-  // Position lock is driven by server: fixed stages or stages that have reached/passed progress
-  const isPositionLocked = (step: WorkflowStep) => Boolean(step.isFixed ?? step.isLocked);
+  // Position lock is driven by server: fixed stages, stages that have reached/passed progress, or pending stages
+  const isPositionLocked = (step: WorkflowStep) =>
+    Boolean(step.isFixed || step.isLocked || !step.stageId);
 
-  // Free stages can only be deleted if not fixed and not locked
-  const canDeleteStage = (step: WorkflowStep) => !step.isFixed && !step.isLocked;
+  // Free stages can only be deleted if not fixed, not locked, and already created on the server
+  const canDeleteStage = (step: WorkflowStep) =>
+    !step.isFixed && !step.isLocked && Boolean(step.stageId);
 
   const handleDeleteStage = async (step: WorkflowStep) => {
+    if (!step.stageId) return;
     if (editingId === step.id) {
       setEditingId(null);
       setEditingValue('');
@@ -93,24 +98,21 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
     }
     // Optimistically update intermediateSteps
     setIntermediateSteps(prev => prev.filter(s => s.id !== step.id));
-    if (step.stageId) {
-      try {
-        await deleteStage(step.stageId);
-      } catch (err) {
-        Logger.logException(err, { context: 'Failed to delete workflow stage' });
-        const message =
-          err instanceof Error
-            ? err.message
-            : t('manageWorkflow.deleteFailed', 'Failed to delete stage.');
-        toast.error(message);
-        // Revert to workflowConfig on failure
-        const middle = workflowConfig.filter(
-          s =>
-            s.id !== ChapterAssignmentStatus.NOT_STARTED &&
-            s.id !== ChapterAssignmentStatus.COMPLETE
-        );
-        setIntermediateSteps(middle);
-      }
+    try {
+      await deleteStage(step.stageId);
+    } catch (err) {
+      Logger.logException(err, { context: 'Failed to delete workflow stage' });
+      const message =
+        err instanceof Error
+          ? err.message
+          : t('manageWorkflow.deleteFailed', 'Failed to delete stage.');
+      toast.error(message);
+      // Revert to workflowConfig on failure
+      const middle = workflowConfig.filter(
+        s =>
+          s.id !== ChapterAssignmentStatus.NOT_STARTED && s.id !== ChapterAssignmentStatus.COMPLETE
+      );
+      setIntermediateSteps(middle);
     }
   };
 
@@ -144,6 +146,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   };
 
   const handleStartEdit = (step: WorkflowStep) => {
+    if (!step.stageId) return;
     setEditingId(step.id);
     setEditingValue(step.label);
     setErrorMessage('');
@@ -293,9 +296,21 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
 
   const applyReorder = async (updated: WorkflowStep[]) => {
     setIntermediateSteps(updated);
-    const stageIds = updated
+    const middleIds = updated
       .map(s => s.stageId)
       .filter((id): id is number => typeof id === 'number');
+
+    const notStartedStage = workflowConfig.find(s => s.id === ChapterAssignmentStatus.NOT_STARTED);
+    const completeStage = workflowConfig.find(s => s.id === ChapterAssignmentStatus.COMPLETE);
+
+    const stageIds: number[] = [];
+    if (typeof notStartedStage?.stageId === 'number') {
+      stageIds.push(notStartedStage.stageId);
+    }
+    stageIds.push(...middleIds);
+    if (typeof completeStage?.stageId === 'number') {
+      stageIds.push(completeStage.stageId);
+    }
 
     if (stageIds.length > 0) {
       try {
@@ -337,6 +352,7 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
       e.preventDefault();
       return;
     }
+    dragStartIndexRef.current = index;
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     const cardEl =
@@ -360,8 +376,11 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
   };
 
   const handleDragEnd = () => {
-    if (draggedIndex !== null) {
-      setDraggedIndex(null);
+    const startIndex = dragStartIndexRef.current;
+    dragStartIndexRef.current = null;
+    const finalIndex = draggedIndex;
+    setDraggedIndex(null);
+    if (startIndex !== null && finalIndex !== null && startIndex !== finalIndex) {
       void applyReorder(intermediateSteps);
     }
   };
@@ -487,8 +506,18 @@ export const ManageWorkflowDialog: React.FC<ManageWorkflowDialogProps> = ({
                       </div>
                     ) : (
                       <button
-                        className='hover:text-primary focus-visible:ring-ring cursor-pointer rounded-xs text-left font-bold transition-colors focus-visible:ring-2 focus-visible:outline-none'
-                        title={t('manageWorkflow.clickToRename', 'Click to rename stage')}
+                        className={cn(
+                          'focus-visible:ring-ring rounded-xs text-left font-bold transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                          step.stageId
+                            ? 'hover:text-primary cursor-pointer'
+                            : 'cursor-default opacity-70'
+                        )}
+                        disabled={!step.stageId}
+                        title={
+                          step.stageId
+                            ? t('manageWorkflow.clickToRename', 'Click to rename stage')
+                            : undefined
+                        }
                         type='button'
                         onClick={() => handleStartEdit(step)}
                         onKeyDown={e => {
