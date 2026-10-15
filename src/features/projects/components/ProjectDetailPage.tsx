@@ -37,7 +37,7 @@ import { AddMilestoneDialog } from './AddMilestoneDialog';
 import { AssignProjectUsers } from './AssignProjectUsers';
 import { CardProgressBar } from './CardProgressBar';
 import { ManageWorkflowDialog } from './ManageWorkflowDialog';
-import { TruncatedCardText } from './TruncatedText';
+import { TruncatedCardText, TruncatedMilestoneText } from './TruncatedText';
 import { ViewPageHeader } from './ViewPageHeader';
 
 interface ProjectDetailPageProps {
@@ -298,12 +298,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                         >
                           <TableCell className='text-popover-foreground px-6 py-4 text-sm'>
                             <div className='flex flex-col gap-1'>
-                              <span
-                                className='text-foreground block max-w-[200px] truncate font-medium'
-                                title={milestone.name}
-                              >
-                                {milestone.name}
-                              </span>
+                              <TruncatedMilestoneText text={milestone.name} />
                               {milestone.bookIds.length > 0 && books && (
                                 <span className='text-xs text-gray-500'>
                                   {(() => {
