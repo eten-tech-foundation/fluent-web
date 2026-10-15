@@ -27,6 +27,7 @@ import { server } from '@/test/msw/server';
 import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
+import type * as ReactI18next from 'react-i18next';
 
 function TestProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createTestQueryClient);
@@ -61,29 +62,36 @@ vi.mock('@tanstack/react-router', async importOriginal => {
   };
 });
 
-// i18n is mocked so accessible names are the inline defaults with interpolated tokens.
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (
-      key: string,
-      defaultOrOptions?: string | Record<string, unknown>,
-      maybeOptions?: Record<string, unknown>
-    ) => {
-      const opts =
-        (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
-          ? defaultOrOptions
-          : maybeOptions) ?? {};
-      const template =
-        typeof defaultOrOptions === 'string'
-          ? defaultOrOptions
-          : typeof opts.defaultValue === 'string'
-            ? opts.defaultValue
-            : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(opts[name] ?? ''));
-    },
-    i18n: { language: 'en', changeLanguage: vi.fn() },
-  }),
-}));
+// i18n is mocked so accessible names are the inline defaults with interpolated tokens. The
+// empty-passage message is the exception: it is asserted against the shipped English text (#471).
+// Partial so initDraftingTestI18n still finds initReactI18next.
+vi.mock('react-i18next', async importOriginal => {
+  const { default: enCommon } = await import('../../../../public/locales/en/common.json');
+  return {
+    ...(await importOriginal<typeof ReactI18next>()),
+    useTranslation: () => ({
+      t: (
+        key: string,
+        defaultOrOptions?: string | Record<string, unknown>,
+        maybeOptions?: Record<string, unknown>
+      ) => {
+        if (key === 'noContentAvailable') return enCommon.noContentAvailable;
+        const opts =
+          (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
+            ? defaultOrOptions
+            : maybeOptions) ?? {};
+        const template =
+          typeof defaultOrOptions === 'string'
+            ? defaultOrOptions
+            : typeof opts.defaultValue === 'string'
+              ? opts.defaultValue
+              : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(opts[name] ?? ''));
+      },
+      i18n: { language: 'en', changeLanguage: vi.fn() },
+    }),
+  };
+});
 
 // Mock hooks
 const mockUseAddTranslatedVerse = vi.fn();
