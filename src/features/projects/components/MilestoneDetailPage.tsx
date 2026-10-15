@@ -43,7 +43,7 @@ import { AssignUsersDialog } from './AssignUsersDialog';
 import { CardProgressBar } from './CardProgressBar';
 import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
 import { ManageMilestoneBooksDialog } from './ManageMilestoneBooksDialog';
-import { TruncatedCardText } from './TruncatedText';
+import { TruncatedCardText, TruncatedMilestoneText } from './TruncatedText';
 
 interface MilestoneDetailPageProps {
   projectId?: number | null;
@@ -401,9 +401,10 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
                 <TruncatedCardText text={projectTitle} />
 
                 <label className='text-base font-bold'>{t('milestoneColumnMilestone')}</label>
-                <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
-                  {milestoneName}
-                </p>
+                <TruncatedMilestoneText
+                  className='block max-w-full truncate text-base font-medium text-gray-600 dark:text-gray-400'
+                  text={milestoneName ?? ''}
+                />
                 <label className='text-base font-bold'>{t('milestoneBooksLabel')}</label>
                 <p className='text-base font-medium text-gray-600 dark:text-gray-400'>
                   {milestoneBooks.length > 0 && (
