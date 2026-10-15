@@ -21,7 +21,7 @@ function makeEvent(overrides: Partial<KeyboardEvent<HTMLElement>>) {
 }
 
 function setup() {
-  const editor = { undo: vi.fn(), redo: vi.fn() };
+  const editor = { undo: vi.fn(), redo: vi.fn(), applyUpdate: vi.fn() };
   const ref = { current: editor } as unknown as RefObject<EditorRef | null>;
   const { result } = renderHook(() => useHistoryShortcuts(ref));
   return { editor, handler: result.current };

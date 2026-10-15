@@ -49,6 +49,81 @@ describe('useBibleTextDebounce with markers', () => {
     useAppStore.getState().setRoleChangeWarning(false);
   });
 
+  it('keeps two debounced saves in order when the first request is delayed', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const persisted: string[] = [];
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      if (payload.content === 'Older edit') await pending;
+      persisted.push(payload.content);
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    result.current.debouncedSave(1, { content: 'Latest edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(persisted).toEqual(['Older edit', 'Latest edit']);
+    expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+  });
+
+  it('persists a revert to the initial content after a pending older write', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const persisted: string[] = [];
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      if (payload.content === 'Older edit') await pending;
+      persisted.push(payload.content);
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    result.current.debouncedSave(1, { content: 'Initial' });
+    await vi.advanceTimersByTimeAsync(20);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(persisted).toEqual(['Older edit', 'Initial']);
+  });
+
+  it('persists a revert when an older write committed but its response was lost', async () => {
+    let rejectResponse!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, reject) => {
+      rejectResponse = reject;
+    });
+    let serverContent = 'Initial';
+    const onSave = vi.fn(async (_verse: number, payload: { content: string }) => {
+      serverContent = payload.content;
+      if (payload.content === 'Older edit') await pending;
+    });
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    result.current.debouncedSave(1, { content: 'Older edit' });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(serverContent).toBe('Older edit');
+    result.current.debouncedSave(1, { content: 'Initial' });
+    await vi.advanceTimersByTimeAsync(20);
+    rejectResponse(new Error('Response lost after commit'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(serverContent).toBe('Initial');
+    expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+  });
+
+  it('clears saving status when an immediate save has no changes', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.setInitialContent(1, { content: 'Initial' });
+    await result.current.saveImmediately(1, { content: 'Initial' });
+    expect(onSave).not.toHaveBeenCalled();
+    expect(result.current.getSaveStatus(1).isActivelySaving).toBe(false);
+  });
+
   it('saves a markers-only change so a new paragraph reaches the server', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useBibleTextDebounce({ onSave, debounceMs: 10 }));
@@ -124,5 +199,30 @@ describe('useBibleTextDebounce with markers', () => {
 
     // onSave should not have been called again (no retries, no new saves)
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes the latest pending markers on unmount without a duplicate debounce save', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.setInitialContent(1, { content: 'Verse', markers: null });
+    result.current.debouncedSave(1, { content: 'Verse', markers: OPENING });
+    result.current.debouncedSave(1, { content: 'Verse', markers: SPLIT });
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(12000);
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith(1, { content: 'Verse', markers: SPLIT });
+  });
+
+  it.each([401, 403, 404])('does not retry a %s response to an unmount flush', async status => {
+    const onSave = vi.fn().mockRejectedValue({ status });
+    const { result, unmount } = renderHook(() => useBibleTextDebounce({ onSave }));
+    result.current.debouncedSave(1, { content: 'Unsaved verse', markers: OPENING });
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(20000);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().roleChangeWarning).toBe(true);
   });
 });

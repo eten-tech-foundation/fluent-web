@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
@@ -88,6 +89,7 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
 }) => {
   const { t } = useTranslation();
   const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
+  const { getStageLabel } = useProjectWorkflow(projectItem.projectId);
   const navigate = useNavigate();
 
   const handleViewAudio = useCallback(() => {
@@ -136,7 +138,10 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
             className='rounded-full border-2 px-3 py-1 text-sm font-bold whitespace-nowrap text-(--text-disabled)'
             variant='outline'
           >
-            {getStatusDisplay(projectItem.chapterStatus as ChapterAssignmentStatusType)}
+            {getStatusDisplay(
+              projectItem.chapterStatus as ChapterAssignmentStatusType,
+              getStageLabel
+            )}
           </Badge>
         </div>
 

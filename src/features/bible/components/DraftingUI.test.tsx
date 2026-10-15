@@ -1,11 +1,12 @@
-import { type ComponentProps, type ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render as renderUi, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DisplayModeToggle } from '@/components/DisplayModeToggle';
 import { DraftingUI } from '@/features/bible/components/DraftingUI';
 import type { AiHeadingSuggestion } from '@/features/bible/hooks/useAiSuggestions';
 import type { SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
@@ -21,11 +22,23 @@ import {
   type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/drafting-i18n';
 import { server } from '@/test/msw/server';
+import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
+import type * as ReactI18next from 'react-i18next';
 
-const render = (ui: ReactNode) => renderUi(ui, { wrapper: PlaybackRegistryProvider });
+function TestProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createTestQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackRegistryProvider>{children}</PlaybackRegistryProvider>
+    </QueryClientProvider>
+  );
+}
+
+const render = (ui: ReactNode) => renderUi(ui, { wrapper: TestProviders });
 
 // Mock TanStack Router
 const { mockNavigate, mockBack, mockUseLocation } = vi.hoisted(() => ({
@@ -45,6 +58,37 @@ vi.mock('@tanstack/react-router', async importOriginal => {
       history: {
         back: mockBack,
       },
+    }),
+  };
+});
+
+// i18n is mocked so accessible names are the inline defaults with interpolated tokens. The
+// empty-passage message is the exception: it is asserted against the shipped English text (#471).
+// Partial so initDraftingTestI18n still finds initReactI18next.
+vi.mock('react-i18next', async importOriginal => {
+  const { default: enCommon } = await import('../../../../public/locales/en/common.json');
+  return {
+    ...(await importOriginal<typeof ReactI18next>()),
+    useTranslation: () => ({
+      t: (
+        key: string,
+        defaultOrOptions?: string | Record<string, unknown>,
+        maybeOptions?: Record<string, unknown>
+      ) => {
+        if (key === 'noContentAvailable') return enCommon.noContentAvailable;
+        const opts =
+          (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
+            ? defaultOrOptions
+            : maybeOptions) ?? {};
+        const template =
+          typeof defaultOrOptions === 'string'
+            ? defaultOrOptions
+            : typeof opts.defaultValue === 'string'
+              ? opts.defaultValue
+              : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => String(opts[name] ?? ''));
+      },
+      i18n: { language: 'en', changeLanguage: vi.fn() },
     }),
   };
 });
@@ -197,6 +241,7 @@ vi.mock('@/features/resources/components/ResourcePanel', async importOriginal =>
         activeVerseId,
         initialResource,
         selectedBibleId,
+        onBibleErrorChange,
         onBibleLoadingChange,
         onBibleSelect,
         onBibleVersesChange,
@@ -228,15 +273,46 @@ vi.mock('@/features/resources/components/ResourcePanel', async importOriginal =>
       const handleSelectLoadingBible = () => {
         onBibleSelect?.({ id: 'aq-loading', label: 'Loading Bible', language: 'eng' });
       };
+      // Verse 2 is missing, so its row shows whichever state the request is in.
+      const handleSelectPartialBible = () => {
+        onBibleSelect?.({ id: 'aq-partial', label: 'Partial Bible', language: 'eng' });
+        onBibleLoadingChange?.('aq-partial', false);
+        onBibleVersesChange?.('aq-partial', [{ verseNumber: 1, text: 'Partial verse 1 text' }]);
+      };
       return (
         <div data-testid='mock-resource-panel'>
           <span>Mock Resource Panel - Active Verse {activeVerseId}</span>
           <span data-testid='mock-selected-bible'>{selectedBibleId ?? 'none'}</span>
           <span data-testid='mock-current-resource'>{initialResource?.id ?? 'none'}</span>
           <button onClick={handleSelectBible}>Select Alternative Bible</button>
+          <button
+            onClick={() =>
+              onBibleSelect?.({ id: 'aq-alternative', label: 'Alternative Bible', language: 'eng' })
+            }
+          >
+            Reselect Alternative Bible
+          </button>
           <button onClick={handleSelectSecondBible}>Select Second Bible</button>
           <button onClick={handleSelectEmptyBible}>Select Empty Bible</button>
           <button onClick={handleSelectLoadingBible}>Select Loading Bible</button>
+          <button onClick={handleSelectPartialBible}>Select Partial Bible</button>
+          <button onClick={() => onBibleLoadingChange?.('aq-partial', true)}>
+            Refetch Partial Bible
+          </button>
+          <button onClick={() => onBibleErrorChange?.('aq-partial', true)}>
+            Fail Partial Bible
+          </button>
+          <button
+            onClick={() => {
+              onBibleVersesChange?.('aq-loading', [
+                { verseNumber: 1, text: 'Replaced Bible response' },
+              ]);
+              onBibleLoadingChange?.('aq-loading', false);
+              onBibleErrorChange?.('aq-loading', true);
+            }}
+          >
+            Finish Replaced Bible Request
+          </button>
           <button onClick={() => onResourceChange?.({ id: 'UWTranslationNotes', name: 'TN' })}>
             Select Notes Resource
           </button>
@@ -297,6 +373,7 @@ const defaultDraftingHookResult = (overrides = {}) => ({
   moveToNextVerse: vi.fn(),
   revealNextVerse: vi.fn(),
   updateButtonPosition: vi.fn(),
+  resizeAndPosition: vi.fn(),
   ...overrides,
 });
 
@@ -325,6 +402,8 @@ const defaultPericopeHookResult = (overrides = {}) => ({
 });
 
 describe('DraftingUI', () => {
+  beforeAll(initDraftingTestI18n);
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockTrackAiUsageAsync.mockReset().mockResolvedValue(undefined);
@@ -359,6 +438,7 @@ describe('DraftingUI', () => {
     // Default to Verse Mode
     useAppStore.setState({
       displayMode: 'verse',
+      manualAiEnable: null,
       userdetail: { id: 1, username: 'testuser', role: 'Project Translator' } as unknown as User,
     });
 
@@ -472,7 +552,7 @@ describe('DraftingUI', () => {
       await user.click(await screen.findByText('ENG — English Bible'));
 
       expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
-      expect(screen.queryByText('No content available')).not.toBeInTheDocument();
+      expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
       await user.click(screen.getByRole('tab', { name: 'WEB' }));
       expect(
         screen.getByText('In the beginning God created the heaven and the earth.')
@@ -491,11 +571,39 @@ describe('DraftingUI', () => {
       await selectLanguage(user, 'English');
       await user.click(await screen.findByText('ENG — English Bible'));
 
-      expect(await screen.findByText('No content available')).toBeInTheDocument();
+      expect(await screen.findByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
       expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
     });
 
-    it('keeps cached Aquifer text visible after a failed refetch', async () => {
+    it.each([undefined, '', '   '])(
+      'shows the missing-content message for an unavailable verse (%s)',
+      async missingText => {
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, () =>
+            HttpResponse.json({
+              chapters: [
+                {
+                  number: 1,
+                  verses: [
+                    { number: 1, text: 'Available resource verse' },
+                    ...(missingText === undefined ? [] : [{ number: 2, text: missingText }]),
+                  ],
+                },
+              ],
+            })
+          )
+        );
+        const user = await openResources();
+        await selectLanguage(user, 'English');
+        await user.click(await screen.findByText('ENG — English Bible'));
+
+        expect(await screen.findByText('Available resource verse')).toBeInTheDocument();
+        expect(screen.getByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
+        expect(screen.queryByText(mockSourceVerses[1].text)).not.toBeInTheDocument();
+      }
+    );
+
+    it('keeps cached Aquifer text and reports missing verses as an error after a failed refetch', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
       await user.click(await screen.findByText('ENG — English Bible'));
@@ -512,8 +620,10 @@ describe('DraftingUI', () => {
       });
       expect(queryClient.getQueriesData({ queryKey: ['aquifer-bible-text'] })).not.toHaveLength(0);
       expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe('error');
+      // Verse 2 is not in the cached text, so its row reports the failed request.
+      expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
       expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
-      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+      expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
     });
 
     it.each(['unavailable', 'loading'] as const)(
@@ -600,7 +710,7 @@ describe('DraftingUI', () => {
           expect(within(referenceGroup).getByText('2:1')).toBeInTheDocument();
           expect(
             within(referenceGroup).getAllByText(
-              currentState === 'loading' ? /loading/i : /no content available/i
+              currentState === 'loading' ? /loading/i : NO_CONTENT_MESSAGE
             )
           ).toHaveLength(2);
           expect(screen.queryByText('Project source neighboring verse')).not.toBeInTheDocument();
@@ -618,7 +728,7 @@ describe('DraftingUI', () => {
         }
       }
     );
-    it('keeps both Bible tabs and their cached verses when resources are hidden and shown', async () => {
+    it('keeps the source and current Bible when resources are hidden and shown', async () => {
       const user = await openResources();
       await selectLanguage(user, 'English');
       await user.click(await screen.findByText('ENG — English Bible'));
@@ -626,19 +736,99 @@ describe('DraftingUI', () => {
       await selectLanguage(user, 'Spanish');
       await user.click(await screen.findByText('SPA — Spanish Bible'));
       expect(await screen.findByText('Bible 2 verse content')).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: '', pressed: true }));
       expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
       expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
       expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
-      await user.click(screen.getByRole('tab', { name: 'ENG' }));
-      expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(screen.getByText(mockSourceVerses[0].text)).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: '', pressed: false }));
-      expect(await screen.findByRole('combobox')).toHaveTextContent('English');
-      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(await screen.findByRole('combobox')).toHaveTextContent('Spanish');
       await user.click(screen.getByRole('tab', { name: 'SPA' }));
       expect(screen.getByText('Bible 2 verse content')).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Close SPA' }));
+      expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByText(mockSourceVerses[0].text)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '', pressed: true }));
+      await user.click(screen.getByRole('button', { name: '', pressed: false }));
+      expect(screen.queryByRole('tab', { name: 'SPA' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('tablist', { name: 'Bible versions' })).getAllByRole('tab')
+      ).toHaveLength(2);
     });
+
+    it('restores cached content when the same Bible is closed and reopened', async () => {
+      const user = await openResources();
+      await selectLanguage(user, 'English');
+      await user.click(await screen.findByText('ENG — English Bible'));
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Close ENG' }));
+      expect(screen.queryByRole('tab', { name: 'ENG' })).not.toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'WEB' })).toHaveAttribute('aria-selected', 'true');
+      await user.click(screen.getByText('ENG — English Bible'));
+
+      expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+      // Only verse 2, which the fixture omits, is unavailable.
+      expect(screen.getAllByText(NO_CONTENT_MESSAGE)).toHaveLength(1);
+    });
+
+    it.each(['success', 'error'] as const)(
+      'keeps the replacement Bible after the previous request finishes with %s',
+      async result => {
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        let requested = false;
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/2/texts`, async () => {
+            requested = true;
+            await pendingText;
+            if (result === 'error') return new HttpResponse(null, { status: 503 });
+            return HttpResponse.json({
+              chapters: [{ number: 1, verses: [{ number: 1, text: 'Replaced Spanish content' }] }],
+            });
+          })
+        );
+        try {
+          const user = await openResources();
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+          await selectLanguage(user, 'Spanish');
+          await user.click(await screen.findByText('SPA — Spanish Bible'));
+          await waitFor(() => expect(requested).toBe(true));
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+
+          releaseText();
+          await waitFor(() => {
+            expect(queryClient.getQueryState(['aquifer-bible-text', 2, 'GEN', 1])?.status).toBe(
+              result
+            );
+          });
+          expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+          expect(screen.queryByRole('tab', { name: 'SPA' })).not.toBeInTheDocument();
+          expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
+          expect(screen.queryByText('Replaced Spanish content')).not.toBeInTheDocument();
+          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+        } finally {
+          releaseText();
+        }
+      }
+    );
 
     it.each(['resources', 'checks', 'hidden'])(
       'finishes an interrupted Bible request after changing language through %s',
@@ -663,8 +853,7 @@ describe('DraftingUI', () => {
         await waitFor(() => expect(requested).toBe(true));
         if (panel === 'resources') {
           await selectLanguage(user, 'English');
-          await user.click(await screen.findByText('ENG — English Bible'));
-          expect(await screen.findByText('Bible 1 verse content')).toBeInTheDocument();
+          await screen.findByText('ENG — English Bible');
         }
         await user.click(screen.getByRole('button', { name: 'TN' }));
         await selectLanguage(user, 'English');
@@ -680,6 +869,75 @@ describe('DraftingUI', () => {
         releaseText();
         expect(await screen.findByText('Spanish request completed')).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'SPA' })).toHaveAttribute('aria-selected', 'true');
+      }
+    );
+
+    it.each([
+      ['the Bible tab', 'success'],
+      ['the Bible tab', 'error'],
+      ['the Resources button', 'success'],
+      ['the Resources button', 'error'],
+    ] as const)(
+      'recovers a request that finished while Resources was hidden through %s (%s)',
+      async (path, result) => {
+        let releaseText = () => {};
+        const pendingText = new Promise<void>(resolve => {
+          releaseText = resolve;
+        });
+        let requested = false;
+        server.use(
+          http.get(`${config.api.url}/aquifer/bibles/1/texts`, async () => {
+            requested = true;
+            await pendingText;
+            if (result === 'error') return new HttpResponse(null, { status: 503 });
+            return HttpResponse.json({
+              chapters: [
+                {
+                  number: 1,
+                  verses: [
+                    { number: 1, text: 'Hidden request completed' },
+                    { number: 2, text: 'Hidden request verse 2' },
+                  ],
+                },
+              ],
+            });
+          })
+        );
+        try {
+          const user = await openResources();
+          await selectLanguage(user, 'English');
+          await user.click(await screen.findByText('ENG — English Bible'));
+          await waitFor(() => expect(requested).toBe(true));
+          await user.click(screen.getByRole('button', { name: '', pressed: true }));
+          expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+
+          releaseText();
+          await waitFor(() => {
+            expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe(
+              result
+            );
+          });
+          // The unmounted panel cannot publish the response until it is shown again.
+          expect(screen.queryByText('Hidden request completed')).not.toBeInTheDocument();
+          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+
+          if (path === 'the Bible tab') {
+            await user.click(screen.getByRole('tab', { name: 'ENG' }));
+          } else {
+            await user.click(screen.getByRole('button', { name: '', pressed: false }));
+          }
+
+          expect(await screen.findByRole('combobox')).toHaveTextContent('English');
+          if (result === 'success') {
+            expect(await screen.findByText('Hidden request completed')).toBeInTheDocument();
+          } else {
+            expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+          }
+          expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
+          expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
+        } finally {
+          releaseText();
+        }
       }
     );
   });
@@ -864,9 +1122,55 @@ describe('DraftingUI', () => {
     expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('none');
   });
 
-  it('keeps each opened resource Bible beside the source with its own content', async () => {
-    const user = userEvent.setup();
+  it.each(['verse', 'pericope'] as const)(
+    'reuses the second Bible tab through repeated selections in %s mode',
+    async mode => {
+      const user = userEvent.setup();
+      useAppStore.setState({ displayMode: mode });
+      mockUsePericope.mockReturnValue(
+        defaultPericopeHookResult({ isPericopeMode: mode === 'pericope' })
+      );
 
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
+      expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+
+      for (const [label, content] of [
+        ['Second Bible', 'Second Bible verse 1 text'],
+        ['Alternative Bible', 'Alternative verse 1 text'],
+        ['Second Bible', 'Second Bible verse 1 text'],
+      ]) {
+        await user.click(screen.getByRole('button', { name: `Select ${label}` }));
+        const tabs = within(screen.getByRole('tablist', { name: 'Bible versions' }));
+        expect(tabs.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['WEB', label]);
+        expect(tabs.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByText(content)).toBeInTheDocument();
+      }
+      expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('yv-second');
+      expect(screen.queryByRole('button', { name: 'Close WEB' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('tab', { name: 'WEB' }));
+      expect(
+        screen.getByText('In the beginning God created the heaven and the earth.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Alternative Bible' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Second Bible' }));
+      expect(screen.getByText('Second Bible verse 1 text')).toBeInTheDocument();
+    }
+  );
+
+  it('preserves loaded content when the same resource Bible is selected again', async () => {
+    const user = userEvent.setup();
     render(
       <DraftingUI
         projectItem={mockProjectItem}
@@ -875,30 +1179,74 @@ describe('DraftingUI', () => {
         userdetail={{ id: 1 } as unknown as User}
       />
     );
-
     await user.click(screen.getByRole('button', { pressed: false }));
     await user.click(screen.getByRole('button', { name: 'Select Alternative Bible' }));
-    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
-
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
-      'Resources',
-      'Checks',
-      'WEB',
-      'Alternative Bible',
-      'Second Bible',
-    ]);
-    expect(screen.getByText('Second Bible verse 1 text')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('tab', { name: 'Alternative Bible' }));
-    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-alternative');
-
     await user.click(screen.getByRole('tab', { name: 'WEB' }));
+    await user.click(screen.getByRole('button', { name: 'Reselect Alternative Bible' }));
+
+    expect(screen.getByText('Alternative verse 1 text')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alternative Bible' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
     expect(
-      screen.getByText('In the beginning God created the heaven and the earth.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Second Bible' })).toBeInTheDocument();
+      within(screen.getByRole('tablist', { name: 'Bible versions' })).getAllByRole('tab')
+    ).toHaveLength(2);
   });
+
+  it('ignores late content, loading, and error updates from a replaced Bible', async () => {
+    const user = userEvent.setup();
+    render(
+      <DraftingUI
+        projectItem={mockProjectItem}
+        sourceVerses={mockSourceVerses}
+        targetVerses={mockTargetVerses}
+        userdetail={{ id: 1 } as unknown as User}
+      />
+    );
+    await user.click(screen.getByRole('button', { pressed: false }));
+    await user.click(screen.getByRole('button', { name: 'Select Loading Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Select Empty Bible' }));
+    await user.click(screen.getByRole('button', { name: 'Finish Replaced Bible Request' }));
+
+    expect(screen.getByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText('Replaced Bible response')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Loading Bible' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Empty Bible' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByTestId('mock-selected-bible')).toHaveTextContent('aq-empty');
+  });
+
+  it.each([
+    ['loading', 'Refetch Partial Bible', 'Loading...'],
+    ['error', 'Fail Partial Bible', 'Unable to load Bible content.'],
+  ])(
+    'shows %s instead of missing content for an unavailable verse in verse mode',
+    async (_state, action, message) => {
+      const user = userEvent.setup();
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('button', { name: 'Select Partial Bible' }));
+      expect(screen.getByText('Partial verse 1 text')).toBeInTheDocument();
+      expect(screen.getByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: action }));
+
+      expect(screen.getByText('Partial verse 1 text')).toBeInTheDocument();
+      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
+    }
+  );
 
   it('returns to Resources and Bibles when an interrupted tab is reactivated', async () => {
     const user = userEvent.setup();
@@ -914,7 +1262,6 @@ describe('DraftingUI', () => {
 
     await user.click(screen.getByRole('button', { pressed: false }));
     await user.click(screen.getByRole('button', { name: 'Select Loading Bible' }));
-    await user.click(screen.getByRole('button', { name: 'Select Second Bible' }));
     await user.click(screen.getByRole('button', { name: 'Select Notes Resource' }));
     await user.click(screen.getByRole('tab', { name: 'Checks' }));
     expect(screen.queryByTestId('mock-resource-panel')).not.toBeInTheDocument();
@@ -982,8 +1329,8 @@ describe('DraftingUI', () => {
       />
     );
 
-    // Find submit button in header (which is labeled with "Send to Peer Checking")
-    const submitBtn = screen.getByRole('button', { name: /Send to Peer Checking/i });
+    // Find submit button in header (which is labeled with "Send to Peer Check")
+    const submitBtn = screen.getByRole('button', { name: 'Send to Peer Check' });
     expect(submitBtn).toBeEnabled();
 
     await user.click(submitBtn);
@@ -1125,6 +1472,50 @@ describe('DraftingUI', () => {
     });
 
     const titleSuggestion = { pericopeNumber: '1', bibleTextId: 101, suggestedText: 'La creación' };
+
+    it('fills a verse and title without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Verse one', 2: 'Verse two' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, 'Verse one', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+      expect(mockTrackAiUsage).toHaveBeenCalledWith({
+        bibleTextId: 101,
+        projectUnitId: 10,
+        pericopeNumber: '1',
+        wasUsed: false,
+      });
+    });
+
+    it('fills a title arriving before scripture without a saved first-verse translation row', () => {
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({
+          verses: [{ verseNumber: 2, content: 'Human translation' }],
+          handleTextChange,
+        })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: {},
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      renderWithAi();
+      expect(handleTextChange).toHaveBeenCalledExactlyOnceWith(1, '', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+    });
 
     it('fills title and first verse in one save without putting title words in scripture', () => {
       mockUseAiSuggestions.mockReturnValue({
@@ -1291,6 +1682,42 @@ describe('DraftingUI', () => {
         headings: [{ marker: 's1', text: 'New title' }, ...bodyHeadings],
       });
     });
+
+    it.each([undefined, [{ marker: 'p', offset: 0 }]])(
+      'saves a cleared final title with valid markers while preserving paragraphs %j',
+      async paragraphs => {
+        const authored: TargetVerse[] = [
+          {
+            verseNumber: 1,
+            content: 'My scripture',
+            markers: {
+              headings: [{ marker: 's1', text: 'My title' }],
+              ...(paragraphs ? { paragraphs } : {}),
+            },
+          },
+          { verseNumber: 2, content: 'My other verse' },
+        ];
+        mockUseDrafting.mockReturnValue(
+          defaultDraftingHookResult({ verses: authored, handleTextChange })
+        );
+        const mutateAsync = vi.fn().mockResolvedValue(undefined);
+        mockUseAddTranslatedVerse.mockReturnValue({ mutateAsync, isPending: false });
+        renderWithAi();
+        await userEvent.setup().clear(screen.getByLabelText('Section title'));
+        const expectedMarkers = paragraphs ? { paragraphs } : null;
+        expect(handleTextChange).toHaveBeenLastCalledWith(1, 'My scripture', expectedMarkers);
+        const { onSave } = mockUseDrafting.mock.calls.at(-1)?.[0] as {
+          onSave: (verse: number, payload: SavePayload) => Promise<void>;
+        };
+        await onSave(1, { content: 'My scripture', markers: expectedMarkers });
+        expect(mutateAsync).toHaveBeenCalledWith({
+          verseData: expect.objectContaining({
+            content: 'My scripture',
+            markers: expectedMarkers,
+          }) as unknown,
+        });
+      }
+    );
 
     it('preserves saved verse content without accepting an AI verse for a title-only fill', async () => {
       mockUseDrafting.mockReturnValue(
@@ -1658,6 +2085,67 @@ describe('DraftingUI', () => {
       expect(options.touchedTitleVerseNumbers).toContain(1);
     });
 
+    it('preserves cleared verses and titles when failed opt-out restores AI without manual opt-in', async () => {
+      const authored: TargetVerse[] = [
+        {
+          verseNumber: 1,
+          content: 'My draft',
+          markers: { headings: [{ marker: 's1', text: 'My title' }] },
+        },
+        { verseNumber: 2, content: 'Keep my text' },
+      ];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: authored, handleTextChange })
+      );
+      mockUseAiSuggestions.mockReturnValue({
+        suggestions: { 1: 'Suggestion for 1', 2: 'Suggestion for 2' },
+        headingSuggestions: { '1': titleSuggestion },
+        isAiThresholdMet: true,
+        suggestionStatus: 'idle',
+      });
+      const view = renderWithAi();
+      const user = userEvent.setup();
+      await user.clear(screen.getByLabelText('Translation for verse 1'));
+      await user.clear(screen.getByLabelText('Section title'));
+      const cleared: TargetVerse[] = [EMPTY_PERICOPE[0], authored[1]];
+      mockUseDrafting.mockReturnValue(
+        defaultDraftingHookResult({ verses: cleared, handleTextChange })
+      );
+      const rerenderWithAi = (isAiEnabled: boolean) =>
+        view.rerender(
+          <DraftingUI
+            projectItem={{ ...mockProjectItem, isAiEnabled }}
+            sourceVerses={mockSourceVerses}
+            targetVerses={cleared}
+            userdetail={{ id: 1 } as User}
+          />
+        );
+      rerenderWithAi(false);
+      handleTextChange.mockClear();
+      mockTrackAiUsage.mockClear();
+      rerenderWithAi(true);
+      expect(handleTextChange).not.toHaveBeenCalled();
+      expect(mockTrackAiUsage).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('');
+      expect(screen.getByLabelText('Section title')).toHaveValue('');
+      expect(screen.getByLabelText('Translation for verse 2')).toHaveValue('Keep my text');
+      const options = mockUseAiSuggestions.mock.calls.at(-1)?.[7] as {
+        touchedTitleVerseNumbers: number[];
+      };
+      expect(options.touchedTitleVerseNumbers).toContain(1);
+
+      // Only a confirmed manual enable releases these empty inputs. Authored scripture stays intact.
+      act(() =>
+        useAppStore.setState({
+          manualAiEnable: { assignmentId: mockProjectItem.chapterAssignmentId, revision: 1 },
+        })
+      );
+      expect(handleTextChange).toHaveBeenCalledTimes(1);
+      expect(handleTextChange).toHaveBeenCalledWith(1, 'Suggestion for 1', {
+        headings: [{ marker: 's1', text: 'La creación' }],
+      });
+    });
+
     it('keeps the stored paragraph of a verse it fills all the way into the request', async () => {
       config.features.rtePericope = true;
       const mutateAsyncMock = vi.fn().mockResolvedValue(undefined);
@@ -1932,7 +2420,35 @@ describe('DraftingUI', () => {
       config.features.rtePericope = false;
     });
 
+    it('returns a saved Chapter preference to Verse for incomplete content', () => {
+      config.features.rtePericope = true;
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      render(
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue(
+        mockTargetVerses[0].content
+      );
+      expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+    });
+
     it('holds the pane open while the chapter chunk is still on the wire', async () => {
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Translated text' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
       config.features.rtePericope = true;
       useAppStore.setState({ displayMode: 'chapter' });
 
@@ -1953,6 +2469,38 @@ describe('DraftingUI', () => {
 
       expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
       expect(screen.queryByTestId('chapter-view-loading')).not.toBeInTheDocument();
+    });
+
+    it('uses live edits for Chapter and preserves them when clearing a verse disables it', async () => {
+      config.features.rtePericope = true;
+      const complete = mockTargetVerses.map(verse => ({ ...verse, content: 'Local translation' }));
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: complete }));
+      useAppStore.setState({ displayMode: 'chapter', currentProjectItem: mockProjectItem });
+      chapterChunk.deliver();
+      const ui = () => (
+        <>
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as User}
+          />
+          <DisplayModeToggle />
+        </>
+      );
+      const { rerender } = render(ui());
+      expect(await screen.findByTestId('chapter-view')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Chapter' })).not.toHaveAttribute('aria-disabled');
+      const edited = [complete[0], { ...complete[1], content: '' }];
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ verses: edited }));
+      rerender(ui());
+      expect(useAppStore.getState().displayMode).toBe('verse');
+      expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('Local translation');
     });
   });
 });

@@ -21,6 +21,7 @@ import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiS
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useChapterPresence } from '@/features/bible/hooks/useChapterPresence';
+import { useChapterViewAvailability } from '@/features/bible/hooks/useChapterViewAvailability';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
 import { usePericope } from '@/features/bible/hooks/usePericope';
 import { usePericopeContext } from '@/features/bible/hooks/usePericopeContext';
@@ -29,7 +30,7 @@ import {
   useResourceState,
   useSaveResourceState,
 } from '@/features/bible/hooks/useResourceStatePersistence';
-import { pendingAiAutoFills } from '@/features/bible/lib/ai-autofill';
+import { pendingAiAutoFills, targetFor } from '@/features/bible/lib/ai-autofill';
 import { pericopeSuggestionScope } from '@/features/bible/lib/ai-suggestion-scope';
 import { orderedPericopeRefs } from '@/features/bible/lib/pericope-display';
 import {
@@ -44,12 +45,13 @@ import { useRepeatedWordsCheck } from '@/features/checks/hooks/useRepeatedWordsC
 import { useResolvedFindings } from '@/features/checks/hooks/useResolvedFindings';
 import { useSuppressions } from '@/features/checks/hooks/useSuppressions';
 import { useFeatureFlag, useFeatureFlags } from '@/features/flags';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { type BibleVerse } from '@/features/resources/hooks/hooks';
 import { useReferenceChapterTexts } from '@/features/resources/hooks/useReferenceChapterTexts';
 import { isValidHeadingText } from '@/features/rte/lib/heading-markers';
 import {
-  ServerTtsEngine,
   RecordedNoticeDialog,
+  ServerTtsEngine,
   type SourceAudioRow,
   useAudioEnabled,
   usePlaybackRegistry,
@@ -57,7 +59,6 @@ import {
   useTtsKeyboardShortcuts,
 } from '@/features/tts';
 import { useProviderFacts } from '@/features/tts/resolver/providerFacts';
-import { config } from '@/lib/config';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
@@ -129,9 +130,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const { t } = useTranslation();
   const displayMode = useAppStore(state => state.displayMode);
   const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
-  // Chapter view owns its own two-pane layout: the shared scroll container below is what keeps the
-  // other views' rows level, and a chapter has no rows to keep level (#397).
-  const isChapterMode = config.features.rtePericope && displayMode === 'chapter';
+  const setDisplayMode = useAppStore(state => state.setDisplayMode);
   const [chapterPlayerMounted, setChapterPlayerMounted] = useState(false);
   const chapterSourceVerseRefs = useRef<Record<number, HTMLElement | null>>({});
   const chapterSourceViewportRef = useRef<HTMLDivElement | null>(null);
@@ -145,16 +144,16 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const [currentResource, setCurrentResource] = useState<ResourceName>(RESOURCE_NAMES[0]);
   const [currentLanguage, setCurrentLanguage] = useState('');
 
-  // The source tab is permanent; every Resources Bible keeps its own keyed
-  // content so selecting another one cannot replace either the source or a
-  // previously opened resource Bible (#471).
+  // The source tab is permanent. Resources reuses the second tab, and keyed
+  // content updates cannot restore a Bible that has been replaced (#471).
   const [activeBibleTabId, setActiveBibleTabId] = useState(SOURCE_BIBLE_TAB_ID);
-  const [resourceBibleTabs, setResourceBibleTabs] = useState<ResourceBibleTab[]>([]);
+  const [resourceBibleTab, setResourceBibleTab] = useState<ResourceBibleTab | null>(null);
   const [resourcePanelSelectedBibleId, setResourcePanelSelectedBibleId] = useState<string | null>(
     null
   );
 
-  const activeResourceBibleTab = resourceBibleTabs.find(tab => tab.id === activeBibleTabId);
+  const activeResourceBibleTab =
+    resourceBibleTab?.id === activeBibleTabId ? resourceBibleTab : undefined;
   const selectedPanel: 1 | 2 = activeResourceBibleTab ? 2 : 1;
   const bibleVerses = activeResourceBibleTab?.verses ?? EMPTY_BIBLE_VERSES;
   const bibleContentLoading = activeResourceBibleTab?.isLoading ?? false;
@@ -312,12 +311,26 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     moveToNextVerse,
     revealNextVerse,
     updateButtonPosition,
+    resizeAndPosition,
   } = useDrafting({
     sourceVerses,
     targetVerses,
     readOnly,
+    displayMode,
     onSave: saveVerse,
   });
+
+  const chapterViewAvailable = useChapterViewAvailability({ projectItem, sourceVerses, verses });
+  // Chapter uses a shared scroll container instead of the per-column verse layout (#397).
+  const isChapterMode = displayMode === 'chapter' && chapterViewAvailable;
+
+  // A saved preference cannot open an incomplete chapter. Local edits remain in useDrafting
+  // when clearing a verse returns the translator to the verse surface.
+  useLayoutEffect(() => {
+    if (displayMode === 'chapter' && !chapterViewAvailable) {
+      setDisplayMode('verse');
+    }
+  }, [displayMode, chapterViewAvailable, setDisplayMode]);
 
   const verseMapping = useMemo(() => {
     const mapping: Record<number, number> = {};
@@ -368,8 +381,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // immediately request and refill them while the translator is still working.
   const userTouchedVersesRef = useRef<Set<number>>(new Set());
   const touchedTitlesRef = useRef(new Set<number>());
-  const wasAiEnabledRef = useRef(projectItem.isAiEnabled);
-  const isAiJustEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
+  const manualAiEnable = useAppStore(state => state.manualAiEnable);
+  const handledManualEnableRef = useRef(manualAiEnable?.revision);
+  const isAiJustEnabled =
+    manualAiEnable?.assignmentId === projectItem.chapterAssignmentId &&
+    manualAiEnable.revision !== handledManualEnableRef.current;
 
   const {
     suggestions: aiSuggestions,
@@ -536,10 +552,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     router.history.back();
   }, [clearCurrentProjectItem, navigate, router]);
 
-  // Reset assignment-local state without remounting and discarding pending verse saves.
+  // Initialize assignment-local resource state. The keyed draft flushes pending verse saves
+  // before unmounting; its replacement starts with the next assignment's content.
   useEffect(() => {
     setActiveBibleTabId(SOURCE_BIBLE_TAB_ID);
-    setResourceBibleTabs([]);
+    setResourceBibleTab(null);
     setResourcePanelSelectedBibleId(null);
     setCurrentResource(RESOURCE_NAMES[0]);
     setCurrentLanguage('');
@@ -689,8 +706,29 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
   const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);
 
-  const buttonText =
+  const { workflowConfig, getStageLabel } = useProjectWorkflow(projectItem.projectId);
+
+  let buttonText =
     ChapterAssignmentStatusNextAction[projectItem.chapterStatus as ChapterAssignmentStatus];
+
+  if (workflowConfig.length > 0) {
+    const currentIndex = workflowConfig.findIndex(
+      step =>
+        step.id === projectItem.chapterStatus ||
+        step.stageId?.toString() === projectItem.chapterStatus
+    );
+    if (currentIndex !== -1 && currentIndex < workflowConfig.length - 1) {
+      const nextStep = workflowConfig[currentIndex + 1];
+      if (nextStep.id === 'complete') {
+        buttonText = t('markAsComplete', 'Mark as Complete');
+      } else {
+        const nextLabel = nextStep.label
+          ? getStageLabel(nextStep.id, nextStep.label)
+          : getStageLabel(nextStep.id);
+        buttonText = t('sendToStage', 'Send to {{stage}}', { stage: nextLabel });
+      }
+    }
+  }
 
   const handleSubmit = useCallback(async () => {
     if (!isTranslationComplete) return;
@@ -744,8 +782,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   );
 
   useEffect(() => {
-    const justEnabled = projectItem.isAiEnabled && !wasAiEnabledRef.current;
-    wasAiEnabledRef.current = projectItem.isAiEnabled;
+    const justEnabled = isAiJustEnabled;
+    handledManualEnableRef.current = manualAiEnable?.revision;
     if (!projectItem.isAiEnabled || !isDraft || readOnly) return;
 
     // An explicit opt-in is a new request for every empty input. While AI stays
@@ -777,7 +815,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       touchedVerseNumbers: userTouchedVersesRef.current,
     });
     const firstSource = sourceVerses.find(verse => verse.verseNumber === candidateVerseNumbers[0]);
-    const firstTarget = verses.find(verse => verse.verseNumber === firstSource?.verseNumber);
+    const firstTarget = firstSource ? targetFor(firstSource.verseNumber, verses) : undefined;
     const heading = currentPericopeGroup && headingSuggestions[currentPericopeGroup.pericopeNumber];
     const titleFill =
       currentPericopeGroup?.pericopeTitle?.trim() &&
@@ -833,6 +871,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     verses,
     handleTextChange,
     projectItem.isAiEnabled,
+    isAiJustEnabled,
+    manualAiEnable,
     projectItem.projectUnitId,
     projectItem.chapterAssignmentId,
     projectItem.chapterNumber,
@@ -860,15 +900,11 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const handleBibleSelect = useCallback(
     (bible: { id: string; label: string; language: string }) => {
       setResourcePanelSelectedBibleId(bible.id);
-      setResourceBibleTabs(currentTabs => {
-        const existing = currentTabs.find(tab => tab.id === bible.id);
-        if (existing) {
-          if (existing.label === bible.label && existing.language === bible.language)
-            return currentTabs;
-          return currentTabs.map(tab => (tab.id === bible.id ? { ...tab, ...bible } : tab));
-        }
-
-        return [...currentTabs, { ...bible, verses: [], isLoading: true, isError: false }];
+      setResourceBibleTab(current => {
+        if (current?.id !== bible.id)
+          return { ...bible, verses: [], isLoading: true, isError: false };
+        if (current.label === bible.label && current.language === bible.language) return current;
+        return { ...current, ...bible };
       });
       setActiveBibleTabId(bible.id);
     },
@@ -881,7 +917,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
       if (tabId === SOURCE_BIBLE_TAB_ID) return;
 
       setResourcePanelSelectedBibleId(tabId);
-      const tab = resourceBibleTabs.find(tab => tab.id === tabId);
+      const tab = resourceBibleTab?.id === tabId ? resourceBibleTab : null;
       if (tab) setCurrentLanguage(tab.language);
       if (tab?.isLoading) {
         setCurrentResource(BIBLES_RESOURCE);
@@ -889,26 +925,34 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         setShowResources(true);
       }
     },
-    [resourceBibleTabs]
+    [resourceBibleTab]
   );
 
-  const handleBibleVersesChange = useCallback((bibleId: string, nextVerses: BibleVerse[]) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, verses: nextVerses } : tab))
-    );
-  }, []);
+  const updateResourceBibleTab = useCallback(
+    (
+      bibleId: string,
+      changes: Partial<Pick<ResourceBibleTab, 'verses' | 'isLoading' | 'isError'>>
+    ) =>
+      setResourceBibleTab(current =>
+        current?.id === bibleId ? { ...current, ...changes } : current
+      ),
+    []
+  );
 
-  const handleBibleLoadingChange = useCallback((bibleId: string, isLoading: boolean) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isLoading } : tab))
-    );
-  }, []);
+  const handleBibleVersesChange = useCallback(
+    (bibleId: string, verses: BibleVerse[]) => updateResourceBibleTab(bibleId, { verses }),
+    [updateResourceBibleTab]
+  );
 
-  const handleBibleErrorChange = useCallback((bibleId: string, isError: boolean) => {
-    setResourceBibleTabs(currentTabs =>
-      currentTabs.map(tab => (tab.id === bibleId ? { ...tab, isError } : tab))
-    );
-  }, []);
+  const handleBibleLoadingChange = useCallback(
+    (bibleId: string, isLoading: boolean) => updateResourceBibleTab(bibleId, { isLoading }),
+    [updateResourceBibleTab]
+  );
+
+  const handleBibleErrorChange = useCallback(
+    (bibleId: string, isError: boolean) => updateResourceBibleTab(bibleId, { isError }),
+    [updateResourceBibleTab]
+  );
 
   const toggleResources = useCallback(() => {
     setShowResources(prev => !prev);
@@ -916,7 +960,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const handleBibleTabClose = useCallback(
     (bibleId: string) => {
-      setResourceBibleTabs(currentTabs => currentTabs.filter(tab => tab.id !== bibleId));
+      setResourceBibleTab(current => (current?.id === bibleId ? null : current));
       setActiveBibleTabId(currentId => (currentId === bibleId ? SOURCE_BIBLE_TAB_ID : currentId));
 
       if (resourcePanelSelectedBibleId === bibleId) {
@@ -1402,7 +1446,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 playback={ttsPericopeGridProps}
                 projectItem={projectItem}
                 readOnly={readOnly}
-                resourceBibleTabs={resourceBibleTabs}
+                resourceBibleTab={resourceBibleTab}
                 selectedPanel={selectedPanel}
                 sourceVerseRefs={chapterSourceVerseRefs}
                 sourceVerses={sourceVerses}
@@ -1426,7 +1470,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
               <div className='bg-background sticky top-0 z-10 min-w-0 px-6 py-3'>
                 <BibleTabList
                   activeTabId={activeBibleTabId}
-                  resourceTabs={resourceBibleTabs}
+                  resourceTab={resourceBibleTab}
                   sourceLabel={projectItem.bibleName}
                   onClose={handleBibleTabClose}
                   onSelect={handleBibleTabSelect}
@@ -1494,6 +1538,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         <DraftingGridPericope
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
+                          bibleContentError={bibleContentError}
+                          bibleContentLoading={bibleContentLoading}
                           bibleVerseMap={bibleVerseMap}
                           contextChapters={pericopeContext.chapters}
                           fullPericopes={fullPericopes}
@@ -1511,7 +1557,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           projectItem={projectItem}
                           readOnly={readOnly}
                           resourceBibleId={activeResourceBibleTab?.id}
-                          resourceBibleLoading={bibleContentLoading}
                           selectedPanel={selectedPanel}
                           sourceVerses={sourceVerses}
                           suggestionStatus={suggestionStatus}
@@ -1524,6 +1569,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                         <DraftingGridVerse
                           activeVerseId={activeVerseId}
                           aiSuggestions={aiSuggestions}
+                          bibleContentError={bibleContentError}
+                          bibleContentLoading={bibleContentLoading}
                           bibleVerseMap={bibleVerseMap}
                           effectiveRevealedVerses={effectiveRevealedVerses}
                           getPericopeStyle={getPericopeStyle}
@@ -1540,6 +1587,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           tts={ttsGridProps}
                           verseRefs={verseRefs}
                           verses={verses}
+                          onLayoutChange={resizeAndPosition}
                         />
                       )}
                     </>

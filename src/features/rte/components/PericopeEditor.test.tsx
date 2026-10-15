@@ -40,6 +40,9 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
             },
             undo: editor.undo,
             redo: editor.redo,
+            applyUpdate: () => {
+              if (editor.usj) editor.commit?.(editor.usj);
+            },
           }),
           []
         );

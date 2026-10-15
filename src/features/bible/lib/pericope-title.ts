@@ -18,7 +18,7 @@ export function canSetPericopeTitle(markers?: VerseMarkers | null): boolean {
 export function withPericopeTitle(
   markers: VerseMarkers | null | undefined,
   text: string
-): VerseMarkers {
+): VerseMarkers | null {
   const headings = [...(markers?.headings ?? [])];
   const index = titleIndex(markers);
   if (index >= 0) {
@@ -27,7 +27,11 @@ export function withPericopeTitle(
   } else if (text.trim()) {
     headings.unshift({ marker: 's1', text });
   }
-  return { ...markers, headings };
+  if (headings.length) return { ...markers, headings };
+  // The API accepts nonempty structural arrays or null, never headings: [].
+  const remaining = { ...markers };
+  delete remaining.headings;
+  return remaining.paragraphs?.length ? remaining : null;
 }
 
 export function withoutPericopeTitle(markers?: VerseMarkers | null): VerseMarkers | null {

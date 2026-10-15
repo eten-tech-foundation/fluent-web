@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { VerseHeading, VerseMarkers, VerseParagraph } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -69,6 +69,7 @@ export const useBibleTextDebounce = ({
   const lastSavedContent = useRef<Map<number, SavePayload>>(new Map());
   const currentContent = useRef<Map<number, SavePayload>>(new Map());
   const saveSequence = useRef<Map<number, number>>(new Map());
+  const flushPendingSavesRef = useRef<() => void>(() => {});
 
   // Helper to cancel all pending timers
   const cancelAllTimers = useCallback(() => {
@@ -78,15 +79,7 @@ export const useBibleTextDebounce = ({
     retryTimeouts.current.clear();
   }, []);
 
-  useEffect(() => {
-    const debounceTimeoutsRef = debounceTimeouts.current;
-    const retryTimeoutsRef = retryTimeouts.current;
-
-    return () => {
-      debounceTimeoutsRef.forEach(timeout => clearTimeout(timeout));
-      retryTimeoutsRef.forEach(timeout => clearTimeout(timeout));
-    };
-  }, []);
+  useEffect(() => () => flushPendingSavesRef.current(), []);
 
   // Clear queued timers when roleChangeWarning becomes active
   useEffect(() => {
@@ -98,6 +91,10 @@ export const useBibleTextDebounce = ({
   // Core save function that handles race conditions and retries
   const executeSave = useCallback(
     async (verseId: number, payload: SavePayload, sequenceNumber: number): Promise<void> => {
+      // Serialize requests for this verse so a delayed older write cannot overwrite a newer one.
+      const previousSave = activeSaves.current.get(verseId);
+      await previousSave?.catch(() => {});
+
       // Don't execute save if role warning is active
       if (useAppStore.getState().roleChangeWarning) {
         activeSaves.current.delete(verseId);
@@ -119,9 +116,9 @@ export const useBibleTextDebounce = ({
       try {
         await onSave(verseId, payload);
 
-        // Only update if this is still the latest sequence
+        // Track what reached the server even when a newer edit is waiting to save.
+        lastSavedContent.current.set(verseId, payload);
         if (sequenceNumber === (saveSequence.current.get(verseId) ?? 0)) {
-          lastSavedContent.current.set(verseId, payload);
           activeSaves.current.delete(verseId);
 
           // Clear any pending retry for this verse
@@ -134,6 +131,10 @@ export const useBibleTextDebounce = ({
       } catch (error) {
         const errStatus = (error as { status?: number } | null | undefined)?.status;
         const isForbidden = errStatus === 403 || errStatus === 401 || errStatus === 404;
+
+        // A failed response does not prove the server rejected the write. Re-send the live
+        // content even when the translator reverted to the previously acknowledged text.
+        if (!isForbidden) lastSavedContent.current.delete(verseId);
 
         if (isForbidden) {
           useAppStore.getState().setRoleChangeWarning(true);
@@ -157,15 +158,15 @@ export const useBibleTextDebounce = ({
               ) {
                 const newSequence = (saveSequence.current.get(verseId) ?? 0) + 1;
                 saveSequence.current.set(verseId, newSequence);
-                activeSaves.current.set(verseId, executeSave(verseId, retryPayload, newSequence));
+                const retryPromise = executeSave(verseId, retryPayload, newSequence);
+                // A failed background retry schedules its next attempt in executeSave.
+                retryPromise.catch(() => {});
+                activeSaves.current.set(verseId, retryPromise);
               }
             }, retryDelayMs);
 
             retryTimeouts.current.set(verseId, retryTimeout);
           }
-        } else {
-          // If this is an outdated sequence that failed, still clean it up
-          activeSaves.current.delete(verseId);
         }
 
         throw error;
@@ -187,7 +188,10 @@ export const useBibleTextDebounce = ({
       }
 
       // Don't schedule a save if content and markers haven't changed from the last saved
-      if (samePayload(payload, lastSavedContent.current.get(verseId))) {
+      if (
+        !activeSaves.current.has(verseId) &&
+        samePayload(payload, lastSavedContent.current.get(verseId))
+      ) {
         debounceTimeouts.current.delete(verseId);
         return;
       }
@@ -224,20 +228,8 @@ export const useBibleTextDebounce = ({
         debounceTimeouts.current.delete(verseId);
       }
 
-      // Don't save if content and markers haven't changed
-      if (samePayload(payload, lastSavedContent.current.get(verseId))) {
-        return;
-      }
-
-      // Create new sequence number BEFORE checking existing saves
       const sequenceNumber = (saveSequence.current.get(verseId) ?? 0) + 1;
       saveSequence.current.set(verseId, sequenceNumber);
-
-      // Wait for any existing save to complete first, but ignore errors
-      const existingSave = activeSaves.current.get(verseId);
-      if (existingSave) {
-        await existingSave;
-      }
 
       const savePromise = executeSave(verseId, payload, sequenceNumber);
       activeSaves.current.set(verseId, savePromise);
@@ -246,6 +238,25 @@ export const useBibleTextDebounce = ({
     },
     [executeSave]
   );
+
+  useLayoutEffect(() => {
+    flushPendingSavesRef.current = () => {
+      const pendingVerseIds = new Set([
+        ...debounceTimeouts.current.keys(),
+        ...retryTimeouts.current.keys(),
+      ]);
+      cancelAllTimers();
+      // Keep the departing editor's onSave closure and payloads. The next assignment has
+      // its own hook instance, so its verse numbers cannot cancel or redirect these saves.
+      for (const verseId of pendingVerseIds) {
+        const payload = currentContent.current.get(verseId);
+        if (payload !== undefined) {
+          // Transient failures still schedule retries, including after this editor unmounts.
+          void saveImmediately(verseId, payload).catch(() => {});
+        }
+      }
+    };
+  }, [cancelAllTimers, saveImmediately]);
 
   const getSaveStatus = useCallback((verseId: number) => {
     const hasPendingDebounce = debounceTimeouts.current.has(verseId);

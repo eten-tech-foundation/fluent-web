@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ProgressBarTrack } from '@/features/projects/components/ProgressBarTrack';
 import useProgressBar from '@/features/projects/hooks/useProgressBar';
 import { useUserProjects } from '@/features/projects/hooks/useProjects';
 import { type Project } from '@/lib/types';
@@ -28,24 +29,7 @@ const ProjectProgressBar: React.FC<{ project: Project }> = ({ project }) => {
   const { calculateProgressSegments } = useProgressBar(project.workflowConfig);
   const segments = calculateProgressSegments(project.chapterStatusCounts);
 
-  if (segments.length === 0) {
-    return <div className='bg-primary/10 h-[7px] w-full rounded-full' />;
-  }
-
-  return (
-    <div className='flex h-[7px] w-full overflow-hidden rounded-full'>
-      {segments.map((segment, index) => (
-        <div
-          key={`${segment.status}-${index}`}
-          className='transition-all'
-          style={{
-            width: `${segment.widthPercentage}%`,
-            backgroundColor: segment.color,
-          }}
-        />
-      ))}
-    </div>
-  );
+  return <ProgressBarTrack className='h-[7px] w-full' segments={segments} />;
 };
 
 const TruncatedText: React.FC<{ text: string }> = ({ text }) => {

@@ -8,8 +8,9 @@
  * `useSourceTtsPlayback.test.ts`, so both are stubbed here: this file drives
  * playback state directly and inspects what drafting handed over.
  */
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +33,7 @@ import {
   type User,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+import { createTestQueryClient } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -160,6 +162,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
     moveToNextVerse: vi.fn(),
     revealNextVerse: vi.fn(),
     updateButtonPosition: vi.fn(),
+    resizeAndPosition: vi.fn(),
   }),
 }));
 
@@ -408,6 +411,18 @@ const RegistryProbe = () => {
   return null;
 };
 
+function TestProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createTestQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackRegistryProvider>
+        <RegistryProbe />
+        {children}
+      </PlaybackRegistryProvider>
+    </QueryClientProvider>
+  );
+}
+
 const renderDrafting = (
   projectItem: ProjectItem = mockProjectItem,
   readOnly = false,
@@ -422,12 +437,7 @@ const renderDrafting = (
       userdetail={{ id: 1 } as unknown as User}
     />,
     {
-      wrapper: ({ children }) => (
-        <PlaybackRegistryProvider>
-          <RegistryProbe />
-          {children}
-        </PlaybackRegistryProvider>
-      ),
+      wrapper: TestProviders,
     }
   );
 
@@ -443,7 +453,7 @@ beforeEach(() => {
   setHideAudio(false);
   useAppStore.setState({ displayMode: 'verse' });
   vi.clearAllMocks();
-  mockFeatureFlag.mockReturnValue(true);
+  mockFeatureFlag.mockImplementation(() => true);
   ttsRows = [];
   capturedPlaybackOptions = undefined;
   realPlayback = false;
@@ -1180,10 +1190,14 @@ describe('DraftingUI — keyboard shortcuts', () => {
   it('Alt+P and play-from-here share the impossible button reason and start nothing', async () => {
     realPlayback = true;
     renderDrafting();
+    const playButton = await screen.findByRole('button', { name: 'Play verse 1' });
+    await waitFor(() => {
+      expect(registry.getSnapshot(playback.verseKey('1')!)).toBeDefined();
+    });
     act(() => registry.setImpossible(playback.verseKey('1')!, 'Licence forbids audio.'));
     await userEvent.keyboard('{Alt>}p{/Alt}');
     await userEvent.keyboard('{Alt>}{Shift>}p{/Shift}{/Alt}');
-    await userEvent.click(screen.getByRole('button', { name: 'Play verse 1' }));
+    await userEvent.click(playButton);
     expect(toastError).toHaveBeenCalledTimes(3);
     expect(toastError.mock.calls.every(([reason]) => reason === 'Licence forbids audio.')).toBe(
       true
@@ -1962,6 +1976,13 @@ describe('DraftingUI — the serving tint', () => {
 });
 
 vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () => undefined }));
+// These suites test audio in Chapter view, not its availability gate (#507), and the mock
+// chapter has empty verses. Treat it as complete so a 'chapter' displayMode really opens it,
+// keeping the real hook's RTE flag gate.
+vi.mock('@/features/bible/hooks/useChapterViewAvailability', async () => {
+  const { config } = await import('@/lib/config');
+  return { useChapterViewAvailability: () => config.features.rtePericope };
+});
 const mockReferenceChapters = new Map<
   number,
   { texts: Map<number, string>; loading: boolean; error: boolean }
