@@ -55,13 +55,13 @@ const setup = (overrides: Partial<React.ComponentProps<typeof UserModal>> = {}) 
 };
 
 describe('UserModal — create', () => {
-  it('offers only Org Manager in the role dropdown (project roles stay project-scoped)', async () => {
+  it('offers Organization Member + Org Manager in the role dropdown (project roles stay project-scoped)', async () => {
     const { user } = setup();
 
     await user.click(screen.getByRole('combobox'));
 
-    await waitFor(() => expect(screen.getByRole('option')).toHaveTextContent('Org Manager'));
-    expect(screen.getAllByRole('option')).toHaveLength(1);
+    const options = await screen.findAllByRole('option');
+    expect(options.map(o => o.textContent)).toEqual(['Organization Member', 'Org Manager']);
   });
 
   it('blocks submit and shows the duplicate notice when the email already belongs to the org', async () => {

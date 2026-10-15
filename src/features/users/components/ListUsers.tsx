@@ -28,8 +28,6 @@ interface UsersPageProps {
   /** Email of the signed-in user; their row hides the remove action (D2). */
   currentUserEmail?: string;
   onRemoveUser?: (user: User) => void;
-  /** Slot rendered above the table (e.g. the remove-confirmation banner). */
-  banner?: React.ReactNode;
 }
 
 const TruncatedTextCell = ({
@@ -88,7 +86,6 @@ export const UsersPage: React.FC<UsersPageProps> = ({
   activeOrgId = null,
   currentUserEmail,
   onRemoveUser,
-  banner,
 }) => {
   const { t } = useTranslation();
 
@@ -117,8 +114,6 @@ export const UsersPage: React.FC<UsersPageProps> = ({
           title={t('users')}
         />
       </div>
-
-      {banner}
 
       <div className='flex flex-1 flex-col overflow-hidden rounded-lg border shadow'>
         {loading ? (

@@ -131,6 +131,7 @@ vi.mock('@/features/bible/hooks/useDrafting', () => ({
     moveToNextVerse: vi.fn(),
     revealNextVerse: vi.fn(),
     updateButtonPosition: vi.fn(),
+    resizeAndPosition: vi.fn(),
   }),
 }));
 

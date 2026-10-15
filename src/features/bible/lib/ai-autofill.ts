@@ -10,6 +10,10 @@ export interface AiAutoFill {
   markers?: VerseMarkers;
 }
 
+/** A source-backed input is empty before the API has a saved translation row, in every view. */
+export const targetFor = (verseNumber: number, verses: TargetVerse[]): TargetVerse =>
+  verses.find(verse => verse.verseNumber === verseNumber) ?? { verseNumber, content: '' };
+
 interface PendingAiAutoFillsArgs {
   /** The verses that may receive a suggestion right now, in the order they should be written. */
   candidateVerseNumbers: number[];
@@ -49,8 +53,8 @@ export const pendingAiAutoFills = ({
     const suggestion = suggestions[verseNumber];
     if (!suggestion) return [];
 
-    const target = verses.find(verse => verse.verseNumber === verseNumber);
-    if (!target || target.content.trim()) return [];
+    const target = targetFor(verseNumber, verses);
+    if (target.content.trim()) return [];
 
     return [{ verseNumber, text: suggestion, markers: target.markers ?? undefined }];
   });

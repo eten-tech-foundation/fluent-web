@@ -34,6 +34,8 @@ import { useAppStore } from '@/store/store';
 
 import { PericopeTitleInput } from './PericopeTitleInput';
 
+import '../styles/source-fonts.css';
+
 // Loaded only when the flag is on: the editor is ~180 KB gz, and users on the textarea path must
 // not pay for it (see eten-tech-foundation/scripture-editors#516).
 const PericopeRteGroup = lazy(() =>
@@ -70,7 +72,8 @@ interface DraftingGridPericopeProps {
   fullPericopes?: PericopeGroup[];
   contextChapters?: Map<number, PericopeContextChapter>;
   resourceBibleId?: string;
-  resourceBibleLoading?: boolean;
+  bibleContentLoading?: boolean;
+  bibleContentError?: boolean;
   pericopes: PericopeGroup[];
   sourceVerses: Source[];
   verses: TargetVerse[];
@@ -187,7 +190,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
             <div className='flex min-h-[24px] flex-1 flex-col items-start justify-center'>
               <div className='relative w-full'>
                 {readOnly ? (
-                  <p className='w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                  <p className='target-scripture w-full text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                     {currentTargetVerse?.content ?? ''}
                   </p>
                 ) : (
@@ -198,7 +201,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                     aria-label={`Translation for verse ${v.verseNumber}`}
                     autoCapitalize='sentences'
                     autoCorrect='on'
-                    className={`text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
+                    className={`target-scripture text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
                       isButtonRow ? 'pr-16' : ''
                     }`}
                     placeholder={
@@ -483,7 +486,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   fullPericopes,
   contextChapters,
   resourceBibleId,
-  resourceBibleLoading = false,
+  bibleContentLoading = false,
+  bibleContentError = false,
   pericopes,
   sourceVerses,
   verses,
@@ -564,7 +568,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
               <div
-                className='flex w-full min-w-0 flex-col px-6'
+                className='source-scripture flex w-full min-w-0 flex-col px-6'
                 data-testid='pericope-source-column'
               >
                 <div className='flex h-6 min-w-0 items-center gap-2'>
@@ -577,15 +581,13 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 </div>
                 {showResourcePlaceholder ? (
                   <div className='bg-muted flex min-h-32 w-full items-center justify-center rounded-lg border-2 p-5'>
-                    {resourceBibleLoading ? (
+                    {bibleContentLoading ? (
                       <Loader2
                         aria-label={t('loading', 'Loading...')}
                         className='text-muted-foreground h-6 w-6 animate-spin'
                       />
                     ) : (
-                      <p className='text-muted-foreground text-center text-sm'>
-                        {t('noContentAvailable', 'No content available')}
-                      </p>
+                      <PericopeText className='text-center' isError={bibleContentError} />
                     )}
                   </div>
                 ) : (
@@ -647,9 +649,11 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                           const loading =
                             selectedPanel === 1
                               ? !isCurrentChapter && context?.sourceIsLoading
-                              : resourceBibleLoading;
+                              : bibleContentLoading;
                           const failed =
-                            selectedPanel === 1 && !isCurrentChapter && context?.sourceIsError;
+                            selectedPanel === 1
+                              ? !isCurrentChapter && context?.sourceIsError
+                              : isCurrentChapter && bibleContentError;
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span

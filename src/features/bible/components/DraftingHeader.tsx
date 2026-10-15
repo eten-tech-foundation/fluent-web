@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
-import { BookText, ChevronLeft, Loader } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { BookText, ChevronLeft, Headphones, Loader } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { getStatusDisplay } from '@/lib/formatters';
 import {
   type ChapterAssignmentStatus as ChapterAssignmentStatusType,
@@ -25,10 +27,46 @@ interface DraftingHeaderProps {
   isDraft: boolean;
   buttonText: string | undefined;
   activeFindingsCount?: number;
+  /** When true, the "View Audio" button is shown (≥1 recorded take exists in this chapter). */
+  hasAnyAudio?: boolean;
+  /** When true, chapter audio is being fetched from backend. */
+  isAudioLoading?: boolean;
+  /** When true, the current user is a Project Manager and may access the audio review view. */
+  isPM?: boolean;
   onBack: () => void;
   onToggleResources: () => void;
   onSubmit: () => Promise<void>;
 }
+
+interface ViewAudioButtonProps {
+  isAudioLoading: boolean;
+  onClick: () => void;
+}
+
+export const ViewAudioButton: React.FC<ViewAudioButtonProps> = ({ isAudioLoading, onClick }) => {
+  const { t } = useTranslation();
+
+  return (
+    <Button
+      className={
+        isAudioLoading
+          ? 'flex cursor-not-allowed items-center gap-2 opacity-60'
+          : 'border-primary text-primary hover:bg-primary/10 hover:text-primary flex cursor-pointer items-center gap-2'
+      }
+      disabled={isAudioLoading}
+      type='button'
+      variant='outline'
+      onClick={onClick}
+    >
+      {isAudioLoading ? (
+        <Loader className='h-4 w-4 animate-spin' />
+      ) : (
+        <Headphones className='h-4 w-4' />
+      )}
+      {t('viewAudio', 'View Audio')}
+    </Button>
+  );
+};
 
 export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   projectItem,
@@ -42,12 +80,28 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
   isDraft,
   buttonText,
   activeFindingsCount,
+  hasAnyAudio = false,
+  isAudioLoading = false,
+  isPM = false,
   onBack,
   onToggleResources,
   onSubmit,
 }) => {
   const { t } = useTranslation();
   const roleChangeWarning = useAppStore(state => state.roleChangeWarning);
+  const { getStageLabel } = useProjectWorkflow(projectItem.projectId);
+  const navigate = useNavigate();
+
+  const handleViewAudio = useCallback(() => {
+    void navigate({
+      to: '/audio/$bookId/$chapterNumber',
+      params: {
+        bookId: projectItem.bookId.toString(),
+        chapterNumber: projectItem.chapterNumber.toString(),
+      },
+      state: { projectItem },
+    });
+  }, [navigate, projectItem]);
 
   const backButton = (
     <TooltipProvider delayDuration={300}>
@@ -84,7 +138,10 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
             className='rounded-full border-2 px-3 py-1 text-sm font-bold whitespace-nowrap text-(--text-disabled)'
             variant='outline'
           >
-            {getStatusDisplay(projectItem.chapterStatus as ChapterAssignmentStatusType)}
+            {getStatusDisplay(
+              projectItem.chapterStatus as ChapterAssignmentStatusType,
+              getStageLabel
+            )}
           </Badge>
         </div>
 
@@ -131,6 +188,10 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
               </Tooltip>
             </TooltipProvider>
 
+            {isPM && (isAudioLoading || hasAnyAudio) && (
+              <ViewAudioButton isAudioLoading={isAudioLoading} onClick={handleViewAudio} />
+            )}
+
             {!isComplete && isDraft && (
               <div className='bg-input rounded-lg border sm:w-40 md:w-50 lg:w-76 xl:w-105'>
                 <div className='h-4 overflow-hidden rounded-full'>
@@ -155,6 +216,12 @@ export const DraftingHeader: React.FC<DraftingHeaderProps> = ({
                 {buttonText}
               </Button>
             )}
+          </div>
+        )}
+
+        {readOnly && isPM && (isAudioLoading || hasAnyAudio) && (
+          <div className='flex flex-1 items-center justify-end'>
+            <ViewAudioButton isAudioLoading={isAudioLoading} onClick={handleViewAudio} />
           </div>
         )}
       </div>

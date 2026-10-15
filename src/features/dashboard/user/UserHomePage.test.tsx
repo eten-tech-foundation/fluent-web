@@ -1,10 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UserHomePage } from '@/features/dashboard/user/UserHomePage';
+import { config } from '@/lib/config';
 import { type User, type UserChapterAssignment } from '@/lib/types';
 import { useAppStore } from '@/store/store';
+import { server } from '@/test/msw/server';
+import { renderWithProviders as render } from '@/test/render';
 
 import type * as ReactRouter from '@tanstack/react-router';
 
@@ -106,5 +110,82 @@ describe('UserHomePage tabs', () => {
     await user.click(screen.getByRole('button', { name: /my work/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/', search: {} });
+  });
+
+  it('includes custom stages in the status filter dropdown', async () => {
+    const user = userEvent.setup();
+    const customChapter = assignment({
+      chapterAssignmentId: 3,
+      book: 'Leviticus',
+      bookId: 3,
+      chapterStatus: 'custom_audio_check',
+    });
+    mockUseChapterAssignments.mockReturnValue({
+      data: {
+        assignedChapters: [workChapter, customChapter],
+        peerCheckChapters: [],
+      },
+      isLoading: false,
+    });
+
+    render(<UserHomePage />);
+
+    const statusFilterBtn = screen.getByRole('button', { name: /status/i });
+    await user.click(statusFilterBtn);
+
+    const popover = screen.getByRole('dialog');
+    expect(within(popover).getByText('custom_audio_check')).toBeInTheDocument();
+  });
+
+  it('lists both Draft and Drafting when two different projects have different display names for draft', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${config.api.url}/projects/1/workflow-stages`, () =>
+        HttpResponse.json([
+          { id: 'not_started', label: 'Not Started', stageId: 1, position: 0 },
+          { id: 'draft', label: 'Draft', stageId: 2, position: 1 },
+          { id: 'complete', label: 'Complete', stageId: 3, position: 2 },
+        ])
+      ),
+      http.get(`${config.api.url}/projects/2/workflow-stages`, () =>
+        HttpResponse.json([
+          { id: 'not_started', label: 'Not Started', stageId: 1, position: 0 },
+          { id: 'draft', label: 'Drafting', stageId: 2, position: 1 },
+          { id: 'complete', label: 'Complete', stageId: 3, position: 2 },
+        ])
+      )
+    );
+
+    const project1Chapter = assignment({
+      chapterAssignmentId: 1,
+      projectId: 1,
+      book: 'Genesis',
+      chapterStatus: 'draft',
+    });
+    const project2Chapter = assignment({
+      chapterAssignmentId: 2,
+      projectId: 2,
+      projectUnitId: 20,
+      bookId: 2,
+      book: 'Exodus',
+      chapterStatus: 'draft',
+    });
+
+    mockUseChapterAssignments.mockReturnValue({
+      data: {
+        assignedChapters: [project1Chapter, project2Chapter],
+        peerCheckChapters: [],
+      },
+      isLoading: false,
+    });
+
+    render(<UserHomePage />);
+
+    const statusFilterBtn = screen.getByRole('button', { name: /status/i });
+    await user.click(statusFilterBtn);
+
+    const popover = screen.getByRole('dialog');
+    expect(await within(popover).findByText('Draft')).toBeInTheDocument();
+    expect(await within(popover).findByText('Drafting')).toBeInTheDocument();
   });
 });

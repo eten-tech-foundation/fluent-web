@@ -28,8 +28,15 @@ export function useHistoryShortcuts(editorRef: RefObject<EditorRef | null>) {
       // keeps the (already handled) keystroke from also reaching the editor's key handling.
       event.preventDefault();
       event.stopPropagation();
-      if (isUndo) editorRef.current?.undo();
-      else editorRef.current?.redo();
+      const editor = editorRef.current;
+      if (!editor) return;
+      if (isUndo) editor.undo();
+      else editor.redo();
+      // Editorial 0.8.15 can restore a paragraph's history state without dirty text nodes.
+      // Its change plugin then skips the update, leaving getUsj/autosave behind the DOM.
+      // An empty local delta flushes that state through the public serializer and callback
+      // without editing the document or adding a history entry.
+      editor.applyUpdate([], 'local');
     },
     [editorRef]
   );

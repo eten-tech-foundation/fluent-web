@@ -185,13 +185,16 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
       const isAssignedDrafter = assignment.assignedUser?.id === userdetail.id;
       const isAssignedPeerChecker = assignment.peerChecker?.id === userdetail.id;
 
+      const isPostPeer =
+        status !== ChapterAssignmentStatus.NOT_STARTED &&
+        status !== ChapterAssignmentStatus.DRAFT &&
+        status !== ChapterAssignmentStatus.PEER_CHECK &&
+        status !== ChapterAssignmentStatus.COMPLETE;
+
       const canEdit =
         (isAssignedDrafter && status === ChapterAssignmentStatus.DRAFT) ||
         (isAssignedPeerChecker && status === ChapterAssignmentStatus.PEER_CHECK) ||
-        status === ChapterAssignmentStatus.COMMUNITY_REVIEW ||
-        status === ChapterAssignmentStatus.LINGUIST_CHECK ||
-        status === ChapterAssignmentStatus.THEOLOGICAL_CHECK ||
-        status === ChapterAssignmentStatus.CONSULTANT_CHECK;
+        isPostPeer;
 
       const route = canEdit
         ? '/translation/$bookId/$chapterNumber'
@@ -484,6 +487,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
             isLoading={assignmentsLoading}
             isManager={isManager}
             isRowActionsDisabled={isLoadingData}
+            projectId={projectId}
             selectedAssignments={selectedAssignments}
             selectedBook={selectedBook}
             onCheckboxChange={handleCheckboxChange}
@@ -497,6 +501,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
         availablePeerCheckers={availablePeerCheckers}
         isAssigning={assignChapterMutation.isPending}
         isOpen={isDialogOpen}
+        projectId={projectId}
         projectUsers={projectTranslators}
         selectedAssignmentsStatuses={selectedAssignmentsStatuses}
         selectedDrafter={selectedDrafter}

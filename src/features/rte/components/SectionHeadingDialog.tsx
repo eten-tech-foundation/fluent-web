@@ -20,10 +20,16 @@ interface SectionHeadingDialogProps {
   verseNumber: number;
   onAdd: (text: string) => void;
   onClose: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /** Collect heading words before inserting: an empty heading cannot be saved by the API. */
-export function SectionHeadingDialog({ verseNumber, onAdd, onClose }: SectionHeadingDialogProps) {
+export function SectionHeadingDialog({
+  verseNumber,
+  onAdd,
+  onClose,
+  onCloseAutoFocus,
+}: SectionHeadingDialogProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const invalid = Boolean(text.trim()) && !isValidHeadingText(text);
@@ -35,7 +41,7 @@ export function SectionHeadingDialog({ verseNumber, onAdd, onClose }: SectionHea
         if (!open) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <form
           className='grid gap-4'
           onSubmit={event => {

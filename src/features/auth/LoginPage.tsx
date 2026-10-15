@@ -162,7 +162,7 @@ export function LoginPage() {
 
   return (
     <div className='bg-primary flex min-h-screen flex-col items-center justify-center font-sans text-[#172b4d]'>
-      <div className='relative flex min-h-[500px] w-full max-w-[400px] flex-col justify-center rounded-[3px] bg-[#fffef9] px-[50px] py-[60px] text-center shadow-[0_4px_12px_rgba(0,0,0,0.15)]'>
+      <div className='login-card relative flex min-h-[500px] w-full max-w-[400px] flex-col justify-center rounded-[3px] bg-[#fffef9] px-[50px] py-[60px] text-center shadow-[0_4px_12px_rgba(0,0,0,0.15)]'>
         {/* --- VIEW: LOGIN --- */}
         <div
           className={`animate-in fade-in slide-in-from-bottom-1 duration-300 ${view === 'login' ? 'block' : 'hidden'}`}

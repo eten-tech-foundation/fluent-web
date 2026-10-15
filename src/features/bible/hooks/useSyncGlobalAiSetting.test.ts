@@ -37,6 +37,8 @@ describe('useSyncGlobalAiSetting', () => {
   beforeEach(() => {
     useAppStore.setState({
       aiAutoEnablePreferences: {},
+      aiSyncPendingCount: 0,
+      manualAiEnable: null,
       userdetail: mockUser,
       currentProjectItem: null,
     });

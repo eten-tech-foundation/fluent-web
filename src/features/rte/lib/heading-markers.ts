@@ -31,6 +31,8 @@ export const isHeadingMarker = (marker: string | undefined): boolean =>
 export const isValidHeadingText = (text: string): boolean =>
   text.trim().length > 0 && text.trim().length <= 300 && !/[\\\n\r\u2028\u2029]/.test(text);
 
+export const MAX_HEADINGS_PER_VERSE = 4;
+
 export type HeadingError = 'text' | 'count' | null;
 
 /** Validate direct editor changes too, before they enter the autosave queue. */
@@ -39,7 +41,7 @@ export function headingErrorIn(
 ): HeadingError {
   for (const row of rows) {
     const headings = row.markers?.headings ?? [];
-    if (headings.length + (row.reservedHeadingSlots ?? 0) > 4) return 'count';
+    if (headings.length + (row.reservedHeadingSlots ?? 0) > MAX_HEADINGS_PER_VERSE) return 'count';
     if (headings.some(heading => !isValidHeadingText(heading.text))) return 'text';
   }
   return null;

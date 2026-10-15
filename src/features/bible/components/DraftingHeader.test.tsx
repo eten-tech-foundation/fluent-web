@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DraftingHeader } from '@/features/bible/components/DraftingHeader';
 import { ChapterAssignmentStatus, type ProjectItem } from '@/lib/types';
+import { renderWithProviders as render } from '@/test/render';
 
 const mockProjectItem: ProjectItem = {
   chapterAssignmentId: 1,
@@ -71,5 +72,42 @@ describe('DraftingHeader', () => {
     await user.click(toggleButton);
 
     expect(onToggleResources).toHaveBeenCalledOnce();
+  });
+
+  it('renders View Audio button when user is PM and audio exists', () => {
+    render(<DraftingHeader {...defaultProps} hasAnyAudio={true} isPM={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+    expect(audioButton).not.toBeDisabled();
+  });
+
+  it('renders disabled View Audio button with spinner while audio is loading', () => {
+    render(<DraftingHeader {...defaultProps} isAudioLoading={true} isPM={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+    expect(audioButton).toBeDisabled();
+  });
+
+  it('renders View Audio button in readOnly mode when user is PM and audio exists', () => {
+    render(<DraftingHeader {...defaultProps} hasAnyAudio={true} isPM={true} readOnly={true} />);
+
+    const audioButton = screen.getByRole('button', { name: /View Audio/i });
+    expect(audioButton).toBeInTheDocument();
+  });
+
+  it('does not render View Audio button when user is not a PM', () => {
+    render(<DraftingHeader {...defaultProps} hasAnyAudio={true} isPM={false} />);
+
+    expect(screen.queryByRole('button', { name: /View Audio/i })).not.toBeInTheDocument();
+  });
+
+  it('does not render View Audio button when there is no audio and not loading', () => {
+    render(
+      <DraftingHeader {...defaultProps} hasAnyAudio={false} isAudioLoading={false} isPM={true} />
+    );
+
+    expect(screen.queryByRole('button', { name: /View Audio/i })).not.toBeInTheDocument();
   });
 });

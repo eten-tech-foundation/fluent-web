@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { type ProjectUser } from '@/features/projects/hooks/useProjectUsers';
+import { useProjectWorkflow } from '@/features/projects/hooks/useProjectWorkflow';
 import { ChapterAssignmentStatus } from '@/lib/types';
 
 interface AssignUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  projectId?: number;
   selectedDrafter: string;
   selectedPeerChecker: string;
   onDrafterChange: (value: string) => void;
@@ -86,6 +88,7 @@ export const TruncatedDropdownText = ({
 export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   isOpen,
   onClose,
+  projectId,
   selectedDrafter,
   selectedPeerChecker,
   onDrafterChange,
@@ -98,49 +101,33 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
   onAssign,
   selectedAssignmentsStatuses,
 }) => {
-  const hasPeerCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.PEER_CHECK
-  );
-  const hasCommunityReviewStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.COMMUNITY_REVIEW
-  );
-  const hasLinguistCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.LINGUIST_CHECK
-  );
-  const hasTheologicalCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.THEOLOGICAL_CHECK
-  );
-  const hasConsultantCheckStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.CONSULTANT_CHECK
-  );
-  const hasCompleteStatus = selectedAssignmentsStatuses.some(
-    status => status === ChapterAssignmentStatus.COMPLETE
-  );
+  const { getStageLabel, getRoleLabel } = useProjectWorkflow(projectId);
+  const draftingName = getStageLabel(ChapterAssignmentStatus.DRAFT, 'Drafting');
+  const drafterRoleName = getRoleLabel(ChapterAssignmentStatus.DRAFT, 'Drafter');
+  const peerCheckName = getStageLabel(ChapterAssignmentStatus.PEER_CHECK, 'Peer Check');
+  const peerCheckerRoleName = getRoleLabel(ChapterAssignmentStatus.PEER_CHECK, 'Peer Checker');
+
   const hasCompleteSelection = !!selectedDrafter && !!selectedPeerChecker;
   const isDraftingComplete = selectedAssignmentsStatuses.some(
     status =>
       status !== ChapterAssignmentStatus.NOT_STARTED && status !== ChapterAssignmentStatus.DRAFT
   );
 
-  const isDrafterDisabled =
-    hasPeerCheckStatus ||
-    hasCommunityReviewStatus ||
-    hasLinguistCheckStatus ||
-    hasTheologicalCheckStatus ||
-    hasConsultantCheckStatus ||
-    hasCompleteStatus;
-  const isPeerCheckerDisabled =
-    hasCommunityReviewStatus ||
-    hasLinguistCheckStatus ||
-    hasTheologicalCheckStatus ||
-    hasConsultantCheckStatus ||
-    hasCompleteStatus;
+  const isDrafterDisabled = isDraftingComplete;
+  const isPeerCheckerDisabled = selectedAssignmentsStatuses.some(
+    status =>
+      status !== ChapterAssignmentStatus.NOT_STARTED &&
+      status !== ChapterAssignmentStatus.DRAFT &&
+      status !== ChapterAssignmentStatus.PEER_CHECK
+  );
 
   const isResetDisabled =
     (!selectedDrafter && !selectedPeerChecker) || isDraftingComplete || usersLoading || isAssigning;
 
+  const allAssignableRolesDisabled = isDrafterDisabled && isPeerCheckerDisabled;
+
   const isSubmitDisabled =
-    !hasCompleteSelection || isPeerCheckerDisabled || usersLoading || isAssigning;
+    !hasCompleteSelection || allAssignableRolesDisabled || usersLoading || isAssigning;
 
   const handleReset = () => {
     onDrafterChange('');
@@ -158,7 +145,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
         <div>
           <div className='mt-1 mb-2 flex items-center gap-1'>
             <span className='text-sm text-red-500'>*</span>
-            <label className='block text-sm font-medium'>Drafter</label>
+            <label className='block text-sm font-medium'>{drafterRoleName || draftingName}</label>
           </div>
           <Select
             disabled={isDrafterDisabled || usersLoading}
@@ -182,7 +169,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
                     {usersLoading
                       ? 'Loading users...'
                       : isDrafterDisabled
-                        ? 'Cannot modify drafter for this status'
+                        ? `Cannot modify ${draftingName.toLowerCase()} for this status`
                         : 'Select a User'}
                   </span>
                 )}
@@ -200,11 +187,12 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
           </Select>
         </div>
 
-        {/* Peer Checker */}
         <div>
           <div className='mb-2 flex items-center gap-1'>
             <span className='text-sm text-red-500'>*</span>
-            <label className='block text-sm font-medium'>Peer Checker</label>
+            <label className='block text-sm font-medium'>
+              {peerCheckerRoleName || peerCheckName}
+            </label>
           </div>
           <Select
             disabled={isPeerCheckerDisabled || usersLoading}
@@ -228,7 +216,7 @@ export const AssignUsersDialog: React.FC<AssignUsersDialogProps> = ({
                     {usersLoading
                       ? 'Loading users...'
                       : isPeerCheckerDisabled
-                        ? 'Cannot modify peer checker for this status'
+                        ? `Cannot modify ${peerCheckName.toLowerCase()} for this status`
                         : 'Select a User'}
                   </span>
                 )}

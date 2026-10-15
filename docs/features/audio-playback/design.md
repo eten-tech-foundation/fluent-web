@@ -185,6 +185,8 @@ The drafting delivery includes source and reference Bible audio in verse, perico
 
 Translation Notes, Questions, Words, and Open Study Notes remain later delivery. Their concrete controls and article chunking will be decided with that work. The native FIA guide/key-term player now honors the aggregate audio gate and Hide Audio, but it remains outside the shared playback registry. Later resource/FIA work can add app-wide exclusivity and decide whether FIA receives redesigned controls. Audio-only source Bibles are not ruled out by the segment model.
 
+Audio review (take evaluation and conflict resolution) connects to the shared `PlaybackRegistry` for app-wide playback exclusivity: claiming playback immediately pauses any active drafting or resource audio, and subsequent sounding claimants pause the review player. Because take review requires side-by-side comparison of multiple candidate takes for the same verse or pericope with per-take visual waveform progress and fast A/B scrubbing, it retains a lightweight take-comparison player rather than the drafting queue, ScrubBar, and segment-resolution stack.
+
 ## 16. Current delivery decisions and later follow-ups
 
 Current drafting delivery records these decisions:
@@ -193,6 +195,7 @@ Current drafting delivery records these decisions:
 - Recording acknowledgment, later Info access, and Settings attribution are part of the current notice flow.
 - Chapter mode uses one chapter-sized player with source-only highlighting and scrolling.
 - Reference playback may use an exact configured Aquifer recording or TTS when that exact text identity has whole-edition clearance. DBL reference resolution is best effort in the API, while the current picker exposes no DBL reference choices and live DBL timing remains unproven.
+- Audio review takes join `PlaybackRegistry` exclusivity to prevent overlapping playback across drafting and review, while retaining dedicated take-comparison player controls.
 - The current impossible-state glyph, shortcut discovery, pericope highlighting, and scroll behavior remain the disclosed delivery. Any presentation change is separate follow-up work.
 
 The only current-delivery direction request is the grouped total-time display. Generated clips still leave the total as `--:--`; the final treatment could be elapsed-only, a real total once known, or another specified display.

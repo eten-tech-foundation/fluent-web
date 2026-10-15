@@ -12,6 +12,7 @@ import { type ProjectItem, type Source, type TargetVerse } from '@/lib/types';
 
 import { BibleTabList, type ResourceBibleTab } from './BibleTabList';
 import { PericopeText } from './PericopeText';
+import '../styles/source-fonts.css';
 
 interface DraftingChapterViewProps {
   sourceVerses: Source[];
@@ -21,7 +22,7 @@ interface DraftingChapterViewProps {
   bibleVerseMap: Map<number, string>;
   selectedPanel: 1 | 2;
   activeBibleTabId: string;
-  resourceBibleTabs: ResourceBibleTab[];
+  resourceBibleTab: ResourceBibleTab | null;
   bibleContentLoading: boolean;
   bibleContentError: boolean;
   onBibleTabSelect: (tabId: string) => void;
@@ -57,7 +58,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
   bibleVerseMap,
   selectedPanel,
   activeBibleTabId,
-  resourceBibleTabs,
+  resourceBibleTab,
   bibleContentLoading,
   bibleContentError,
   onBibleTabSelect,
@@ -78,7 +79,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
     return () => onPlayerMounted?.(false);
   }, [hasPlayer, onPlayerMounted]);
 
-  const hasBibleContent = [...bibleVerseMap.values()].some(text => text.trim());
+  const hasBibleContent = sourceVerses.some(verse => bibleVerseMap.get(verse.verseNumber)?.trim());
 
   const editorVerses = useMemo<PericopeVerseText[]>(
     () =>
@@ -116,7 +117,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
       <div className='bg-background min-w-0 px-6 py-3'>
         <BibleTabList
           activeTabId={activeBibleTabId}
-          resourceTabs={resourceBibleTabs}
+          resourceTab={resourceBibleTab}
           sourceLabel={projectItem.bibleName}
           onClose={onBibleTabClose}
           onSelect={onBibleTabSelect}
@@ -153,7 +154,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
             <h4 className='mb-3 text-2xl font-bold text-slate-800 dark:text-slate-100'>
               {projectItem.chapterNumber}
             </h4>
-            <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+            <p className='source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
               {sourceVerses.map(verse => (
                 <span
                   key={verse.verseNumber}
@@ -176,9 +177,15 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
                     {verse.verseNumber}
                   </span>
                   <span className='mr-3'>
-                    {selectedPanel === 1
-                      ? verse.text
-                      : (bibleVerseMap.get(verse.verseNumber) ?? '')}
+                    {selectedPanel === 1 ? (
+                      verse.text
+                    ) : (
+                      <PericopeText
+                        content={bibleVerseMap.get(verse.verseNumber)}
+                        isError={bibleContentError}
+                        isLoading={bibleContentLoading}
+                      />
+                    )}
                   </span>
                 </span>
               ))}
