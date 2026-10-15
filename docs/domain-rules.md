@@ -19,10 +19,14 @@ check here never replaces one in the API.
   have to match what fluent-api allows. Tests: `src/lib/grant-utils.test.ts` › "is false for an
   org-scoped grant even when the role name is SuperAdmin"; `src/components/header/MainMenu.test.tsx`
   › "shows no Users item for a project-scoped Project Manager".
-- Only two routes have guards: `/users` checks `context.auth.canViewUsers` and `/organizations`
-  checks `context.auth.canManageOrgs` (global SuperAdmin). Both values come from
-  `src/features/root/AppRouter.tsx`. Tests: `src/features/auth/route-guards.test.ts` › "redirects
-  when user cannot view users".
+- Three routes have guards: `/users` checks `context.auth.canViewUsers` and `/organizations`
+  checks `context.auth.canManageOrgs` (global SuperAdmin), both from
+  `src/features/root/AppRouter.tsx`; `/audio/$bookId/$chapterNumber` redirects anyone who isn't a
+  Project Manager on the project (the route loader, spec #383), and the drafting header's View
+  Audio button only shows for PMs. Tests: `src/features/auth/route-guards.test.ts` › "redirects
+  when user cannot view users"; `src/features/bible/components/DraftingHeader.test.tsx` ›
+  "renders View Audio button when user is PM and audio exists". No test covers the audio route
+  redirect itself.
 - Part of chapter assignment is only checked in the browser. [fluent-api](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/domains/projects/chapter-assignments/project-chapter-assignments.route.ts#L231-L298)'s `assign-selected`
   checks the permission, project access, organization membership and that the drafter and peer
   checker are different people. It doesn't check that both are Project Translators or that the
@@ -127,8 +131,9 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   `src/features/bible/hooks/useDrafting.test.ts` › "flushes the stored markers when the active
   verse changes, not a wipe".
 - A failed save retries after 10 seconds with the latest text, and keeps retrying while the page
-  is open. A 401, 403 or 404 sets `roleChangeWarning` instead: pending saves are cancelled, new
-  ones are skipped and the header shows a banner. Tests:
+  is open. A 401, 403 or 404 sets `roleChangeWarning` instead: queued debounce and retry saves are
+  cancelled (a save already in flight still completes), new ones are skipped and the header shows
+  a banner. Tests:
   `src/features/bible/hooks/useBibleTextDebounce.test.ts` › "cancels pending saves and skips new
   saves when a 403 permission error occurs" and "retries a failed save with its markers intact".
 - A save sends plain text and optional `markers`, never USJ. [fluent-api](https://github.com/eten-tech-foundation/fluent-api) replaces the stored

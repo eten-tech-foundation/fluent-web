@@ -82,6 +82,14 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   `GET /projects/:id/bible-resources/:bibleKey` and `POST /ai/tts/generate`. The runtime flag
   `sourceAudio` turns it on, and `PlaybackRegistryProvider` in `src/routes/__root.tsx` lets only
   one player run at a time. The design is in `docs/features/audio-playback/design.md`.
+- `src/features/audio/`: the audio review page (`/audio/$bookId/$chapterNumber`) for takes
+  recorded in fluent-mobile, guarded to Project Managers — the route redirects anyone else and
+  the drafting header only links it for PMs. `components/AudioReviewPage.tsx` lists a chapter's
+  takes by verse or pericope (`components/TakeCard.tsx`, `components/AudioPlayer.tsx`), flags
+  conflicting ones and lets the PM pick the winner. It calls `GET /verse-audio`
+  (`hooks/useChapterAudio.ts`, which `DraftingUI` also uses for the conflict indicator and review
+  link) and `POST /verse-audio/:projectUnitId/:bibleTextId/resolve`
+  (`hooks/useResolveConflict.ts`).
 - `src/features/organizations/`: the SuperAdmin organization pages and the Org Manager invite
   (`GET|POST /organizations`, `POST /users/invite`).
 - `src/features/users/`: the Users page for the active organization. It changes org-level roles
