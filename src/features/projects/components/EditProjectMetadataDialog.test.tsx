@@ -11,7 +11,10 @@ import { server } from '@/test/msw/server';
 import { createTestQueryClient, render, renderWithProviders, screen, waitFor } from '@/test/render';
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, string>) =>
+      values ? [key, ...Object.values(values)].join(' ') : key,
+  }),
 }));
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -106,6 +109,26 @@ describe('EditProjectMetadataDialog', () => {
     expect(longName).toHaveValue('');
     expect(shortName).toHaveValue('The First Book of Moses');
     expect(abbreviation).toHaveValue('');
+  });
+
+  it.each([
+    ['bookLongName', '\\toc1'],
+    ['bookShortName', '\\toc2'],
+    ['bookAbbreviation', '\\toc3'],
+  ])('shows the %s marker in a tooltip anchored to its info button', async (label, marker) => {
+    mockApi();
+    const { user } = renderDialog();
+    await user.click(await bookTrigger('Genesis'));
+
+    await user.hover(screen.getByRole('button', { name: `bookFieldInfo ${label}` }));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(`storedAsMarker ${marker}`);
+    // Radix parks the content at translate(0, -200%) until it has measured the trigger. With
+    // no element to measure it never moves, and the dialog's transform turns that parking spot
+    // into a box above the dialog's top-left corner (QA on #398).
+    const wrapper = tooltip.closest<HTMLElement>('[data-radix-popper-content-wrapper]');
+    await waitFor(() => expect(wrapper?.style.transform).not.toContain('-200%'));
   });
 
   it('saves a changed field when it loses focus', async () => {
