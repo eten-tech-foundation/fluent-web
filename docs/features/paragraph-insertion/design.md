@@ -7,6 +7,8 @@ The Chapter format bar has two separate paragraph controls:
 
 The button is only in the Chapter view format bar. Paragraphs it inserts still round-trip through Pericope view.
 
+Like the rest of the bar it is an icon (↵, the Enter key it duplicates), so the bar stays clear of the target language name ([#472](https://github.com/eten-tech-foundation/fluent-web/issues/472) QA). Chad kept it on [#530](https://github.com/eten-tech-foundation/fluent-web/issues/530) as the visible way to add a paragraph. Its tooltip only names it, as every tooltip in the bar does, disabled controls included.
+
 Inside a Poetry line (`q1`–`q4`) or another non-`p` block, the text after the cursor up to the next verse number moves into the new `p`; that is the paragraph the button inserts. Text before the cursor keeps the block's style, and any later verse in the same block keeps it too, so it still reloads as Poetry. Use Enter to break a Poetry line without changing its style. At the end of a block, the new `p` starts empty after it.
 
 From a heading, insertion keeps the whole title and creates a paragraph at the start of its following verse. The verse number moves to the new paragraph, and the verse text after it keeps its Poetry format. Enter retains its existing behavior.

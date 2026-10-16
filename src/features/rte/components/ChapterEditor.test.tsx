@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +27,7 @@ const editor = vi.hoisted(() => ({
   echoOnMount: true,
   setUsj: vi.fn<(usj: Usj) => void>(),
   formatPara: vi.fn<(marker: string) => void>(),
+  focus: vi.fn<() => void>(),
   undo: vi.fn<() => void>(),
   redo: vi.fn<() => void>(),
   commit: undefined as ((usj: Usj) => void) | undefined,
@@ -70,6 +71,7 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
             formatPara: (marker: string) => {
               editor.formatPara(marker);
             },
+            focus: editor.focus,
             getSelection: () => ({ start: { jsonPath: '$.content[1].content[0]', offset: 0 } }),
             getUsj: () => editor.usj,
             setSelection: vi.fn(),
@@ -152,6 +154,7 @@ describe('ChapterEditor', () => {
     editor.askedForVerses = [];
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
+    editor.focus.mockClear();
   });
 
   it('does not report the editor mount echo as a change', () => {
@@ -347,11 +350,13 @@ describe('ChapterEditor', () => {
       }
     );
 
-    it('keeps accessible names on contextual icon controls', () => {
+    it('keeps accessible names on contextual icon controls', async () => {
+      const user = userEvent.setup();
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
-      for (const name of ['Paragraph', 'Poetry Line', 'Section Heading']) {
+      for (const name of ['Paragraph', 'Poetry Line', 'Section Heading', 'Insert paragraph']) {
         expect(screen.getByRole('button', { name })).toBeVisible();
+        expect(screen.getByRole('button', { name })).toHaveTextContent(/^$/);
       }
       expect(screen.getByRole('button', { name: 'Section Heading' })).toBeDisabled();
 
@@ -362,10 +367,27 @@ describe('ChapterEditor', () => {
       expect(screen.getByRole('button', { name: 'Increase indent' })).toBeDisabled();
 
       reportBlock('s2');
+      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
       for (const level of [1, 2, 3, 4]) {
-        const label = `Level ${level}`;
-        expect(screen.getByRole('button', { name: label })).toBeVisible();
+        expect(screen.getByRole('menuitemradio', { name: `Level ${level}` })).toBeVisible();
       }
+    });
+
+    it('opens the heading levels from H and puts the caret back in the text after a pick', async () => {
+      const user = userEvent.setup();
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+
+      reportBlock('s2');
+      expect(screen.queryByRole('button', { name: /^Level/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+      expect(screen.getByRole('menuitemradio', { name: 'Level 2' })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      await user.click(screen.getByRole('menuitemradio', { name: 'Level 3' }));
+
+      await waitFor(() => expect(editor.focus).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
 
     it('keeps invalid heading edits visible and resumes saving after correction', async () => {
@@ -434,20 +456,18 @@ describe('ChapterEditor', () => {
 
     it('keeps the level and indent controls with the block they belong to', () => {
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+      const heading = () => screen.getByRole('button', { name: 'Section Heading' });
 
       reportBlock('p');
-      expect(screen.queryByTestId('heading-levels')).not.toBeInTheDocument();
+      expect(heading()).not.toHaveAttribute('aria-haspopup');
       expect(screen.queryByTestId('poetry-indent')).not.toBeInTheDocument();
 
       reportBlock('s2');
-      expect(screen.getByTestId('heading-levels')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Level 2' })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      );
+      expect(heading()).toHaveAttribute('aria-haspopup', 'menu');
+      expect(heading()).toHaveAttribute('aria-pressed', 'true');
 
       reportBlock('q1');
-      expect(screen.queryByTestId('heading-levels')).not.toBeInTheDocument();
+      expect(heading()).not.toHaveAttribute('aria-haspopup');
       expect(screen.getByTestId('poetry-indent')).toBeInTheDocument();
     });
 
