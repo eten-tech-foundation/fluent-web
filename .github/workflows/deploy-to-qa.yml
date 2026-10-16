@@ -48,4 +48,6 @@ jobs:
       # src/lib/config.ts's enum has no 'qa' member; 'staging' is the QA slot.
       vite_environment: staging
       app_version: ${{ github.ref_name }}
+      rte_pericope: true
+      usfm_import: true
     secrets: inherit
