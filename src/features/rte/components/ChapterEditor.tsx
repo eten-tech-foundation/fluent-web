@@ -6,6 +6,7 @@ import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
+import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
@@ -297,6 +298,7 @@ export function ChapterEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
     <>
@@ -314,9 +316,13 @@ export function ChapterEditor({
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
         onKeyDownCapture={event => {
-          if (!handleHeadingEnter(event)) handleEditorKeys(event);
+          if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event))
+            handleEditorKeys(event);
         }}
-        onPasteCapture={handleEditorPaste}
+        onPasteCapture={event => {
+          verseKeys.handlePaste(event);
+          handleEditorPaste(event);
+        }}
       >
         <div className='border-border bg-background z-10 flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-2'>
           <h3

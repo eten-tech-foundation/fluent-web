@@ -215,6 +215,63 @@ describe('PericopeRteGroup', () => {
     });
   });
 
+  describe('a pericope that starts inside a paragraph (#530)', () => {
+    const LATER_GROUP: Source[] = [
+      { id: 3, verseNumber: 3, text: 'Source 3' },
+      { id: 4, verseNumber: 4, text: 'Source 4' },
+    ];
+    const chapterWith = (third: TargetVerse['markers']): TargetVerse[] =>
+      [
+        {
+          verseNumber: 1,
+          content: 'Drafted 1',
+          markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+        },
+        {
+          verseNumber: 2,
+          content: 'Drafted 2',
+          markers: { paragraphs: [{ marker: 'q1', offset: 0 }] },
+        },
+        { verseNumber: 3, content: 'Drafted 3', markers: third },
+        { verseNumber: 4, content: 'Drafted 4' },
+      ] as TargetVerse[];
+    const continued = (): unknown =>
+      (editorProps.current as { continuedParagraph?: string }).continuedParagraph;
+
+    it('tells the editor which paragraph the pericope continues', () => {
+      renderGroup({ groupVerses: LATER_GROUP, verses: chapterWith(null) });
+
+      expect(continued()).toBe('q1');
+    });
+
+    it('continues nothing when the first verse opens a paragraph or has a heading', () => {
+      renderGroup({
+        groupVerses: LATER_GROUP,
+        verses: chapterWith({ paragraphs: [{ marker: 'p', offset: 0 }] }),
+      });
+      expect(continued()).toBeUndefined();
+
+      renderGroup({
+        groupVerses: LATER_GROUP,
+        verses: chapterWith({ headings: [{ marker: 's1', text: 'Title' }] }),
+      });
+      expect(continued()).toBeUndefined();
+    });
+
+    it('continues the default paragraph when the verses before have no rows yet', () => {
+      // Drafting this pericope before the one ahead of it.
+      renderGroup({ groupVerses: LATER_GROUP, verses: chapterWith(null).slice(2) });
+
+      expect(continued()).toBe('p');
+    });
+
+    it('continues nothing at the start of the chapter', () => {
+      renderGroup();
+
+      expect(continued()).toBeUndefined();
+    });
+  });
+
   it('forwards editor markers to the save chain', () => {
     const split = {
       paragraphs: [

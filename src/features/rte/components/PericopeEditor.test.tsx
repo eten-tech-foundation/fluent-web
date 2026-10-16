@@ -402,6 +402,33 @@ describe('PericopeEditor', () => {
     ]);
   });
 
+  it('continues the paragraph the pericope before left open, without saving a break (#530)', () => {
+    const onVersesChange = vi.fn();
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='a'
+        continuedParagraph='q1'
+        verses={[
+          { verseNumber: 16, text: 'Verse 16 text.', markers: null },
+          { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+        ]}
+        onVersesChange={onVersesChange}
+      />
+    );
+
+    expect((editor.usj?.content[1] as { marker?: string }).marker).toBe('q1');
+
+    editor.commit?.(editor.usj as Usj);
+    expect(onVersesChange).not.toHaveBeenCalled();
+
+    typeInto(16, 'Verse 16 text. More.');
+    expect(onVersesChange).toHaveBeenCalledWith([
+      { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+    ]);
+  });
+
   it('does not re-report a split the editor merely re-echoes', () => {
     const onVersesChange = vi.fn();
     render(

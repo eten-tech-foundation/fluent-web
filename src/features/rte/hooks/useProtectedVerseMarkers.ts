@@ -94,6 +94,14 @@ function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: Deletion
     neighbor.matches(BLOCK_SELECTOR) &&
     isHeadingMarker(block.getAttribute('data-marker') ?? undefined) !==
       isHeadingMarker(neighbor.getAttribute('data-marker') ?? undefined);
+  // Backspace in an empty line under a heading just removes the line: nothing crosses into the
+  // heading. Enter there opens such a line (#397).
+  const removesEmptyLine =
+    backward &&
+    !block.querySelector(SCRIPTURE_MARKER_SELECTOR) &&
+    block.textContent.replace(/[\u200B\s]/g, '') === '';
+  if (crossesHeadingBoundary && removesEmptyLine && !neighbor.matches(SCRIPTURE_MARKER_SELECTOR))
+    return false;
   if (!neighbor.matches(SCRIPTURE_MARKER_SELECTOR) && !crossesHeadingBoundary) return false;
   const edge = document.createRange();
   edge.selectNodeContents(block);
@@ -102,7 +110,8 @@ function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: Deletion
   return edge.toString().replace(/\u200B/g, '') === '' && !edge.cloneContents().querySelector('br');
 }
 
-function hasStructuralPayload(data: DataTransfer | null): boolean {
+/** A paste or drop carrying verse or chapter markers, which this guard refuses. */
+export function hasStructuralPayload(data: DataTransfer | null): boolean {
   if (!data) return false;
   const html = data.getData('text/html');
   if (

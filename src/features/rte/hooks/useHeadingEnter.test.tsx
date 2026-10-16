@@ -107,8 +107,14 @@ describe('Enter from a heading in the real editor', () => {
     if (rangeRects) Object.defineProperty(Range.prototype, 'getClientRects', rangeRects);
     else Reflect.deleteProperty(Range.prototype, 'getClientRects');
   });
+  const verseTwoBody = {
+    type: 'para',
+    marker: 'p',
+    content: [{ type: 'verse', marker: 'v', number: '2', sid: 'GEN 1:2' }, 'Second verse.'],
+  };
+
   it.each([0, 2, 5])(
-    'leaves the whole title intact at offset %s and enters its paragraph',
+    'opens a new paragraph under the whole title from offset %s, verse 2 untouched',
     async offset => {
       const { editorRef, input, container, selectHeading } = await setup();
       await selectHeading(offset);
@@ -116,8 +122,12 @@ describe('Enter from a heading in the real editor', () => {
       await waitFor(() =>
         expect(editorRef.current!.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/)
       );
+      const usj = editorRef.current!.getUsj()!;
+      expect(usj.content[3]).toEqual({ type: 'para', marker: 'p' });
+      expect(usj.content[4]).toEqual(verseTwoBody);
       expect(container.querySelectorAll('[data-marker="s1"]')).toHaveLength(1);
-      expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(rows);
+      // The new paragraph holds no words yet, so nothing about the saved verses changes.
+      expect(usjToPericopeVerses(usj)).toEqual(rows);
     }
   );
 
@@ -127,10 +137,11 @@ describe('Enter from a heading in the real editor', () => {
     await waitFor(() =>
       expect(editorRef.current!.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/)
     );
+    expect(editorRef.current!.getUsj()!.content[3]).toEqual({ type: 'para', marker: 'p' });
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(rows);
   });
 
-  it('skips adjacent titles and enters the body after both', async () => {
+  it('opens the new paragraph after the last of adjacent titles', async () => {
     const verses = rows.map(row =>
       row.verseNumber === 2
         ? {
@@ -150,10 +161,14 @@ describe('Enter from a heading in the real editor', () => {
     await waitFor(() =>
       expect(editorRef.current!.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[4\]/)
     );
-    expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(verses);
+    const usj = editorRef.current!.getUsj()!;
+    expect(usj.content[3]).toEqual({ type: 'para', marker: 's2', content: ['Subtitle'] });
+    expect(usj.content[4]).toEqual({ type: 'para', marker: 'p' });
+    expect(usj.content[5]).toEqual(verseTwoBody);
+    expect(usjToPericopeVerses(usj)).toEqual(verses);
   });
 
-  it('creates a paragraph before poetry and preserves its text and format', async () => {
+  it('opens the new paragraph above Poetry and keeps the verse number on its Poetry line', async () => {
     const verses = rows.map(row =>
       row.verseNumber === 2
         ? {
@@ -164,18 +179,13 @@ describe('Enter from a heading in the real editor', () => {
     );
     const { editorRef, input, container } = await setup(verses);
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() =>
-      expect(container.querySelector('[data-marker="q2"]')).toHaveTextContent('Second verse.')
-    );
     await waitFor(() => expect(container.querySelectorAll('[data-marker="p"]')).toHaveLength(2));
-    const body = container.querySelectorAll('[data-marker="p"]')[1];
-    expect(body.querySelector('[data-marker="v"]')).toHaveTextContent('2');
-    expect(body).not.toHaveTextContent('Second verse.');
-    expect(editorRef.current!.getUsj()!.content[3]).toMatchObject({
-      marker: 'p',
-      content: [{ type: 'verse', number: '2' }, '  '],
-    });
-    expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(verses);
+    const usj = editorRef.current!.getUsj()!;
+    expect(usj.content[3]).toEqual({ type: 'para', marker: 'p' });
+    expect(usj.content[4]).toEqual({ ...verseTwoBody, marker: 'q2' });
+    expect(container.querySelector('[data-marker="q2"] [data-marker="v"]')).toHaveTextContent('2');
+    expect(container.querySelector('[data-marker="q2"]')).toHaveTextContent('Second verse.');
+    expect(usjToPericopeVerses(usj)).toEqual(verses);
     act(() => editorRef.current!.undo());
     await waitFor(() => expect(container.querySelectorAll('[data-marker="p"]')).toHaveLength(1));
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(verses);
@@ -183,7 +193,7 @@ describe('Enter from a heading in the real editor', () => {
     await waitFor(() => expect(container.querySelectorAll('[data-marker="p"]')).toHaveLength(2));
   });
 
-  it('saves text entered before poetry in the following verse and reloads both blocks', async () => {
+  it('saves words that reach the new paragraph without a keystroke, before Poetry', async () => {
     const verses = rows.map(row =>
       row.verseNumber === 2
         ? {
@@ -195,10 +205,11 @@ describe('Enter from a heading in the real editor', () => {
     const { editorRef, input, container, onUsjChange } = await setup(verses);
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(container.querySelectorAll('[data-marker="p"]')).toHaveLength(2));
-    // Exercise the editor's native local edit and the real save callback. This fixture's offset
-    // is after c (1), verse 1 + text + LF (14), heading + LF (6), and verse 2 (1).
+    // An edit the editor applies itself, as mobile autocorrect does, skips the keystroke that
+    // would bring verse 2's number up. The words still belong to verse 2. The new paragraph
+    // starts after c (1), verse 1 + text + LF (14) and heading + LF (6).
     act(() =>
-      editorRef.current!.applyUpdate([{ retain: 22 }, { insert: 'New paragraph.' }], 'local')
+      editorRef.current!.applyUpdate([{ retain: 21 }, { insert: 'New paragraph.' }], 'local')
     );
     await waitFor(() =>
       expect(container.querySelectorAll('[data-marker="p"]')[1]).toHaveTextContent('New paragraph.')
@@ -259,13 +270,14 @@ describe('Enter from a heading in the real editor', () => {
     expect(saved[1].markers?.headings).toEqual(verses[1].markers?.headings);
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(saved);
   });
-  it('enters an empty verse without changing the document', async () => {
+  it('opens a paragraph above an empty verse without changing what is saved', async () => {
     const verses = rows.map(row => (row.verseNumber === 2 ? { ...row, text: '' } : row));
     const { editorRef, input } = await setup(verses);
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
       expect(editorRef.current!.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/)
     );
+    expect(editorRef.current!.getUsj()!.content[3]).toEqual({ type: 'para', marker: 'p' });
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(verses);
   });
 

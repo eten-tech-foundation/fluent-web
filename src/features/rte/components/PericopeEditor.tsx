@@ -6,6 +6,7 @@ import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
+import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
@@ -38,6 +39,12 @@ export interface PericopeEditorProps {
   contentKey: string;
   /** Heading slots held by content edited outside this surface, keyed by verse number. */
   reservedHeadingSlots?: Record<number, number>;
+  /**
+   * The paragraph the chapter has open where this pericope starts, when its first verse doesn't
+   * open one of its own (`openParagraphAfter`). The first verse continues it, and editing that
+   * verse doesn't save it as a new paragraph (#530).
+   */
+  continuedParagraph?: string;
   /** Called with only the verses whose text or paragraph markers changed. */
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
@@ -63,6 +70,7 @@ export function PericopeEditor({
   readOnly = false,
   contentKey,
   reservedHeadingSlots,
+  continuedParagraph,
   onVersesChange,
   onActiveVerseChange,
 }: PericopeEditorProps) {
@@ -74,6 +82,8 @@ export function PericopeEditor({
   useForwardTextDeletion(containerRef, editorRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
+  /** The paragraph the loaded document continues, so commits are read the way it was built. */
+  const continuedRef = useRef(continuedParagraph);
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
    * (the rows re-derived from the document we built), never the raw props. The document makes a
@@ -81,7 +91,10 @@ export function PericopeEditor({
    * report that upgrade as an edit on every mount.
    */
   const knownVersesRef = useRef<PericopeVerseText[]>(
-    usjToPericopeVerses(pericopeVersesToUsj(verses, chapterNumber, bookCode))
+    usjToPericopeVerses(
+      pericopeVersesToUsj(verses, chapterNumber, bookCode, continuedParagraph),
+      continuedParagraph
+    )
   );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
@@ -89,12 +102,13 @@ export function PericopeEditor({
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
       setHeadingError(null);
-      const usj = pericopeVersesToUsj(next, chapterNumber, bookCode);
-      knownVersesRef.current = usjToPericopeVerses(usj);
+      continuedRef.current = continuedParagraph;
+      const usj = pericopeVersesToUsj(next, chapterNumber, bookCode, continuedParagraph);
+      knownVersesRef.current = usjToPericopeVerses(usj, continuedParagraph);
       suppressedJsonRef.current = JSON.stringify(usj);
       editorRef.current?.setUsj(usj);
     },
-    [bookCode, chapterNumber]
+    [bookCode, chapterNumber, continuedParagraph]
   );
 
   // Text the parent wrote that the editor never held: the drafting surface fills an empty verse
@@ -127,7 +141,7 @@ export function PericopeEditor({
       if (json === suppressedJsonRef.current) return;
       suppressedJsonRef.current = json;
 
-      const derived = usjToPericopeVerses(usj);
+      const derived = usjToPericopeVerses(usj, continuedRef.current);
       const error = headingErrorIn(
         derived.map(verse => ({
           ...verse,
@@ -157,6 +171,7 @@ export function PericopeEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
     <div
@@ -165,14 +180,17 @@ export function PericopeEditor({
       data-testid='pericope-editor'
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={event => {
-        if (!handleHeadingEnter(event)) handleEditorKeys(event);
+        if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event)) handleEditorKeys(event);
       }}
-      onPasteCapture={handleEditorPaste}
+      onPasteCapture={event => {
+        verseKeys.handlePaste(event);
+        handleEditorPaste(event);
+      }}
     >
       <HeadingValidationMessage error={headingError} />
       <Editorial
         ref={editorRef}
-        defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode)}
+        defaultUsj={pericopeVersesToUsj(verses, chapterNumber, bookCode, continuedParagraph)}
         options={{
           isReadonly: readOnly,
           // The drafting page supplies its own controls; the built-in toolbar would repeat once

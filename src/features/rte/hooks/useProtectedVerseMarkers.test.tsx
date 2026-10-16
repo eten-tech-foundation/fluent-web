@@ -160,6 +160,17 @@ describe('useProtectedVerseMarkers', () => {
     expect(key('Delete').defaultPrevented).toBe(false);
   });
 
+  it('lets Backspace remove an empty paragraph under a heading', () => {
+    render(<Fixture />);
+    const title = insertHeadingBefore('paragraph');
+    const empty = document.createElement('p');
+    empty.setAttribute('data-marker', 'p');
+    empty.append(document.createElement('br'));
+    title.parentElement?.after(empty);
+    select(empty, 0);
+    expect(key('Backspace').defaultPrevented).toBe(false);
+  });
+
   it('allows merges between two headings', () => {
     render(<Fixture />);
     const first = insertHeadingBefore('paragraph', 's1');

@@ -93,27 +93,36 @@ describe('explicit paragraph insertion in Editorial', () => {
     expect(container.querySelectorAll('.verse')).toHaveLength(1);
   });
 
-  it.each([0, 5, 11])('keeps a heading whole when inserting from offset %s', async offset => {
-    const { editor, select, container } = await setup();
-    await select('$.content[1].content[0]', offset);
-    act(() => expect(insertParagraph(editor)).toBe(true));
-    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
-    expect(usjToPericopeVerses(editor.getUsj()!)[0]).toMatchObject({
-      text: 'First words. Last words.',
-      markers: { headings: [{ marker: 's1', text: 'Whole title' }] },
-    });
-    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[2\]/);
-  });
+  it.each([0, 5, 11])(
+    'opens an empty paragraph under a whole heading from offset %s, the verse untouched',
+    async offset => {
+      const { editor, select, container } = await setup();
+      await select('$.content[1].content[0]', offset);
+      act(() => expect(insertParagraph(editor)).toBe(true));
+      await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
+      expect(editor.getUsj()!.content[2]).toEqual({ type: 'para', marker: 'p' });
+      expect(editor.getUsj()!.content[3]).toMatchObject({
+        marker: 'p',
+        content: [{ type: 'verse', number: '1' }, 'First words. Last words.'],
+      });
+      expect(usjToPericopeVerses(editor.getUsj()!)[0]).toMatchObject({
+        text: 'First words. Last words.',
+        markers: { headings: [{ marker: 's1', text: 'Whole title' }] },
+      });
+      expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[2\]/);
+    }
+  );
 
-  it('keeps Poetry after the paragraph inserted from a heading', async () => {
+  it('keeps the verse number on its Poetry line after the paragraph inserted from a heading', async () => {
     const { editor, select, container } = await setup('q2');
     await select('$.content[1].content[0]', 5);
     act(() => expect(insertParagraph(editor)).toBe(true));
     await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
-    expect(container.querySelector('[data-marker="q2"]')).toHaveTextContent(
-      'First words. Last words.'
-    );
-    expect(editor.getUsj()!.content[2]).toMatchObject({ marker: 'p' });
+    expect(editor.getUsj()!.content[2]).toEqual({ type: 'para', marker: 'p' });
+    expect(editor.getUsj()!.content[3]).toMatchObject({
+      marker: 'q2',
+      content: [{ type: 'verse', number: '1' }, 'First words. Last words.'],
+    });
   });
 
   it('inserts in an empty verse without losing its number', async () => {
@@ -122,7 +131,43 @@ describe('explicit paragraph insertion in Editorial', () => {
     act(() => expect(insertParagraph(editor)).toBe(true));
     await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
     expect(container.querySelectorAll('.verse')).toHaveLength(1);
+    expect(editor.getUsj()!.content[3]).toMatchObject({
+      content: [{ type: 'verse', number: '1' }],
+    });
     expect(usjToPericopeVerses(editor.getUsj()!)[0].verseNumber).toBe(1);
+  });
+
+  it('moves a verse number down with its text when inserting right after it', async () => {
+    const { editor, select, container, onUsjChange } = await renderRows([
+      verseOne('p', 'First words. Last words.'),
+      secondVerse,
+    ]);
+    await select('$.content[2].content[3]', 0);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
+    expect(editor.getUsj()!.content[3]).toMatchObject({
+      marker: 'p',
+      content: [{ type: 'verse', number: '2' }, 'Second verse.'],
+    });
+    expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1]).toEqual({
+      verseNumber: 2,
+      text: 'Second verse.',
+      markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+    });
+    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
+  });
+
+  it('opens a paragraph above a verse that starts its Poetry line when inserting after its number', async () => {
+    const { editor, select, container } = await setup('q2');
+    await select('$.content[2].content[1]', 0);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
+    expect(editor.getUsj()!.content[2]).toEqual({ type: 'para', marker: 'p' });
+    expect(editor.getUsj()!.content[3]).toMatchObject({
+      marker: 'q2',
+      content: [{ type: 'verse', number: '1' }, 'First words. Last words.'],
+    });
+    expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/);
   });
 
   it.each(['p', 'q2'])('inserts after the last word in %s', async marker => {
@@ -185,6 +230,18 @@ describe('explicit paragraph insertion in Editorial', () => {
     const saved = usjToPericopeVerses(onUsjChange.mock.lastCall![0]);
     expect(saved.map(verse => verse.text)).toEqual(['First words. Last words.', 'Second verse.']);
     expect(paragraphOfVerse(pericopeVersesToUsj(saved, 1, 'GEN'), '2')).toBe('q2');
+  });
+
+  it('inserts after a word space, so the space stays on the line above', async () => {
+    const { editor, select, container } = await setup();
+    await select('$.content[2].content[1]', 12);
+    act(() => expect(insertParagraph(editor)).toBe(true));
+    await waitFor(() => expect(container.querySelectorAll('p')).toHaveLength(3));
+    expect(editor.getUsj()!.content[2]).toMatchObject({
+      content: [{ type: 'verse', number: '1' }, 'First words. '],
+    });
+    expect(editor.getUsj()!.content[3]).toMatchObject({ content: ['Last words.'] });
+    expect(usjToPericopeVerses(editor.getUsj()!)[0].text).toBe('First words. Last words.');
   });
 
   it('never replaces a selected range', async () => {

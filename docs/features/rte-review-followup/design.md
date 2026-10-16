@@ -15,18 +15,22 @@ Kasey approved the unchanged core in [his final #475 review](https://github.com/
 The older `s1`/`s2` limit and generic block-conversion wording in #397 do not describe that later design.
 The H3/H4 styling and immediate-typing fixes remain in [#529 / PR #533](https://github.com/eten-tech-foundation/fluent-web/pull/533).
 
-Enter and Shift+Enter keep a heading's text intact and move into its following verse. When that
-verse already starts in `p`, the current handler reuses it. Before Poetry it inserts a `p` segment
-without changing the following Poetry text or level. Two temporary spaces hold the caret; the save
-path trims them. This supports typing immediately after Enter without storing heading words as scripture.
+Enter and Shift+Enter keep a heading's text intact and open an empty `p` under it, after the last
+heading when several are adjacent. The following verse keeps its number, text and format, so a
+Poetry line stays Poetry. The first letter typed in the new `p` brings that verse's number to the
+start of the line, because those words begin the verse; moving the number and typing the letter are
+one undo step. Two temporary spaces after the letter hold the caret; the save path trims them. This
+supports typing immediately after Enter without storing heading words as scripture.
 An orphan heading without a following verse cannot create body text that has no row to save into.
 
-The reuse of an existing `p` is a deliberate exception to #397's literal request for a _new_
-Paragraph. The earlier heading design did not explicitly settle that detail. It still needs a
-product/spec decision if an additional empty paragraph is required. Empty spacer paragraphs do not
-survive the current offset-based row contract; they have no character to anchor them to. The separate
-[Insert paragraph action in #531](https://github.com/eten-tech-foundation/fluent-web/pull/531) handles
-repeated insertion within verse text and does not change that storage constraint.
+The reviewed handler reused the following verse's `p` and only moved the caret after its number, as
+a deliberate exception to #397's literal request for a _new_ Paragraph. The next Enter then split
+the number from its text. Roslin's [October 16 QA on #397](https://github.com/eten-tech-foundation/fluent-web/issues/397#issuecomment-6212370155)
+reported that Enter at the end of a heading did not create a new Paragraph block, which settled that
+detail. Empty spacer paragraphs still do not survive the offset-based row contract; they have no
+character to anchor them to, so an unused one is gone after a reload. The separate
+[Insert paragraph action in #531](https://github.com/eten-tech-foundation/fluent-web/pull/531) does
+the same from a heading and handles repeated insertion within verse text.
 
 ## Protected boundaries and clipboard
 

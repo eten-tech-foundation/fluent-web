@@ -73,6 +73,23 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
 - Trim only the space USJ keeps before the next verse marker. Don't normalize text inside a verse.
   Tests: `src/features/rte/lib/pericope-usj.test.ts` › "drops the structural space USJ carries
   before the next verse marker".
+- A verse number always starts its verse's text, because that is the only shape a verse row can
+  store. So a paragraph break never lands between a number and its text
+  (`src/features/rte/lib/verse-numbers.ts`): a break typed right after a number goes in front of
+  it, and Enter or Insert paragraph in a heading opens an empty paragraph under the last heading
+  instead. Words typed in a line no verse owns yet, under a heading or above the first verse,
+  bring the next verse's number to the start of that line first, and `usjToPericopeVerses` saves
+  such words as the start of the next verse rather than dropping them. Tests:
+  `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
+  first letter"; `src/features/rte/lib/pericope-usj.test.ts` › "starts the next verse with words
+  typed in a new paragraph under a heading".
+- Pericope View builds one document per pericope, but it must not add structure the chapter
+  doesn't have. When a pericope's first verse opens no paragraph of its own, it continues the one
+  the chapter has open there (`openParagraphAfter`, passed as `continuedParagraph`), so a Poetry
+  line stays Poetry across the boxes, and editing that verse doesn't save a new paragraph.
+  Tests: `src/features/rte/lib/pericope-usj.test.ts` › "does not save the continued paragraph as
+  a break before the first verse"; `src/features/bible/components/PericopeRteGroup.test.tsx` ›
+  "tells the editor which paragraph the pericope continues".
 - A verse saves as plain text plus `markers.paragraphs` and `markers.headings`. Words inside
   character markers become plain verse text, and footnotes stay out of it. Tests:
   `src/features/rte/lib/pericope-usj.test.ts` › "leaves a footnote out of the verse row".
@@ -96,12 +113,17 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   you upgrade `@eten-tech-foundation/platform-editor`: undo and redo shortcuts
   (`src/features/rte/lib/history-shortcuts.ts`), copy and paste
   (`src/features/rte/lib/editor-shortcuts.ts`, `src/features/rte/lib/editor-clipboard.ts`),
-  heading level changes (`src/features/rte/lib/format-heading.ts`) and formatting a single verse
-  inside a longer block (`src/features/rte/lib/scoped-block-format.ts`). Tests:
+  heading level changes (`src/features/rte/lib/format-heading.ts`), formatting a single verse
+  inside a longer block (`src/features/rte/lib/scoped-block-format.ts`), the space a new
+  paragraph would start with, which Editorial drops so a later merge glues two words together
+  (`afterWordSpace` in `src/features/rte/lib/verse-numbers.ts`), and the invisible caret host
+  Editorial keeps after a lone verse number, which getUsj leaves out but deltas count
+  (`src/features/rte/hooks/useVerseNumberKeys.ts`). Tests:
   `src/features/rte/lib/history-shortcuts.test.tsx`,
   `src/features/rte/lib/clipboard-shortcuts.test.tsx`,
-  `src/features/rte/lib/format-heading.test.tsx` and
-  `src/features/rte/lib/scoped-block-format.test.ts`.
+  `src/features/rte/lib/format-heading.test.tsx`,
+  `src/features/rte/lib/scoped-block-format.test.ts` and
+  `src/features/rte/hooks/useVerseNumberKeys.test.tsx`.
 - A project created from USFM sends the files as `usfmFiles` and `bookId: []`, and [fluent-api](https://github.com/eten-tech-foundation/fluent-api)
   takes the books from the files. The import tab (`src/features/projects/lib/usfm-validate.ts`) is
   all or nothing: one file that isn't USFM, has no book code or repeats a book clears the whole

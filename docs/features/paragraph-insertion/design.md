@@ -11,7 +11,9 @@ Like the rest of the bar it is an icon (↵, the Enter key it duplicates), so th
 
 Inside a Poetry line (`q1`–`q4`) or another non-`p` block, the text after the cursor up to the next verse number moves into the new `p`; that is the paragraph the button inserts. Text before the cursor keeps the block's style, and any later verse in the same block keeps it too, so it still reloads as Poetry. Use Enter to break a Poetry line without changing its style. At the end of a block, the new `p` starts empty after it.
 
-From a heading, insertion keeps the whole title and creates a paragraph at the start of its following verse. The verse number moves to the new paragraph, and the verse text after it keeps its Poetry format. Enter retains its existing behavior.
+From a heading, insertion keeps the whole title and opens an empty `p` under it, after the last heading when several are adjacent. Enter and Shift+Enter in a heading do the same. The following verse keeps its number, text and format, so a Poetry line stays Poetry. The first letter typed in the new `p` brings that verse's number to the start of the line, because those words begin the verse, and that is how they are saved.
+
+A break never lands between a verse number and its text, because a verse row always starts with its number. Right after a verse number, Insert paragraph and Enter break in front of it, so the verse moves to the new line with its number. Right before a space they break after the space: Editorial drops the space a paragraph starts with, so a later merge would glue the two words together. If a number still ends up alone on a line, Delete at the end of that line or Backspace at the start of the text joins them, and the line keeps the text's format.
 
 Insertion uses Editorial's local delta transaction so USJ, autosave, and undo/redo observe the same change. A selection-only update is flushed before the next keystroke. This avoids Editorial 0.8.15's `insertMarker` path, which can split the DOM without updating the USJ snapshot used by Fluent's save callback.
 
