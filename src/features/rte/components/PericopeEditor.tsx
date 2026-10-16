@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useEmptyVerseCaret } from '../hooks/useEmptyVerseCaret';
 import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
@@ -72,6 +73,7 @@ export function PericopeEditor({
   useProtectedVerseMarkers(containerRef);
   useNativeRtlSelection(containerRef, readOnly);
   useForwardTextDeletion(containerRef, editorRef, readOnly);
+  useEmptyVerseCaret(containerRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
   /**
