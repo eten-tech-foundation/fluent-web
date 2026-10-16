@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import * as useTruncationModule from '@/features/projects/hooks/useTruncation';
 import { renderWithProviders, screen } from '@/test/render';
 
-import { TruncatedCardText, TruncatedTableText } from './TruncatedText';
+import {
+  TruncatedCardText,
+  TruncatedMilestoneText,
+  TruncatedTableText,
+  wrapMilestoneName,
+} from './TruncatedText';
 
 describe('TruncatedTableText', () => {
   it('renders text with truncate and min-w-0 classes when not truncated', () => {
@@ -85,5 +90,54 @@ describe('TruncatedCardText', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Very Long Card Title That Needs Truncation'
     );
+  });
+});
+
+describe('wrapMilestoneName', () => {
+  it('returns empty array for empty or whitespace-only string', () => {
+    expect(wrapMilestoneName('')).toEqual([]);
+    expect(wrapMilestoneName('   ')).toEqual([]);
+  });
+
+  it('wraps text when it exceeds maxChars', () => {
+    const text = 'This is a milestone name that should be wrapped into multiple lines';
+    const lines = wrapMilestoneName(text, 25);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(25);
+    }
+  });
+
+  it('chunks words longer than maxChars', () => {
+    const text = 'SupercalifragilisticexpialidociousAndEvenLongerThanExpected';
+    const lines = wrapMilestoneName(text, 20);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(20);
+    }
+  });
+});
+
+describe('TruncatedMilestoneText', () => {
+  it('renders milestone text with default classes', () => {
+    renderWithProviders(<TruncatedMilestoneText text='Short Milestone' />);
+    const el = screen.getByText('Short Milestone');
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveClass('truncate', 'max-w-[200px]');
+  });
+
+  it('shows tooltip on hover when text is longer than 25 characters', async () => {
+    const longMilestone = 'Milestone With Very Long Name That Exceeds Threshold';
+    const { user } = renderWithProviders(<TruncatedMilestoneText text={longMilestone} />);
+
+    const trigger = screen.getByText(longMilestone);
+    await user.hover(trigger);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toBeInTheDocument();
+    const lines = wrapMilestoneName(longMilestone);
+    for (const line of lines) {
+      expect(tooltip).toHaveTextContent(line);
+    }
   });
 });
