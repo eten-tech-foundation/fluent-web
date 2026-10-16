@@ -95,7 +95,6 @@
   "bookShortNamePlaceholder": "Short book name",
   "bookAbbreviationPlaceholder": "Book abbreviation",
   "storedAsMarker": "Stored as {{marker}}",
-  "bookFieldInfo": "More information about {{field}}",
   "loadingBooks": "Loading books...",
   "noBooksInProject": "No books found in this project",
   "bookDetailsSaveFailed": "Failed to save changes",

@@ -122,12 +122,12 @@ describe('EditProjectMetadataDialog', () => {
     ['bookLongName', '\\toc1'],
     ['bookShortName', '\\toc2'],
     ['bookAbbreviation', '\\toc3'],
-  ])('shows the %s marker in a tooltip anchored to its info button', async (label, marker) => {
+  ])('shows the %s marker in a tooltip on its label', async (label, marker) => {
     mockApi();
     const { user } = renderDialog();
     await user.click(await bookTrigger('Genesis'));
 
-    await user.hover(screen.getByRole('button', { name: `bookFieldInfo ${label}` }));
+    await user.hover(screen.getByText(label));
 
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip).toHaveTextContent(`storedAsMarker ${marker}`);
@@ -136,6 +136,27 @@ describe('EditProjectMetadataDialog', () => {
     // into a box above the dialog's top-left corner (QA on #398).
     const wrapper = tooltip.closest<HTMLElement>('[data-radix-popper-content-wrapper]');
     await waitFor(() => expect(wrapper?.style.transform).not.toContain('-200%'));
+  });
+
+  it('gives each field its marker as an accessible description, with no extra button', async () => {
+    mockApi();
+    const { user } = renderDialog();
+    await user.click(await bookTrigger('Genesis'));
+
+    // The tooltip only opens on hover, like the app's other text tooltips, so keyboard and
+    // screen reader users get the same text from the input itself.
+    expect(screen.getByLabelText('bookLongName')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc1'
+    );
+    expect(screen.getByLabelText('bookShortName')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc2'
+    );
+    expect(screen.getByLabelText('bookAbbreviation')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc3'
+    );
+    expect(
+      screen.queryAllByRole('button', { name: /bookLongName|bookShortName|bookAbbreviation/ })
+    ).toHaveLength(0);
   });
 
   it('saves a changed field when it loses focus', async () => {

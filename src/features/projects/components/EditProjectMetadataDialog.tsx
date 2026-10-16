@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Info, Loader2 } from 'lucide-react';
+import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -281,28 +282,27 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                           const inputId = `book-${book.bookId}-${field}`;
                           return (
                             <div key={field} className='flex flex-col gap-1.5'>
-                              <div className='flex items-center gap-1'>
-                                <Label htmlFor={inputId}>{t(meta.labelKey)}</Label>
-                                {/* The trigger has to take a ref: Label does not forward one,
-                                    and an unmeasured tooltip renders above the dialog. */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      aria-label={t('bookFieldInfo', { field: t(meta.labelKey) })}
-                                      className='text-muted-foreground hover:text-foreground h-6 w-6 p-0'
-                                      size='sm'
-                                      type='button'
-                                      variant='ghost'
-                                    >
-                                      <Info className='h-4 w-4' />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side='top'>
+                              {/* The span is the trigger because Label does not forward a ref,
+                                  and a tooltip Radix cannot measure renders above the dialog.
+                                  Same look as the milestone name tooltip, but above. */}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className='w-fit'>
+                                    <Label htmlFor={inputId}>{t(meta.labelKey)}</Label>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipPortal>
+                                  <TooltipContent
+                                    className='max-w-[420px] text-xs font-normal break-words'
+                                    side='top'
+                                    sideOffset={4}
+                                  >
                                     {t('storedAsMarker', { marker: meta.marker })}
                                   </TooltipContent>
-                                </Tooltip>
-                              </div>
+                                </TooltipPortal>
+                              </Tooltip>
                               <Input
+                                aria-describedby={`${inputId}-marker`}
                                 id={inputId}
                                 maxLength={200}
                                 placeholder={t(meta.placeholderKey)}
@@ -310,6 +310,11 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                                 onBlur={() => handleBlur(book, field)}
                                 onChange={event => setField(book.bookId, field, event.target.value)}
                               />
+                              {/* The tooltip opens on hover only, so the input carries the
+                                  marker for keyboard and screen reader users. */}
+                              <span className='sr-only' id={`${inputId}-marker`}>
+                                {t('storedAsMarker', { marker: meta.marker })}
+                              </span>
                             </div>
                           );
                         })}
