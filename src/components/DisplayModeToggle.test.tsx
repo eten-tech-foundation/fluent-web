@@ -57,20 +57,24 @@ describe('DisplayModeToggle', () => {
     expect(useAppStore.getState().displayMode).toBe('verse');
   });
 
-  it('explains the disabled option on hover and focus', async () => {
+  // #396 QA: the tooltip on disabled Chapter ran outside the settings dialog and repeated the note
+  // under the toggle, so the note is the one explanation (Chad, 16 Oct).
+  it('explains the disabled option below the toggle, not in a tooltip', async () => {
     useAppStore.setState({
       chapterViewAvailability: { chapterAssignmentId: 396, available: false },
     });
     const { user } = renderToggle();
     const chapter = screen.getByRole('radio', { name: 'Chapter' });
     const explanation = 'Chapter view is available once all verses have content.';
+    expect(screen.getByRole('status')).toHaveTextContent(explanation);
     await user.hover(chapter);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(explanation);
+    await expect(screen.findByRole('tooltip', {}, { timeout: 600 })).rejects.toThrow();
     await user.unhover(chapter);
     await user.tab();
     await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(chapter).toHaveFocus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(explanation);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(chapter).toHaveAccessibleDescription(explanation);
     expect(toggle()).toHaveAccessibleDescription(explanation);
   });
 
@@ -81,7 +85,7 @@ describe('DisplayModeToggle', () => {
     await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
     expect(useAppStore.getState().displayMode).toBe('pericope');
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAccessibleDescription(
       'Chapter view is available once all verses have content.'
     );
     await user.keyboard('{ArrowRight}');
@@ -124,7 +128,8 @@ describe('DisplayModeToggle', () => {
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('shows expected and missing verses without needing hover, and explains them on keyboard focus', async () => {
+  // #396 QA: Chad asked for the one sentence (16 Oct): the counts and the missing list are gone.
+  it('says how many verses need content without needing hover, and on keyboard focus', async () => {
     useAppStore.setState({
       chapterViewAvailability: {
         chapterAssignmentId: 396,
@@ -136,16 +141,18 @@ describe('DisplayModeToggle', () => {
     const { user } = renderToggle();
     const status = screen.getByRole('status');
     expect(status).toBeVisible();
-    expect(status).toHaveTextContent('23 of 25 have content. Missing content: 4, 25.');
+    expect(status).toHaveTextContent(/^Chapter view needs content in all 25 verses\.$/);
     await user.tab();
     await user.keyboard('{ArrowLeft}');
     expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveFocus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(status.textContent!);
+    expect(screen.getByRole('radio', { name: 'Chapter' })).toHaveAccessibleDescription(
+      status.textContent!
+    );
     await user.keyboard('{Enter} ');
     expect(useAppStore.getState().displayMode).toBe('verse');
   });
 
-  it('keeps long consecutive missing verse lists readable', () => {
+  it('stays one sentence however many verses are missing', () => {
     useAppStore.setState({
       chapterViewAvailability: {
         chapterAssignmentId: 396,
@@ -156,7 +163,7 @@ describe('DisplayModeToggle', () => {
     });
     renderToggle();
     expect(screen.getByRole('status')).toHaveTextContent(
-      '0 of 176 have content. Missing content: 1-176.'
+      /^Chapter view needs content in all 176 verses\.$/
     );
   });
 
@@ -186,7 +193,7 @@ describe('DisplayModeToggle', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Chapter content could not be verified. Reopen the chapter to try again.'
     );
-    expect(screen.getByRole('status')).not.toHaveTextContent('Missing content');
+    expect(screen.getByRole('status')).not.toHaveTextContent('needs content in all');
   });
 
   afterEach(() => {
