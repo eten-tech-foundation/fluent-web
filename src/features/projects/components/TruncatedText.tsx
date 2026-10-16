@@ -1,11 +1,18 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTruncation } from '@/features/projects/hooks/useTruncation';
+import { cn } from '@/lib/utils';
 
-export const TruncatedTableText = ({ text }: { text: string }): React.JSX.Element => {
+export const TruncatedTableText = ({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}): React.JSX.Element => {
   const { ref, isTruncated } = useTruncation<HTMLDivElement>(text);
 
   const content = (
-    <div ref={ref} className='max-w-full cursor-default truncate' title=''>
+    <div ref={ref} className={cn('max-w-full min-w-0 cursor-default truncate', className)} title=''>
       {text}
     </div>
   );
@@ -28,13 +35,22 @@ export const TruncatedTableText = ({ text }: { text: string }): React.JSX.Elemen
   );
 };
 
-export const TruncatedCardText = ({ text }: { text: string }): React.JSX.Element => {
+export const TruncatedCardText = ({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}): React.JSX.Element => {
   const { ref, isTruncated } = useTruncation<HTMLDivElement>(text);
 
   const content = (
     <div
       ref={ref}
-      className='max-w-full cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400'
+      className={cn(
+        'max-w-full min-w-0 cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400',
+        className
+      )}
     >
       {text}
     </div>
