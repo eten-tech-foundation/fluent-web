@@ -46,6 +46,11 @@ on:
         required: false
         type: boolean
         default: false
+      usfm_import:
+        description: 'Baked into VITE_USFM_IMPORT (#418, #419)'
+        required: false
+        type: boolean
+        default: false
     outputs:
       url:
         description: 'URL of the deployed Static Web App'
@@ -98,4 +103,5 @@ jobs:
           VITE_ENVIRONMENT: ${{ inputs.vite_environment }}
           VITE_APP_VERSION: ${{ inputs.app_version }}
           VITE_RTE_PERICOPE: ${{ inputs.rte_pericope }}
+          VITE_USFM_IMPORT: ${{ inputs.usfm_import }}
           VITE_BETTER_AUTH_URL: ${{ secrets.VITE_BETTER_AUTH_URL }}

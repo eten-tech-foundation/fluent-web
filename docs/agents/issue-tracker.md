@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+Moving a ticket through the Fluent board — stages, labels, `gh project` commands — see [fluent-platform's ticket workflow](https://github.com/eten-tech-foundation/fluent-platform/blob/main/docs/guides/ticket-workflow.md).
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.

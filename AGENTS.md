@@ -1,5 +1,18 @@
 # AGENTS.md — Fluent Web
 
+Fluent's browser app, React + TypeScript built with Vite. Its only backend is
+[fluent-api](https://github.com/eten-tech-foundation/fluent-api).
+
+## Read only what the task needs
+
+- Finding where a feature lives or which endpoints it calls: [docs/code-map.md](docs/code-map.md).
+- Changing permissions, scripture text, saving, async updates or feature flags:
+  [docs/domain-rules.md](docs/domain-rules.md).
+- Setup, scripts and what CI runs: the [README](README.md#checks-before-a-pr).
+
+Don't edit `src/routeTree.gen.ts` by hand, since `pnpm dev` and `pnpm build` regenerate it from
+`src/routes/`. Run `pnpm precheck` on Node 24.13.x before you finish.
+
 ## Docs
 
 See `docs/README.md` for the docs directory convention. Brainstorming and
