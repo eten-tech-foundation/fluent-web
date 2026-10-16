@@ -259,7 +259,7 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
               <span className='text-gray-500'>{t('noBooksInProject')}</span>
             </div>
           ) : (
-            <TooltipProvider>
+            <TooltipProvider delayDuration={300}>
               <Accordion
                 className='w-full'
                 type='multiple'
