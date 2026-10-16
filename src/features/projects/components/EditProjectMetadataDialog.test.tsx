@@ -94,7 +94,7 @@ describe('EditProjectMetadataDialog', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
   });
 
-  it('expands several books at once and seeds Short Name from the legacy title', async () => {
+  it('expands several books at once and shows the TOC values as stored', async () => {
     mockApi();
     const { user } = renderDialog();
 
@@ -102,13 +102,20 @@ describe('EditProjectMetadataDialog', () => {
     await user.click(await bookTrigger('Exodus'));
 
     expect(screen.getAllByRole('textbox')).toHaveLength(6);
-    const [longName, shortName, abbreviation] = screen.getAllByRole('textbox');
+    const [longName, shortName, abbreviation, ...exodusFields] = screen.getAllByRole('textbox');
     expect(longName).toHaveAttribute('placeholder', 'bookLongNamePlaceholder');
     expect(shortName).toHaveAttribute('placeholder', 'bookShortNamePlaceholder');
     expect(abbreviation).toHaveAttribute('placeholder', 'bookAbbreviationPlaceholder');
+    // Genesis has a book title (\mt) and no TOC values. The title is not a Short Name: it is
+    // exported as \mt1 on its own, so showing it here would claim a \toc2 the file never has.
     expect(longName).toHaveValue('');
-    expect(shortName).toHaveValue('The First Book of Moses');
+    expect(shortName).toHaveValue('');
     expect(abbreviation).toHaveValue('');
+    expect(exodusFields.map(input => (input as HTMLInputElement).value)).toEqual([
+      'Exodus',
+      'Exo',
+      'Ex',
+    ]);
   });
 
   it.each([

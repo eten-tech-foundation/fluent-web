@@ -65,12 +65,12 @@ const TOC_FIELD_META: Record<
 };
 
 /**
- * What the inputs show for a book as the server holds it. Short Name is seeded from the
- * legacy \mt title while no \toc2 exists (API contract); the other two are never seeded.
+ * What the inputs show for a book as the server holds it. Each field is its own \toc value;
+ * the running header and book title (\h, \mt) are never shown or seeded here.
  */
 const serverValues = (book: BookDetails): TocValues => ({
   tocLongName: book.tocLongName ?? '',
-  tocShortName: book.tocShortName ?? book.bookTitle ?? '',
+  tocShortName: book.tocShortName ?? '',
   tocAbbreviation: book.tocAbbreviation ?? '',
 });
 
