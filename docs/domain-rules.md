@@ -163,9 +163,12 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   the dashboard when no project item can be resolved".
 - The book metadata dialog (`src/features/projects/components/EditProjectMetadataDialog.tsx`)
   saves each changed field on blur, sends an empty value as `null`, waits for the previous save of
-  the same book, and saves what's pending when it closes or unmounts. Tests:
+  the same book, and saves what's pending when it closes or unmounts. Its inputs show only the
+  stored `\toc1`, `\toc2` and `\toc3` values: the running header and book title (`\h`, `\mt`) are
+  never shown or used to pre-fill one. Tests:
   `src/features/projects/components/EditProjectMetadataDialog.test.tsx` › "waits for an in-flight
-  save before sending the next one for the same field".
+  save before sending the next one for the same field" and "expands several books at once and
+  shows the TOC values as stored".
 - Word pairs a translator ignores everywhere in the repeated word check are saved with a
   full-replace `PUT /self/settings`. `src/features/checks/hooks/useSuppressions.ts` applies the
   change right away, sends the writes one at a time and rolls back on failure. Pairs ignored for

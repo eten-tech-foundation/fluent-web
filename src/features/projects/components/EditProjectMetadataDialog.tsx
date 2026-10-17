@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -65,12 +66,12 @@ const TOC_FIELD_META: Record<
 };
 
 /**
- * What the inputs show for a book as the server holds it. Short Name is seeded from the
- * legacy \mt title while no \toc2 exists (API contract); the other two are never seeded.
+ * What the inputs show for a book as the server holds it. Each field is its own \toc value;
+ * the running header and book title (\h, \mt) are never shown or seeded here.
  */
 const serverValues = (book: BookDetails): TocValues => ({
   tocLongName: book.tocLongName ?? '',
-  tocShortName: book.tocShortName ?? book.bookTitle ?? '',
+  tocShortName: book.tocShortName ?? '',
   tocAbbreviation: book.tocAbbreviation ?? '',
 });
 
@@ -259,7 +260,7 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
               <span className='text-gray-500'>{t('noBooksInProject')}</span>
             </div>
           ) : (
-            <TooltipProvider>
+            <TooltipProvider delayDuration={300}>
               <Accordion
                 className='w-full'
                 type='multiple'
@@ -279,19 +280,31 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                         {TOC_FIELDS.map(field => {
                           const meta = TOC_FIELD_META[field];
                           const inputId = `book-${book.bookId}-${field}`;
+                          const markerId = `${inputId}-marker`;
+                          const markerText = t('storedAsMarker', { marker: meta.marker });
                           return (
                             <div key={field} className='flex flex-col gap-1.5'>
+                              {/* The span is the trigger because Label does not forward a ref,
+                                  and a tooltip Radix cannot measure renders above the dialog.
+                                  Same look as the milestone name tooltip, but above. */}
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Label className='w-fit cursor-help' htmlFor={inputId}>
-                                    {t(meta.labelKey)}
-                                  </Label>
+                                  <span className='w-fit'>
+                                    <Label htmlFor={inputId}>{t(meta.labelKey)}</Label>
+                                  </span>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  {t('storedAsMarker', { marker: meta.marker })}
-                                </TooltipContent>
+                                <TooltipPortal>
+                                  <TooltipContent
+                                    className='max-w-[420px] text-xs font-normal break-words'
+                                    side='top'
+                                    sideOffset={4}
+                                  >
+                                    {markerText}
+                                  </TooltipContent>
+                                </TooltipPortal>
                               </Tooltip>
                               <Input
+                                aria-describedby={markerId}
                                 id={inputId}
                                 maxLength={200}
                                 placeholder={t(meta.placeholderKey)}
@@ -299,6 +312,11 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                                 onBlur={() => handleBlur(book, field)}
                                 onChange={event => setField(book.bookId, field, event.target.value)}
                               />
+                              {/* The tooltip opens on hover only, so the input carries the
+                                  marker for keyboard and screen reader users. */}
+                              <span className='sr-only' id={markerId}>
+                                {markerText}
+                              </span>
                             </div>
                           );
                         })}
