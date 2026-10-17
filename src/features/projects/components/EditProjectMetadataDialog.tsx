@@ -280,6 +280,8 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                         {TOC_FIELDS.map(field => {
                           const meta = TOC_FIELD_META[field];
                           const inputId = `book-${book.bookId}-${field}`;
+                          const markerId = `${inputId}-marker`;
+                          const markerText = t('storedAsMarker', { marker: meta.marker });
                           return (
                             <div key={field} className='flex flex-col gap-1.5'>
                               {/* The span is the trigger because Label does not forward a ref,
@@ -297,12 +299,12 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                                     side='top'
                                     sideOffset={4}
                                   >
-                                    {t('storedAsMarker', { marker: meta.marker })}
+                                    {markerText}
                                   </TooltipContent>
                                 </TooltipPortal>
                               </Tooltip>
                               <Input
-                                aria-describedby={`${inputId}-marker`}
+                                aria-describedby={markerId}
                                 id={inputId}
                                 maxLength={200}
                                 placeholder={t(meta.placeholderKey)}
@@ -312,8 +314,8 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                               />
                               {/* The tooltip opens on hover only, so the input carries the
                                   marker for keyboard and screen reader users. */}
-                              <span className='sr-only' id={`${inputId}-marker`}>
-                                {t('storedAsMarker', { marker: meta.marker })}
+                              <span className='sr-only' id={markerId}>
+                                {markerText}
                               </span>
                             </div>
                           );
