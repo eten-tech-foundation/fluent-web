@@ -25,9 +25,17 @@ export function useTruncation<T extends HTMLElement = HTMLDivElement>(
       timeoutId = setTimeout(checkTruncation, 150);
     };
     window.addEventListener('resize', debouncedCheck);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && ref.current) {
+      observer = new ResizeObserver(debouncedCheck);
+      observer.observe(ref.current);
+    }
+
     return () => {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', debouncedCheck);
+      observer?.disconnect();
     };
   }, [text]);
 

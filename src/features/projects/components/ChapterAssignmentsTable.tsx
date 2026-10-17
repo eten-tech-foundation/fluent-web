@@ -97,11 +97,11 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   }, [assignments, sortColumn, sortDirection]);
 
   const getSortIcon = (column: SortableColumn) => {
-    if (sortColumn !== column) return <ArrowUpDown className='h-3 w-3 opacity-50' />;
+    if (sortColumn !== column) return <ArrowUpDown className='h-3 w-3 shrink-0 opacity-50' />;
     return sortDirection === 'asc' ? (
-      <ArrowUp className='h-3 w-3' />
+      <ArrowUp className='h-3 w-3 shrink-0' />
     ) : (
-      <ArrowDown className='h-3 w-3' />
+      <ArrowDown className='h-3 w-3 shrink-0' />
     );
   };
 
@@ -134,44 +134,44 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                   <TableHead className='w-12 px-3 py-2 md:px-4 md:py-2.5 lg:px-6 lg:py-3'>
                     <span className='sr-only'>Select</span>
                   </TableHead>
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
+                  <TableHead className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Book
                   </TableHead>
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
+                  <TableHead className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Chapter
                   </TableHead>
                   <TableHead
                     aria-sort={getAriaSortValue('drafter')}
-                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                    className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
                   >
                     <button
-                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      className='flex max-w-full min-w-0 cursor-pointer items-center gap-1 select-none hover:opacity-80'
                       type='button'
                       onClick={() => handleSort('drafter')}
                     >
-                      <TruncatedTableText text={drafterLabel} />
+                      <TruncatedTableText className='cursor-pointer' text={drafterLabel} />
                       {getSortIcon('drafter')}
                     </button>
                   </TableHead>
                   <TableHead
                     aria-sort={getAriaSortValue('peerChecker')}
-                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                    className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
                   >
                     <button
-                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      className='flex max-w-full min-w-0 cursor-pointer items-center gap-1 select-none hover:opacity-80'
                       type='button'
                       onClick={() => handleSort('peerChecker')}
                     >
-                      <TruncatedTableText text={peerCheckerLabel} />
+                      <TruncatedTableText className='cursor-pointer' text={peerCheckerLabel} />
                       {getSortIcon('peerChecker')}
                     </button>
                   </TableHead>
                   <TableHead
                     aria-sort={getAriaSortValue('status')}
-                    className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
+                    className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'
                   >
                     <button
-                      className='flex cursor-pointer items-center gap-1 select-none hover:opacity-80'
+                      className='flex max-w-full min-w-0 cursor-pointer items-center gap-1 select-none hover:opacity-80'
                       type='button'
                       onClick={() => handleSort('status')}
                     >
@@ -180,7 +180,7 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                     </button>
                   </TableHead>
 
-                  <TableHead className='text-accent-foreground px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
+                  <TableHead className='text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base'>
                     Progress
                   </TableHead>
                 </TableRow>
