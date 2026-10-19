@@ -1,5 +1,8 @@
+import { useRef, type ReactNode } from 'react';
+
 import {
   AlignLeft,
+  CornerDownLeft,
   Heading,
   Heading1,
   Heading2,
@@ -13,6 +16,13 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import {
@@ -31,6 +41,8 @@ export interface FormatBarProps {
   blockMarker: string | undefined;
   onFormat: (marker: string) => void;
   onInsertParagraph?: () => void;
+  /** Puts the caret back in the text once a heading level is picked from the menu. */
+  focusEditor?: () => void;
   canAddHeading: boolean;
   disabled?: boolean;
 }
@@ -43,28 +55,108 @@ const KINDS: Array<{ kind: BlockKind; labelKey: string; fallback: string; icon: 
 
 const HEADING_ICONS = { 1: Heading1, 2: Heading2, 3: Heading3, 4: Heading4 };
 
-/** Disabled controls still expose their explanation to pointer and keyboard users. */
-function FormatButton({ title, ...props }: ButtonProps & { title: string }) {
+const ICON_BUTTON =
+  'text-muted-foreground hover:bg-hover h-7 w-7 cursor-pointer rounded-md bg-transparent p-0';
+
+/**
+ * A control whose tooltip is its name, enabled or not: a disabled icon is still the same control,
+ * so its tooltip does not switch to explaining why it is off (#472 QA). Disabled buttons get no
+ * pointer or focus events, so a focusable wrapper shows the name for them.
+ */
+function FormatButton({ label, ...props }: ButtonProps & { label: string }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           {props.disabled ? (
             <span
-              aria-label={props['aria-label']}
+              aria-label={label}
               className='focus-visible:ring-ring inline-flex cursor-not-allowed rounded-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
               role='group'
               tabIndex={0}
             >
-              <Button {...props} />
+              <Button aria-label={label} {...props} />
             </span>
           ) : (
-            <Button {...props} />
+            <Button aria-label={label} {...props} />
           )}
         </TooltipTrigger>
-        <TooltipContent>{title}</TooltipContent>
+        <TooltipContent>{label}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/**
+ * H inside a heading. The levels open from it as a menu instead of lining up in the bar, where
+ * all four pushed into the language name (#472 QA). Picking one hands the caret back to the text;
+ * Escape leaves focus on H, as any menu does.
+ */
+function HeadingLevelMenu({
+  label,
+  level,
+  className,
+  focusEditor,
+  onPick,
+  children,
+}: {
+  label: string;
+  level: number;
+  className: string;
+  focusEditor?: () => void;
+  onPick: (level: number) => void;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const pickedRef = useRef(false);
+
+  return (
+    <DropdownMenu>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button aria-pressed aria-label={label} className={className}>
+                {children}
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <DropdownMenuContent
+        align='end'
+        className='min-w-0'
+        onCloseAutoFocus={event => {
+          if (!pickedRef.current || !focusEditor) return;
+          pickedRef.current = false;
+          event.preventDefault();
+          focusEditor();
+        }}
+      >
+        <DropdownMenuRadioGroup
+          value={String(level)}
+          onValueChange={value => {
+            pickedRef.current = true;
+            onPick(Number(value));
+          }}
+        >
+          {HEADING_LEVELS.map(headingLevel => {
+            const Icon = HEADING_ICONS[headingLevel];
+            return (
+              <DropdownMenuRadioItem
+                key={headingLevel}
+                aria-label={`${t('headingLevel', 'Level')} ${headingLevel}`}
+                className='data-[state=checked]:text-primary cursor-pointer font-semibold'
+                value={String(headingLevel)}
+              >
+                <Icon aria-hidden='true' className='size-5 text-current' />
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -74,7 +166,8 @@ function FormatButton({ title, ...props }: ButtonProps & { title: string }) {
  *
  * The level control and the indent controls are contextual by design — heading levels only mean
  * something inside a heading, and indenting only means something inside poetry — so they appear
- * with their block rather than sitting there disabled.
+ * with their block rather than sitting there disabled. Inside a heading the levels open from H,
+ * which keeps the bar the same width as everywhere else.
  *
  * A block the bar cannot author — an imported `\ms`, or poetry indented deeper than it writes —
  * says so, because three unpressed buttons on their own read as "this block has no formatting".
@@ -84,6 +177,7 @@ export function FormatBar({
   blockMarker,
   onFormat,
   onInsertParagraph,
+  focusEditor,
   canAddHeading,
   disabled = false,
 }: FormatBarProps) {
@@ -108,25 +202,34 @@ export function FormatBar({
               : insideHeading;
           const Icon = option.icon;
           const label = t(option.labelKey, option.fallback);
-          const tooltip = unavailable
-            ? insideHeading
-              ? t('headingOwnText', 'Headings keep their text separate from verses.')
-              : t('headingSelectVerse', 'Select a verse with fewer than four headings.')
-            : label;
+          const className = `h-7 w-7 rounded-md p-0 transition-colors ${
+            unavailable ? 'cursor-not-allowed' : 'cursor-pointer'
+          } ${
+            kind === option.kind
+              ? 'bg-primary text-white'
+              : 'text-muted-foreground hover:bg-hover bg-transparent'
+          }`;
+          if (option.kind === 'heading' && kind === 'heading' && !disabled) {
+            return (
+              <HeadingLevelMenu
+                key={option.kind}
+                className={className}
+                focusEditor={focusEditor}
+                label={label}
+                level={level}
+                onPick={headingLevel => onFormat(markerFor('heading', headingLevel))}
+              >
+                <Icon aria-hidden='true' className='h-4 w-4' />
+              </HeadingLevelMenu>
+            );
+          }
           return (
             <FormatButton
               key={option.kind}
-              aria-label={label}
               aria-pressed={kind === option.kind}
-              className={`h-7 w-7 rounded-md p-0 transition-colors ${
-                unavailable ? 'cursor-not-allowed' : 'cursor-pointer'
-              } ${
-                kind === option.kind
-                  ? 'bg-primary text-white'
-                  : 'text-muted-foreground hover:bg-hover bg-transparent'
-              }`}
+              className={className}
               disabled={disabled || unavailable}
-              title={tooltip}
+              label={label}
               onClick={() => onFormat(markerFor(option.kind, level))}
             >
               <Icon aria-hidden='true' className='h-4 w-4' />
@@ -137,18 +240,13 @@ export function FormatBar({
 
       {onInsertParagraph && (
         <FormatButton
-          aria-label={t('insertParagraph', 'Insert paragraph')}
-          className='h-7 gap-1 px-2 text-xs'
+          className={ICON_BUTTON}
           disabled={disabled || blockMarker === undefined}
-          title={t(
-            'insertParagraphHint',
-            'Place the cursor, then insert a paragraph. Selected text is kept.'
-          )}
+          label={t('insertParagraph', 'Insert paragraph')}
           onClick={onInsertParagraph}
           onMouseDown={event => event.preventDefault()}
         >
-          <Pilcrow aria-hidden='true' className='h-4 w-4' />
-          {t('insertParagraph', 'Insert paragraph')}
+          <CornerDownLeft aria-hidden='true' className='h-4 w-4' />
         </FormatButton>
       )}
 
@@ -158,39 +256,12 @@ export function FormatBar({
         </span>
       )}
 
-      {kind === 'heading' && (
-        <div className='flex flex-wrap items-center justify-end gap-1' data-testid='heading-levels'>
-          {HEADING_LEVELS.map(headingLevel => {
-            const Icon = HEADING_ICONS[headingLevel];
-            const label = `${t('headingLevel', 'Level')} ${headingLevel}`;
-            return (
-              <FormatButton
-                key={headingLevel}
-                aria-label={label}
-                aria-pressed={level === headingLevel}
-                className={`h-7 w-7 cursor-pointer rounded-md p-0 text-xs font-semibold transition-colors ${
-                  level === headingLevel
-                    ? 'bg-primary text-white'
-                    : 'text-muted-foreground hover:bg-hover bg-transparent'
-                }`}
-                disabled={disabled}
-                title={label}
-                onClick={() => onFormat(markerFor('heading', headingLevel))}
-              >
-                <Icon aria-hidden='true' className='h-4 w-4' />
-              </FormatButton>
-            );
-          })}
-        </div>
-      )}
-
       {kind === 'poetry' && (
         <div className='flex items-center gap-1' data-testid='poetry-indent'>
           <FormatButton
-            aria-label={t('decreaseIndent', 'Decrease indent')}
-            className='text-muted-foreground hover:bg-hover h-7 w-7 cursor-pointer rounded-md bg-transparent p-0'
+            className={ICON_BUTTON}
             disabled={disabled || !canOutdent}
-            title={t('decreaseIndent', 'Decrease indent')}
+            label={t('decreaseIndent', 'Decrease indent')}
             onClick={() => {
               const marker = outdentedMarker(blockMarker);
               if (marker) onFormat(marker);
@@ -199,10 +270,9 @@ export function FormatBar({
             <IndentDecrease aria-hidden='true' className='h-4 w-4' />
           </FormatButton>
           <FormatButton
-            aria-label={t('increaseIndent', 'Increase indent')}
-            className='text-muted-foreground hover:bg-hover h-7 w-7 cursor-pointer rounded-md bg-transparent p-0'
+            className={ICON_BUTTON}
             disabled={disabled || !canIndent}
-            title={t('increaseIndent', 'Increase indent')}
+            label={t('increaseIndent', 'Increase indent')}
             onClick={() => {
               const marker = indentedMarker(blockMarker);
               if (marker) onFormat(marker);

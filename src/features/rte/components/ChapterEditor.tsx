@@ -334,6 +334,7 @@ export function ChapterEditor({
                   ?.headings?.length ?? 0) < MAX_HEADINGS_PER_VERSE
               }
               disabled={Boolean(headingError)}
+              focusEditor={() => editorRef.current?.focus()}
               onFormat={handleFormat}
               onInsertParagraph={() => {
                 if (editorRef.current && !headingError) insertParagraph(editorRef.current);

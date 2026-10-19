@@ -8,6 +8,12 @@ headings can be edited in the chapter and pericope surfaces. Clearing a heading 
 Heading level changes apply only to the selected heading. Body formats cannot convert a heading
 back into verse text, and formatting a selection that spans paragraphs is refused.
 
+With the cursor in a heading, H in the Chapter format bar opens a menu of the four levels with the
+current one checked. The levels used to line up in the bar itself, which then grew into the target
+language name ([#472](https://github.com/eten-tech-foundation/fluent-web/issues/472) QA). Picking a
+level puts the caret back where it was, so typing continues in the heading. Escape closes the menu
+and leaves focus on H.
+
 The existing `markers.headings` array stores `{ marker, text }` entries in order before the
 following verse. `paragraphs` and `headings` are independently optional. Heading words stay outside
 `content`. Loading a verse with headings opens its stored body paragraph or a default `p`, so no
@@ -49,7 +55,7 @@ heading/verse repair, poetry offsets, title-only edits and deletion, textarea pr
 autosave. Component tests exercise insertion/cancel, invalid edit recovery and readonly behavior.
 Real Editorial tests cover level persistence and refusal of selections crossing heading/verse blocks.
 They also type immediately after switching a heading to `s2`, `s3` or `s4` and check that the saved
-text keeps the new level, and they drive the H3/H4 toolbar buttons in ChapterEditor, type right
+text keeps the new level, and they pick H3/H4 from the level menu in ChapterEditor, type right
 away, and check that the other headings and scripture are unchanged. A stylesheet test checks that
 all four levels render differently in both editing surfaces.
 Browser verification uses the production ChapterEditor and PericopeEditor with local save fixtures.

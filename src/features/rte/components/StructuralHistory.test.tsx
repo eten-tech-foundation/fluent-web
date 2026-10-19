@@ -56,6 +56,18 @@ async function select(input: HTMLElement, text: Node, offset: number) {
   });
 }
 
+/** Opens H's level menu from inside a heading and picks a level, the way a translator does. */
+async function pickLevel(user: ReturnType<typeof userEvent.setup>, level: number) {
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu'
+    )
+  );
+  await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+  await user.click(await screen.findByRole('menuitemradio', { name: `Level ${level}` }));
+}
+
 async function setup(verses = rows) {
   const onVersesChange = vi.fn();
   const result = render(
@@ -102,6 +114,40 @@ describe('structural edits in Editorial history', () => {
         markers: {
           paragraphs: [{ marker: 'p', offset: 0 }],
           headings: [{ marker: 's1', text: 'A title' }],
+        },
+      },
+    ]);
+  });
+
+  it('returns focus to the heading after a level is picked so immediate typing is saved there', async () => {
+    const { input, body, onVersesChange, user } = await setup();
+    const heading = () =>
+      input.querySelector<HTMLElement>('[data-marker="s1"], [data-marker="s2"]');
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Section Heading' }));
+    await user.type(screen.getByRole('textbox', { name: 'Heading text' }), 'A title');
+    await user.click(screen.getByRole('button', { name: 'Add heading' }));
+    await waitFor(() => expect(heading()).toHaveTextContent('A title'));
+    await select(input, heading()!.firstChild!.firstChild!, 'A title'.length);
+    await pickLevel(user, 2);
+    await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's2'));
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent(
+      input,
+      new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertReplacementText',
+        data: '!',
+      })
+    );
+    await waitFor(() => expect(heading()).toHaveTextContent('A title!'));
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      {
+        ...rows[1],
+        markers: {
+          paragraphs: [{ marker: 'p', offset: 0 }],
+          headings: [{ marker: 's2', text: 'A title!' }],
         },
       },
     ]);
@@ -194,7 +240,7 @@ describe('structural edits in Editorial history', () => {
     await history(true);
     await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's1'));
     await select(input, heading()!.firstChild!.firstChild!, 2);
-    await user.click(screen.getByRole('button', { name: 'Level 2' }));
+    await pickLevel(user, 2);
     await waitFor(() => expect(heading()).toHaveAttribute('data-marker', 's2'));
     await select(input, body(2), 3);
     onVersesChange.mockClear();
@@ -234,7 +280,7 @@ describe('structural edits in Editorial history', () => {
       expect(input.querySelector('[data-marker="s1"]')).toHaveTextContent('A title')
     );
     await select(input, input.querySelector('[data-marker="s1"]')!.firstChild!.firstChild!, 2);
-    await user.click(screen.getByRole('button', { name: 'Level 3' }));
+    await pickLevel(user, 3);
     await waitFor(() =>
       expect(input.querySelector('[data-marker="s3"]')).toHaveTextContent('A title')
     );
