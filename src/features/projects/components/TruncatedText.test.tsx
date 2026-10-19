@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as useTruncationModule from '@/features/projects/hooks/useTruncation';
 import { renderWithProviders, screen } from '@/test/render';
@@ -10,10 +10,14 @@ import {
   wrapMilestoneName,
 } from './TruncatedText';
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('TruncatedTableText', () => {
   it('renders text with truncate and min-w-0 classes when not truncated', () => {
     vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
-      ref: { current: null },
+      ref: vi.fn(),
       isTruncated: false,
     });
 
@@ -27,7 +31,7 @@ describe('TruncatedTableText', () => {
 
   it('renders with custom className passed as prop', () => {
     vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
-      ref: { current: null },
+      ref: vi.fn(),
       isTruncated: false,
     });
 
@@ -41,7 +45,7 @@ describe('TruncatedTableText', () => {
 
   it('renders with tooltip trigger when isTruncated is true', async () => {
     vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
-      ref: { current: null },
+      ref: vi.fn(),
       isTruncated: true,
     });
 
@@ -62,7 +66,7 @@ describe('TruncatedTableText', () => {
 describe('TruncatedCardText', () => {
   it('renders text with truncate and min-w-0 classes', () => {
     vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
-      ref: { current: null },
+      ref: vi.fn(),
       isTruncated: false,
     });
 
@@ -75,7 +79,7 @@ describe('TruncatedCardText', () => {
 
   it('renders with tooltip when truncated', async () => {
     vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
-      ref: { current: null },
+      ref: vi.fn(),
       isTruncated: true,
     });
 

@@ -136,22 +136,13 @@ export const TruncatedTableText = ({
   );
 };
 
-export const TruncatedCardText = ({
-  text,
-  className,
-}: {
-  text: string;
-  className?: string;
-}): React.JSX.Element => {
+export const TruncatedCardText = ({ text }: { text: string }): React.JSX.Element => {
   const { ref, isTruncated } = useTruncation<HTMLDivElement>(text);
 
   const content = (
     <div
       ref={ref}
-      className={cn(
-        'max-w-full min-w-0 cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400',
-        className
-      )}
+      className='max-w-full min-w-0 cursor-default truncate text-base font-medium text-gray-600 dark:text-gray-400'
     >
       {text}
     </div>

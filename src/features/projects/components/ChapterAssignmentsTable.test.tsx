@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as useTruncationModule from '@/features/projects/hooks/useTruncation';
 import { type ChapterAssignmentProgress } from '@/lib/types';
 import { renderWithProviders, screen } from '@/test/render';
 
@@ -40,6 +41,15 @@ const mockAssignment: ChapterAssignmentProgress = {
 };
 
 describe('ChapterAssignmentsTable', () => {
+  beforeEach(() => {
+    mockRoleLabels.draft = 'Drafter';
+    mockRoleLabels.peer_check = 'Peer Checker';
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const defaultProps = {
     assignments: [mockAssignment],
     isLoading: false,
@@ -148,5 +158,19 @@ describe('ChapterAssignmentsTable', () => {
     expect(drafterTh).not.toHaveAttribute('aria-sort');
     await user.click(drafterButton!);
     expect(drafterTh).toHaveAttribute('aria-sort', 'ascending');
+  });
+
+  it('opens tooltip when sort button is focused by keyboard if header text is truncated', async () => {
+    vi.spyOn(useTruncationModule, 'useTruncation').mockReturnValue({
+      ref: vi.fn(),
+      isTruncated: true,
+    });
+
+    renderWithProviders(<ChapterAssignmentsTable {...defaultProps} />);
+
+    const drafterButton = screen.getByRole('button', { name: /drafter/i });
+    drafterButton.focus();
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Drafter');
   });
 });
