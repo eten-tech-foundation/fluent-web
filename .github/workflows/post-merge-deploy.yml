@@ -21,3 +21,4 @@ jobs:
       vite_environment: development
       app_version: ${{ format('dev-{0}', github.sha) }}
       rte_pericope: true
+      usfm_import: true

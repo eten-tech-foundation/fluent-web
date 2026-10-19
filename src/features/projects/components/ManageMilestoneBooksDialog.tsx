@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
+import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Headphones, Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -20,9 +21,67 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
 import { bookDetailsQueryKey, useBookDetails } from '@/features/projects/hooks/useBookDetails';
 import { useGetMilestones, useUpdateMilestone } from '@/features/projects/hooks/useMilestones';
+
+import { wrapMilestoneName } from './TruncatedText';
+
+interface MoveMilestoneMenuItemProps {
+  milestone: { id: number; name: string };
+  onSelect: () => void;
+}
+
+const MoveMilestoneMenuItem: React.FC<MoveMilestoneMenuItemProps> = ({ milestone, onSelect }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const lines = wrapMilestoneName(milestone.name);
+
+  const handlePointerEnter = () => {
+    const isEllipsed = ref.current
+      ? ref.current.scrollWidth > ref.current.clientWidth || milestone.name.length > 25
+      : milestone.name.length > 25;
+    if (isEllipsed) {
+      setIsOpen(true);
+    }
+  };
+
+  const handlePointerLeave = () => {
+    setIsOpen(false);
+  };
+
+  return (
+    <DropdownMenuItem
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      onSelect={onSelect}
+    >
+      <Tooltip open={isOpen} onOpenChange={setIsOpen}>
+        <TooltipTrigger asChild>
+          <span ref={ref} className='block max-w-[200px] truncate'>
+            {milestone.name}
+          </span>
+        </TooltipTrigger>
+        <TooltipPortal>
+          <TooltipContent
+            className='max-w-[420px] text-xs font-normal break-words'
+            side='bottom'
+            sideOffset={6}
+          >
+            <div className='flex flex-col gap-0.5'>
+              {lines.map((line, idx) => (
+                <span key={idx} className='block'>
+                  {line}
+                </span>
+              ))}
+            </div>
+          </TooltipContent>
+        </TooltipPortal>
+      </Tooltip>
+    </DropdownMenuItem>
+  );
+};
 
 interface ManageMilestoneBooksDialogProps {
   isOpen: boolean;
@@ -163,18 +222,17 @@ export const ManageMilestoneBooksDialog: React.FC<ManageMilestoneBooksDialogProp
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align='end'>
-                            {otherMilestones.map(milestone => (
-                              <DropdownMenuItem
-                                key={milestone.id}
-                                onSelect={() =>
-                                  void handleMove(book.bookId, milestone.id, book.bookName)
-                                }
-                              >
-                                <span className='max-w-[200px] truncate' title={milestone.name}>
-                                  {milestone.name}
-                                </span>
-                              </DropdownMenuItem>
-                            ))}
+                            <TooltipProvider delayDuration={300}>
+                              {otherMilestones.map(milestone => (
+                                <MoveMilestoneMenuItem
+                                  key={milestone.id}
+                                  milestone={milestone}
+                                  onSelect={() =>
+                                    void handleMove(book.bookId, milestone.id, book.bookName)
+                                  }
+                                />
+                              ))}
+                            </TooltipProvider>
                           </DropdownMenuContent>
                         </DropdownMenu>
 

@@ -25,10 +25,10 @@ const envSchema = z.object({
     value => (value === '' ? undefined : value),
     z.enum(['true', 'false']).optional()
   ),
-  // The USFM import tab on project creation (#418). Off by default: the tab can validate
-  // files, but nothing can create a project out of them until #419 lands, so a visible tab
-  // would dead-end. Same preprocess as RTE_PERICOPE — a blank value has to read as unset
-  // rather than stop the app booting.
+  // The USFM import tab on project creation (#418, #419). Off unless the build sets it:
+  // deployed builds take it from the `usfm_import` input in deploy.yml, which only the
+  // development deploy turns on. Same preprocess as RTE_PERICOPE — a blank value has to
+  // read as unset rather than stop the app booting.
   USFM_IMPORT: z.preprocess(
     value => (value === '' ? undefined : value),
     z.enum(['true', 'false']).optional()

@@ -1,9 +1,7 @@
 import React, { useId, useRef } from 'react';
 
-import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { useTranslation } from 'react-i18next';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { config } from '@/lib/config';
 import { chapterViewAvailabilityFor, useAppStore, type DisplayMode } from '@/store/store';
 
@@ -29,17 +27,6 @@ const ARROW_STEPS = new Map<string, number>([
   ['ArrowLeft', -1],
   ['ArrowUp', -1],
 ]);
-
-/** Keep long runs of missing verses readable, including chapters with over 100 verses. */
-function formatVerseNumbers(numbers: number[]): string {
-  const ranges: string[] = [];
-  for (let i = 0; i < numbers.length; i++) {
-    const start = numbers[i];
-    while (i + 1 < numbers.length && numbers[i + 1] === numbers[i] + 1) i++;
-    ranges.push(start === numbers[i] ? String(start) : `${start}-${numbers[i]}`);
-  }
-  return ranges.join(', ');
-}
 
 /**
  * The Display selector in the drafting settings menu.
@@ -68,11 +55,8 @@ export const DisplayModeToggle: React.FC = () => {
         )
       : missing?.length
         ? t('chapterViewMissingContent', {
-            defaultValue:
-              'Chapter view needs content in all {{total}} verses. {{completed}} of {{total}} have content. Missing content: {{verses}}. Continue in Verse or Pericope view.',
+            defaultValue: 'Chapter view needs content in all {{total}} verses.',
             total: availability?.expectedVerseCount,
-            completed: (availability?.expectedVerseCount ?? 0) - missing.length,
-            verses: formatVerseNumbers(missing),
           })
         : t('chapterViewUnavailable', 'Chapter view is available once all verses have content.');
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -103,31 +87,34 @@ export const DisplayModeToggle: React.FC = () => {
     // from scrolling the settings dialog.
     event.preventDefault();
     const nextIndex = (index + step + modes.length) % modes.length;
-    // Disabled Chapter stays reachable so keyboard users can read its tooltip.
+    // Disabled Chapter stays reachable so keyboard users hear why it is off: the note under the
+    // toggle describes it.
     if (!isDisabled(nextIndex)) setDisplayMode(modes[nextIndex].mode);
     optionRefs.current[nextIndex]?.focus();
   };
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className='border-primary bg-background flex w-full flex-wrap items-center justify-between gap-y-3 rounded-[12px] border p-4 shadow-sm'>
-        <span className='text-foreground text-sm font-semibold' id={labelId}>
-          {t('display', 'Display')}
-        </span>
-        <div
-          aria-describedby={showExplanation ? explanationId : undefined}
-          aria-labelledby={labelId}
-          className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
-          role='radiogroup'
-        >
-          {modes.map((option, index) => {
-            const disabled = isDisabled(index);
-            const button = (
+    <div className='border-primary bg-background flex w-full flex-wrap items-center justify-between gap-y-3 rounded-[12px] border p-4 shadow-sm'>
+      <span className='text-foreground text-sm font-semibold' id={labelId}>
+        {t('display', 'Display')}
+      </span>
+      <div
+        aria-describedby={showExplanation ? explanationId : undefined}
+        aria-labelledby={labelId}
+        className='border-primary bg-background flex h-9 items-center overflow-hidden rounded-full border'
+        role='radiogroup'
+      >
+        {modes.map((option, index) => {
+          const disabled = isDisabled(index);
+          return (
+            <React.Fragment key={option.mode}>
+              {index > 0 && <div className='bg-primary h-full w-px' />}
               <button
                 ref={element => {
                   optionRefs.current[index] = element;
                 }}
                 aria-checked={displayMode === option.mode}
+                aria-describedby={disabled ? explanationId : undefined}
                 aria-disabled={disabled || undefined}
                 className={`flex h-full items-center justify-center px-5 text-xs font-semibold transition-all ${
                   disabled
@@ -146,30 +133,15 @@ export const DisplayModeToggle: React.FC = () => {
               >
                 {t(option.labelKey, option.fallback)}
               </button>
-            );
-            return (
-              <React.Fragment key={option.mode}>
-                {index > 0 && <div className='bg-primary h-full w-px' />}
-                {disabled ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                    <TooltipPortal>
-                      <TooltipContent>{explanation}</TooltipContent>
-                    </TooltipPortal>
-                  </Tooltip>
-                ) : (
-                  button
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-        {showExplanation && (
-          <span className='text-muted-foreground w-full text-sm' id={explanationId} role='status'>
-            {explanation}
-          </span>
-        )}
+            </React.Fragment>
+          );
+        })}
       </div>
-    </TooltipProvider>
+      {showExplanation && (
+        <span className='text-muted-foreground w-full text-sm' id={explanationId} role='status'>
+          {explanation}
+        </span>
+      )}
+    </div>
   );
 };

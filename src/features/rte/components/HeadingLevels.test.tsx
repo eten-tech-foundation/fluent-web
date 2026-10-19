@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { ChapterEditor } from './ChapterEditor';
@@ -22,6 +22,18 @@ afterAll(() => {
     else Reflect.deleteProperty(prototype, key);
   }
 });
+
+/** Opens H's level menu once the bar reports a heading, as Enter on H does. */
+async function openLevels() {
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu'
+    )
+  );
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Section Heading' }), { key: 'Enter' });
+  return screen.findByRole('menu');
+}
 
 describe('heading toolbar with the real editor', () => {
   it.each([3, 4])(
@@ -68,16 +80,15 @@ describe('heading toolbar with the real editor', () => {
         window.getSelection()!.addRange(range);
         fireEvent(document, new Event('selectionchange'));
       });
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: `Level ${level}` })).toHaveAttribute(
-          'aria-pressed',
-          'true'
-        )
+      const levels = await openLevels();
+      expect(within(levels).getByRole('menuitemradio', { name: `Level ${level}` })).toHaveAttribute(
+        'aria-checked',
+        'true'
       );
       onVersesChange.mockClear();
       const target = level === 3 ? 4 : 3;
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: `Level ${target}` }));
+        fireEvent.click(within(levels).getByRole('menuitemradio', { name: `Level ${target}` }));
         fireEvent(
           input,
           new InputEvent('beforeinput', {
@@ -103,10 +114,10 @@ describe('heading toolbar with the real editor', () => {
           },
         ])
       );
-      expect(screen.getByRole('button', { name: `Level ${target}` })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      );
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      expect(
+        within(await openLevels()).getByRole('menuitemradio', { name: `Level ${target}` })
+      ).toHaveAttribute('aria-checked', 'true');
       expect(container.querySelector('.usfm_q2')).toHaveTextContent('First verse.');
       expect(container.querySelector('.usfm_p')).toHaveTextContent('Second verse.');
     }
