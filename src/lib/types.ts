@@ -465,6 +465,9 @@ export interface VerseAudioTake {
   downloadUrl: string;
   createdAt: string;
   updatedAt: string;
+  isPericope?: boolean;
+  pericopeRange?: [number, number];
+  pericopeNumber?: string;
 }
 
 export interface VerseAudioRecording {
@@ -484,6 +487,12 @@ export interface VerseAudioRecording {
   takes: VerseAudioTake[];
   createdAt: string;
   updatedAt: string;
+  granularity?: 'verse' | 'pericope';
+  isPericope?: boolean;
+  pericopeRange?: [number, number];
+  pericopeNumber?: string;
+  startVerse?: number;
+  endVerse?: number;
 }
 
 export interface ChapterAudioResponse {

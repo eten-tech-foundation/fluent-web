@@ -44,6 +44,8 @@ export const SelectAsDraftButton: React.FC<SelectAsDraftButtonProps> = ({
 interface TakeCardProps {
   take: VerseAudioTake;
   takeNumber: number;
+  /** Custom label override, e.g. "Take 1 - Pericope - vv. 1-5" */
+  label?: string;
   /** Display name for the uploader. Pass undefined for single-contributor passages. */
   contributorName?: string;
   /** Whether this take is currently marked as the active draft. */
@@ -59,6 +61,7 @@ interface TakeCardProps {
 const TakeCard: React.FC<TakeCardProps> = ({
   take,
   takeNumber,
+  label,
   contributorName,
   isActiveDraft,
   onPlay,
@@ -92,7 +95,11 @@ const TakeCard: React.FC<TakeCardProps> = ({
             </div>
           )}
           <span className='text-muted-foreground text-xs'>
-            {contributorName ? null : (
+            {label ? (
+              <>
+                <span className='text-foreground text-sm font-semibold'>{label}</span>{' '}
+              </>
+            ) : contributorName ? null : (
               <>
                 <span className='text-foreground text-sm font-semibold'>
                   {t('takeNumber', 'Take {{number}}', { number: takeNumber })}

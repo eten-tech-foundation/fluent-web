@@ -140,9 +140,11 @@ vi.mock('@tanstack/react-router', () => ({
   useRouter: () => mockRouter,
 }));
 
+let currentRecordings = [...mockRecordings];
+
 vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
   useChapterAudio: () => ({
-    data: { items: mockRecordings, total: mockRecordings.length },
+    data: { items: currentRecordings, total: currentRecordings.length },
     isLoading: false,
   }),
 }));
@@ -187,6 +189,7 @@ function renderPage() {
 
 describe('AudioReviewPage display mode', () => {
   beforeEach(() => {
+    currentRecordings = [...mockRecordings];
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     useAppStore.setState({
@@ -232,13 +235,21 @@ describe('AudioReviewPage display mode', () => {
     expect(screen.getByText('Verse 3')).toBeInTheDocument();
   });
 
-  it('switches to verse view locally when clicking page-specified switch button, keeping global setting unchanged', () => {
+  it('switches to verse view locally when clicking page-specified switch button in conflict banner, keeping global setting unchanged', () => {
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+      },
+      mockRecordings[1],
+      mockRecordings[2],
+    ];
     useAppStore.setState({ displayMode: 'pericope' });
     const { unmount } = renderPage();
 
     expect(screen.getByText('Verses 1–2')).toBeInTheDocument();
 
-    // Click page-specified "Switch to Verse view"
+    // Click page-specified "Switch to Verse view" in the conflict banner
     const switchButton = screen.getByRole('button', { name: /switch to verse view/i });
     fireEvent.click(switchButton);
 
@@ -253,5 +264,201 @@ describe('AudioReviewPage display mode', () => {
     unmount();
     renderPage();
     expect(screen.getByText('Verses 1–2')).toBeInTheDocument();
+  });
+});
+
+describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue #554)', () => {
+  beforeEach(() => {
+    currentRecordings = [...mockRecordings];
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    useAppStore.setState({
+      displayMode: 'pericope',
+      userdetail: {
+        id: 1,
+        username: 'alice',
+        displayName: 'Alice',
+        email: 'alice@example.com',
+        role: 'user',
+        grants: [
+          {
+            orgId: 1,
+            projectId: 1,
+            roleId: 1,
+            roleName: 'project_manager',
+            permissions: [],
+          },
+        ],
+        lastActiveOrgId: 1,
+      },
+    });
+  });
+
+  it('renders stitched audio player and correct subtitle for verse-recorded pericopes without conflicts', () => {
+    renderPage();
+
+    // Subtitle under Recorded Takes
+    expect(screen.getByText('Recorded by verse. Played as one recording.')).toBeInTheDocument();
+
+    // Stitched card with heading
+    expect(screen.getByTestId('stitched-audio-card')).toBeInTheDocument();
+    expect(screen.getByText('Stitched from verse recordings, vv. 1-2')).toBeInTheDocument();
+
+    // No individual TakeCard elements rendered
+    expect(screen.queryByText(/Take 1/)).not.toBeInTheDocument();
+  });
+
+  it('shows skipped verse notes when a verse has conflict in pericope view', () => {
+    currentRecordings = [
+      mockRecordings[0], // verse 1 clean
+      {
+        ...mockRecordings[1],
+        conflictStatus: 'conflict', // verse 2 conflict
+      },
+      mockRecordings[2],
+    ];
+
+    renderPage();
+
+    expect(screen.getByTestId('stitched-audio-card')).toBeInTheDocument();
+    expect(screen.getByText('Verse 2 not included: conflict')).toBeInTheDocument();
+  });
+
+  it('shows skipped verse notes when a verse is unrecorded in pericope view', () => {
+    // Only verse 1 is recorded in pericope 1-2, verse 2 is missing
+    currentRecordings = [
+      mockRecordings[0],
+      mockRecordings[2], // verse 3
+    ];
+
+    renderPage();
+
+    expect(screen.getByTestId('stitched-audio-card')).toBeInTheDocument();
+    expect(screen.getByText('Verse 2 not included: no recording')).toBeInTheDocument();
+  });
+
+  it('displays cross-view warning indicator and banner in pericope view when verse has conflict', () => {
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+      },
+      mockRecordings[1],
+      mockRecordings[2],
+    ];
+
+    renderPage();
+
+    // Left column warning indicator
+    expect(screen.getByText('Conflict in verse 1')).toBeInTheDocument();
+
+    // Center column conflict banner
+    expect(screen.getByText(/This conflict was recorded by verse\./)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /switch to verse view/i })).toBeInTheDocument();
+
+    // In opposing mode, no "Select as Draft" button is rendered
+    expect(screen.queryByText(/Select as Draft/i)).not.toBeInTheDocument();
+  });
+
+  it('displays cross-view warning indicator and banner in verse view when pericope has conflict', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    // Pericope covering verses 1-2 is in conflict
+    currentRecordings = [
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'conflict',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+      mockRecordings[2], // verse 3
+    ];
+
+    renderPage();
+
+    // Left column warning indicator on verse 1 and verse 2
+    expect(screen.getAllByText('Conflict in pericope vv. 1-2')).toHaveLength(2);
+
+    // Center column banner
+    expect(screen.getByText(/This conflict was recorded as a pericope\./)).toBeInTheDocument();
+    const switchBtn = screen.getByRole('button', { name: /switch to pericope view/i });
+    expect(switchBtn).toBeInTheDocument();
+
+    // Conflicting pericope takes are suppressed in verse view
+    expect(screen.queryByText(/Take.*Pericope/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Select as Draft/i)).not.toBeInTheDocument();
+
+    // Clicking switch to pericope switches local view
+    fireEvent.click(switchBtn);
+    expect(screen.getByText('Verses 1–2')).toBeInTheDocument();
+  });
+
+  it('renders pericope takes under covered verses in verse view when pericope is clean', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    currentRecordings = [
+      mockRecordings[0], // verse 1 has its own verse recording
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // Should display verse 1 take and pericope take labeled "Take 1 - Pericope - vv. 1-2"
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
   });
 });
