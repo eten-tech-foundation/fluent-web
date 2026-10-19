@@ -116,6 +116,8 @@ interface Passage {
 
 const isPassage = (passage: Passage | null): passage is Passage => passage !== null;
 
+const EMPTY_VERSE_NUMBERS: number[] = [];
+
 interface AudioReviewPageProps {
   projectItem?: ProjectItem;
 }
@@ -176,6 +178,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   interface ReviewTake extends VerseAudioTake {
     displayLabel?: string;
     bibleTextId?: number;
+    isCoveringPericope?: boolean;
   }
 
   // ---------- Build passage list ----------
@@ -348,7 +351,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   // ---------- Stitched audio calculation for pericope mode ----------
 
   const stitchedAudio = useStitchedAudio({
-    verseNumbers: effectivePassage.verseNumbers,
+    verseNumbers: selectedPassage?.verseNumbers ?? EMPTY_VERSE_NUMBERS,
     recordings: audioData?.items ?? [],
   });
 
@@ -370,11 +373,12 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     const recordings = audioData?.items ?? [];
     const pericopeRecordings = recordings.filter(isPericopeRecording);
 
-    if (displayMode === 'verse') {
+    if (displayMode !== 'pericope') {
       const v = selectedPassage.verseNumbers[0];
       const verseTakes: ReviewTake[] = (selectedPassage.recordings[0]?.takes ?? []).map(t => ({
         ...t,
         bibleTextId: selectedPassage.recordings[0]?.bibleTextId,
+        isCoveringPericope: false,
       }));
 
       // Find pericope recordings covering this verse
@@ -399,6 +403,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
               range,
             }),
             bibleTextId: pr.bibleTextId,
+            isCoveringPericope: true,
           });
         });
       }
@@ -702,6 +707,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                     isPM &&
                     selectedHasConflict &&
                     !effectivePassage.isOppositeModeConflict &&
+                    !take.isCoveringPericope &&
                     take.id !== activeTakeId;
 
                   return (

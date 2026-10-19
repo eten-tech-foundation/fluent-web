@@ -461,4 +461,136 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     // Should display verse 1 take and pericope take labeled "Take 1 - Pericope - vv. 1-2"
     expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
   });
+
+  it('renders pericope takes under covered verses in chapter view when pericope is clean', () => {
+    useAppStore.setState({ displayMode: 'chapter' });
+
+    currentRecordings = [
+      mockRecordings[0],
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
+  });
+
+  it('excludes covering pericope takes from Select as Draft when verse is in conflict', () => {
+    useAppStore.setState({
+      displayMode: 'verse',
+      userdetail: {
+        id: 1,
+        username: 'alice',
+        displayName: 'Alice',
+        email: 'alice@example.com',
+        role: 'user',
+        grants: [
+          {
+            orgId: 1,
+            projectId: 1,
+            roleId: 1,
+            roleName: 'Project Manager',
+            permissions: [],
+          },
+        ],
+        lastActiveOrgId: 1,
+      },
+    });
+
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+        activeTakeId: 11,
+        takes: [
+          mockRecordings[0].takes[0],
+          {
+            id: 112,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 5,
+            contentHash: 'hash-112',
+            downloadUrl: 'https://example.com/112.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      },
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // Select as Draft button should appear exactly once (for take 112 belonging to verse recording),
+    // and NOT for covering pericope take 991.
+    const selectButtons = screen.getAllByRole('button', { name: /select as draft/i });
+    expect(selectButtons).toHaveLength(1);
+  });
+
+  it('renders without crashing when there are no recordings or passages', () => {
+    currentRecordings = [];
+    renderPage();
+    expect(screen.getByText('No recorded takes found for this chapter.')).toBeInTheDocument();
+  });
 });

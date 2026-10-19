@@ -66,11 +66,29 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Reset player state when tracks change
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+    }
+    setCurrentTrackIndex(0);
+    currentTrackIndexRef.current = 0;
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setIsLoading(false);
+    if (releaseRef.current) {
+      releaseRef.current();
+      releaseRef.current = null;
+    }
+  }, [tracks]);
+
   // Keep audio.src initialized for the current track
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !tracks.length) return;
     const track = tracks[currentTrackIndex];
+    if (!track) return;
     if (!audio.src.includes(track.downloadUrl)) {
       audio.src = track.downloadUrl;
     }
@@ -390,21 +408,30 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
           className='mt-3 flex flex-col gap-1 border-t pt-2.5'
           style={{ borderColor: 'var(--border)' }}
         >
-          {skippedVerses.map(skipped => (
-            <div
-              key={skipped.verseNumber}
-              className='flex items-center gap-1.5 text-xs font-medium'
-              style={{ color: 'var(--warning-subtle-foreground)' }}
-            >
-              <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
-              <span>
-                {t('verseNotIncluded', 'Verse {{verse}} not included: {{reason}}', {
-                  verse: skipped.verseNumber,
-                  reason: skipped.reason,
-                })}
-              </span>
-            </div>
-          ))}
+          {skippedVerses.map(skipped => {
+            const reasonText =
+              skipped.reason === 'conflict'
+                ? t('conflict', 'conflict')
+                : skipped.reason === 'no recording'
+                  ? t('noRecording', 'no recording')
+                  : skipped.reason;
+
+            return (
+              <div
+                key={skipped.verseNumber}
+                className='flex items-center gap-1.5 text-xs font-medium'
+                style={{ color: 'var(--warning-subtle-foreground)' }}
+              >
+                <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
+                <span>
+                  {t('verseNotIncluded', 'Verse {{verse}} not included: {{reason}}', {
+                    verse: skipped.verseNumber,
+                    reason: reasonText,
+                  })}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

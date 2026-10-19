@@ -81,7 +81,8 @@ describe('StitchedAudioPlayer', () => {
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
 
     // Advances time
-    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuetext', '0:01');
+    expect(slider).toHaveAttribute('aria-valuenow', '5');
   });
 
   it('automatically advances to the next track when current track ends while playing', async () => {
@@ -120,5 +121,27 @@ describe('StitchedAudioPlayer', () => {
     // Now playback is paused and reset to end
     expect(onPause).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
+  });
+
+  it('resets player state when tracks change without crashing on empty or reduced list', async () => {
+    const { rerender } = renderComponent();
+
+    const playBtn = screen.getByRole('button', { name: /play/i });
+    fireEvent.click(playBtn);
+
+    // Now update tracks to empty array
+    rerender(
+      <PlaybackRegistryProvider>
+        <StitchedAudioPlayer
+          label='Stitched from verse recordings, vv. 6-9'
+          skippedVerses={[]}
+          totalDuration={0}
+          tracks={[]}
+        />
+      </PlaybackRegistryProvider>
+    );
+
+    // Should reset without throwing error
+    expect(screen.getByRole('button', { name: /play/i })).toBeDisabled();
   });
 });
