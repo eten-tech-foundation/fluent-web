@@ -196,8 +196,9 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   banner copy when member has active assignments".
 - The repeated word check reruns after every successful save, because a counter that goes up
   after each save is part of its query key. It doesn't poll. The request and response types in
-  `src/features/checks/checks.types.ts` copy [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai)'s contract in snake_case, so don't rename
-  them. The request sends the milestone's `project_unit_id`, not a project id: fluent-api works
+  `src/features/checks/checks.types.ts` are snake_case to match the AI-tools wire contract
+  (the response is [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai)'s envelope
+  as-is), so don't rename them. The request sends the milestone's `project_unit_id`, not a project id: fluent-api works
   out the project and fills in fluent-ai's `project_id`/`project_name`
   ([fluent-api#420](https://github.com/eten-tech-foundation/fluent-api/issues/420)). Tests:
   `src/features/checks/hooks/useRepeatedWordsCheck.test.ts` › "re-runs the check when saveCounter

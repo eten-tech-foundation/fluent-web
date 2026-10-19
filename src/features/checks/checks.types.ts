@@ -19,9 +19,10 @@
  */
 
 // ---------------------------------------------------------------------------
-// Wire types — snake_case, mirroring the fluent-ai contract (fluent-api D8).
+// Wire types — snake_case, mirroring fluent-api's AI-tools contract (D8).
 // Mirror of fluent-api `src/domains/ai-tools/ai-tools.types.ts` and
-// `src/lib/services/fluent-ai/fluent-ai.types.ts`.
+// `src/lib/services/fluent-ai/fluent-ai.types.ts`. Responses are fluent-ai's
+// envelope verbatim; the request is fluent-api's own (see RepeatedWordsRequest).
 // ---------------------------------------------------------------------------
 
 /** Job lifecycle status from the fluent-ai `ToolJobResponse` envelope. */
