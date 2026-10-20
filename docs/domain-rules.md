@@ -196,9 +196,13 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   banner copy when member has active assignments".
 - The repeated word check reruns after every successful save, because a counter that goes up
   after each save is part of its query key. It doesn't poll. The request and response types in
-  `src/features/checks/checks.types.ts` copy [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai)'s contract in snake_case, so don't rename
-  them. Tests: `src/features/checks/hooks/useRepeatedWordsCheck.test.ts` › "re-runs the check when
-  saveCounter changes" and "sends project_id as a string (fluent-ai requires str, not int)".
+  `src/features/checks/checks.types.ts` are snake_case to match the AI-tools wire contract
+  (the response is [fluent-ai](https://github.com/eten-tech-foundation/fluent-ai)'s envelope
+  as-is), so don't rename them. The request sends the milestone's `project_unit_id`, not a project id: fluent-api works
+  out the project and fills in fluent-ai's `project_id`/`project_name`
+  ([fluent-api#420](https://github.com/eten-tech-foundation/fluent-api/issues/420)). Tests:
+  `src/features/checks/hooks/useRepeatedWordsCheck.test.ts` › "re-runs the check when saveCounter
+  changes" and "sends the project unit id, never the project id (#420 regression)".
 - AI suggestions run only when AI is on, the chapter is in Draft and the page isn't read only. The
   page queues work (`queue-next` or `queue-pericopes`), then polls every 5 seconds, once for a verse
   and up to 12 times for a pericope (`src/features/bible/hooks/useAiSuggestions.ts`). Tests:
