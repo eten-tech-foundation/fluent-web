@@ -130,18 +130,18 @@ describe('buildRepeatedWordsRequest', () => {
     expect(request.verses[0]).toEqual({ snt_id: 'JDG 4:3', text: 'real content' });
   });
 
-  it('carries the snake_case project context (D8 wire shape)', () => {
+  it('carries the snake_case wire shape: language + project_unit_id, no project fields', () => {
     const request = buildRepeatedWordsRequest(makeProjectItem(), [
       { verseNumber: 3, content: 'x' },
     ]);
-    expect(request).toMatchObject({
+    // toEqual (not toMatchObject) so a stray `project_id` / `project_name`
+    // fails: fluent-api resolves the project from the unit server-side (#420).
+    expect(request).toEqual({
       // lang_code is the ISO 639-3 CODE; lang_name is the human display NAME.
       lang_code: 'spa',
       lang_name: 'Spanish',
-      // project_id is sent as a STRING: fluent-ai declares it `str` (strict), so
-      // a numeric value is rejected 422 → 502. See the phase-04 manual smoke.
-      project_id: '7',
-      project_name: 'Test Project',
+      project_unit_id: 7,
+      verses: [{ snt_id: 'JDG 4:3', text: 'x' }],
     });
   });
 
@@ -174,12 +174,16 @@ describe('buildRepeatedWordsRequest', () => {
     expect(request.lang_name).toBe('English');
   });
 
-  it('sends project_id as a string (fluent-ai requires str, not int)', () => {
-    const request = buildRepeatedWordsRequest(makeProjectItem({ projectUnitId: 123 }), [
-      { verseNumber: 3, content: 'x' },
-    ]);
-    expect(typeof request.project_id).toBe('string');
-    expect(request.project_id).toBe('123');
+  it('sends the project unit id, never the project id (#420 regression)', () => {
+    // The fixture deliberately uses a non-identity mapping (unit 123 belongs to
+    // project 100). Sending the unit id under `project_id` is what made fluent-api
+    // authorize against the wrong project and 404 every real request.
+    const request = buildRepeatedWordsRequest(
+      makeProjectItem({ projectUnitId: 123, projectId: 100 }),
+      [{ verseNumber: 3, content: 'x' }]
+    );
+    expect(request.project_unit_id).toBe(123);
+    expect(request).not.toHaveProperty('project_id');
   });
 });
 
@@ -244,15 +248,14 @@ describe('useRepeatedWordsCheck — enabled gating', () => {
     expect(result.current.data?.result?.findings).toHaveLength(2);
 
     // Assert the request body that actually went on the wire (W6): the hook
-    // must POST the snake_case D8 shape assembled by buildRepeatedWordsRequest
+    // must POST the snake_case shape assembled by buildRepeatedWordsRequest
     // — the ISO code as lang_code, the display name as lang_name, and the
-    // project id as a STRING (fluent-ai's strict `str`).
+    // milestone's project_unit_id (fluent-api resolves the project, #420).
     expect(calls.count).toBe(1);
-    expect(calls.lastBody).toMatchObject({
+    expect(calls.lastBody).toEqual({
       lang_code: 'spa',
       lang_name: 'Spanish',
-      project_id: '7',
-      project_name: 'Test Project',
+      project_unit_id: 7,
       verses: [{ snt_id: 'JDG 4:3', text: 'the the' }],
     });
   });
