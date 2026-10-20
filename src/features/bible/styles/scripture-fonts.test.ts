@@ -11,7 +11,9 @@ const theme = read('../../../index.css');
 afterEach(() => document.body.replaceChildren());
 
 describe('scripture font stack (#472)', () => {
-  it('gives source text, plain target text and the editor the same font-family', () => {
+  // jsdom doesn't resolve var(), so this checks which rule wins (the editor's over the vendored
+  // usj-nodes one) and that all three point at the token; the next test checks the token itself.
+  it('points source text, plain target text and the editor at --font-scripture', () => {
     const style = document.createElement('style');
     style.textContent = [...editorStyles, sourceFonts].join('\n');
     const root = document.createElement('div');
