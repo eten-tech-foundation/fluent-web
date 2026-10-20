@@ -16,6 +16,11 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
+import {
+  canonicalPassageBriefingSelection,
+  nextPassageBriefingContext,
+} from '@/features/assistant/assistant.navigation';
+import { AssistantPanel } from '@/features/assistant/components/AssistantPanel';
 import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
 import { useAddTranslatedVerse, useSubmitChapter } from '@/features/bible/hooks/useBibleTarget';
@@ -340,6 +345,15 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     return mapping;
   }, [sourceVerses]);
 
+  // Feature gates are resolved before pericope loading so an open Assistant can request the
+  // complete canonical group even while the drafting surface remains in verse mode.
+  const checksEnabled = useFeatureFlag('repeatedWordCheck');
+  const ttsEnabled = useAudioEnabled();
+  const { features: featureFlags, overrides: flagOverrides } = useFeatureFlags();
+  const assistantEnabled = featureFlags.assistant;
+  const assistantForceOn = flagOverrides.assistant === true;
+  const ttsShowServing = flagOverrides.sourceAudio === true;
+
   const {
     pericopes,
     fullPericopes,
@@ -364,6 +378,8 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealedVerses,
     lastRevealedVerseHasContent,
     displayMode,
+    includeFullPericopes:
+      displayMode === 'pericope' || (assistantEnabled && activeLeftTab === 'assistant'),
     getSaveStatus,
     saveImmediately,
     handleActiveVerseChange,
@@ -442,35 +458,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   // --- Repeated Word Check wiring (Phase 4, §6.2/§6.6, W3/W10/W11) ----------
 
-  // Feature flag: is the Repeated Word Check enabled in this environment? The
-  // whole Checks feature depends on fluent-ai, which isn't hosted everywhere,
-  // so the flag lets this code ship hidden until AI is wired (feature-flags
-  // proposal D6/D7). Fail-closed: `useFeatureFlag` returns false while loading
-  // or on endpoint error, so the tab and the AI query stay off by default. This
-  // is the single consumption point — the flag is threaded down as booleans so
-  // the leaf components stay flag-agnostic.
-  const checksEnabled = useFeatureFlag('repeatedWordCheck');
-
-  // The composed gate is the single source for audio surfaces: the published
-  // feature flag must be on and this device must not have hidden controls.
-  // `useFeatureFlags` remains here only because the verification tint below
-  // needs the raw override; `flagOverrides.ts` permits exactly one direct site.
-  const ttsEnabled = useAudioEnabled();
-  const { overrides: ttsOverrides } = useFeatureFlags();
-
-  // Verification affordance, NOT a product feature (§9.2): tint the playback
-  // wash when a clip came from the artifact store, so a deployer can see that
-  // R2 is really serving rather than every listen silently paying for a fresh
-  // synthesis — the two are indistinguishable by ear.
-  //
-  // Keyed to a FORCE-ON override rather than to the flag itself, so ordinary
-  // listeners never meet a colour they cannot interpret. Forcing on a flag
-  // that is already on is a no-op for everything else, which makes this an
-  // easy switch to reach for while verifying. Costs nothing to compute — the
-  // container is read off the clip URL the engine already has — so only the
-  // DISPLAY is gated, not the recording.
-  const ttsShowServing = ttsOverrides.sourceAudio === true;
-
   // The single writer for the occurrence-rule map: `useSuppressions` does the
   // read-modify-write and hands the next full map back here; updating state
   // makes it ride the existing debounced editor-state save (one writer, §7.1).
@@ -536,7 +523,35 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   // 'checks'` must not strand the panel on an empty/absent tab — fall back to
   // Resources for rendering. The persisted value itself is left untouched, so
   // if the feature is later enabled the translator's last tab is restored.
-  const effectiveActiveLeftTab: LeftTab = checksEnabled ? activeLeftTab : 'resources';
+  const effectiveActiveLeftTab: LeftTab =
+    (activeLeftTab === 'checks' && !checksEnabled) ||
+    (activeLeftTab === 'assistant' && !assistantEnabled)
+      ? 'resources'
+      : activeLeftTab;
+  const rawAssistantContext = useMemo(
+    () => ({
+      projectId: projectItem.projectId,
+      bookCode: projectItem.bookCode,
+      chapter: projectItem.chapterNumber,
+      activeVerse: activeVerseId,
+    }),
+    [projectItem.projectId, projectItem.bookCode, projectItem.chapterNumber, activeVerseId]
+  );
+  const assistantContextReady = fullPericopes !== undefined && !isPericopeLoading;
+  const assistantSelection = useMemo(
+    () =>
+      assistantContextReady
+        ? canonicalPassageBriefingSelection(rawAssistantContext, fullPericopes, projectItem.book)
+        : null,
+    [assistantContextReady, rawAssistantContext, fullPericopes, projectItem.book]
+  );
+  const nextAssistantContext = useMemo(
+    () =>
+      assistantSelection
+        ? nextPassageBriefingContext(assistantSelection.context, fullPericopes)
+        : null,
+    [assistantSelection, fullPericopes]
+  );
 
   const handleTabChange = useCallback((tab: LeftTab) => {
     setActiveLeftTab(tab);
@@ -583,7 +598,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         setShowResources(tabStatus);
       }
 
-      if (savedTab === 'resources' || savedTab === 'checks') {
+      if (savedTab === 'resources' || savedTab === 'checks' || savedTab === 'assistant') {
         setActiveLeftTab(savedTab);
       }
 
@@ -598,7 +613,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
         activeResource: RESOURCE_NAMES[0].id,
         languageCode: languageCode || projectItem.sourceLangCode,
         tabStatus: typeof tabStatus === 'boolean' ? tabStatus : false,
-        activeLeftTab: savedTab === 'checks' ? 'checks' : 'resources',
+        activeLeftTab: savedTab === 'checks' || savedTab === 'assistant' ? savedTab : 'resources',
         checkOccurrenceRules: savedOccurrenceRules,
       };
     } else {
@@ -1392,6 +1407,16 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             key={projectItem.chapterAssignmentId}
             activeFindingsCount={activeFindingsCount}
             activeLeftTab={effectiveActiveLeftTab}
+            assistantContent={
+              <AssistantPanel
+                context={assistantSelection?.context ?? rawAssistantContext}
+                contextError={isPericopeError}
+                contextReady={assistantContextReady}
+                localForceOn={assistantForceOn}
+                nextContext={nextAssistantContext}
+                reference={assistantSelection?.reference ?? null}
+              />
+            }
             checksContent={
               <ChecksPanel
                 globalIgnoresAvailable={globalIgnoresAvailable}
@@ -1414,6 +1439,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
             selectedBibleId={resourcePanelSelectedBibleId}
             setCurrentLanguage={setCurrentLanguage}
             setCurrentResource={setCurrentResource}
+            showAssistantTab={assistantEnabled}
             showChecksTab={checksEnabled}
             onBibleErrorChange={handleBibleErrorChange}
             onBibleLoadingChange={handleBibleLoadingChange}

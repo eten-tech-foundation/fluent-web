@@ -49,6 +49,7 @@ describe('FeatureFlagsDiagnostics', () => {
       expect(screen.getByTestId('flag-state-repeatedWordCheck')).toHaveTextContent('On')
     );
     expect(screen.getByTestId('flag-row-repeatedWordCheck')).toBeInTheDocument();
+    expect(screen.getByTestId('flag-row-assistant')).toBeInTheDocument();
     expect(screen.queryByTestId('flags-error')).not.toBeInTheDocument();
   });
 

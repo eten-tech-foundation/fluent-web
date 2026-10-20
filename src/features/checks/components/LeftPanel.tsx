@@ -1,5 +1,8 @@
 import { type ReactNode } from 'react';
 
+import { Sparkles } from 'lucide-react';
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { type LeftTab } from '@/features/bible/hooks/useResourceStatePersistence';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +27,8 @@ export interface LeftPanelProps {
   resourcesContent: ReactNode;
   /** Body for the Checks tab (the `ChecksPanel`, composed by the parent). */
   checksContent: ReactNode;
+  /** Body for the Assistant tab. It is mounted only while that tab is active. */
+  assistantContent?: ReactNode;
   /**
    * Whether the "Checks" tab is shown at all. When the Repeated Word Check
    * feature is disabled (feature-flags proposal D6/D7), the tab — and its
@@ -33,10 +38,12 @@ export interface LeftPanelProps {
    * never tries to render an absent tab's body. Defaults to true.
    */
   showChecksTab?: boolean;
+  /** Whether the dark-shipped Assistant tab is available. Defaults to false. */
+  showAssistantTab?: boolean;
 }
 
 /**
- * Stable element ids wiring the tabs to the shared panel (W11, §6.6). The two
+ * Stable element ids wiring the tabs to the shared panel (W11, §6.6). The
  * tabs share a single body container; `aria-labelledby` on the panel points at
  * whichever tab is currently active, so screen readers announce the panel's
  * controlling tab. (CR-5: complete the ARIA tab/tabpanel relationship.)
@@ -44,48 +51,75 @@ export interface LeftPanelProps {
 const TAB_IDS: Record<LeftTab, string> = {
   resources: 'left-panel-tab-resources',
   checks: 'left-panel-tab-checks',
+  assistant: 'left-panel-tab-assistant',
 };
 const PANEL_ID = 'left-panel-tabpanel';
 
 interface TabButtonProps {
   id: string;
   label: string;
+  icon?: ReactNode;
   isActive: boolean;
   onClick: () => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+  tooltip?: string;
   showDot?: boolean;
 }
 
-const TabButton: React.FC<TabButtonProps> = ({ id, label, isActive, onClick, showDot = false }) => (
-  <button
-    aria-controls={PANEL_ID}
-    aria-selected={isActive}
-    className={cn(
-      'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-xl font-bold transition-colors',
-      isActive
-        ? 'border-primary text-foreground'
-        : 'text-muted-foreground hover:text-foreground border-transparent'
-    )}
-    id={id}
-    role='tab'
-    type='button'
-    onClick={onClick}
-  >
-    {label}
-    {showDot && (
-      <span
-        aria-label='Active checks present'
-        className='bg-primary inline-block h-2 w-2 shrink-0 rounded-full'
-        data-testid='checks-notification-dot'
-      />
-    )}
-  </button>
-);
+const TabButton: React.FC<TabButtonProps> = ({
+  id,
+  label,
+  icon,
+  isActive,
+  onClick,
+  onKeyDown,
+  tooltip,
+  showDot = false,
+}) => {
+  const button = (
+    <button
+      aria-controls={PANEL_ID}
+      aria-label={icon ? label : undefined}
+      aria-selected={isActive}
+      className={cn(
+        'flex items-center gap-1.5 border-b-2 px-1 pb-2 text-xl font-bold transition-colors',
+        isActive
+          ? 'border-primary text-foreground'
+          : 'text-muted-foreground hover:text-foreground border-transparent'
+      )}
+      id={id}
+      role='tab'
+      tabIndex={isActive ? 0 : -1}
+      type='button'
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+    >
+      {icon ?? label}
+      {showDot && (
+        <span
+          aria-label='Active checks present'
+          className='bg-primary inline-block h-2 w-2 shrink-0 rounded-full'
+          data-testid='checks-notification-dot'
+        />
+      )}
+    </button>
+  );
+  if (!tooltip) return button;
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 /**
  * Tabbed left-panel container for the drafting page (W11, §6.6).
  *
- * Owns the text-tab header row ("Resources | Checks", blue underline on the
- * active tab, a blue notification dot right of "Checks" when there are active
+ * Owns the tab header row (optional icon-only AI Assistant, Resources, and Checks), a blue
+ * underline on the active tab, a blue notification dot right of "Checks" when there are active
  * findings) and renders the active tab's body below it. The dot's state comes
  * from the cascade-resolved active count computed at `DraftingPage` level and
  * threaded in via {@link LeftPanelProps.activeFindingsCount}, so it stays live
@@ -102,22 +136,61 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   activeFindingsCount,
   resourcesContent,
   checksContent,
+  assistantContent,
   showChecksTab = true,
+  showAssistantTab = false,
 }) => {
   const hasActiveFindings = activeFindingsCount > 0;
   // When the Checks tab is hidden, the shared panel must never try to render the
   // (absent) checks body. The parent forces `activeTab` back to 'resources', but
   // we also guard here so this component is correct in isolation.
-  const effectiveTab: LeftTab = showChecksTab ? activeTab : 'resources';
+  const effectiveTab: LeftTab =
+    (activeTab === 'checks' && !showChecksTab) || (activeTab === 'assistant' && !showAssistantTab)
+      ? 'resources'
+      : activeTab;
+  const visibleTabs: LeftTab[] = [
+    ...(showAssistantTab ? (['assistant'] as const) : []),
+    'resources',
+    ...(showChecksTab ? (['checks'] as const) : []),
+  ];
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, tab: LeftTab) => {
+    const index = visibleTabs.indexOf(tab);
+    let next: LeftTab | undefined;
+    if (event.key === 'ArrowRight') next = visibleTabs[(index + 1) % visibleTabs.length];
+    if (event.key === 'ArrowLeft')
+      next = visibleTabs[(index - 1 + visibleTabs.length) % visibleTabs.length];
+    if (event.key === 'Home') next = visibleTabs[0];
+    if (event.key === 'End') next = visibleTabs.at(-1);
+    if (!next) return;
+    event.preventDefault();
+    onTabChange(next);
+    document.getElementById(TAB_IDS[next])?.focus();
+  };
 
   return (
     <div className='flex h-full flex-col'>
-      <div aria-label='Left panel' className='flex items-center gap-6 px-1 pt-4' role='tablist'>
+      <div
+        aria-label='Left panel'
+        className={cn('flex items-center px-1 pt-4', showAssistantTab ? 'gap-3' : 'gap-6')}
+        role='tablist'
+      >
+        {showAssistantTab && (
+          <TabButton
+            icon={<Sparkles aria-hidden='true' className='h-5 w-5' />}
+            id={TAB_IDS.assistant}
+            isActive={effectiveTab === 'assistant'}
+            label='AI Assistant'
+            tooltip='AI Assistant'
+            onClick={() => onTabChange('assistant')}
+            onKeyDown={event => handleTabKeyDown(event, 'assistant')}
+          />
+        )}
         <TabButton
           id={TAB_IDS.resources}
           isActive={effectiveTab === 'resources'}
           label='Resources'
           onClick={() => onTabChange('resources')}
+          onKeyDown={event => handleTabKeyDown(event, 'resources')}
         />
         {/* The notification dot sits to the right of the "Checks" label only,
             and is visible whatever tab is active (mock shows it while the
@@ -131,6 +204,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             label='Checks'
             showDot={hasActiveFindings}
             onClick={() => onTabChange('checks')}
+            onKeyDown={event => handleTabKeyDown(event, 'checks')}
           />
         )}
       </div>
@@ -143,7 +217,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         id={PANEL_ID}
         role='tabpanel'
       >
-        {effectiveTab === 'resources' ? resourcesContent : checksContent}
+        {effectiveTab === 'resources'
+          ? resourcesContent
+          : effectiveTab === 'checks'
+            ? checksContent
+            : assistantContent}
       </div>
     </div>
   );

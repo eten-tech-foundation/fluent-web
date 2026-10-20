@@ -64,6 +64,16 @@ describe('useResourceState — new field: activeLeftTab', () => {
     expect(result.current.data?.activeLeftTab).toBe('resources');
   });
 
+  it('returns activeLeftTab "assistant" when the server includes it', async () => {
+    const state = makeState({ activeLeftTab: 'assistant' });
+    server.use(http.get(editorStateUrl(99), () => HttpResponse.json(state)));
+
+    const { result } = renderHook(() => useResourceState(99), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.activeLeftTab).toBe('assistant');
+  });
+
   it('returns undefined activeLeftTab when the server omits it (old row, backward-compatible)', async () => {
     // Old rows do not include activeLeftTab; the key must simply be absent.
     const state = makeState(); // no activeLeftTab
@@ -196,6 +206,37 @@ describe('useSaveResourceState — new fields in payload', () => {
     expect(captured.body).toMatchObject({
       resources: { activeLeftTab: 'checks' },
     });
+  });
+
+  it('sends activeLeftTab "assistant" in the existing resources blob', async () => {
+    const captured: { body: unknown } = { body: undefined };
+    server.use(
+      http.put(editorStateUrl(10), async ({ request }) => {
+        captured.body = await request.json();
+        return HttpResponse.json({});
+      })
+    );
+    const { result } = renderHook(() => useSaveResourceState(), { wrapper: makeWrapper() });
+
+    await act(async () => {
+      result.current.mutate({
+        chapterAssignmentId: 10,
+        resourceState: {
+          resources: {
+            bookCode: 'GEN',
+            chapterNumber: 1,
+            verseNumber: 1,
+            activeResource: 'ult',
+            languageCode: 'eng',
+            tabStatus: true,
+            activeLeftTab: 'assistant',
+          },
+        },
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(captured.body).toMatchObject({ resources: { activeLeftTab: 'assistant' } });
   });
 
   it('sends checkOccurrenceRules in the resources blob', async () => {

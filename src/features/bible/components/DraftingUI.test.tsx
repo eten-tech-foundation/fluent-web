@@ -219,6 +219,7 @@ vi.mock('@/features/checks/hooks/useResolvedFindings', () => ({
 // full Checks surface; individual tests flip `mockFeatureFlag` to false to
 // assert the hidden state.
 const mockFeatureFlag = vi.fn<(name: string) => boolean>(() => true);
+const mockAssistantPanel = vi.hoisted(() => vi.fn());
 
 vi.mock('@/features/flags', () => ({
   useFeatureFlag: (name: string) => mockFeatureFlag(name) as unknown,
@@ -227,9 +228,30 @@ vi.mock('@/features/flags', () => ({
   // exactly one override read site. No override here: the verification tint
   // stays off and the playback wash is the ordinary one.
   useFeatureFlags: () => ({
-    features: { sourceAudio: mockFeatureFlag('sourceAudio'), repeatedWordCheck: true },
+    features: {
+      sourceAudio: mockFeatureFlag('sourceAudio'),
+      repeatedWordCheck: true,
+      assistant: mockFeatureFlag('assistant'),
+    },
     overrides: {},
   }),
+}));
+
+vi.mock('@/features/assistant/components/AssistantPanel', () => ({
+  AssistantPanel: (props: {
+    context: { chapter: number; activeVerse: number };
+    reference: string | null;
+  }) => {
+    mockAssistantPanel(props);
+    return (
+      <div data-testid='mock-assistant-panel'>
+        <span data-testid='mock-assistant-context'>
+          {props.context.chapter}:{props.context.activeVerse}
+        </span>
+        <span data-testid='mock-assistant-reference'>{props.reference}</span>
+      </div>
+    );
+  },
 }));
 
 const resourcePanelMode = vi.hoisted(() => ({ real: false }));
@@ -392,6 +414,16 @@ const defaultPericopeHookResult = (overrides = {}) => ({
       ],
     },
   ],
+  fullPericopes: [
+    {
+      pericopeNumber: '1',
+      pericopeTitle: 'Creation',
+      verses: [
+        { chapterNumber: 1, verseNumber: 1 },
+        { chapterNumber: 1, verseNumber: 2 },
+      ],
+    },
+  ],
   isPericopeMode: false,
   isPericopeLoading: false,
   getPericopeStyle: vi.fn(() => 'border-border'),
@@ -414,7 +446,7 @@ describe('DraftingUI', () => {
     resourcePanelMode.real = false;
 
     // Default: Repeated Word Check feature ON (see mock definition above).
-    mockFeatureFlag.mockReturnValue(true);
+    mockFeatureFlag.mockImplementation(name => name !== 'assistant');
 
     mockUseAddTranslatedVerse.mockReturnValue({
       mutateAsync: vi.fn(),
@@ -2325,6 +2357,143 @@ describe('DraftingUI', () => {
       );
 
       expect(mockFeatureFlag).toHaveBeenCalledWith('repeatedWordCheck');
+    });
+  });
+
+  describe('Assistant feature flag and saved tab', () => {
+    it('shows the third tab only when Assistant is effectively enabled', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { pressed: false }));
+      expect(screen.getAllByRole('tab').slice(0, 3)).toEqual([
+        screen.getByRole('tab', { name: 'AI Assistant' }),
+        screen.getByRole('tab', { name: 'Resources' }),
+        screen.getByRole('tab', { name: /Checks/ }),
+      ]);
+    });
+
+    it.each(['verse', 'pericope'] as const)(
+      'shows the complete cross-chapter canonical reference in %s mode',
+      async displayMode => {
+        const user = userEvent.setup();
+        mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
+        useAppStore.setState({ displayMode });
+        mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ activeVerseId: 2 }));
+        mockUsePericope.mockReturnValue(
+          defaultPericopeHookResult({
+            isPericopeMode: displayMode === 'pericope',
+            fullPericopes: [
+              {
+                pericopeNumber: 'crossing',
+                pericopeTitle: null,
+                verses: [
+                  { chapterNumber: 1, verseNumber: 2 },
+                  { chapterNumber: 2, verseNumber: 1 },
+                ],
+              },
+            ],
+          })
+        );
+        render(
+          <DraftingUI
+            projectItem={mockProjectItem}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as unknown as User}
+          />
+        );
+
+        await user.click(screen.getByRole('button', { pressed: false }));
+        await user.click(screen.getByRole('tab', { name: 'AI Assistant' }));
+        expect(screen.getByTestId('mock-assistant-reference')).toHaveTextContent('Genesis 1:2–2:1');
+        expect(screen.getByTestId('mock-assistant-context')).toHaveTextContent('1:2');
+        expect(mockUsePericope).toHaveBeenLastCalledWith(
+          expect.objectContaining({ includeFullPericopes: true })
+        );
+      }
+    );
+
+    it('keeps one canonical Assistant identity while the active verse moves inside its pericope', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
+      const props = {
+        projectItem: mockProjectItem,
+        sourceVerses: mockSourceVerses,
+        targetVerses: mockTargetVerses,
+        userdetail: { id: 1 } as unknown as User,
+      };
+      const view = render(<DraftingUI {...props} />);
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('tab', { name: 'AI Assistant' }));
+      expect(screen.getByTestId('mock-assistant-context')).toHaveTextContent('1:1');
+
+      mockUseDrafting.mockReturnValue(defaultDraftingHookResult({ activeVerseId: 2 }));
+      view.rerender(<DraftingUI {...props} />);
+      expect(screen.getByTestId('mock-assistant-context')).toHaveTextContent('1:1');
+      expect(screen.getByTestId('mock-assistant-reference')).toHaveTextContent('Genesis 1:1-2');
+    });
+
+    it('falls back to Resources when saved state names a disabled Assistant tab', async () => {
+      mockUseResourceState.mockReturnValue({
+        data: {
+          activeResource: 'ult',
+          languageCode: 'eng',
+          tabStatus: true,
+          activeLeftTab: 'assistant',
+        },
+        isFetched: true,
+      });
+      render(
+        <DraftingUI
+          projectItem={mockProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as unknown as User}
+        />
+      );
+
+      expect(await screen.findByRole('tab', { name: 'Resources' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+      expect(screen.queryByRole('tab', { name: 'AI Assistant' })).not.toBeInTheDocument();
+    });
+
+    it('resets an open Assistant tab with assignment-local panel state', async () => {
+      const user = userEvent.setup();
+      mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
+      const props = {
+        projectItem: mockProjectItem,
+        sourceVerses: mockSourceVerses,
+        targetVerses: mockTargetVerses,
+        userdetail: { id: 1 } as unknown as User,
+      };
+      const view = render(<DraftingUI {...props} />);
+      await user.click(screen.getByRole('button', { pressed: false }));
+      await user.click(screen.getByRole('tab', { name: 'AI Assistant' }));
+      expect(screen.getByTestId('mock-assistant-panel')).toBeInTheDocument();
+
+      view.rerender(
+        <DraftingUI
+          {...props}
+          projectItem={{ ...mockProjectItem, chapterAssignmentId: 2, bookCode: 'MRK' }}
+        />
+      );
+      await user.click(screen.getByRole('button', { pressed: false }));
+      expect(screen.getByRole('tab', { name: 'Resources' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+      expect(screen.queryByTestId('mock-assistant-panel')).not.toBeInTheDocument();
     });
   });
 

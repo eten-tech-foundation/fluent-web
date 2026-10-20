@@ -10,7 +10,7 @@ import { Logger } from '@/lib/services/logger';
  * left off (Repeated Word Check, W11/§6.6). Optional + backward-compatible:
  * old rows simply omit it and the panel defaults to 'resources'.
  */
-export type LeftTab = 'resources' | 'checks';
+export type LeftTab = 'resources' | 'checks' | 'assistant';
 
 export interface FetchResourceState {
   activeResource: string;
