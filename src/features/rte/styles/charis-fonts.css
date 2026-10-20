@@ -1,0 +1,6 @@
+/* Charis SIL through the package entry points: latin, latin-ext, cyrillic, cyrillic-ext and
+   vietnamese, each with its unicode-range. fonts.css and source-fonts.css both import this list. */
+@import '@fontsource/charis-sil/400.css';
+@import '@fontsource/charis-sil/400-italic.css';
+@import '@fontsource/charis-sil/700.css';
+@import '@fontsource/charis-sil/700-italic.css';

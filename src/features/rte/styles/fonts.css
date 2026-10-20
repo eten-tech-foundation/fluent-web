@@ -23,10 +23,7 @@
  * latin, latin-ext, cyrillic, cyrillic-ext and vietnamese. Russian needs nothing beyond this.
  */
 
-@import '@fontsource/charis-sil/400.css';
-@import '@fontsource/charis-sil/400-italic.css';
-@import '@fontsource/charis-sil/700.css';
-@import '@fontsource/charis-sil/700-italic.css';
+@import './charis-fonts.css';
 @import './noto-fonts.css';
 
 /*

@@ -1,9 +1,6 @@
 /* Verse view loads before the editor chunk, so the source column brings its own copy of the
    faces. fonts.css still declares them again after the editor's vendored local()-only rules. */
-@import '@fontsource/charis-sil/400.css';
-@import '@fontsource/charis-sil/400-italic.css';
-@import '@fontsource/charis-sil/700.css';
-@import '@fontsource/charis-sil/700-italic.css';
+@import '../../rte/styles/charis-fonts.css';
 @import '../../rte/styles/noto-fonts.css';
 
 /* Scripture text uses the editor's stack, so English reads the same in both columns (#472).
