@@ -141,6 +141,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 let currentRecordings = [...mockRecordings];
+let currentPericopes: PericopeGroup[] = mockPericopes;
 
 vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
   useChapterAudio: () => ({
@@ -157,7 +158,7 @@ vi.mock('@/features/projects/hooks/useProjectUsers', () => ({
 
 vi.mock('@/features/pericopes/hooks/useChapterPericopes', () => ({
   useChapterPericopes: () => ({
-    data: mockPericopes,
+    data: currentPericopes,
   }),
 }));
 
@@ -270,6 +271,7 @@ describe('AudioReviewPage display mode', () => {
 describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue #554)', () => {
   beforeEach(() => {
     currentRecordings = [...mockRecordings];
+    currentPericopes = mockPericopes;
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     useAppStore.setState({
@@ -285,7 +287,7 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
             orgId: 1,
             projectId: 1,
             roleId: 1,
-            roleName: 'project_manager',
+            roleName: 'Project Manager',
             permissions: [],
           },
         ],
@@ -592,5 +594,173 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     currentRecordings = [];
     renderPage();
     expect(screen.getByText('No recorded takes found for this chapter.')).toBeInTheDocument();
+  });
+
+  it('displays both conflict dot and cross-view warning indicator in pericope view when both direct and verse conflicts exist', () => {
+    // Both direct pericope conflict and verse 1 conflict
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+      },
+      mockRecordings[1],
+      mockRecordings[2],
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'conflict',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+          {
+            id: 992,
+            uploadedBy: 2,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-992',
+            downloadUrl: 'https://example.com/992.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // Cross-view indicator is present on the row
+    expect(screen.getByText('Conflict in verse 1')).toBeInTheDocument();
+
+    // Direct conflict banner and cross-view notice are present
+    expect(
+      screen.getByText('This passage has conflicting takes — select one to resolve.')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/There is also a conflict recorded by verse\./)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /switch to verse view/i })).toBeInTheDocument();
+
+    // Direct pericope takes can still be resolved as draft
+    expect(screen.getAllByRole('button', { name: /select as draft/i })[0]).toBeInTheDocument();
+  });
+
+  it('displays both conflict dot and cross-view warning indicator in verse view when both verse direct conflict and covering pericope conflict exist', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+        takes: [
+          mockRecordings[0].takes[0],
+          {
+            id: 113,
+            uploadedBy: 2,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-113',
+            downloadUrl: 'https://example.com/113.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      },
+      mockRecordings[1],
+      mockRecordings[2],
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 10,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'conflict',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 10,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // Cross-view indicator is present on verse 1 row (and verse 2 row covered by pericope 1-2)
+    expect(screen.getAllByText('Conflict in pericope vv. 1-2')[0]).toBeInTheDocument();
+
+    // Direct conflict banner and cross-view notice are present
+    expect(
+      screen.getByText('This passage has conflicting takes — select one to resolve.')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/There is also a conflict recorded as a pericope\./)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /switch to pericope view/i })).toBeInTheDocument();
+
+    // Direct verse takes can still be resolved as draft
+    expect(screen.getAllByRole('button', { name: /select as draft/i })[0]).toBeInTheDocument();
+  });
+
+  it('honestly labels cross-chapter pericopes showing continuation in the next chapter', () => {
+    currentPericopes = [
+      {
+        pericopeNumber: '1',
+        pericopeTitle: null,
+        verses: [
+          { verseNumber: 1, chapterNumber: 6 },
+          { verseNumber: 2, chapterNumber: 6 },
+          { verseNumber: 1, chapterNumber: 7 },
+        ],
+      },
+    ];
+
+    renderPage();
+
+    // The passage in the list should note continuation in ch. 7
+    expect(screen.getByText('Verses 1–2 (cont. in ch. 7)')).toBeInTheDocument();
+
+    // The StitchedAudioPlayer title should also note continuation
+    expect(
+      screen.getByText('Stitched from verse recordings, vv. 1-2 (cont. in ch. 7)')
+    ).toBeInTheDocument();
   });
 });

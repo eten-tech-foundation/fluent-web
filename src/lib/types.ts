@@ -490,9 +490,6 @@ export interface VerseAudioRecording {
   granularity?: 'verse' | 'pericope';
   isPericope?: boolean;
   pericopeRange?: [number, number];
-  pericopeNumber?: string;
-  startVerse?: number;
-  endVerse?: number;
 }
 
 export interface ChapterAudioResponse {

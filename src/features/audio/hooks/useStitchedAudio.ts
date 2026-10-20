@@ -9,7 +9,7 @@ export interface StitchedTrack {
   durationSeconds: number;
 }
 
-export type SkippedReason = 'conflict' | 'no recording';
+export type SkippedReason = 'conflict' | 'no recording' | 'no active take';
 
 export interface SkippedVerse {
   verseNumber: number;
@@ -50,6 +50,17 @@ export function isPericopeRecording(r: VerseAudioRecording): boolean {
   );
 }
 
+export function pericopeSpan(r: VerseAudioRecording): [number, number] | null {
+  const range = r.pericopeRange ?? r.takes[0]?.pericopeRange;
+  if (range) {
+    const [start, end] = range;
+    if (typeof start === 'number' && typeof end === 'number') {
+      return [start, end];
+    }
+  }
+  return null;
+}
+
 export function useStitchedAudio({
   verseNumbers,
   recordings,
@@ -62,10 +73,9 @@ export function useStitchedAudio({
     // Check for pericope-level recordings covering this pericope
     const pericopeRecordings = recordings.filter(r => {
       if (!isPericopeRecording(r)) return false;
-      if (r.pericopeRange) {
-        return r.pericopeRange[0] === startVerse && r.pericopeRange[1] === endVerse;
-      }
-      return r.verseNumber === startVerse;
+      const span = pericopeSpan(r);
+      if (!span) return false;
+      return span[0] === startVerse && span[1] === endVerse;
     });
 
     const pericopeTakes = pericopeRecordings.flatMap(r => r.takes);
@@ -77,6 +87,9 @@ export function useStitchedAudio({
     );
 
     const hasActivePericopeTake = Boolean(activePericopeTake);
+    // When any pericope-level takes exist (including while in conflict or pending resolution),
+    // the takes list is shown so the PM can review and resolve the pericope-level takes.
+    // Verse stitching is only used when the pericope has exclusively per-verse recordings.
     const hasOnlyPerVerseRecordings = pericopeTakes.length === 0;
 
     // Build verse-by-verse recording map for quick lookup
@@ -92,7 +105,7 @@ export function useStitchedAudio({
 
     for (const v of sortedVerseNums) {
       const rec = verseRecordingMap.get(v);
-      if (!rec) {
+      if (!rec || rec.takes.length === 0) {
         skippedVerses.push({ verseNumber: v, reason: 'no recording' });
         continue;
       }
@@ -104,7 +117,7 @@ export function useStitchedAudio({
 
       const activeTake = rec.takes.find(t => t.id === rec.activeTakeId);
       if (!activeTake?.downloadUrl) {
-        skippedVerses.push({ verseNumber: v, reason: 'no recording' });
+        skippedVerses.push({ verseNumber: v, reason: 'no active take' });
         continue;
       }
 

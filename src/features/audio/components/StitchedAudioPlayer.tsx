@@ -5,7 +5,11 @@ import { useTranslation } from 'react-i18next';
 
 import { formatClock, usePlaybackRegistry } from '@/features/tts';
 
-import { type SkippedVerse, type StitchedTrack } from '../hooks/useStitchedAudio';
+import {
+  type SkippedReason,
+  type SkippedVerse,
+  type StitchedTrack,
+} from '../hooks/useStitchedAudio';
 
 export interface StitchedAudioPlayerProps {
   /** Title label, e.g. "Stitched from verse recordings, vv. 6-9" */
@@ -16,12 +20,6 @@ export interface StitchedAudioPlayerProps {
   skippedVerses?: SkippedVerse[];
   /** Total calculated duration of the stitched tracks */
   totalDuration: number;
-  /** Called when playback starts */
-  onPlay?: () => void;
-  /** Called when playback pauses or ends */
-  onPause?: () => void;
-  /** Accent color for play button and waveform fill */
-  accentColor?: string;
 }
 
 const BARS = 40;
@@ -30,6 +28,15 @@ const WAVEFORM_HEIGHTS = [
   0.5, 0.35, 0.65, 0.9, 0.55, 0.4, 0.75, 0.6, 0.45, 0.8, 0.95, 0.5, 0.3, 0.7, 0.85, 0.6, 0.4, 0.55,
   0.75, 0.4, 0.25,
 ];
+
+function isSameSrc(currentSrc: string, targetUrl: string): boolean {
+  if (!currentSrc || !targetUrl) return false;
+  try {
+    return new URL(targetUrl, window.location.href).href === currentSrc;
+  } catch {
+    return currentSrc.includes(targetUrl);
+  }
+}
 
 /**
  * Continuous stitched audio player for verse-recorded pericopes.
@@ -41,9 +48,6 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
   tracks,
   skippedVerses = [],
   totalDuration,
-  onPlay,
-  onPause,
-  accentColor = 'var(--primary)',
 }) => {
   const { t } = useTranslation();
   const registry = usePlaybackRegistry();
@@ -66,31 +70,64 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Reset player state when tracks change
+  const tracksKey = tracks.map(t => `${t.verseNumber}:${t.takeId}`).join(',');
+  const prevTracksKeyRef = useRef(tracksKey);
+
+  // Reset player when track identity changes, and clean up on unmount
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
+    if (prevTracksKeyRef.current !== tracksKey) {
+      prevTracksKeyRef.current = tracksKey;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      setCurrentTrackIndex(0);
+      currentTrackIndexRef.current = 0;
+      setCurrentTime(0);
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setIsLoading(false);
+      if (releaseRef.current) {
+        releaseRef.current();
+        releaseRef.current = null;
+      }
     }
-    setCurrentTrackIndex(0);
-    currentTrackIndexRef.current = 0;
-    setCurrentTime(0);
-    setIsPlaying(false);
-    setIsLoading(false);
-    if (releaseRef.current) {
-      releaseRef.current();
-      releaseRef.current = null;
-    }
-  }, [tracks]);
 
-  // Keep audio.src initialized for the current track
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+      if (releaseRef.current) {
+        releaseRef.current();
+        releaseRef.current = null;
+      }
+    };
+  }, [tracksKey]);
+
+  // Keep audio.src initialized for the current track; when only URLs change, keep currentTime and playback state
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !tracks.length) return;
-    const track = tracks[currentTrackIndex];
+    const track = tracks[currentTrackIndex] as StitchedTrack | undefined;
     if (!track) return;
-    if (!audio.src.includes(track.downloadUrl)) {
+    if (!isSameSrc(audio.src, track.downloadUrl)) {
+      const prevTime = audio.currentTime;
+      const wasPlaying = isPlayingRef.current;
       audio.src = track.downloadUrl;
+      if (prevTime > 0) {
+        audio.currentTime = prevTime;
+        const restoreTime = () => {
+          audio.currentTime = prevTime;
+        };
+        audio.addEventListener('loadedmetadata', restoreTime, { once: true });
+      }
+      if (wasPlaying) {
+        void audio.play().catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          setIsPlaying(false);
+        });
+      }
     }
   }, [tracks, currentTrackIndex]);
 
@@ -117,22 +154,7 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
       releaseRef.current();
       releaseRef.current = null;
     }
-    onPause?.();
-  }, [onPause]);
-
-  // Clean up on unmount or tracks change
-  useEffect(() => {
-    const audio = audioRef.current;
-    return () => {
-      if (audio) {
-        audio.pause();
-      }
-      if (releaseRef.current) {
-        releaseRef.current();
-        releaseRef.current = null;
-      }
-    };
-  }, [tracks]);
+  }, []);
 
   // Helper to locate which track and internal offset correspond to a given total time
   const locateTrack = useCallback(
@@ -188,7 +210,6 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
     if (isPlaying) {
       pausePlayback();
     } else {
-      onPlay?.();
       setIsLoading(true);
 
       // Claim exclusivity in the shared registry
@@ -199,7 +220,6 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
         setIsPlaying(false);
         setIsLoading(false);
         releaseRef.current = null;
-        onPause?.();
       });
 
       // If at end, start from beginning
@@ -211,8 +231,12 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
         audio.currentTime = 0;
       } else {
         const track = tracks[currentTrackIndexRef.current];
-        if (!audio.src.includes(track.downloadUrl)) {
+        if (!isSameSrc(audio.src, track.downloadUrl)) {
+          const savedTime = audio.currentTime;
           audio.src = track.downloadUrl;
+          if (savedTime > 0) {
+            audio.currentTime = savedTime;
+          }
         }
       }
 
@@ -240,7 +264,7 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
           }
         });
     }
-  }, [tracks, isPlaying, onPlay, onPause, pausePlayback, registry, currentTime, totalDuration]);
+  }, [tracks, isPlaying, pausePlayback, registry, currentTime, totalDuration]);
 
   const handleTimeUpdate = useCallback(() => {
     const audio = audioRef.current;
@@ -275,9 +299,8 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
         releaseRef.current();
         releaseRef.current = null;
       }
-      onPause?.();
     }
-  }, [tracks, totalDuration, onPause]);
+  }, [tracks, totalDuration]);
 
   const handleSeek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -329,6 +352,12 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
   const progress = totalDuration > 0 ? currentTime / totalDuration : 0;
   const hasTracks = tracks.length > 0;
 
+  const skippedReasonLabels: Record<SkippedReason, string> = {
+    conflict: t('conflict', 'conflict'),
+    'no recording': t('noRecording', 'no recording'),
+    'no active take': t('noActiveTake', 'no active take'),
+  };
+
   return (
     <div
       className='rounded-xl border p-4 transition-colors'
@@ -351,7 +380,7 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
           aria-label={isPlaying ? t('pause', 'Pause') : t('play', 'Play')}
           className='flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-60'
           disabled={!hasTracks || isLoading}
-          style={{ backgroundColor: accentColor }}
+          style={{ backgroundColor: 'var(--primary)' }}
           type='button'
           onClick={handleToggle}
         >
@@ -388,7 +417,7 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
                 className='flex-1 rounded-sm transition-all duration-75'
                 style={{
                   height: `${h * 100}%`,
-                  backgroundColor: isPast ? accentColor : 'var(--border)',
+                  backgroundColor: isPast ? 'var(--primary)' : 'var(--border)',
                   minWidth: 0,
                 }}
               />
@@ -408,30 +437,21 @@ const StitchedAudioPlayer: React.FC<StitchedAudioPlayerProps> = ({
           className='mt-3 flex flex-col gap-1 border-t pt-2.5'
           style={{ borderColor: 'var(--border)' }}
         >
-          {skippedVerses.map(skipped => {
-            const reasonText =
-              skipped.reason === 'conflict'
-                ? t('conflict', 'conflict')
-                : skipped.reason === 'no recording'
-                  ? t('noRecording', 'no recording')
-                  : skipped.reason;
-
-            return (
-              <div
-                key={skipped.verseNumber}
-                className='flex items-center gap-1.5 text-xs font-medium'
-                style={{ color: 'var(--warning-subtle-foreground)' }}
-              >
-                <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
-                <span>
-                  {t('verseNotIncluded', 'Verse {{verse}} not included: {{reason}}', {
-                    verse: skipped.verseNumber,
-                    reason: reasonText,
-                  })}
-                </span>
-              </div>
-            );
-          })}
+          {skippedVerses.map(skipped => (
+            <div
+              key={skipped.verseNumber}
+              className='flex items-center gap-1.5 text-xs font-medium'
+              style={{ color: 'var(--warning-subtle-foreground)' }}
+            >
+              <AlertTriangle className='h-3.5 w-3.5 shrink-0' />
+              <span>
+                {t('verseNotIncluded', 'Verse {{verse}} not included: {{reason}}', {
+                  verse: skipped.verseNumber,
+                  reason: skippedReasonLabels[skipped.reason],
+                })}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

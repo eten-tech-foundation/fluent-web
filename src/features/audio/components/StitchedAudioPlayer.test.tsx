@@ -26,6 +26,7 @@ describe('StitchedAudioPlayer', () => {
   const mockSkipped = [
     { verseNumber: 6, reason: 'conflict' as const },
     { verseNumber: 7, reason: 'no recording' as const },
+    { verseNumber: 8, reason: 'no active take' as const },
   ];
 
   beforeEach(() => {
@@ -54,24 +55,21 @@ describe('StitchedAudioPlayer', () => {
     expect(screen.getByText('0:23')).toBeInTheDocument();
     expect(screen.getByText('Verse 6 not included: conflict')).toBeInTheDocument();
     expect(screen.getByText('Verse 7 not included: no recording')).toBeInTheDocument();
+    expect(screen.getByText('Verse 8 not included: no active take')).toBeInTheDocument();
   });
 
   it('toggles play and pause on button click', async () => {
-    const onPlay = vi.fn();
-    const onPause = vi.fn();
-    renderComponent({ onPlay, onPause });
+    renderComponent();
 
     const playBtn = screen.getByRole('button', { name: /play/i });
     fireEvent.click(playBtn);
 
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
-    expect(onPlay).toHaveBeenCalled();
 
     const pauseBtn = await screen.findByRole('button', { name: /pause/i });
     fireEvent.click(pauseBtn);
 
     expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
-    expect(onPause).toHaveBeenCalled();
   });
 
   it('supports seeking via keyboard ArrowRight on the slider', () => {
@@ -103,8 +101,7 @@ describe('StitchedAudioPlayer', () => {
   });
 
   it('stops and resets when the last track ends', async () => {
-    const onPause = vi.fn();
-    const { container } = renderComponent({ onPause });
+    const { container } = renderComponent();
 
     const playBtn = screen.getByRole('button', { name: /play/i });
     fireEvent.click(playBtn);
@@ -119,7 +116,6 @@ describe('StitchedAudioPlayer', () => {
     fireEvent.ended(audioElement!);
 
     // Now playback is paused and reset to end
-    expect(onPause).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
   });
 
@@ -143,5 +139,98 @@ describe('StitchedAudioPlayer', () => {
 
     // Should reset without throwing error
     expect(screen.getByRole('button', { name: /play/i })).toBeDisabled();
+  });
+
+  it('preserves playback position and continues playing when only presigned URLs change', async () => {
+    const { container, rerender } = renderComponent();
+
+    const playBtn = screen.getByRole('button', { name: /play/i });
+    fireEvent.click(playBtn);
+
+    const audioElement = container.querySelector('audio')!;
+    expect(audioElement).toHaveAttribute('src', 'https://example.com/take-81.webm');
+
+    // Simulate playback advancing 5 seconds into track 0
+    audioElement.currentTime = 5;
+    fireEvent.timeUpdate(audioElement);
+
+    const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause');
+
+    // Refetch produces new presigned URLs but same track identities (verseNumber:takeId)
+    const refreshedTracks = [
+      {
+        verseNumber: 8,
+        takeId: 81,
+        downloadUrl: 'https://example.com/take-81.webm?expires=123456',
+        durationSeconds: 10,
+      },
+      {
+        verseNumber: 9,
+        takeId: 91,
+        downloadUrl: 'https://example.com/take-91.webm?expires=123456',
+        durationSeconds: 13,
+      },
+    ];
+
+    rerender(
+      <PlaybackRegistryProvider>
+        <StitchedAudioPlayer
+          label='Stitched from verse recordings, vv. 6-9'
+          skippedVerses={mockSkipped}
+          totalDuration={23}
+          tracks={refreshedTracks}
+        />
+      </PlaybackRegistryProvider>
+    );
+
+    // Audio src is swapped to the new URL
+    expect(audioElement).toHaveAttribute('src', 'https://example.com/take-81.webm?expires=123456');
+    // Position is preserved and playback continues (pause was not called)
+    expect(audioElement.currentTime).toBe(5);
+    expect(pauseSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /pause/i })).toBeInTheDocument();
+  });
+
+  it('resets player state when track identity (takeId) changes', async () => {
+    const { container, rerender } = renderComponent();
+
+    const playBtn = screen.getByRole('button', { name: /play/i });
+    fireEvent.click(playBtn);
+
+    const audioElement = container.querySelector('audio')!;
+    audioElement.currentTime = 5;
+    fireEvent.timeUpdate(audioElement);
+
+    // Track identity changed: verse 8 has a different takeId (take 82 instead of 81)
+    const newTakesTracks = [
+      {
+        verseNumber: 8,
+        takeId: 82,
+        downloadUrl: 'https://example.com/take-82.webm',
+        durationSeconds: 10,
+      },
+      {
+        verseNumber: 9,
+        takeId: 91,
+        downloadUrl: 'https://example.com/take-91.webm',
+        durationSeconds: 13,
+      },
+    ];
+
+    rerender(
+      <PlaybackRegistryProvider>
+        <StitchedAudioPlayer
+          label='Stitched from verse recordings, vv. 6-9'
+          skippedVerses={mockSkipped}
+          totalDuration={23}
+          tracks={newTakesTracks}
+        />
+      </PlaybackRegistryProvider>
+    );
+
+    // Player state should reset to paused and start of track 0
+    expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
+    expect(audioElement.currentTime).toBe(0);
+    expect(audioElement).toHaveAttribute('src', 'https://example.com/take-82.webm');
   });
 });
