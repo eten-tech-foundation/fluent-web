@@ -2016,7 +2016,25 @@ describe('DraftingUI', () => {
       expect(handleTextChange).not.toHaveBeenCalled();
       expect(mockTrackAiUsage).not.toHaveBeenCalled();
       expect(screen.queryByLabelText('Section title')).not.toBeInTheDocument();
+      expect(
+        within(screen.getByTestId('pericope-source-column')).queryByRole('heading', { level: 5 })
+      ).not.toBeInTheDocument();
     });
+
+    it.each([true, false])(
+      'shows the source title above the source text the Section title translates (rte %s)',
+      rte => {
+        config.features.rtePericope = rte;
+        renderWithAi();
+        const source = screen.getByTestId('pericope-source-column');
+        const title = within(source).getByRole('heading', { level: 5, name: 'Creation' });
+        // Above the first verse, inside the same box.
+        expect(
+          title.compareDocumentPosition(within(source).getByText(mockSourceVerses[0].text)) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      }
+    );
 
     it('preserves a title being typed while a suggestion is in flight', async () => {
       mockUseAiSuggestions.mockReturnValue({

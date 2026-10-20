@@ -9,7 +9,10 @@ interface PericopeTextProps {
   className?: string;
 }
 
-/** Keep loaded text visible; placeholders share the same precedence across pericope panels. */
+/**
+ * Keep loaded text visible; placeholders share the same precedence across pericope panels.
+ * A neighboring chapter's undrafted verse stays blank: it is read-only context, not a prompt.
+ */
 export const PericopeText = ({
   content,
   testId,
@@ -27,7 +30,7 @@ export const PericopeText = ({
       : isError
         ? t('errorLoadingBibleContent', 'Unable to load Bible content.')
         : emptyState === 'not-drafted'
-          ? t('pericopeNotDrafted', 'Not drafted')
+          ? ''
           : t('noContentAvailable', 'No content available');
 
   return (

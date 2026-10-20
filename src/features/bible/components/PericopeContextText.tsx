@@ -36,11 +36,9 @@ export const PericopeContextText = ({
         })}
         className='text-muted-foreground space-y-1 py-2'
       >
+        {/* The same divider the editable chapter gets; "read-only" is said to screen readers. */}
         <p className='text-sm font-medium'>
-          {t('pericopeChapterContext', {
-            defaultValue: 'Chapter {{chapter}} context (read-only)',
-            chapter,
-          })}
+          {t('pericopeCurrentChapter', { defaultValue: 'Chapter {{chapter}}', chapter })}
         </p>
         <p className='text-foreground text-base leading-relaxed select-text'>
           {refs

@@ -549,6 +549,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               : undefined;
           const isVerseSpeaking = (chapter: number, verse: number) =>
             tts !== undefined && tts.verseRefFor(verse, chapter) === tts.activeVerseRef;
+          // What the target's Section title box translates; without it that box reads as empty.
+          const sourceTitle = group.pericopeTitle?.trim();
 
           return (
             <div
@@ -617,6 +619,11 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       }
                     }}
                   >
+                    {sourceTitle ? (
+                      <h5 className='mb-2 text-base font-semibold text-slate-900 dark:text-slate-100'>
+                        {sourceTitle}
+                      </h5>
+                    ) : null}
                     <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                       {chapters.map(chapter => {
                         const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);

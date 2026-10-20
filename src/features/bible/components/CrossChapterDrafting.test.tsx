@@ -225,6 +225,9 @@ describe('cross-chapter drafting integration', () => {
     expect(screen.queryByText('Source Mark 8:1')).not.toBeInTheDocument();
     expect(editor).toHaveValue('My current chapter draft');
     const context = screen.getByRole('region', { name: 'Chapter 9 context (read-only)' });
+    // The visible label is a plain chapter divider; "context (read-only)" is for screen readers.
+    expect(within(context).getByText('Chapter 9')).toBeInTheDocument();
+    expect(screen.queryByText('Chapter 9 context (read-only)')).not.toBeInTheDocument();
     expect(within(context).getByText('Saved Mark 9:1')).toBeInTheDocument();
     expect(within(context).queryByRole('textbox')).not.toBeInTheDocument();
     expect(submit).toBeEnabled();
@@ -289,7 +292,10 @@ describe('cross-chapter drafting integration', () => {
     expect(editor).toHaveValue('Keep my new text');
     expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
-    expect(within(context).getAllByText('Not drafted')).toHaveLength(8);
+    // Undrafted neighbors keep their numbers and stay blank.
+    expect(within(context).getByText('8:31')).toBeInTheDocument();
+    expect(within(context).getByText('8:38')).toBeInTheDocument();
+    expect(within(context).queryByText('Not drafted')).not.toBeInTheDocument();
     expect(within(context).queryByRole('textbox')).not.toBeInTheDocument();
     await waitFor(() => expect(saved).toHaveLength(1), { timeout: 3500 });
     expect(saved).toEqual([
@@ -336,7 +342,8 @@ describe('cross-chapter drafting integration', () => {
     expect(next).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
-    expect(within(context).getAllByText('Not drafted')).toHaveLength(8);
+    expect(within(context).getByText('Chapter 8')).toBeInTheDocument();
+    expect(within(context).queryByText('Not drafted')).not.toBeInTheDocument();
 
     await translator.click(next);
 

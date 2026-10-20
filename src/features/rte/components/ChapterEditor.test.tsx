@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -155,6 +155,34 @@ describe('ChapterEditor', () => {
     editor.setUsj.mockClear();
     editor.formatPara.mockClear();
     editor.focus.mockClear();
+  });
+
+  it('lays out as a header row and a body row its parent can place and frame', () => {
+    render(
+      <ChapterEditor
+        {...CHAPTER_PROPS}
+        bodyClassName='rounded-r-md border-y border-r'
+        className='row-span-2 grid grid-rows-subgrid'
+        verses={A_PAIR}
+        onVersesChange={vi.fn()}
+      />
+    );
+    const root = screen.getByTestId('chapter-editor');
+    expect(root).toHaveClass('row-span-2', 'grid', 'grid-rows-subgrid');
+    // Exactly two children, so a two-row subgrid puts the heading on the first row.
+    expect(root.children).toHaveLength(2);
+    const [header, body] = Array.from(root.children);
+    expect(within(header as HTMLElement).getByRole('heading', { name: 'Spanish' })).toBeVisible();
+    expect(header).not.toHaveClass('border-b');
+    expect(body).toHaveClass('rounded-r-md', 'border-y', 'border-r');
+    expect(body.querySelector('.chapter-editor-surface')).not.toBeNull();
+  });
+
+  it('fills its container on its own when no layout is given', () => {
+    render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+    const root = screen.getByTestId('chapter-editor');
+    expect(root).toHaveClass('flex', 'h-full', 'flex-col');
+    expect(root.children[1]).toHaveClass('min-h-0', 'flex-1');
   });
 
   it('does not report the editor mount echo as a change', () => {
