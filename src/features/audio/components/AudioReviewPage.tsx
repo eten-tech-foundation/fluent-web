@@ -118,6 +118,7 @@ interface Passage {
   isOppositeModeConflict?: boolean;
   conflictRecordedMode?: 'verse' | 'pericope';
   continuationNote?: string;
+  conflictedVerses?: number[];
 }
 
 const isPassage = (passage: Passage | null): passage is Passage => passage !== null;
@@ -303,6 +304,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             isOppositeModeConflict,
             conflictRecordedMode,
             continuationNote,
+            conflictedVerses,
           };
         })
         .filter(isPassage);
@@ -393,6 +395,29 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   }, [passages, selectedPassageId]);
 
   const effectivePassage = selectedPassage ?? passages[0];
+
+  const handleSwitchToVerseView = () => {
+    const targetVerse = effectivePassage.conflictedVerses?.[0] ?? effectivePassage.verseNumbers[0];
+    if (typeof targetVerse === 'number') {
+      setSelectedPassageId(`verse-${targetVerse}`);
+    }
+    setDisplayMode('verse');
+  };
+
+  const handleSwitchToPericopeView = () => {
+    const v = effectivePassage.verseNumbers[0];
+    if (typeof v === 'number' && pericopes) {
+      const coveringGroup = pericopes.find(group =>
+        group.verses.some(
+          gv => gv.chapterNumber === projectItem.chapterNumber && gv.verseNumber === v
+        )
+      );
+      if (coveringGroup) {
+        setSelectedPassageId(`pericope-${coveringGroup.pericopeNumber}`);
+      }
+    }
+    setDisplayMode('pericope');
+  };
 
   // ---------- Stitched audio calculation for pericope mode ----------
 
@@ -700,7 +725,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                               <button
                                 className='cursor-pointer font-medium underline hover:opacity-80'
                                 type='button'
-                                onClick={() => setDisplayMode('verse')}
+                                onClick={handleSwitchToVerseView}
                               >
                                 {t('switchToVerseView', 'Switch to Verse view')}
                               </button>{' '}
@@ -715,7 +740,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                               <button
                                 className='cursor-pointer font-medium underline hover:opacity-80'
                                 type='button'
-                                onClick={() => setDisplayMode('pericope')}
+                                onClick={handleSwitchToPericopeView}
                               >
                                 {t('switchToPericopeView', 'Switch to Pericope view')}
                               </button>{' '}
@@ -731,7 +756,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                       <button
                         className='cursor-pointer font-medium underline hover:opacity-80'
                         type='button'
-                        onClick={() => setDisplayMode('verse')}
+                        onClick={handleSwitchToVerseView}
                       >
                         {t('switchToVerseView', 'Switch to Verse view')}
                       </button>{' '}
@@ -746,7 +771,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                       <button
                         className='cursor-pointer font-medium underline hover:opacity-80'
                         type='button'
-                        onClick={() => setDisplayMode('pericope')}
+                        onClick={handleSwitchToPericopeView}
                       >
                         {t('switchToPericopeView', 'Switch to Pericope view')}
                       </button>{' '}

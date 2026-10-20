@@ -266,6 +266,30 @@ describe('AudioReviewPage display mode', () => {
     renderPage();
     expect(screen.getByText('Verses 1–2')).toBeInTheDocument();
   });
+
+  it('selects the conflicted verse when switching to verse view from a pericope with conflict on a later verse', () => {
+    currentRecordings = [
+      mockRecordings[0],
+      {
+        ...mockRecordings[1], // verse 2 has the conflict
+        conflictStatus: 'conflict',
+      },
+      mockRecordings[2],
+    ];
+    useAppStore.setState({ displayMode: 'pericope' });
+    renderPage();
+
+    const switchButton = screen.getByRole('button', { name: /switch to verse view/i });
+    fireEvent.click(switchButton);
+
+    // Selected passage in verse view should be Verse 2, showing its conflicting takes header
+    expect(
+      screen.getByRole('heading', { level: 2, name: /conflicting takes/i })
+    ).toBeInTheDocument();
+    // Verse 2 list item should be selected (has bg-accent class)
+    const verse2Button = screen.getByRole('button', { name: /verse 2/i });
+    expect(verse2Button).toHaveClass('bg-accent');
+  });
 });
 
 describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue #554)', () => {
