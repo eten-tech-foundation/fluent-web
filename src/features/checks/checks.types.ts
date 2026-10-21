@@ -19,9 +19,10 @@
  */
 
 // ---------------------------------------------------------------------------
-// Wire types — snake_case, verbatim fluent-ai contract (fluent-api D8).
+// Wire types — snake_case, mirroring fluent-api's AI-tools contract (D8).
 // Mirror of fluent-api `src/domains/ai-tools/ai-tools.types.ts` and
-// `src/lib/services/fluent-ai/fluent-ai.types.ts`.
+// `src/lib/services/fluent-ai/fluent-ai.types.ts`. Responses are fluent-ai's
+// envelope verbatim; the request is fluent-api's own (see RepeatedWordsRequest).
 // ---------------------------------------------------------------------------
 
 /** Job lifecycle status from the fluent-ai `ToolJobResponse` envelope. */
@@ -34,19 +35,19 @@ export interface VerseInput {
 }
 
 /**
- * Request body for `POST /ai/tools/greek-room/repeated-words`.
- * Forwarded verbatim by fluent-api to fluent-ai (D8). snake_case is intentional.
+ * Request body for `POST /ai/tools/greek-room/repeated-words` on fluent-api.
+ * snake_case is intentional.
+ *
+ * Not forwarded verbatim (fluent-api D8, amended by fluent-api#420): fluent-api
+ * resolves `project_unit_id` to its owning project, authorizes against it, and
+ * builds fluent-ai's payload with that project's `project_id` / `project_name`.
+ * `lang_code`, `lang_name` and `verses` pass through as sent.
  */
 export interface RepeatedWordsRequest {
   lang_code: string;
   lang_name: string;
-  // fluent-ai declares `project_id: str` (Pydantic v2, strict — it does NOT
-  // coerce an int to a str), so this MUST be a string on the wire. The builder
-  // already sends `String(projectItem.projectUnitId)`; typing it `string` (not
-  // `string | number`) matches that reality and keeps a stray numeric id from
-  // ever compiling through. See W1 and phase-04 manual smoke (2026-06-23).
-  project_id: string;
-  project_name: string;
+  /** The milestone's `project_units.id` — NOT a `projects.id`. */
+  project_unit_id: number;
   verses: VerseInput[];
 }
 

@@ -3,8 +3,8 @@
  * The Noto faces are written out here rather than imported, one script subset per family.
  *
  * Their `400.css` and `700.css` entry points also declare that family's latin and latin-ext faces,
- * plus math and symbols for Gujarati and Naskh Arabic. The editor keeps Charis SIL ahead of Noto,
- * while source scripture keeps Inter. The Noto Latin subsets are not needed;
+ * plus math and symbols for Gujarati and Naskh Arabic. `--font-scripture` puts Inter and Charis SIL
+ * ahead of Noto on both sides, so the Noto Latin subsets are never reached;
  * they were 40 files of dead weight in the build. Fontsource does ship per-script entry points
  * (`devanagari-400.css` and friends), but those declare the face with no `unicode-range` at all,
  * which would make every Noto match every character: rendering one line of Arabic then fetches all

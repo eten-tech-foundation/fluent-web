@@ -201,7 +201,7 @@ export const TargetVersesGroup: React.FC<TargetVersesGroupProps> = ({
                     aria-label={`Translation for verse ${v.verseNumber}`}
                     autoCapitalize='sentences'
                     autoCorrect='on'
-                    className={`target-scripture text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none ${
+                    className={`target-scripture text-foreground w-full resize-none overflow-hidden border-none bg-transparent py-0.5 text-base leading-relaxed outline-none placeholder:font-sans ${
                       isButtonRow ? 'pr-16' : ''
                     }`}
                     placeholder={
@@ -568,7 +568,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               style={{ gridTemplateColumns: '1fr 1fr' }}
             >
               <div
-                className='source-scripture flex w-full min-w-0 flex-col px-6'
+                className='flex w-full min-w-0 flex-col px-6'
                 data-testid='pericope-source-column'
               >
                 <div className='flex h-6 min-w-0 items-center gap-2'>
@@ -617,7 +617,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       }
                     }}
                   >
-                    <p className='text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
+                    <p className='source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
                       {chapters.map(chapter => {
                         const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
                         if (
@@ -657,7 +657,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                           return (
                             <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
                               <span
-                                className={`mr-1.5 font-bold ${isVerseSpeaking(chapter, ref.verseNumber) ? 'text-primary' : 'text-slate-900 dark:text-slate-100'}`}
+                                className={`mr-1.5 font-sans font-bold ${isVerseSpeaking(chapter, ref.verseNumber) ? 'text-primary' : 'text-slate-900 dark:text-slate-100'}`}
                               >
                                 {chapters.length > 1
                                   ? `${chapter}:${ref.verseNumber}`

@@ -102,7 +102,7 @@ export const DraftingTargetColumn: React.FC<DraftingTargetColumnProps> = ({
             aria-label={`Translation for verse ${verseNumber}`}
             autoCapitalize='sentences'
             autoCorrect='on'
-            className='target-scripture w-full resize-none border-none bg-transparent text-base leading-snug outline-none'
+            className='target-scripture w-full resize-none border-none bg-transparent text-base leading-snug outline-none placeholder:font-sans'
             placeholder={
               isAiActiveNoSuggestion && suggestionStatus === 'generating'
                 ? t('generatingAiSuggestion', 'Generating...')
@@ -244,14 +244,14 @@ export const DraftingGridVerse: React.FC<DraftingGridVerseProps> = ({
             <div className='flex w-8 items-start px-4'>
               <span className='text-lg font-medium'>{verse.verseNumber}</span>
             </div>
-            <div className='source-scripture group/audio relative flex flex-col px-6'>
+            <div className='group/audio relative flex flex-col px-6'>
               {selectedPanel === 1 ? (
                 <div className={getPericopeStyle(verse.verseNumber, isActive, 'bg-card')}>
-                  <p className='min-h-12 leading-relaxed'>{verse.text}</p>
+                  <p className='source-scripture min-h-12 leading-relaxed'>{verse.text}</p>
                 </div>
               ) : (
                 <div className={getPericopeStyle(verse.verseNumber, false, 'bg-muted')}>
-                  <p className='min-h-12 leading-relaxed'>
+                  <p className='source-scripture min-h-12 leading-relaxed'>
                     <PericopeText
                       content={bibleVerseMap.get(verse.verseNumber)}
                       isError={bibleContentError}

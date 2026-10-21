@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -96,6 +96,23 @@ describe('DraftingChapterView', () => {
     expect(screen.getByText('Spanish')).toBeInTheDocument();
     expect(screen.getByText('In the beginning.')).toBeInTheDocument();
     expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
+  });
+
+  it('keeps the chapter and verse numbers in the app font beside scripture text', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        activeBibleTabId={SOURCE_BIBLE_TAB_ID}
+        selectedPanel={1}
+      />
+    );
+
+    const scripture = screen.getByText('The earth was formless.').closest('.source-scripture');
+    expect(scripture).toBeInstanceOf(HTMLElement);
+    expect(within(scripture as HTMLElement).getByText('2')).toHaveClass('font-sans');
+    expect(
+      screen.getByRole('heading', { level: 4, name: '1' }).closest('.source-scripture')
+    ).toBeNull();
   });
 
   it('keeps the source tab available when a resource Bible has no passage content', () => {

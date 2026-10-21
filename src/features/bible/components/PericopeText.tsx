@@ -32,7 +32,7 @@ export const PericopeText = ({
 
   return (
     <span
-      className={`${className} ${unavailable ? 'text-muted-foreground text-sm' : ''}`.trim()}
+      className={`${className} ${unavailable ? 'text-muted-foreground font-sans text-sm' : ''}`.trim()}
       data-testid={testId}
     >
       {text}

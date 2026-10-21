@@ -216,6 +216,13 @@
   --font-mono:
     'Inter', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
+  /* Scripture text in the source column, the plain target text and the editor. One stack, so a
+     language reads the same on both sides (#472). Latin is Inter; Charis SIL only draws the
+     letters our Inter file lacks (ŋ, ɛ, ā). fonts.css and source-fonts.css bundle the faces. */
+  --font-scripture:
+    'Inter', 'Charis SIL', 'Noto Serif Devanagari', 'Noto Serif Gujarati', 'Noto Serif Malayalam',
+    'Noto Serif Kannada', 'Noto Serif Telugu', 'Noto Serif Tamil', 'Noto Naskh Arabic',
+    'Times New Roman', 'Liberation Serif', 'DejaVu Serif', Georgia, serif;
   --tracking-normal: 0em;
   --radius: 0.75rem;
   --spacing: 0.25rem;

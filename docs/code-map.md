@@ -86,7 +86,9 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   recorded in fluent-mobile, guarded to Project Managers — the route redirects anyone else and
   the drafting header only links it for PMs. `components/AudioReviewPage.tsx` lists a chapter's
   takes by verse or pericope (`components/TakeCard.tsx`, `components/AudioPlayer.tsx`), flags
-  conflicting ones and lets the PM pick the winner. It calls `GET /verse-audio`
+  conflicting ones and lets the PM pick the winner. For pericopes recorded only by verse,
+  `components/StitchedAudioPlayer.tsx` and `hooks/useStitchedAudio.ts` sequence active verse takes
+  into continuous playback. It calls `GET /verse-audio`
   (`hooks/useChapterAudio.ts`, which `DraftingUI` also uses for the conflict indicator and review
   link) and `POST /verse-audio/:projectUnitId/:bibleTextId/resolve`
   (`hooks/useResolveConflict.ts`).

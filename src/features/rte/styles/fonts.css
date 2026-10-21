@@ -23,24 +23,19 @@
  * latin, latin-ext, cyrillic, cyrillic-ext and vietnamese. Russian needs nothing beyond this.
  */
 
-@import '@fontsource/charis-sil/400.css';
-@import '@fontsource/charis-sil/400-italic.css';
-@import '@fontsource/charis-sil/700.css';
-@import '@fontsource/charis-sil/700-italic.css';
+@import './charis-fonts.css';
 @import './noto-fonts.css';
 
 /*
- * Charis SIL stays first, so Latin and Cyrillic are unchanged. Fallback runs per character, so a
- * Devanagari codepoint skips Charis and lands on Noto Serif Devanagari rather than dropping the
- * whole run to one substitute font.
+ * `--font-scripture` (index.css) puts Inter first, so Latin matches the source column (#472).
+ * Fallback runs per character: a letter our Inter file lacks (ŋ, ɛ, ā, Cyrillic) lands on Charis
+ * SIL, and a Devanagari codepoint skips both and lands on Noto Serif Devanagari rather than
+ * dropping the whole run to one substitute font.
  *
  * Scoped under `.rte-editor` so it outranks the vendored `.usfm.formatted-font` rule on
  * specificity and not only on import order. Both editor wrappers carry that class. Only the family
  * is overridden; the vendored `font-size` still applies.
  */
 .rte-editor .usfm.formatted-font {
-  font-family:
-    'Charis SIL', 'Noto Serif Devanagari', 'Noto Serif Gujarati', 'Noto Serif Malayalam',
-    'Noto Serif Kannada', 'Noto Serif Telugu', 'Noto Serif Tamil', 'Noto Naskh Arabic',
-    'Times New Roman', 'Liberation Serif', 'DejaVu Serif', Georgia, serif;
+  font-family: var(--font-scripture);
 }

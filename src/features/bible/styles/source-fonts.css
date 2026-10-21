@@ -1,10 +1,11 @@
+/* Verse view loads before the editor chunk, so the source column brings its own copy of the
+   faces. fonts.css still declares them again after the editor's vendored local()-only rules. */
+@import '../../rte/styles/charis-fonts.css';
 @import '../../rte/styles/noto-fonts.css';
 
-/* Keep Latin in Inter and try the bundled scripture fonts before system fallbacks. */
+/* Scripture text uses the editor's stack, so English reads the same in both columns (#472).
+   Numbers, headings and messages around it keep the app font even when the text falls back. */
 .source-scripture,
 .target-scripture {
-  font-family:
-    'Inter', 'Noto Serif Devanagari', 'Noto Serif Gujarati', 'Noto Serif Malayalam',
-    'Noto Serif Kannada', 'Noto Serif Telugu', 'Noto Serif Tamil', 'Noto Naskh Arabic',
-    var(--font-sans);
+  font-family: var(--font-scripture);
 }

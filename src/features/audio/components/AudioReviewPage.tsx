@@ -7,13 +7,19 @@ import { useTranslation } from 'react-i18next';
 
 import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useResolveConflict } from '@/features/audio/hooks/useResolveConflict';
+import {
+  isPericopeRecording,
+  pericopeSpan,
+  useStitchedAudio,
+} from '@/features/audio/hooks/useStitchedAudio';
 import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
 import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPericopes';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
-import { type ProjectItem, type VerseAudioRecording } from '@/lib/types';
+import { type ProjectItem, type VerseAudioRecording, type VerseAudioTake } from '@/lib/types';
 import { type DisplayMode, useAppStore } from '@/store/store';
 
+import StitchedAudioPlayer from './StitchedAudioPlayer';
 import TakeCard, { SelectAsDraftButton } from './TakeCard';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +45,8 @@ interface PassageListItemProps {
   isSelected: boolean;
   /** True if this passage was previously conflicted but is now resolved */
   isResolved: boolean;
+  /** Cross-view conflict warning label, e.g. "Conflict in verse 6" or "Conflict in pericope vv. 1-5" */
+  crossViewConflict?: string | null;
   onClick: () => void;
 }
 
@@ -47,34 +55,47 @@ const PassageListItem: React.FC<PassageListItemProps> = ({
   dotState,
   isSelected,
   isResolved,
+  crossViewConflict,
   onClick,
 }) => {
   const resolvedGreen = 'var(--success-subtle-foreground)';
+  const warningColor = 'var(--warning-subtle-foreground)';
 
   return (
     <button
-      className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+      className={`flex w-full cursor-pointer flex-col rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
         isSelected
           ? 'bg-accent font-semibold'
           : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
       }`}
-      style={isSelected && isResolved ? { color: resolvedGreen } : undefined}
       type='button'
       onClick={onClick}
     >
-      {dotState !== null && (
-        <span
-          className='h-2 w-2 shrink-0 rounded-full'
-          style={{
-            backgroundColor:
-              dotState === 'conflict'
-                ? 'var(--warning-subtle-foreground)'
-                : 'var(--success-subtle-foreground)',
-          }}
-        />
+      <div className='flex items-center gap-2'>
+        {dotState !== null && (
+          <span
+            className='h-2 w-2 shrink-0 rounded-full'
+            style={{
+              backgroundColor:
+                dotState === 'conflict'
+                  ? 'var(--warning-subtle-foreground)'
+                  : 'var(--success-subtle-foreground)',
+            }}
+          />
+        )}
+        {dotState === null && !crossViewConflict && <span className='h-2 w-2 shrink-0' />}
+        <span style={isResolved ? { color: resolvedGreen } : undefined}>{label}</span>
+      </div>
+
+      {crossViewConflict && (
+        <div
+          className='mt-1 flex items-center gap-1.5 text-xs font-normal'
+          style={{ color: warningColor }}
+        >
+          <AlertTriangle className='h-3.5 w-3.5 shrink-0' style={{ color: warningColor }} />
+          <span>{crossViewConflict}</span>
+        </div>
       )}
-      {dotState === null && <span className='h-2 w-2 shrink-0' />}
-      <span style={isResolved ? { color: resolvedGreen } : undefined}>{label}</span>
     </button>
   );
 };
@@ -91,10 +112,18 @@ interface Passage {
   verseNumbers: number[];
   recordings: VerseAudioRecording[];
   hasConflict: boolean;
+  hasDirectConflict: boolean;
   wasConflicted: boolean;
+  crossViewConflict?: string | null;
+  isOppositeModeConflict?: boolean;
+  conflictRecordedMode?: 'verse' | 'pericope';
+  continuationNote?: string;
+  conflictedVerses?: number[];
 }
 
 const isPassage = (passage: Passage | null): passage is Passage => passage !== null;
+
+const EMPTY_VERSE_NUMBERS: number[] = [];
 
 interface AudioReviewPageProps {
   projectItem?: ProjectItem;
@@ -105,8 +134,17 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   const loaderData = routeApi.useLoaderData();
   const projectItem = propItem ?? loaderData.projectItem;
   const router = useRouter();
-  const initialDisplayMode = useAppStore(state => state.displayMode);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(initialDisplayMode);
+  const globalDisplayMode = useAppStore(state => state.displayMode);
+  const [pageDisplayModeOverride, setPageDisplayModeOverride] = useState<DisplayMode | null>(null);
+  const [prevGlobalDisplayMode, setPrevGlobalDisplayMode] = useState(globalDisplayMode);
+
+  if (prevGlobalDisplayMode !== globalDisplayMode) {
+    setPrevGlobalDisplayMode(globalDisplayMode);
+    setPageDisplayModeOverride(null);
+  }
+
+  const displayMode = pageDisplayModeOverride ?? globalDisplayMode;
+  const setDisplayMode = setPageDisplayModeOverride;
   const userdetail = useAppStore(state => state.userdetail);
 
   // Only PMs may resolve conflicts (spec #383).
@@ -144,59 +182,200 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     [projectUsers]
   );
 
+  interface ReviewTake extends VerseAudioTake {
+    displayLabel?: string;
+    bibleTextId?: number;
+    isCoveringPericope?: boolean;
+  }
+
   // ---------- Build passage list ----------
 
   /**
    * A "passage" is either a single verse (verse/chapter mode) or a pericope group.
-   * Each entry carries the set of VerseAudioRecording rows that belong to it.
+   * Each entry carries the set of VerseAudioRecording rows that belong to it,
+   * plus cross-view conflict metadata.
    */
   const passages: Passage[] = useMemo(() => {
     const recordings = audioData?.items ?? [];
+    const pericopeRecordings = recordings.filter(isPericopeRecording);
+    const verseRecordings = recordings.filter(r => !isPericopeRecording(r));
 
     if (displayMode === 'pericope' && pericopes && pericopes.length > 0) {
       return pericopes
         .map((group): Passage | null => {
-          const groupVerseNums = new Set(group.verses.map(v => v.verseNumber));
-          const groupRecordings = recordings.filter(r => groupVerseNums.has(r.verseNumber));
-          if (groupRecordings.length === 0) return null;
+          // Only include verses belonging to the current chapter
+          const chapterVerses = group.verses.filter(
+            v => v.chapterNumber === projectItem.chapterNumber
+          );
+          if (chapterVerses.length === 0) return null;
 
-          const startVerse = group.verses[0]?.verseNumber;
-          const endVerse = group.verses[group.verses.length - 1]?.verseNumber;
-          const label =
+          const groupVerseNums = new Set(chapterVerses.map(v => v.verseNumber));
+          const startVerse = chapterVerses[0]?.verseNumber;
+          const endVerse = chapterVerses[chapterVerses.length - 1]?.verseNumber;
+
+          // Direct pericope recordings
+          const directPericopeRecs = pericopeRecordings.filter(r => {
+            const span = pericopeSpan(r);
+            if (!span) return false;
+            return span[0] === startVerse && span[1] === endVerse;
+          });
+
+          // Verse recordings for verses in this pericope
+          const groupVerseRecs = verseRecordings.filter(r => groupVerseNums.has(r.verseNumber));
+
+          if (directPericopeRecs.length === 0 && groupVerseRecs.length === 0) return null;
+
+          const baseLabel =
             startVerse === endVerse
               ? t('verseLabel', 'Verse {{verse}}', { verse: startVerse })
               : t('versesLabel', 'Verses {{start}}–{{end}}', { start: startVerse, end: endVerse });
 
-          const hasConflictNow = groupRecordings.some(isConflict);
-          // 'resolved' is set by the API when the conflict was explicitly resolved
-          // via PUT /resolve — unambiguous, no heuristic needed.
-          const wasConflicted = groupRecordings.some(isResolved);
+          const prevChapterVerses = group.verses.filter(
+            v => v.chapterNumber < projectItem.chapterNumber
+          );
+          const nextChapterVerses = group.verses.filter(
+            v => v.chapterNumber > projectItem.chapterNumber
+          );
+
+          let continuationNote: string | undefined;
+          if (prevChapterVerses.length > 0 && nextChapterVerses.length > 0) {
+            const prevCh = prevChapterVerses[prevChapterVerses.length - 1]?.chapterNumber;
+            const nextCh = nextChapterVerses[0]?.chapterNumber;
+            continuationNote = t(
+              'pericopeContFromAndInNote',
+              '(cont. from ch. {{prevCh}}, in ch. {{nextCh}})',
+              { prevCh, nextCh }
+            );
+          } else if (nextChapterVerses.length > 0) {
+            const nextCh = nextChapterVerses[0]?.chapterNumber;
+            continuationNote = t('pericopeContInNextNote', '(cont. in ch. {{nextCh}})', {
+              nextCh,
+            });
+          } else if (prevChapterVerses.length > 0) {
+            const prevCh = prevChapterVerses[prevChapterVerses.length - 1]?.chapterNumber;
+            continuationNote = t('pericopeContFromPrevNote', '(cont. from ch. {{prevCh}})', {
+              prevCh,
+            });
+          }
+
+          const label = continuationNote ? `${baseLabel} ${continuationNote}` : baseLabel;
+
+          const hasDirectConflict = directPericopeRecs.some(isConflict);
+          const conflictedVerses = groupVerseRecs
+            .filter(isConflict)
+            .map(r => r.verseNumber)
+            .sort((a, b) => a - b);
+          const hasVerseConflict = conflictedVerses.length > 0;
+
+          const hasConflictNow = hasDirectConflict || hasVerseConflict;
+          const wasConflicted =
+            directPericopeRecs.some(isResolved) || groupVerseRecs.some(isResolved);
+
+          let crossViewConflict: string | null = null;
+          let isOppositeModeConflict = false;
+          let conflictRecordedMode: 'verse' | 'pericope' | undefined;
+
+          if (hasVerseConflict) {
+            conflictRecordedMode = 'verse';
+            crossViewConflict =
+              conflictedVerses.length === 1
+                ? t('conflictInVerse', 'Conflict in verse {{verse}}', {
+                    verse: conflictedVerses[0],
+                  })
+                : t('conflictInVerses', 'Conflict in verses {{verses}}', {
+                    verses: conflictedVerses.join(', '),
+                  });
+            if (!hasDirectConflict) {
+              isOppositeModeConflict = true;
+            }
+          }
+
+          const passageRecs = directPericopeRecs.length > 0 ? directPericopeRecs : groupVerseRecs;
 
           return {
             id: `pericope-${group.pericopeNumber}`,
             label,
-            verseNumbers: group.verses.map(v => v.verseNumber),
-            recordings: groupRecordings,
+            verseNumbers: chapterVerses.map(v => v.verseNumber),
+            recordings: passageRecs,
             hasConflict: hasConflictNow,
+            hasDirectConflict,
             wasConflicted,
+            crossViewConflict,
+            isOppositeModeConflict,
+            conflictRecordedMode,
+            continuationNote,
+            conflictedVerses,
           };
         })
         .filter(isPassage);
     }
 
-    // Verse / chapter mode: one row per verse
-    return recordings.map(
-      (r): Passage => ({
-        id: `verse-${r.verseNumber}`,
-        label: t('verseLabel', 'Verse {{verse}}', { verse: r.verseNumber }),
-        verseNumbers: [r.verseNumber],
-        recordings: [r],
-        hasConflict: isConflict(r),
-        // 'resolved' status is set by the API on successful conflict resolution.
-        wasConflicted: isResolved(r),
-      })
-    );
-  }, [audioData, displayMode, pericopes, t]);
+    // Verse / chapter mode:
+    // Collect all verse numbers that have verse recordings or are covered by pericope recordings
+    const verseNumSet = new Set<number>();
+    for (const r of verseRecordings) {
+      verseNumSet.add(r.verseNumber);
+    }
+    for (const pr of pericopeRecordings) {
+      const span = pericopeSpan(pr);
+      if (!span) continue;
+      const [start, end] = span;
+      for (let v = start; v <= end; v++) {
+        verseNumSet.add(v);
+      }
+    }
+
+    const sortedVerses = Array.from(verseNumSet).sort((a, b) => a - b);
+
+    return sortedVerses.map((v): Passage => {
+      const r = verseRecordings.find(rec => rec.verseNumber === v);
+
+      // Check if this verse is covered by a pericope recording
+      const coveringPericope = pericopeRecordings.find(pr => {
+        const span = pericopeSpan(pr);
+        if (!span) return false;
+        const [start, end] = span;
+        return v >= start && v <= end;
+      });
+
+      const hasDirectConflict = Boolean(r && isConflict(r));
+      const hasPericopeConflict = Boolean(coveringPericope && isConflict(coveringPericope));
+      const hasConflictNow = hasDirectConflict || hasPericopeConflict;
+      const wasConflicted =
+        Boolean(r && isResolved(r)) || Boolean(coveringPericope && isResolved(coveringPericope));
+
+      let crossViewConflict: string | null = null;
+      let isOppositeModeConflict = false;
+      let conflictRecordedMode: 'verse' | 'pericope' | undefined;
+
+      if (hasPericopeConflict && coveringPericope) {
+        const span = pericopeSpan(coveringPericope);
+        if (span) {
+          conflictRecordedMode = 'pericope';
+          const [start, end] = span;
+          crossViewConflict = t('conflictInPericope', 'Conflict in pericope vv. {{range}}', {
+            range: `${start}-${end}`,
+          });
+          if (!hasDirectConflict) {
+            isOppositeModeConflict = true;
+          }
+        }
+      }
+
+      return {
+        id: `verse-${v}`,
+        label: t('verseLabel', 'Verse {{verse}}', { verse: v }),
+        verseNumbers: [v],
+        recordings: r ? [r] : [],
+        hasConflict: hasConflictNow,
+        hasDirectConflict,
+        wasConflicted,
+        crossViewConflict,
+        isOppositeModeConflict,
+        conflictRecordedMode,
+      };
+    });
+  }, [audioData, displayMode, pericopes, projectItem.chapterNumber, t]);
 
   // ---------- All-resolved chip ----------
 
@@ -215,23 +394,101 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     return passages.find(p => p.id === selectedPassageId) ?? passages[0];
   }, [passages, selectedPassageId]);
 
-  // All takes for the selected passage (union of all recordings in the passage).
-  // Pericope mode may have multiple recordings — we flatten all their takes.
-  const selectedTakes = useMemo(
-    () => (selectedPassage?.recordings ?? []).flatMap(r => r.takes),
-    [selectedPassage]
-  );
+  const effectivePassage = selectedPassage ?? passages[0];
+
+  const handleSwitchToVerseView = () => {
+    const targetVerse = effectivePassage.conflictedVerses?.[0] ?? effectivePassage.verseNumbers[0];
+    if (typeof targetVerse === 'number') {
+      setSelectedPassageId(`verse-${targetVerse}`);
+    }
+    setDisplayMode('verse');
+  };
+
+  const handleSwitchToPericopeView = () => {
+    const v = effectivePassage.verseNumbers[0];
+    if (typeof v === 'number' && pericopes) {
+      const coveringGroup = pericopes.find(group =>
+        group.verses.some(
+          gv => gv.chapterNumber === projectItem.chapterNumber && gv.verseNumber === v
+        )
+      );
+      if (coveringGroup) {
+        setSelectedPassageId(`pericope-${coveringGroup.pericopeNumber}`);
+      }
+    }
+    setDisplayMode('pericope');
+  };
+
+  // ---------- Stitched audio calculation for pericope mode ----------
+
+  const stitchedAudio = useStitchedAudio({
+    verseNumbers: selectedPassage?.verseNumbers ?? EMPTY_VERSE_NUMBERS,
+    recordings: audioData?.items ?? [],
+  });
 
   // Map each take.id to its parent recording's bibleTextId
   const takeBibleTextMap = useMemo(() => {
     const map = new Map<number, number>();
-    for (const recording of selectedPassage?.recordings ?? []) {
+    const recordings = audioData?.items ?? [];
+    for (const recording of recordings) {
       for (const take of recording.takes) {
         map.set(take.id, recording.bibleTextId);
       }
     }
     return map;
-  }, [selectedPassage]);
+  }, [audioData]);
+
+  // All takes for the selected passage
+  const selectedTakes = useMemo((): ReviewTake[] => {
+    if (!selectedPassage) return [];
+    const recordings = audioData?.items ?? [];
+    const pericopeRecordings = recordings.filter(isPericopeRecording);
+
+    if (displayMode !== 'pericope') {
+      const v = selectedPassage.verseNumbers[0];
+      const verseTakes: ReviewTake[] = (selectedPassage.recordings[0]?.takes ?? []).map(t => ({
+        ...t,
+        bibleTextId: selectedPassage.recordings[0]?.bibleTextId,
+        isCoveringPericope: false,
+      }));
+
+      // Find pericope recordings covering this verse
+      const coveringPericopes = pericopeRecordings.filter(pr => {
+        const span = pericopeSpan(pr);
+        if (!span) return false;
+        const [start, end] = span;
+        return v >= start && v <= end;
+      });
+
+      const pericopeTakes: ReviewTake[] = [];
+      for (const pr of coveringPericopes) {
+        // "When that pericope is in conflict, do not list its takes under the verses;
+        // the cross-view conflict indicator and message apply instead."
+        if (isConflict(pr)) continue;
+
+        const span = pericopeSpan(pr);
+        if (!span) continue;
+        const [start, end] = span;
+        const range = `${start}-${end}`;
+        pr.takes.forEach((take, idx) => {
+          pericopeTakes.push({
+            ...take,
+            displayLabel: t('takePericopeLabel', 'Take {{takeNumber}} - Pericope - vv. {{range}}', {
+              takeNumber: idx + 1,
+              range,
+            }),
+            bibleTextId: pr.bibleTextId,
+            isCoveringPericope: true,
+          });
+        });
+      }
+
+      return [...verseTakes, ...pericopeTakes];
+    }
+
+    // Pericope mode
+    return selectedPassage.recordings.flatMap(r => r.takes);
+  }, [selectedPassage, displayMode, audioData, t]);
 
   // Show contributor names only when the passage has takes from more than one contributor (spec #383)
   const showContributor = useMemo(() => {
@@ -241,16 +498,38 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
   /**
    * Active take id — look across all recordings in the passage.
-   * In verse mode there's always exactly one recording; in pericope mode
-   * there can be many (one per verse). We find the first take id that is
-   * marked active in any of those recordings.
    */
   const activeTakeId = useMemo(() => {
-    for (const r of selectedPassage?.recordings ?? []) {
-      if (r.activeTakeId !== null) return r.activeTakeId;
+    if (displayMode === 'pericope') {
+      if (stitchedAudio.hasActivePericopeTake && stitchedAudio.activePericopeTake) {
+        return stitchedAudio.activePericopeTake.id;
+      }
+      for (const r of selectedPassage?.recordings ?? []) {
+        if (r.activeTakeId !== null) return r.activeTakeId;
+      }
+      return null;
+    }
+
+    // Verse mode
+    const vRec = selectedPassage?.recordings[0];
+    if (vRec && vRec.activeTakeId !== null) return vRec.activeTakeId;
+
+    // Check if covering pericope has active take
+    const pericopeRecordings = (audioData?.items ?? []).filter(isPericopeRecording);
+    const v = selectedPassage?.verseNumbers[0];
+    if (v !== undefined) {
+      const coveringPericope = pericopeRecordings.find(pr => {
+        const span = pericopeSpan(pr);
+        if (!span) return false;
+        const [start, end] = span;
+        return v >= start && v <= end && !isConflict(pr);
+      });
+      if (coveringPericope && coveringPericope.activeTakeId !== null) {
+        return coveringPericope.activeTakeId;
+      }
     }
     return null;
-  }, [selectedPassage]);
+  }, [selectedPassage, displayMode, stitchedAudio, audioData]);
 
   const selectedHasConflict = selectedPassage?.hasConflict ?? false;
 
@@ -308,8 +587,6 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     );
   }
 
-  const effectivePassage = selectedPassage ?? passages[0];
-
   return (
     <div className='bg-background flex h-full flex-col overflow-hidden'>
       {/* ── Page header ─────────────────────────────────────── */}
@@ -363,16 +640,20 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             style={{ scrollbarGutter: 'stable' }}
           >
             {passages.map(passage => {
-              // Dot: orange = currently in conflict; green = API confirmed 'resolved'; none otherwise
+              // Dot: orange = currently in direct conflict in this view; green = API confirmed 'resolved'; none otherwise
               let dotState: 'conflict' | 'resolved' | null = null;
-              if (passage.hasConflict) dotState = 'conflict';
-              else if (passage.wasConflicted) dotState = 'resolved';
+              if (passage.hasDirectConflict) {
+                dotState = 'conflict';
+              } else if (passage.wasConflicted && !passage.hasConflict) {
+                dotState = 'resolved';
+              }
 
               const isPassageResolved = dotState === 'resolved';
 
               return (
                 <PassageListItem
                   key={passage.id}
+                  crossViewConflict={passage.crossViewConflict}
                   dotState={dotState}
                   isResolved={isPassageResolved}
                   isSelected={effectivePassage.id === passage.id}
@@ -395,17 +676,19 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                   : t('recordedTakes', 'Recorded Takes')}
               </h2>
               <p className='text-muted-foreground mt-0.5 text-sm'>
-                {selectedHasConflict
-                  ? t(
-                      'conflictingTakesDesc',
-                      'Select one take as the active draft. All recordings are retained.'
-                    )
-                  : effectivePassage.wasConflicted
+                {displayMode === 'pericope' && stitchedAudio.hasOnlyPerVerseRecordings
+                  ? t('recordedByVersePlayedAsOne', 'Recorded by verse. Played as one recording.')
+                  : selectedHasConflict
                     ? t(
-                        'resolvedTakesDesc',
-                        'This conflict has been resolved. All recordings are retained.'
+                        'conflictingTakesDesc',
+                        'Select one take as the active draft. All recordings are retained.'
                       )
-                    : t('recordedTakesDesc', 'Listen to every recorded take for this passage.')}
+                    : effectivePassage.wasConflicted
+                      ? t(
+                          'resolvedTakesDesc',
+                          'This conflict has been resolved. All recordings are retained.'
+                        )
+                      : t('recordedTakesDesc', 'Listen to every recorded take for this passage.')}
               </p>
             </div>
 
@@ -425,9 +708,75 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                   style={{ color: 'var(--warning-border)' }}
                 />
                 <span>
-                  {t(
-                    'conflictBanner',
-                    'This passage has conflicting takes — select one to resolve.'
+                  {effectivePassage.hasDirectConflict ? (
+                    <>
+                      {t(
+                        'conflictBanner',
+                        'This passage has conflicting takes — select one to resolve.'
+                      )}
+                      {effectivePassage.crossViewConflict && (
+                        <span className='mt-1 block text-xs font-normal opacity-90'>
+                          {effectivePassage.conflictRecordedMode === 'verse' ? (
+                            <>
+                              {t(
+                                'conflictAlsoRecordedByVerse',
+                                'There is also a conflict recorded by verse.'
+                              )}{' '}
+                              <button
+                                className='cursor-pointer font-medium underline hover:opacity-80'
+                                type='button'
+                                onClick={handleSwitchToVerseView}
+                              >
+                                {t('switchToVerseView', 'Switch to Verse view')}
+                              </button>{' '}
+                              {t('toResolveIt', 'to resolve it.')}
+                            </>
+                          ) : (
+                            <>
+                              {t(
+                                'conflictAlsoRecordedAsPericope',
+                                'There is also a conflict recorded as a pericope.'
+                              )}{' '}
+                              <button
+                                className='cursor-pointer font-medium underline hover:opacity-80'
+                                type='button'
+                                onClick={handleSwitchToPericopeView}
+                              >
+                                {t('switchToPericopeView', 'Switch to Pericope view')}
+                              </button>{' '}
+                              {t('toResolveIt', 'to resolve it.')}
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </>
+                  ) : effectivePassage.conflictRecordedMode === 'verse' ? (
+                    <>
+                      {t('conflictRecordedByVerseLead', 'This conflict was recorded by verse.')}{' '}
+                      <button
+                        className='cursor-pointer font-medium underline hover:opacity-80'
+                        type='button'
+                        onClick={handleSwitchToVerseView}
+                      >
+                        {t('switchToVerseView', 'Switch to Verse view')}
+                      </button>{' '}
+                      {t('toResolveIt', 'to resolve it.')}
+                    </>
+                  ) : (
+                    <>
+                      {t(
+                        'conflictRecordedAsPericopeLead',
+                        'This conflict was recorded as a pericope.'
+                      )}{' '}
+                      <button
+                        className='cursor-pointer font-medium underline hover:opacity-80'
+                        type='button'
+                        onClick={handleSwitchToPericopeView}
+                      >
+                        {t('switchToPericopeView', 'Switch to Pericope view')}
+                      </button>{' '}
+                      {t('toResolveIt', 'to resolve it.')}
+                    </>
                   )}
                 </span>
               </div>
@@ -439,23 +788,26 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             className='min-h-0 flex-1 overflow-y-auto px-6 pb-6'
             style={{ scrollbarGutter: 'stable' }}
           >
-            {/* TODO(fluent-api#377): Spec: "List takes as normal for a pericope recorded as a pericope".
-                Currently, recordings are stored at verse grain, so pericope view prompts the user
-                to switch to Verse view to review and resolve individual verse takes. Once the upstream
-                granularity field lands (fluent-api#377), check recording granularity here to list
-                pericope-grain takes directly. */}
-            {displayMode === 'pericope' ? (
-              <p className='text-muted-foreground text-sm font-normal'>
-                {t('recordedByVerse', 'Recorded by verse.')}{' '}
-                <button
-                  className='text-primary hover:text-primary/80 cursor-pointer font-medium underline'
-                  type='button'
-                  onClick={() => setDisplayMode('verse')}
-                >
-                  {t('switchToVerseView', 'Switch to Verse view')}
-                </button>{' '}
-                {t('toReviewTheseTakes', 'to review these takes.')}
-              </p>
+            {displayMode === 'pericope' && stitchedAudio.hasOnlyPerVerseRecordings ? (
+              <StitchedAudioPlayer
+                label={t(
+                  'stitchedFromVerseRecordings',
+                  'Stitched from verse recordings, vv. {{range}}{{continuation}}',
+                  {
+                    range:
+                      effectivePassage.verseNumbers[0] ===
+                      effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]
+                        ? `${effectivePassage.verseNumbers[0]}`
+                        : `${effectivePassage.verseNumbers[0]}-${effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]}`,
+                    continuation: effectivePassage.continuationNote
+                      ? ` ${effectivePassage.continuationNote}`
+                      : '',
+                  }
+                )}
+                skippedVerses={stitchedAudio.skippedVerses}
+                totalDuration={stitchedAudio.totalDuration}
+                tracks={stitchedAudio.tracks}
+              />
             ) : selectedTakes.length === 0 ? (
               <p className='text-muted-foreground text-sm'>
                 {t('noAudioDraftsAvailable', 'No audio drafts available.')}
@@ -463,8 +815,13 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             ) : (
               <div className='flex flex-col gap-3'>
                 {selectedTakes.map((take, idx) => {
-                  const bibleTextId = takeBibleTextMap.get(take.id);
-                  const canResolveAsDraft = isPM && selectedHasConflict && take.id !== activeTakeId;
+                  const bibleTextId = take.bibleTextId ?? takeBibleTextMap.get(take.id);
+                  const canResolveAsDraft =
+                    isPM &&
+                    selectedHasConflict &&
+                    !effectivePassage.isOppositeModeConflict &&
+                    !take.isCoveringPericope &&
+                    take.id !== activeTakeId;
 
                   return (
                     <TakeCard
@@ -491,6 +848,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                           : undefined
                       }
                       isActiveDraft={take.id === activeTakeId}
+                      label={take.displayLabel}
                       take={take}
                       takeNumber={idx + 1}
                     />
