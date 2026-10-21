@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from 'react';
 
+import { hasStructuralPayload } from '../lib/editor-clipboard';
 import {
   BLOCK_SELECTOR,
   EDITABLE_EDITOR_SELECTOR,
@@ -108,21 +109,6 @@ function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: Deletion
   if (backward) edge.setEnd(range.startContainer, range.startOffset);
   else edge.setStart(range.startContainer, range.startOffset);
   return edge.toString().replace(/\u200B/g, '') === '' && !edge.cloneContents().querySelector('br');
-}
-
-/** A paste or drop carrying verse or chapter markers, which this guard refuses. */
-export function hasStructuralPayload(data: DataTransfer | null): boolean {
-  if (!data) return false;
-  const html = data.getData('text/html');
-  if (
-    html &&
-    new DOMParser().parseFromString(html, 'text/html').querySelector(SCRIPTURE_MARKER_SELECTOR)
-  ) {
-    return true;
-  }
-  // Lexical prefers its private clipboard format over HTML when both are supplied.
-  const lexical = data.getData('application/x-lexical-editor');
-  return /"type"\s*:\s*"(?:immutable-)?(?:verse|chapter)"/.test(lexical);
 }
 
 /**

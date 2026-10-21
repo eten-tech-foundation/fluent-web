@@ -5,6 +5,7 @@ import {
   CARET_HOST,
   afterWordSpace,
   applyAtCaret,
+  blockStart,
   caretInBlock,
   isVerse,
   openParagraphAfterHeading,
@@ -42,26 +43,26 @@ function nextVerseOffset(block: MarkerObject, from: number): number | undefined 
  */
 function poetrySplitOps(
   block: MarkerObject,
-  blockStart: number,
+  start: number,
   caretOffset: number,
   from = caretOffset
 ): DeltaOp[] {
-  const caret = blockStart + caretOffset;
+  const at = start + caretOffset;
   const lineStyle = block.marker ?? PARAGRAPH_MARKER;
   const nextVerse = nextVerseOffset(block, from);
   if (nextVerse !== undefined) {
     const movedToProse = nextVerse - caretOffset;
     return [
-      { retain: caret },
+      { retain: at },
       paragraphBreak(lineStyle),
       movedToProse ? { retain: movedToProse } : { insert: CARET_HOST },
       paragraphBreak(PARAGRAPH_MARKER),
     ];
   }
   const restOfBlock = deltaLength(block) - 1 - caretOffset;
-  if (restOfBlock === 0) return emptyParagraphAt(caret + 1);
+  if (restOfBlock === 0) return emptyParagraphAt(at + 1);
   return [
-    { retain: caret },
+    { retain: at },
     paragraphBreak(lineStyle),
     { retain: restOfBlock },
     { delete: 1 },
@@ -74,28 +75,28 @@ function insertInBody(
   usj: Usj,
   index: number,
   block: MarkerObject,
-  caret: number
+  caretOffset: number
 ): boolean {
-  if (caret > deltaLength(block) - 1) return false;
-  const blockStart = sumDeltaLength(usj.content.slice(0, index));
+  if (caretOffset > deltaLength(block) - 1) return false;
+  const start = blockStart(usj, index);
   // Right after a verse number, the number goes down with its text: the paragraph starts at the
   // number, and a verse that opens its block gets a new empty paragraph above it instead.
-  const verseIndex = verseRightBefore(block, caret);
+  const verseIndex = verseRightBefore(block, caretOffset);
   if (verseIndex !== undefined) {
     const verseOffset = sumDeltaLength((block.content ?? []).slice(0, verseIndex));
     const ops: DeltaOp[] =
       verseOffset === 0
-        ? [{ retain: blockStart }, paragraphBreak(PARAGRAPH_MARKER)]
+        ? [{ retain: start }, paragraphBreak(PARAGRAPH_MARKER)]
         : block.marker === PARAGRAPH_MARKER
-          ? [{ retain: blockStart + verseOffset }, paragraphBreak(PARAGRAPH_MARKER)]
-          : poetrySplitOps(block, blockStart, verseOffset, verseOffset + 1);
+          ? [{ retain: start + verseOffset }, paragraphBreak(PARAGRAPH_MARKER)]
+          : poetrySplitOps(block, start, verseOffset, verseOffset + 1);
     return applyAtCaret(editor, ops, { jsonPath: `$.content[${index + 1}]`, offset: 1 });
   }
-  const at = afterWordSpace(block, caret) ?? caret;
+  const at = afterWordSpace(block, caretOffset) ?? caretOffset;
   const ops =
     block.marker === PARAGRAPH_MARKER
-      ? [{ retain: blockStart + at }, paragraphBreak(PARAGRAPH_MARKER)]
-      : poetrySplitOps(block, blockStart, at);
+      ? [{ retain: start + at }, paragraphBreak(PARAGRAPH_MARKER)]
+      : poetrySplitOps(block, start, at);
   return applyAtCaret(editor, ops, { jsonPath: `$.content[${index + 1}]`, offset: 0 });
 }
 
@@ -103,9 +104,9 @@ function insertInBody(
 export function insertParagraph(editor: EditorRef): boolean {
   const caret = caretInBlock(editor);
   if (!caret) return false;
-  const { usj, index, block, offset } = caret;
+  const { usj, index, block, caretOffset } = caret;
   // A title is not verse text: the new paragraph goes under it, and the title stays whole.
   return isHeadingMarker(block.marker)
     ? openParagraphAfterHeading(editor, usj, index)
-    : insertInBody(editor, usj, index, block, offset);
+    : insertInBody(editor, usj, index, block, caretOffset);
 }

@@ -12,6 +12,7 @@ import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
 import {
   changedVerses,
+  continuedParagraphOf,
   pericopeVersesToUsj,
   usjToPericopeVerses,
   type PericopeVerseText,
@@ -40,9 +41,9 @@ export interface PericopeEditorProps {
   /** Heading slots held by content edited outside this surface, keyed by verse number. */
   reservedHeadingSlots?: Record<number, number>;
   /**
-   * The paragraph the chapter has open where this pericope starts, when its first verse doesn't
-   * open one of its own (`openParagraphAfter`). The first verse continues it, and editing that
-   * verse doesn't save it as a new paragraph (#530).
+   * The paragraph the chapter has open where this pericope starts (`paragraphOpenBefore`). A first
+   * verse that doesn't open a paragraph of its own continues it, and editing that verse doesn't
+   * save it as a new paragraph (#530).
    */
   continuedParagraph?: string;
   /** Called with only the verses whose text or paragraph markers changed. */
@@ -82,8 +83,13 @@ export function PericopeEditor({
   useForwardTextDeletion(containerRef, editorRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
-  /** The paragraph the loaded document continues, so commits are read the way it was built. */
-  const continuedRef = useRef(continuedParagraph);
+  /** The `continuedParagraph` the loaded document was built with. */
+  const loadedOpenRef = useRef(continuedParagraph);
+  /**
+   * The paragraph the loaded document's first verse continues, if it opens none of its own, so
+   * commits are read the way it was built.
+   */
+  const continuedRef = useRef(continuedParagraphOf(verses, continuedParagraph));
   /**
    * What the editor's own document holds, to diff each commit against — kept in *document space*
    * (the rows re-derived from the document we built), never the raw props. The document makes a
@@ -93,7 +99,7 @@ export function PericopeEditor({
   const knownVersesRef = useRef<PericopeVerseText[]>(
     usjToPericopeVerses(
       pericopeVersesToUsj(verses, chapterNumber, bookCode, continuedParagraph),
-      continuedParagraph
+      continuedRef.current
     )
   );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
@@ -102,9 +108,10 @@ export function PericopeEditor({
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
       setHeadingError(null);
-      continuedRef.current = continuedParagraph;
+      loadedOpenRef.current = continuedParagraph;
+      continuedRef.current = continuedParagraphOf(next, continuedParagraph);
       const usj = pericopeVersesToUsj(next, chapterNumber, bookCode, continuedParagraph);
-      knownVersesRef.current = usjToPericopeVerses(usj, continuedParagraph);
+      knownVersesRef.current = usjToPericopeVerses(usj, continuedRef.current);
       suppressedJsonRef.current = JSON.stringify(usj);
       editorRef.current?.setUsj(usj);
     },
@@ -134,6 +141,16 @@ export function PericopeEditor({
     loadedKeyRef.current = contentKey;
     loadIntoEditor(verses);
   }, [contentKey, loadIntoEditor, verses]);
+
+  // The pericope before changed the paragraph it leaves open (its last two lines joined into a
+  // Poetry line, say) while this one stayed open. A first verse that continues that paragraph
+  // follows it, as Chapter View shows it, and its next save is read against it. The edit happened
+  // in another pericope, so rebuilding this document takes no caret away.
+  useEffect(() => {
+    if (contentKey !== loadedKeyRef.current || continuedParagraph === loadedOpenRef.current) return;
+    loadedOpenRef.current = continuedParagraph;
+    if (continuedRef.current !== undefined) loadIntoEditor(knownVersesRef.current);
+  }, [contentKey, continuedParagraph, loadIntoEditor]);
 
   const handleUsjChange = useCallback(
     (usj: Usj) => {

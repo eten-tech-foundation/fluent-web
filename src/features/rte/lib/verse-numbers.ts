@@ -25,8 +25,8 @@ export type CaretLocation = Extract<
 /**
  * Two ordinary spaces host the caret right after a verse number with no words yet. Editorial
  * removes a single space in an empty verse; two survive until the translator types, and the save
- * path trims them. A line with no verse number needs no host: Lexical keeps a caret in an empty
- * paragraph, and Editorial drops whitespace at the start of a paragraph anyway.
+ * path trims them at the end of a line. A line with no verse number needs no host: Lexical keeps a
+ * caret in an empty paragraph, and Editorial drops whitespace at the start of a paragraph anyway.
  */
 export const CARET_HOST = '  ';
 
@@ -45,7 +45,8 @@ export const blockStart = (usj: Usj, index: number): number =>
 export const isVerse = (node: UsjNode | undefined): node is MarkerObject =>
   typeof node === 'object' && node.type === 'verse';
 
-const isBlankText = (node: UsjNode): boolean => typeof node === 'string' && node.trim() === '';
+export const isBlankText = (node: UsjNode): boolean =>
+  typeof node === 'string' && node.trim() === '';
 
 /** A paragraph that holds scripture, as opposed to a heading's own words. */
 export const isBodyParagraph = (node: UsjNode | undefined): node is MarkerObject =>
@@ -81,12 +82,20 @@ export function verseEmbed(verse: MarkerObject): DeltaOp {
   };
 }
 
-/** Apply one local transaction and put the caret where the translator continues. */
-export function applyAtCaret(editor: EditorRef, ops: DeltaOp[], caret: CaretLocation): true {
+/**
+ * Apply one local transaction and put the caret where the translator continues. With `end`, the
+ * span up to it is selected instead, so whatever arrives next replaces it.
+ */
+export function applyAtCaret(
+  editor: EditorRef,
+  ops: DeltaOp[],
+  caret: CaretLocation,
+  end?: CaretLocation
+): true {
   // A local delta keeps undo history and synchronizes USJ immediately. Editorial 0.8.15's
   // insertMarker splits the DOM but can leave getUsj/onUsjChange at the preceding document.
   editor.applyUpdate(ops, 'local');
-  editor.setSelection({ start: caret });
+  editor.setSelection(end ? { start: caret, end } : { start: caret });
   // Commit the selection-only transaction before immediate typing can join it. Editorial
   // excludes selection-tagged updates from onUsjChange, even when they also contain text.
   editor.getSelection();
@@ -124,7 +133,7 @@ export function caretOffsetInBlock(block: MarkerObject, caret: CaretLocation): n
 /** The caret's block, its index and the caret's offset inside it. */
 export function caretInBlock(
   editor: EditorRef
-): { usj: Usj; index: number; block: MarkerObject; offset: number } | undefined {
+): { usj: Usj; index: number; block: MarkerObject; caretOffset: number } | undefined {
   const caret = collapsedCaret(editor);
   const usj = editor.getUsj();
   const start = caret && blockIndex(caret.jsonPath);
@@ -132,8 +141,20 @@ export function caretInBlock(
   const index = Number(start);
   const block = usj.content[index];
   if (typeof block !== 'object' || block.type !== 'para') return undefined;
-  const offset = caretOffsetInBlock(block, caret);
-  return offset === undefined ? undefined : { usj, index, block, offset };
+  const caretOffset = caretOffsetInBlock(block, caret);
+  return caretOffset === undefined ? undefined : { usj, index, block, caretOffset };
+}
+
+/** Only blank text comes before the caret in its block. */
+export function atTextStart(block: MarkerObject, caretOffset: number): boolean {
+  let offset = 0;
+  for (const child of block.content ?? []) {
+    if (offset >= caretOffset) return true;
+    if (typeof child !== 'string' || !isBlankText(child.slice(0, caretOffset - offset)))
+      return false;
+    offset += child.length;
+  }
+  return true;
 }
 
 /**
@@ -255,29 +276,35 @@ export function breakBeforeVerse(
  * first verse), bring the next verse's number to the start of it. The words become the start of
  * that verse, which is how the save path stores them, so the editor shows what every other view
  * will. `typed` is inserted in the same transaction, so one undo takes both back.
+ *
+ * Without `typed` (an IME about to compose, a paste about to land), a caret host keeps the caret
+ * after the number and is selected, so the words that arrive replace it. Spaces left behind them
+ * would end up inside the verse once this line is joined to the next.
  */
 export function claimNextVerse(editor: EditorRef, typed = ''): boolean {
   const caret = caretInBlock(editor);
   if (!caret) return false;
-  const { usj, index, block, offset } = caret;
+  const { usj, index, block, caretOffset } = caret;
   if (!isBlankParagraph(block) || !opensSection(usj, index)) return false;
   const next = verseAfter(usj, index);
   if (!next) return false;
   const start = blockStart(usj, index);
   const text = (block.content ?? []).join('');
-  const host = text === '' ? CARET_HOST : '';
+  const host = text === '' && typed === '' ? CARET_HOST : '';
   const ops: DeltaOp[] = [
     { retain: start },
     verseEmbed(next.verse),
-    ...(offset > 0 ? [{ retain: offset }] : []),
+    ...(caretOffset > 0 ? [{ retain: caretOffset }] : []),
     ...(typed + host ? [{ insert: typed + host }] : []),
-    { retain: next.at - start - offset },
+    { retain: next.at - start - caretOffset },
     { delete: 1 },
   ];
-  return applyAtCaret(editor, ops, {
+  const at = (offset: number): CaretLocation => ({
     jsonPath: `$.content[${index}].content[1]`,
-    offset: offset + typed.length,
+    offset,
   });
+  const afterTyped = caretOffset + typed.length;
+  return applyAtCaret(editor, ops, at(afterTyped), host ? at(afterTyped + host.length) : undefined);
 }
 
 /**
@@ -292,9 +319,9 @@ export function rejoinVerse(
   hostLength: number
 ): boolean {
   const verse = loneVerseOf(usj.content[loneIndex]);
-  const text = usj.content[loneIndex + 1];
-  if (!verse || !isBodyParagraph(text)) return false;
-  const first = (text.content ?? []).find(child => !isBlankText(child));
+  const textParagraph = usj.content[loneIndex + 1];
+  if (!verse || !isBodyParagraph(textParagraph)) return false;
+  const first = (textParagraph.content ?? []).find(child => !isBlankText(child));
   if (typeof first !== 'string') return false;
   return applyAtCaret(
     editor,

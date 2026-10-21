@@ -18,6 +18,16 @@ const USJ_TYPE = 'USJ';
 const USJ_VERSION = '3.1';
 
 /**
+ * The paragraph a verse opens for its text: its offset-0 marker, or a `p` after its headings.
+ * Without either, the verse continues the paragraph before it.
+ */
+function ownParagraph(verse: PericopeVerseText): string | undefined {
+  const opening = verse.markers?.paragraphs?.find(paragraph => paragraph.offset === 0);
+  if (opening) return opening.marker;
+  return verse.markers?.headings?.length ? PARAGRAPH_MARKER : undefined;
+}
+
+/**
  * Builds the USJ document the editor renders for one pericope.
  *
  * A verse with stored markers opens its own paragraph (offset 0) and splits at mid-text offsets;
@@ -26,7 +36,7 @@ const USJ_VERSION = '3.1';
  * path derives, so a slice here and a slice in the export agree character for character.
  *
  * `continuedParagraph` is the paragraph the chapter has open where a later pericope starts
- * (`openParagraphAfter`). Pericope View builds one document per pericope, so without it a first
+ * (`paragraphOpenBefore`). Pericope View builds one document per pericope, so without it a first
  * verse that only continues a Poetry line would open a new `p`.
  */
 export function pericopeVersesToUsj(
@@ -49,9 +59,8 @@ export function pericopeVersesToUsj(
       content.push({ type: 'para', marker: heading.marker, content: [heading.text] });
     }
     const paragraphs = verse.markers?.paragraphs ?? [];
-    const opening = paragraphs.find(paragraph => paragraph.offset === 0);
-    if (opening) openPara(opening.marker);
-    else if (headings.length > 0) openPara(PARAGRAPH_MARKER);
+    const own = ownParagraph(verse);
+    if (own) openPara(own);
     // The chapter's first verse carries no marker of its own: the classic default paragraph. A
     // later pericope's first verse continues the paragraph the chapter has open there.
     else if (!para) openPara(continuedParagraph ?? PARAGRAPH_MARKER);
@@ -84,21 +93,41 @@ export function pericopeVersesToUsj(
 }
 
 /**
- * The paragraph still open after `verses`, laid out the way `pericopeVersesToUsj` lays them out:
- * what a later pericope continues when its first verse doesn't open a paragraph of its own.
+ * The paragraph still open after `verses`: the one their document ends in. It is read off
+ * `pericopeVersesToUsj` rather than worked out again, so the two can't disagree about where a
+ * paragraph opens.
  */
 export function openParagraphAfter(verses: PericopeVerseText[]): string | undefined {
-  let open: string | undefined;
-  for (const verse of verses) {
-    const paragraphs = verse.markers?.paragraphs ?? [];
-    const opening = paragraphs.find(paragraph => paragraph.offset === 0);
-    if (opening) open = opening.marker;
-    else if (open === undefined || (verse.markers?.headings?.length ?? 0) > 0) {
-      open = PARAGRAPH_MARKER;
-    }
-    open = paragraphs.filter(paragraph => paragraph.offset > 0).at(-1)?.marker ?? open;
-  }
-  return open;
+  if (verses.length === 0) return undefined;
+  const last = pericopeVersesToUsj(verses, 0).content.at(-1);
+  return typeof last === 'object' ? last.marker : undefined;
+}
+
+/**
+ * The paragraph the chapter has open where a pericope starting at `verseNumber` begins, from the
+ * chapter's rows. Verses ahead of it with no row yet sit in the chapter's default paragraph.
+ */
+export function paragraphOpenBefore(
+  rows: PericopeVerseText[],
+  verseNumber: number
+): string | undefined {
+  const before = rows
+    .filter(row => row.verseNumber < verseNumber)
+    .sort((a, b) => a.verseNumber - b.verseNumber);
+  return openParagraphAfter(before) ?? (verseNumber > 1 ? PARAGRAPH_MARKER : undefined);
+}
+
+/**
+ * What a pericope's first verse continues: `open`, the paragraph the chapter has open there,
+ * unless the verse opens a paragraph of its own. `usjToPericopeVerses` reads the document's first
+ * paragraph as a continuation only when it was built as one.
+ */
+export function continuedParagraphOf(
+  verses: PericopeVerseText[],
+  open: string | undefined
+): string | undefined {
+  const first = verses.at(0);
+  return first && !ownParagraph(first) ? open : undefined;
 }
 
 /**
@@ -152,9 +181,10 @@ interface VerseSegment {
  * Words in a paragraph that no verse owns yet (under a heading, or above the chapter's first
  * verse) open the verse that follows, rather than being dropped.
  *
- * With `continuedParagraph` (see `pericopeVersesToUsj`), the document's first paragraph is the one
- * the chapter already had open, not a break: while the first verse's text starts in it and it
- * keeps that marker, the verse is saved without an opening marker, as it was stored.
+ * With `continuedParagraph` (`continuedParagraphOf` the document's verses), the document's first
+ * paragraph is the one the chapter already had open, not a break: while the first verse's text
+ * starts in it and it keeps that marker, the verse is saved without an opening marker, as it was
+ * stored.
  */
 export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): PericopeVerseText[] {
   const order: number[] = [];

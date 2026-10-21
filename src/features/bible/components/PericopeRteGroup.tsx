@@ -11,8 +11,7 @@ import {
   withoutPericopeTitle,
 } from '@/features/bible/lib/pericope-title';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
-import { PARAGRAPH_MARKER } from '@/features/rte/lib/block-types';
-import { openParagraphAfter, type PericopeVerseText } from '@/features/rte/lib/pericope-usj';
+import { paragraphOpenBefore, type PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
@@ -97,24 +96,19 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   );
 
   // Each pericope is a document of its own. When its first verse doesn't open a paragraph, it
-  // continues the one the chapter has open there, so Chapter and Pericope View agree (#530).
+  // continues the one the chapter has open there, so Chapter and Pericope View agree (#530). Only
+  // the verses before the pericope count: an edit inside it must not change this.
   const continuedParagraph = useMemo(() => {
     const first = groupVerses.at(0)?.verseNumber;
-    const markers = verses.find(verse => verse.verseNumber === first)?.markers;
-    if (first === undefined || markers?.headings?.length) return undefined;
-    if (markers?.paragraphs?.some(paragraph => paragraph.offset === 0)) return undefined;
-    const open = openParagraphAfter(
-      verses
-        .filter(verse => verse.verseNumber < first)
-        .sort((a, b) => a.verseNumber - b.verseNumber)
-        .map(verse => ({
-          verseNumber: verse.verseNumber,
-          text: verse.content,
-          markers: verse.markers ?? null,
-        }))
+    if (first === undefined) return undefined;
+    return paragraphOpenBefore(
+      verses.map(verse => ({
+        verseNumber: verse.verseNumber,
+        text: verse.content,
+        markers: verse.markers ?? null,
+      })),
+      first
     );
-    // Verses ahead of it that have no row yet still sit in the chapter's default paragraph.
-    return open ?? (first > 1 ? PARAGRAPH_MARKER : undefined);
   }, [groupVerses, verses]);
 
   const titleVerseNumber = groupVerses[0]?.verseNumber;

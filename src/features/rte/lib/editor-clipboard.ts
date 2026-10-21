@@ -1,5 +1,22 @@
 import type { ClipboardEvent, MouseEvent } from 'react';
 
+import { SCRIPTURE_MARKER_SELECTOR } from './editor-dom';
+
+/** A paste or drop carrying verse or chapter markers, which the marker guard refuses. */
+export function hasStructuralPayload(data: DataTransfer | null): boolean {
+  if (!data) return false;
+  const html = data.getData('text/html');
+  if (
+    html &&
+    new DOMParser().parseFromString(html, 'text/html').querySelector(SCRIPTURE_MARKER_SELECTOR)
+  ) {
+    return true;
+  }
+  // Lexical prefers its private clipboard format over HTML when both are supplied.
+  const lexical = data.getData('application/x-lexical-editor');
+  return /"type"\s*:\s*"(?:immutable-)?(?:verse|chapter)"/.test(lexical);
+}
+
 /** The built-in Paste menu also uses the permission-gated Clipboard API. */
 export function handleEditorContextMenu(event: MouseEvent<HTMLElement>) {
   if (event.target instanceof HTMLElement && event.target.closest('.editor-input')) {

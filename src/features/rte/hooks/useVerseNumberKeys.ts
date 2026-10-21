@@ -7,6 +7,7 @@ import {
 } from 'react';
 
 import { PARAGRAPH_MARKER } from '../lib/block-types';
+import { hasStructuralPayload } from '../lib/editor-clipboard';
 import {
   BLOCK_SELECTOR,
   EDITOR_SELECTOR,
@@ -18,6 +19,7 @@ import { isHeadingMarker } from '../lib/heading-markers';
 import {
   afterWordSpace,
   applyAtCaret,
+  atTextStart,
   blockStart,
   breakBeforeVerse,
   caretInBlock,
@@ -29,12 +31,8 @@ import {
   verseRightBefore,
 } from '../lib/verse-numbers';
 
-import { hasStructuralPayload } from './useProtectedVerseMarkers';
-
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
-import type { MarkerObject } from '@eten-tech-foundation/scripture-utilities';
 
-const ZWSP = '\u200B';
 const visibleText = (element: Element): string => element.textContent.replace(/[\u200B\s]/g, '');
 
 /** The block element holding the caret. */
@@ -68,20 +66,8 @@ function caretHostLength(block: Element | null | undefined): number {
   return Array.from(block.querySelectorAll('[data-lexical-text="true"]'))
     .filter(node => !node.closest(VERSE_MARKER_SELECTOR))
     .map(node => node.textContent)
-    .filter(text => text !== '' && [...text].every(char => char === ZWSP))
+    .filter(text => /^\u200B+$/.test(text))
     .reduce((sum, text) => sum + text.length, 0);
-}
-
-/** Only blank text comes before the caret in its block. */
-function atTextStart(block: MarkerObject, caretOffset: number): boolean {
-  let offset = 0;
-  for (const child of block.content ?? []) {
-    if (offset >= caretOffset) return true;
-    if (typeof child !== 'string' || child.slice(0, caretOffset - offset).trim() !== '')
-      return false;
-    offset += child.length;
-  }
-  return true;
 }
 
 /**
@@ -123,15 +109,18 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
       }
 
       if (event.key === 'Enter') {
-        if (event.shiftKey || event.altKey) return false;
         const caret = caretInBlock(editor);
         if (!caret || isHeadingMarker(caret.block.marker)) return false;
-        const { usj, index, block: para, offset } = caret;
+        const { usj, index, block: para, caretOffset } = caret;
         const style = para.marker ?? PARAGRAPH_MARKER;
-        const verseIndex = verseRightBefore(para, offset);
+        // Any break right after a number goes in front of it. Shift+Enter's line break has no
+        // stored form, so here it is a paragraph break too.
+        const verseIndex = verseRightBefore(para, caretOffset);
         if (verseIndex !== undefined)
           return consume(breakBeforeVerse(editor, usj, index, verseIndex, style));
-        const at = afterWordSpace(para, offset);
+        // Elsewhere Shift+Enter stays the editor's line break. Alt+Enter splits like Enter.
+        if (event.shiftKey) return false;
+        const at = afterWordSpace(para, caretOffset);
         if (at === undefined) return false;
         return consume(
           applyAtCaret(editor, [{ retain: blockStart(usj, index) + at }, paragraphBreak(style)], {
@@ -150,7 +139,7 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
         if (block && !(lone && mayBeLoneVerse(lone))) return false;
         const caret = caretInBlock(editor);
         if (!caret) return false;
-        const { usj, index, block: para, offset } = caret;
+        const { usj, index, block: para, caretOffset } = caret;
         // The editor root renders one element per top-level USJ block.
         const hostAt = (blockIndex: number) => caretHostLength(root.children[blockIndex]);
         // Anywhere on the line: with the caret in the host after the number, Editorial reports
@@ -159,7 +148,7 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
           return consume(!!loneVerseOf(para) && rejoinVerse(editor, usj, index, hostAt(index)));
         return consume(
           isBodyParagraph(para) &&
-            atTextStart(para, offset) &&
+            atTextStart(para, caretOffset) &&
             rejoinVerse(editor, usj, index - 1, hostAt(index - 1))
         );
       }

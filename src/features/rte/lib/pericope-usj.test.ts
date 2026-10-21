@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   changedVerses,
+  continuedParagraphOf,
   openParagraphAfter,
+  paragraphOpenBefore,
   pericopeVersesToUsj,
   usjToPericopeVerses,
   type PericopeVerseText,
@@ -652,6 +654,54 @@ describe('openParagraphAfter', () => {
   it('is the default p for verses without markers, and nothing before the first verse', () => {
     expect(openParagraphAfter([{ verseNumber: 1, text: 'a', markers: null }])).toBe('p');
     expect(openParagraphAfter([])).toBeUndefined();
+  });
+});
+
+describe('paragraphOpenBefore', () => {
+  // Chapter rows as the drafting surface holds them: unordered, and not every verse has one.
+  const rows: PericopeVerseText[] = [
+    { verseNumber: 15, text: 'b', markers: null },
+    { verseNumber: 14, text: 'a', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+    { verseNumber: 16, text: 'c', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+  ];
+
+  it('is the paragraph the verses before the pericope leave open, in verse order', () => {
+    expect(paragraphOpenBefore(rows, 16)).toBe('q1');
+  });
+
+  it('is the default p when the verses before have no rows yet', () => {
+    expect(paragraphOpenBefore(rows, 9)).toBe('p');
+  });
+
+  it('is nothing at the start of the chapter', () => {
+    expect(paragraphOpenBefore(rows, 1)).toBeUndefined();
+  });
+});
+
+describe('continuedParagraphOf', () => {
+  const pericope = (first: PericopeVerseText['markers']): PericopeVerseText[] => [
+    { verseNumber: 16, text: 'Verse 16 text.', markers: first },
+    { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+  ];
+
+  it('is the open paragraph when the first verse opens none of its own', () => {
+    expect(continuedParagraphOf(pericope(null), 'q1')).toBe('q1');
+    expect(continuedParagraphOf(pericope({ paragraphs: [{ marker: 'p', offset: 5 }] }), 'q1')).toBe(
+      'q1'
+    );
+  });
+
+  it('is nothing when the first verse opens a paragraph or has a heading', () => {
+    expect(
+      continuedParagraphOf(pericope({ paragraphs: [{ marker: 'q1', offset: 0 }] }), 'q1')
+    ).toBeUndefined();
+    expect(
+      continuedParagraphOf(pericope({ headings: [{ marker: 's1', text: 'Title' }] }), 'q1')
+    ).toBeUndefined();
+  });
+
+  it('is nothing at the start of the chapter', () => {
+    expect(continuedParagraphOf(pericope(null), undefined)).toBeUndefined();
   });
 });
 

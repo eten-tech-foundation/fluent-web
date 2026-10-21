@@ -21,7 +21,6 @@ export function useHeadingEnter(editorRef: RefObject<EditorRef | null>, readOnly
         event.key !== 'Enter' ||
         event.ctrlKey ||
         event.metaKey ||
-        event.altKey ||
         isComposingKey(event.nativeEvent) ||
         !(event.target instanceof HTMLElement) ||
         !event.target.closest(EDITOR_SELECTOR)
@@ -38,7 +37,8 @@ export function useHeadingEnter(editorRef: RefObject<EditorRef | null>, readOnly
       const heading = usj.content[Number(index)];
       if (!heading || typeof heading === 'string' || !isHeadingMarker(heading.marker)) return false;
 
-      // Shift+Enter must also leave the single-line heading: a line break makes its text invalid.
+      // Shift+Enter and Alt+Enter must also leave the single-line heading: a line break makes its
+      // text invalid, and the editor's own Alt+Enter would open a second, empty title line.
       event.preventDefault();
       event.stopPropagation();
       // A malformed imported title with no verse after it gets no line of unsaveable body text.

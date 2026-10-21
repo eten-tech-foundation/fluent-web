@@ -15,12 +15,14 @@ Kasey approved the unchanged core in [his final #475 review](https://github.com/
 The older `s1`/`s2` limit and generic block-conversion wording in #397 do not describe that later design.
 The H3/H4 styling and immediate-typing fixes remain in [#529 / PR #533](https://github.com/eten-tech-foundation/fluent-web/pull/533).
 
-Enter and Shift+Enter keep a heading's text intact and open an empty `p` under it, after the last
-heading when several are adjacent. The following verse keeps its number, text and format, so a
-Poetry line stays Poetry. The first letter typed in the new `p` brings that verse's number to the
-start of the line, because those words begin the verse; moving the number and typing the letter are
-one undo step. Two temporary spaces after the letter hold the caret; the save path trims them. This
-supports typing immediately after Enter without storing heading words as scripture.
+Enter, Shift+Enter and Alt+Enter keep a heading's text intact and open an empty `p` under it, after
+the last heading when several are adjacent. The following verse keeps its number, text and format,
+so a Poetry line stays Poetry. The first letter typed in the new `p` brings that verse's number to
+the start of the line, because those words begin the verse; moving the number and typing the letter
+are one undo step. When an IME composition or a paste starts the line instead, two temporary spaces
+hold the caret after the number and are selected, so the words that arrive replace them; left
+behind, they would end up inside the verse once the line is joined to the next. This supports
+typing immediately after Enter without storing heading words as scripture.
 An orphan heading without a following verse cannot create body text that has no row to save into.
 
 The reviewed handler reused the following verse's `p` and only moved the caret after its number, as

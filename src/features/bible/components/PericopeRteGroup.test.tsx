@@ -244,18 +244,16 @@ describe('PericopeRteGroup', () => {
       expect(continued()).toBe('q1');
     });
 
-    it('continues nothing when the first verse opens a paragraph or has a heading', () => {
-      renderGroup({
-        groupVerses: LATER_GROUP,
-        verses: chapterWith({ paragraphs: [{ marker: 'p', offset: 0 }] }),
-      });
-      expect(continued()).toBeUndefined();
-
-      renderGroup({
-        groupVerses: LATER_GROUP,
-        verses: chapterWith({ headings: [{ marker: 's1', text: 'Title' }] }),
-      });
-      expect(continued()).toBeUndefined();
+    it("does not change with the pericope's own first verse", () => {
+      // The editor decides whether its first verse continues the paragraph. Edits inside the
+      // pericope must not change the value, or the editor would reload under the caret.
+      for (const third of [
+        { paragraphs: [{ marker: 'p', offset: 0 }] },
+        { headings: [{ marker: 's1', text: 'Title' }] },
+      ]) {
+        renderGroup({ groupVerses: LATER_GROUP, verses: chapterWith(third) });
+        expect(continued()).toBe('q1');
+      }
     });
 
     it('continues the default paragraph when the verses before have no rows yet', () => {

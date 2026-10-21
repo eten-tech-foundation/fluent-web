@@ -131,9 +131,13 @@ describe('Enter from a heading in the real editor', () => {
     }
   );
 
-  it('keeps Shift+Enter from inserting an invalid title line break', async () => {
+  it.each([
+    ['Shift+Enter', { shiftKey: true }],
+    // Left to the editor, Alt+Enter would open a second, empty title line.
+    ['Alt+Enter', { altKey: true }],
+  ])('opens the same paragraph on %s, keeping the title one line', async (_, modifier) => {
     const { editorRef, input } = await setup();
-    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+    fireEvent.keyDown(input, { key: 'Enter', ...modifier });
     await waitFor(() =>
       expect(editorRef.current!.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[3\]/)
     );
@@ -286,7 +290,6 @@ describe('Enter from a heading in the real editor', () => {
     { key: 'Enter', keyCode: 229, isComposing: false },
     { key: 'Enter', ctrlKey: true },
     { key: 'Enter', metaKey: true },
-    { key: 'Enter', altKey: true },
     { key: 'a' },
   ])('does not consume composition or unrelated keys: %j', async event => {
     const { editorRef, input } = await setup();

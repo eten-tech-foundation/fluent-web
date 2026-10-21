@@ -92,6 +92,8 @@ async function setup(usj: Usj, readOnly = false) {
     act(() => editor.setSelection({ start: { jsonPath, offset } }));
     await waitFor(() => expect(editor.getSelection()?.start.jsonPath).toBe(jsonPath));
   };
+  // Editorial hands out a new ref object when it re-renders, so spy on the current one.
+  const spyOnUpdates = () => vi.spyOn(editorRef.current!, 'applyUpdate');
   /** Each top-level block as "marker: content", verse numbers as [n]. */
   const blocks = () =>
     editor.getUsj()!.content.map(node => {
@@ -102,7 +104,7 @@ async function setup(usj: Usj, readOnly = false) {
         .join('');
       return `${node.marker}: ${content}`;
     });
-  return { ...rendered, editor, input, onUsjChange, select, blocks };
+  return { ...rendered, editor, input, onUsjChange, select, spyOnUpdates, blocks };
 }
 
 const typeText = (input: HTMLElement, data: string) =>
@@ -150,6 +152,44 @@ describe('verse numbers stay with their text in the real editor', () => {
       expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[2\]/);
     });
 
+    it.each([
+      // A line break has no stored form, so it would leave the number at the end of the line.
+      ['Shift+Enter', { shiftKey: true }],
+      // Left to the editor, Alt+Enter splits the paragraph right after the number.
+      ['Alt+Enter', { altKey: true }],
+    ])('moves the number down with its text on %s too', async (_, modifier) => {
+      const verses = rows.map(row => ({
+        ...row,
+        markers: row.verseNumber === 1 ? row.markers : null,
+      }));
+      const { editor, input, select, blocks } = await setup(pericopeVersesToUsj(verses, 1, 'GEN'));
+      await select('$.content[1].content[3]', 0);
+      fireEvent.keyDown(input, { key: 'Enter', ...modifier });
+      await waitFor(() =>
+        expect(blocks()).toEqual(['c: 1', 'p: [1]First verse.', 'p: [2]Second verse.'])
+      );
+      expect(usjToPericopeVerses(editor.getUsj()!)[1]).toEqual({
+        verseNumber: 2,
+        text: 'Second verse.',
+        markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+      });
+    });
+
+    it('splits after a word space on Alt+Enter, as on Enter', async () => {
+      const { input, select, blocks } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
+      await select('$.content[3].content[1]', 6);
+      fireEvent.keyDown(input, { key: 'Enter', altKey: true });
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]Second ', 'p: verse.']));
+    });
+
+    it('leaves Shift+Enter away from a verse number to the editor', async () => {
+      const { input, select, spyOnUpdates } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
+      await select('$.content[3].content[1]', 6);
+      const applyUpdate = spyOnUpdates();
+      fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+      expect(applyUpdate).not.toHaveBeenCalled();
+    });
+
     it('opens a line above a verse that starts its block, in the same format', async () => {
       const verses = withVerseTwo({ paragraphs: [{ marker: 'q2', offset: 0 }] });
       const { editor, input, select, blocks } = await setup(pericopeVersesToUsj(verses, 1, 'GEN'));
@@ -173,10 +213,10 @@ describe('verse numbers stay with their text in the real editor', () => {
       expect(editor.getSelection()?.start.jsonPath).toMatch(/^\$\.content\[4\]/);
     });
 
-    it('leaves Enter inside the verse text to the editor', async () => {
-      const { editor, input, select } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
-      await select('$.content[3].content[1]', 6);
-      const applyUpdate = vi.spyOn(editor, 'applyUpdate');
+    it('leaves Enter inside a word to the editor', async () => {
+      const { input, select, spyOnUpdates } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
+      await select('$.content[3].content[1]', 3);
+      const applyUpdate = spyOnUpdates();
       fireEvent.keyDown(input, { key: 'Enter' });
       expect(applyUpdate).not.toHaveBeenCalled();
     });
@@ -195,7 +235,9 @@ describe('verse numbers stay with their text in the real editor', () => {
       const { editor, input, blocks, container } = await openUnderHeading();
       const event = fireEvent.keyDown(input, { key: 'N' });
       expect(event).toBe(false);
-      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N  '));
+      // No caret host: spaces left after the words would end up inside the verse once this line
+      // is joined to the next.
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N'));
       expect(blocks()[4]).toBe('p: Second verse.');
       expect(container.querySelectorAll('[data-marker="v"]')).toHaveLength(2);
       expect(usjToPericopeVerses(editor.getUsj()!)[1]).toEqual({
@@ -214,9 +256,9 @@ describe('verse numbers stay with their text in the real editor', () => {
     it('keeps typing after the first letter, and saves the words with the verse', async () => {
       const { input, blocks, onUsjChange } = await openUnderHeading();
       fireEvent.keyDown(input, { key: 'N' });
-      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N  '));
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N'));
       typeText(input, 'ew words');
-      await waitFor(() => expect(blocks()[3]).toBe('p: [2]New words  '));
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]New words'));
       await waitFor(() =>
         expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe(
           'New words Second verse.'
@@ -227,18 +269,62 @@ describe('verse numbers stay with their text in the real editor', () => {
     it('takes the number and the first letter back in one undo', async () => {
       const { editor, input, blocks } = await openUnderHeading();
       fireEvent.keyDown(input, { key: 'N' });
-      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N  '));
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]N'));
       act(() => editor.undo());
       await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
       act(() => editor.redo());
-      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]N  ', 'p: Second verse.']));
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]N', 'p: Second verse.']));
     });
 
     it('brings the number in before an IME composition starts, without typing for it', async () => {
-      const { input, blocks } = await openUnderHeading();
+      const { editor, input, blocks } = await openUnderHeading();
       const event = fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
       expect(event).toBe(true);
       await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]  ', 'p: Second verse.']));
+      // The caret host is selected, so the composed words replace it.
+      expect(editor.getSelection()).toEqual({
+        start: { jsonPath: '$.content[3].content[1]', offset: 0 },
+        end: { jsonPath: '$.content[3].content[1]', offset: 2 },
+      });
+    });
+
+    it('leaves no caret host behind once the composed words land', async () => {
+      const { input, blocks, onUsjChange } = await openUnderHeading();
+      fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]  '));
+      // jsdom can't compose; the committed words arrive at the selection the same way.
+      typeText(input, 'か');
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]か', 'p: Second verse.']));
+      await waitFor(() =>
+        expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe('か Second verse.')
+      );
+    });
+
+    it('leaves no caret host behind once a paste lands', async () => {
+      // Lexical's paste handler tells events apart by these class names, which jsdom lacks.
+      vi.stubGlobal('DragEvent', class DragEvent extends Event {});
+      vi.stubGlobal('ClipboardEvent', class ClipboardEvent extends Event {});
+      try {
+        const { input, blocks, onUsjChange } = await openUnderHeading();
+        const text = 'Pasted words';
+        fireEvent.paste(input, {
+          clipboardData: {
+            types: ['text/plain'],
+            files: [],
+            getData: (type: string) => (type === 'text/plain' ? text : ''),
+          },
+        });
+        await waitFor(() =>
+          expect(blocks().slice(3)).toEqual(['p: [2]Pasted words', 'p: Second verse.'])
+        );
+        await waitFor(() =>
+          expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe(
+            'Pasted words Second verse.'
+          )
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it.each([
@@ -262,7 +348,7 @@ describe('verse numbers stay with their text in the real editor', () => {
       const { editor, input, blocks } = await openUnderHeading(verses);
       expect(blocks().slice(3)).toEqual(['p: ', 'q2: [2]Second verse.']);
       fireEvent.keyDown(input, { key: 'L' });
-      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]L  ', 'q2: Second verse.']));
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]L', 'q2: Second verse.']));
       expect(usjToPericopeVerses(editor.getUsj()!)[1].markers?.paragraphs).toEqual([
         { marker: 'p', offset: 0 },
         { marker: 'q2', offset: 2 },
@@ -281,9 +367,12 @@ describe('verse numbers stay with their text in the real editor', () => {
     });
 
     it('does nothing in a read-only editor', async () => {
-      const { editor, input, select } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'), true);
+      const { input, select, spyOnUpdates } = await setup(
+        pericopeVersesToUsj(rows, 1, 'GEN'),
+        true
+      );
       await select('$.content[3].content[1]', 0);
-      const applyUpdate = vi.spyOn(editor, 'applyUpdate');
+      const applyUpdate = spyOnUpdates();
       fireEvent.keyDown(input, { key: 'Enter' });
       fireEvent.keyDown(input, { key: 'N' });
       expect(applyUpdate).not.toHaveBeenCalled();
@@ -343,9 +432,9 @@ describe('verse numbers stay with their text in the real editor', () => {
           },
         ],
       } as Usj;
-      const { editor, input, select } = await setup(usj);
+      const { input, select, spyOnUpdates } = await setup(usj);
       await select('$.content[2]', 1);
-      const applyUpdate = vi.spyOn(editor, 'applyUpdate');
+      const applyUpdate = spyOnUpdates();
       // The key reaches Lexical's own delete, which extends the DOM selection; jsdom has no modify().
       const modify = Object.getOwnPropertyDescriptor(Selection.prototype, 'modify');
       Object.defineProperty(Selection.prototype, 'modify', { configurable: true, value: () => {} });

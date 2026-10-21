@@ -76,20 +76,25 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
 - A verse number always starts its verse's text, because that is the only shape a verse row can
   store. So a paragraph break never lands between a number and its text
   (`src/features/rte/lib/verse-numbers.ts`): a break typed right after a number goes in front of
-  it, and Enter or Insert paragraph in a heading opens an empty paragraph under the last heading
-  instead. Words typed in a line no verse owns yet, under a heading or above the first verse,
-  bring the next verse's number to the start of that line first, and `usjToPericopeVerses` saves
-  such words as the start of the next verse rather than dropping them. Tests:
+  it, with Shift or Alt held too, and Enter or Insert paragraph in a heading opens an empty
+  paragraph under the last heading instead. Words typed in a line no verse owns yet, under a
+  heading or above the first verse, bring the next verse's number to the start of that line
+  first, and `usjToPericopeVerses` saves such words as the start of the next verse rather than
+  dropping them. The spaces that hold the caret after the number until words arrive are replaced
+  by them, never left inside the verse. Tests:
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
-  first letter"; `src/features/rte/lib/pericope-usj.test.ts` › "starts the next verse with words
-  typed in a new paragraph under a heading".
+  first letter", "leaves no caret host behind once a paste lands" and "moves the number down with
+  its text on %s too"; `src/features/rte/lib/pericope-usj.test.ts` › "starts the next verse with
+  words typed in a new paragraph under a heading".
 - Pericope View builds one document per pericope, but it must not add structure the chapter
   doesn't have. When a pericope's first verse opens no paragraph of its own, it continues the one
-  the chapter has open there (`openParagraphAfter`, passed as `continuedParagraph`), so a Poetry
-  line stays Poetry across the boxes, and editing that verse doesn't save a new paragraph.
-  Tests: `src/features/rte/lib/pericope-usj.test.ts` › "does not save the continued paragraph as
-  a break before the first verse"; `src/features/bible/components/PericopeRteGroup.test.tsx` ›
-  "tells the editor which paragraph the pericope continues".
+  the chapter has open there (`paragraphOpenBefore`, passed as `continuedParagraph`), so a Poetry
+  line stays Poetry across the boxes, and editing that verse doesn't save a new paragraph. When
+  the pericope before changes that paragraph, the open pericope follows it. Tests:
+  `src/features/rte/lib/pericope-usj.test.ts` › "does not save the continued paragraph as a break
+  before the first verse"; `src/features/bible/components/PericopeRteGroup.test.tsx` › "tells the
+  editor which paragraph the pericope continues"; `src/features/rte/components/PericopeEditor.test.tsx`
+  › "shows the new paragraph and saves the first verse as continuing it".
 - A verse saves as plain text plus `markers.paragraphs` and `markers.headings`. Words inside
   character markers become plain verse text, and footnotes stay out of it. Tests:
   `src/features/rte/lib/pericope-usj.test.ts` › "leaves a footnote out of the verse row".
@@ -106,7 +111,8 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   resumes saving after correction".
 - The editor is uncontrolled. Don't feed new verses into it on every render. `ChapterEditor` and
   `PericopeEditor` reload it through `loadIntoEditor` only when the chapter or pericope changes,
-  when an AI suggestion fills a verse the editor holds empty, or after a structural rewrite.
+  when an AI suggestion fills a verse the editor holds empty, after a structural rewrite, or when
+  the pericope before changes the paragraph a pericope's first verse continues.
   Tests: `src/features/rte/components/ChapterEditor.test.tsx` › "does not report the editor mount
   echo as a change" and "does not write an AI suggestion away on the next edit".
 - Some code works around bugs in Editorial 0.8.15. Keep it, and check it in a real browser when
