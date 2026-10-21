@@ -42,7 +42,7 @@ export const PericopeContextText = ({
             chapter,
           })}
         </p>
-        <p className='text-foreground text-base leading-relaxed select-text'>
+        <p className='target-scripture text-foreground text-base leading-relaxed select-text'>
           {refs
             .filter(ref => ref.chapterNumber === chapter)
             .map(ref => {
@@ -52,7 +52,7 @@ export const PericopeContextText = ({
               )?.content;
               return (
                 <Fragment key={`${chapter}:${ref.verseNumber}`}>
-                  <span className='mr-1.5 font-bold'>
+                  <span className='mr-1.5 font-sans font-bold'>
                     {chapter}:{ref.verseNumber}
                   </span>
                   <PericopeText
