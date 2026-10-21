@@ -55,7 +55,7 @@ export const PericopeReferenceVerses = ({
 
           return (
             <span key={verse.verseNumber} className='mr-3'>
-              <span className='mr-1 font-bold'>
+              <span className='mr-1 font-sans font-bold'>
                 {showChapter ? `${chapterNumber}:${verse.verseNumber}` : verse.verseNumber}
               </span>
               <PericopeText content={text} isError={!!failed} isLoading={!!loading} />{' '}

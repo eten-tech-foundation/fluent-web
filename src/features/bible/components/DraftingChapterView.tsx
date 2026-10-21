@@ -173,7 +173,7 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
                       : undefined
                   }
                 >
-                  <span className='mr-1.5 font-bold text-slate-900 dark:text-slate-100'>
+                  <span className='mr-1.5 font-sans font-bold text-slate-900 dark:text-slate-100'>
                     {verse.verseNumber}
                   </span>
                   <span className='mr-3'>

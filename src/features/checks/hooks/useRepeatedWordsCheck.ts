@@ -34,9 +34,8 @@ export const buildSntId = (bookCode: string, chapterNumber: number, verseNumber:
   `${bookCode} ${chapterNumber}:${verseNumber}`;
 
 /**
- * Assemble the snake_case `RepeatedWordsRequest` (D8 shape) from the project
- * context and the currently drafted verses. Only verses with non-empty content
- * are sent.
+ * Assemble the snake_case `RepeatedWordsRequest` from the project context and
+ * the currently drafted verses. Only verses with non-empty content are sent.
  */
 export const buildRepeatedWordsRequest = (
   projectItem: ProjectItem,
@@ -76,13 +75,10 @@ export const buildRepeatedWordsRequest = (
   return {
     lang_code: langCode ?? '<unknown>',
     lang_name: projectItem.targetLanguage,
-    // fluent-ai declares `project_id: str` (Pydantic v2, strict — it does NOT
-    // coerce an int to a str), so a numeric `projectUnitId` is rejected with a
-    // 422 that fluent-api surfaces as a 502. fluent-api's own schema is the
-    // tolerant side (accepts string | number); we are the compliant side and
-    // send the contract-correct string. See phase-04 manual smoke (2026-06-23).
-    project_id: String(projectItem.projectUnitId),
-    project_name: projectItem.projectName,
+    // The milestone being checked. fluent-api resolves it to the owning project,
+    // authorizes against that project, and fills fluent-ai's `project_id` /
+    // `project_name` itself — we no longer send either (fluent-api#420).
+    project_unit_id: projectItem.projectUnitId,
     verses: verseInputs,
   };
 };

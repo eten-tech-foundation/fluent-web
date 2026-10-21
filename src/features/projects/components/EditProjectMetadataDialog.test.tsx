@@ -11,7 +11,10 @@ import { server } from '@/test/msw/server';
 import { createTestQueryClient, render, renderWithProviders, screen, waitFor } from '@/test/render';
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, string>) =>
+      values ? [key, ...Object.values(values)].join(' ') : key,
+  }),
 }));
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -91,7 +94,7 @@ describe('EditProjectMetadataDialog', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
   });
 
-  it('expands several books at once and seeds Short Name from the legacy title', async () => {
+  it('expands several books at once and shows the TOC values as stored', async () => {
     mockApi();
     const { user } = renderDialog();
 
@@ -99,13 +102,61 @@ describe('EditProjectMetadataDialog', () => {
     await user.click(await bookTrigger('Exodus'));
 
     expect(screen.getAllByRole('textbox')).toHaveLength(6);
-    const [longName, shortName, abbreviation] = screen.getAllByRole('textbox');
+    const [longName, shortName, abbreviation, ...exodusFields] = screen.getAllByRole('textbox');
     expect(longName).toHaveAttribute('placeholder', 'bookLongNamePlaceholder');
     expect(shortName).toHaveAttribute('placeholder', 'bookShortNamePlaceholder');
     expect(abbreviation).toHaveAttribute('placeholder', 'bookAbbreviationPlaceholder');
+    // Genesis has a book title (\mt) and no TOC values. The title is not a Short Name: it is
+    // exported as \mt1 on its own, so showing it here would claim a \toc2 the file never has.
     expect(longName).toHaveValue('');
-    expect(shortName).toHaveValue('The First Book of Moses');
+    expect(shortName).toHaveValue('');
     expect(abbreviation).toHaveValue('');
+    expect(exodusFields.map(input => (input as HTMLInputElement).value)).toEqual([
+      'Exodus',
+      'Exo',
+      'Ex',
+    ]);
+  });
+
+  it.each([
+    ['bookLongName', '\\toc1'],
+    ['bookShortName', '\\toc2'],
+    ['bookAbbreviation', '\\toc3'],
+  ])('shows the %s marker in a tooltip on its label', async (label, marker) => {
+    mockApi();
+    const { user } = renderDialog();
+    await user.click(await bookTrigger('Genesis'));
+
+    await user.hover(screen.getByText(label));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(`storedAsMarker ${marker}`);
+    // Radix parks the content at translate(0, -200%) until it has measured the trigger. With
+    // no element to measure it never moves, and the dialog's transform turns that parking spot
+    // into a box above the dialog's top-left corner (QA on #398).
+    const wrapper = tooltip.closest<HTMLElement>('[data-radix-popper-content-wrapper]');
+    await waitFor(() => expect(wrapper?.style.transform).not.toContain('-200%'));
+  });
+
+  it('gives each field its marker as an accessible description, with no extra button', async () => {
+    mockApi();
+    const { user } = renderDialog();
+    await user.click(await bookTrigger('Genesis'));
+
+    // The tooltip only opens on hover, like the app's other text tooltips, so keyboard and
+    // screen reader users get the same text from the input itself.
+    expect(screen.getByLabelText('bookLongName')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc1'
+    );
+    expect(screen.getByLabelText('bookShortName')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc2'
+    );
+    expect(screen.getByLabelText('bookAbbreviation')).toHaveAccessibleDescription(
+      'storedAsMarker \\toc3'
+    );
+    expect(
+      screen.queryAllByRole('button', { name: /bookLongName|bookShortName|bookAbbreviation/ })
+    ).toHaveLength(0);
   });
 
   it('saves a changed field when it loses focus', async () => {

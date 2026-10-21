@@ -21,6 +21,13 @@ describe('pericope text states', () => {
     expect(screen.getByText(expected)).toHaveClass('text-muted-foreground', 'text-sm');
   });
 
+  it('draws its messages in the app font when they stand in for scripture text', () => {
+    const { rerender } = render(<PericopeText content='Loaded scripture' />);
+    expect(screen.getByText('Loaded scripture')).not.toHaveClass('font-sans');
+    rerender(<PericopeText content='' isLoading={true} />);
+    expect(screen.getByText('Loading...')).toHaveClass('font-sans');
+  });
+
   it('distinguishes an undrafted verse after a successful request', () => {
     const { rerender } = render(
       <PericopeText content='' emptyState='not-drafted' isError={true} />

@@ -156,6 +156,30 @@ describe('PericopeReferenceVerses', () => {
     );
   });
 
+  it('keeps verse labels in the app font beside scripture text', async () => {
+    server.use(
+      http.get(`${config.api.url}/aquifer/bibles/11/texts`, () =>
+        HttpResponse.json(aquiferChapter(9))
+      )
+    );
+
+    renderWithProviders(
+      <p>
+        <PericopeReferenceVerses
+          bibleId='aq-11'
+          bookCode='MRK'
+          chapterNumber={9}
+          showChapter={true}
+          verses={[chapterNineVerses[0]]}
+        />
+      </p>
+    );
+
+    await screen.findByText('Aquifer chapter nine');
+    expect(screen.getByText('9:1')).toHaveClass('font-sans');
+    expect(screen.getByText('Aquifer chapter nine')).not.toHaveClass('font-sans');
+  });
+
   it('preserves the verse labels with explicit loading text until the resource chapter arrives', async () => {
     let release: () => void = () => {};
     const ready = new Promise<void>(resolve => {
