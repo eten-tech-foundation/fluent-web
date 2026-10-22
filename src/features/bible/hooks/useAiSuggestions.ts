@@ -236,8 +236,11 @@ export function useAiSuggestions(
     const justEnabled = enabled && !wasQueueEnabledRef.current;
     wasQueueEnabledRef.current = enabled;
     if (!canSuggest || !idsStr || (isPericope && !pericopeNumbersKey)) return;
-    if (enabled && isPericope && !hasPendingWork) return;
-    if (!enabled && checkedThresholdsRef.current.has(contextKey)) return;
+    // A drafted scope has nothing to queue, but the request still runs once per chapter: it is
+    // how a fresh page learns the threshold, and Settings cannot offer the AI switch without it.
+    const thresholdKnown = checkedThresholdsRef.current.has(contextKey);
+    if (enabled && isPericope && !hasPendingWork && thresholdKnown) return;
+    if (!enabled && thresholdKnown) return;
     if (!isPericope && queueVerseNumber <= lastQueuedVerseRef.current && !justEnabled) return;
     const controller = new AbortController();
     const queue = async () => {
