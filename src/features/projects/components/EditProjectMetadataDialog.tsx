@@ -239,13 +239,16 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
         if (!open) handleClose();
       }}
     >
-      <DialogContent className='flex max-h-[80vh] flex-col sm:max-w-2xl'>
-        <DialogHeader className='flex-shrink-0'>
+      {/* The whole panel scrolls, not only the book list: with the page scroll-locked behind the
+          dialog, a wheel over the title, the padding or the footer used to do nothing (QA on
+          #398). The scroll padding keeps what scrolls into view clear of the pinned footer. */}
+      <DialogContent className='max-h-[80vh] scroll-pb-24 overflow-y-auto pb-0 sm:max-w-2xl'>
+        <DialogHeader>
           <DialogTitle>{t('editProjectMetadata')}</DialogTitle>
           <DialogDescription>{t('editProjectMetadataDescription')}</DialogDescription>
         </DialogHeader>
 
-        <div className='flex-1 overflow-y-auto pr-1'>
+        <div>
           {isLoading ? (
             <div className='flex items-center justify-center gap-2 py-8'>
               <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
@@ -275,7 +278,16 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
                         <span className='text-muted-foreground text-xs'>{book.bookCode}</span>
                       </span>
                     </AccordionTrigger>
-                    <AccordionContent>
+                    <AccordionContent
+                      onAnimationEnd={event => {
+                        // A book opened near the bottom grows out of sight. Once the opening
+                        // animation has given it its full height, bring its fields into view.
+                        const region = event.currentTarget;
+                        if (event.target === region && region.dataset.state === 'open') {
+                          region.parentElement?.scrollIntoView({ block: 'nearest' });
+                        }
+                      }}
+                    >
                       <div className='grid gap-3 px-1 pt-1 sm:grid-cols-3'>
                         {TOC_FIELDS.map(field => {
                           const meta = TOC_FIELD_META[field];
@@ -329,17 +341,22 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
           )}
         </div>
 
-        {saveError && (
-          <p className='text-sm text-red-500' role='alert'>
-            {saveError}
-          </p>
-        )}
+        {/* Pinned to the bottom while the books scroll, so Close and a save error stay in view.
+            It carries the panel's bottom padding, which would otherwise scroll in below it, and
+            takes over the gap above it, so at rest nothing moves. */}
+        <div className='bg-card sticky bottom-0 -mt-4 grid gap-4 pt-4 pb-6'>
+          {saveError && (
+            <p className='text-sm text-red-500' role='alert'>
+              {saveError}
+            </p>
+          )}
 
-        <DialogFooter className='flex-shrink-0'>
-          <Button variant='outline' onClick={handleClose}>
-            {t('close')}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant='outline' onClick={handleClose}>
+              {t('close')}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

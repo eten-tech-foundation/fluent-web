@@ -8,7 +8,14 @@ import { EditProjectMetadataDialog } from '@/features/projects/components/EditPr
 import { type BookDetails } from '@/features/projects/hooks/useBookDetails';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
-import { createTestQueryClient, render, renderWithProviders, screen, waitFor } from '@/test/render';
+import {
+  createTestQueryClient,
+  fireEvent,
+  render,
+  renderWithProviders,
+  screen,
+  waitFor,
+} from '@/test/render';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -157,6 +164,53 @@ describe('EditProjectMetadataDialog', () => {
     expect(
       screen.queryAllByRole('button', { name: /bookLongName|bookShortName|bookAbbreviation/ })
     ).toHaveLength(0);
+  });
+
+  // QA on #398: only the book list scrolled, and the page behind the dialog is scroll-locked, so
+  // a wheel over the title, the padding or the footer did nothing. jsdom has no layout, so these
+  // pin the structure; the E2E suite wheels over each part in Chromium and Firefox.
+  it('scrolls the whole dialog instead of a box inside it', async () => {
+    mockApi();
+    renderDialog();
+    await bookTrigger('Genesis');
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('overflow-y-auto');
+    expect(dialog.querySelectorAll('.overflow-y-auto')).toHaveLength(0);
+  });
+
+  it('keeps Close and a save error pinned below the scrolling books', async () => {
+    mockApi({ patchStatus: 400, patchMessage: 'must not contain pipes' });
+    const { user } = renderDialog();
+
+    await user.click(await bookTrigger('Genesis'));
+    await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'a|b');
+    await user.tab();
+
+    const alert = await screen.findByRole('alert');
+    const pinned = screen.getByRole('button', { name: 'close' }).closest('.sticky');
+    expect(pinned).toHaveClass('bottom-0');
+    expect(pinned).toContainElement(alert);
+  });
+
+  it('brings a book into view once it has finished opening', async () => {
+    mockApi();
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const { user } = renderDialog();
+
+    await user.click(await bookTrigger('Genesis'));
+    const region = screen.getByRole('region', { name: /Genesis/ });
+    // An animation inside the fields is not the book opening.
+    fireEvent.animationEnd(screen.getByPlaceholderText('bookLongNamePlaceholder'));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    fireEvent.animationEnd(region);
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    // The whole book, header included, so the user still sees which book the fields belong to.
+    expect(scrollIntoView.mock.contexts[0]).toBe(region.parentElement);
   });
 
   it('saves a changed field when it loses focus', async () => {
