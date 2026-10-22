@@ -24,9 +24,13 @@
 .active-verse-outline {
   pointer-events: none;
 }
-.active-verse-outline > span {
+/* One shape around the whole verse, however many lines it wraps to (see verseOutlineShapes). */
+.active-verse-outline > svg {
   position: absolute;
-  outline: 1px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: 2px;
+  overflow: visible;
+}
+.active-verse-outline path {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1px;
 }
