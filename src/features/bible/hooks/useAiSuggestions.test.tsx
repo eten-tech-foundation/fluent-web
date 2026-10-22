@@ -33,7 +33,8 @@ function setup(
   enabled = true,
   canSuggest = true,
   initialScope: typeof pericope | null = pericope,
-  strict = false
+  strict = false,
+  initialDrafted?: number[]
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -63,6 +64,7 @@ function setup(
         enabled,
         scope: initialScope ?? undefined,
         unit: 1,
+        draftedVerseNumbers: initialDrafted,
       } as HookProps,
     }
   );
@@ -355,5 +357,26 @@ describe('AI requests', () => {
     await waitFor(() => expect(result.current.suggestionStatus).toBe('idle'));
     expect(queued).toEqual([]);
     expect(headingGets).toBe(0);
+  });
+
+  it('still learns the threshold once when a drafted scope loads with AI already on', async () => {
+    // A fresh page does not know the threshold yet. Settings shows a loading placeholder instead
+    // of the AI switch until it does, so skipping the request here left AI impossible to turn off.
+    useAppStore.setState({ isAiThresholdMet: null });
+    const allDrafted = Object.values(mapping);
+    const { result, rerender } = setup(true, true, pericope, false, allDrafted);
+    await waitFor(() => expect(result.current.isAiThresholdMet).toBe(true));
+    expect(queued).toEqual([['2', '3']]);
+
+    rerender({
+      activeVerse: 6,
+      enabled: true,
+      scope: pericope,
+      unit: 1,
+      draftedVerseNumbers: allDrafted,
+    });
+    await act(async () => {});
+    expect(queued).toHaveLength(1);
+    expect(result.current.suggestionStatus).toBe('idle');
   });
 });
