@@ -16,6 +16,7 @@ import {
 } from '@/features/bible/lib/pericope-display';
 import { hasSourceBackedVerse } from '@/features/bible/lib/pericope-navigation';
 import { canSetPericopeTitle, getPericopeTitle } from '@/features/bible/lib/pericope-title';
+import type { VerseCaretRequest } from '@/features/rte/lib/verse-caret';
 import {
   type SourceTtsPlaybackApi,
   type TtsServedFormat,
@@ -91,6 +92,8 @@ interface DraftingGridPericopeProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
   handleNextPericopeClick: () => Promise<void>;
+  /** Where Next Pericope asks for the caret, handed to the pericope editors (#479). */
+  caretRequest?: VerseCaretRequest | null;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
   isAiActive: boolean;
@@ -306,6 +309,7 @@ interface PericopeTargetGroupProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
   handleNextPericopeClick: () => Promise<void>;
+  caretRequest?: VerseCaretRequest | null;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
   isAiActive: boolean;
@@ -359,6 +363,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
   handleKeyDown,
   handleNextClick,
   handleNextPericopeClick,
+  caretRequest,
   aiSuggestions,
   isAiThresholdMet,
   isAiActive,
@@ -436,6 +441,7 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
           aiSuggestions={aiSuggestions}
           beforeContent={beforeContentWithTitle}
           bookCode={projectItem.bookCode}
+          caretRequest={caretRequest}
           chapterAssignmentId={projectItem.chapterAssignmentId}
           chapterNumber={projectItem.chapterNumber}
           groupVerses={groupVerses}
@@ -505,6 +511,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
   handleKeyDown,
   handleNextClick,
   handleNextPericopeClick,
+  caretRequest,
   aiSuggestions,
   isAiThresholdMet,
   isAiActive,
@@ -704,6 +711,7 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                   <PericopeTargetGroup
                     activeVerseId={activeVerseId}
                     aiSuggestions={aiSuggestions}
+                    caretRequest={caretRequest}
                     contextChapters={contextChapters}
                     fullGroup={fullGroup}
                     globalNextUntouchedVerse={globalNextUntouchedVerse}

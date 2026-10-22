@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePericope } from '@/features/bible/hooks/usePericope';
@@ -124,6 +124,31 @@ describe('usePericope handleNextPericopeClick', () => {
     await result.current.handleNextPericopeClick();
 
     expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    expect(result.current.caretRequest).toBeNull();
+  });
+
+  it('asks for the caret in the first verse of the next pericope (#479)', async () => {
+    // Without it nothing held the caret after the move, and a click into the new box landed at
+    // the end of its last verse.
+    const { result } = renderPericope(1, drafted(1, 2, 3));
+    expect(result.current.caretRequest).toBeNull();
+
+    await act(() => result.current.handleNextPericopeClick());
+
+    expect(result.current.caretRequest).toEqual({ verseNumber: 4 });
+  });
+
+  it('asks again on every move, even to the same verse', async () => {
+    // Each request is a new object, so the editor places the caret again when the drafter comes
+    // back to this pericope and presses Next Pericope a second time.
+    const { result } = renderPericope(1, drafted(1, 2, 3));
+
+    await act(() => result.current.handleNextPericopeClick());
+    const first = result.current.caretRequest;
+    await act(() => result.current.handleNextPericopeClick());
+
+    expect(result.current.caretRequest).toEqual({ verseNumber: 4 });
+    expect(result.current.caretRequest).not.toBe(first);
   });
 
   it('flushes an unsaved verse before leaving the pericope', async () => {

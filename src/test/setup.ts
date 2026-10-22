@@ -24,6 +24,10 @@ window.matchMedia = ((query: string) => ({
   dispatchEvent: () => false,
 })) as typeof window.matchMedia;
 
+// jsdom doesn't implement Range geometry. Lexical measures the caret to scroll it into view after
+// the editors place it themselves (a click on a verse number, Next Pericope).
+Range.prototype.getBoundingClientRect = () => new DOMRect();
+
 // Start MSW once for the whole run. onUnhandledRequest: 'error' makes any
 // un-mocked network call fail loudly instead of leaking out of the test.
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

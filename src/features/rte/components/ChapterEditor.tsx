@@ -6,6 +6,7 @@ import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
+import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
 import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
@@ -89,6 +90,7 @@ export function ChapterEditor({
   useProtectedVerseMarkers(containerRef);
   useNativeRtlSelection(containerRef, readOnly);
   useForwardTextDeletion(containerRef, editorRef, readOnly);
+  useVerseNumberCaret(containerRef, readOnly);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const headingSelectionRef = useRef<SelectionRange | undefined>(undefined);
   const loadedKeyRef = useRef(contentKey);

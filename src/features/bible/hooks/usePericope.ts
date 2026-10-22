@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { nextRenderablePericopeVerse } from '@/features/bible/lib/pericope-navigation';
 import { useChapterPericopes } from '@/features/pericopes/hooks/useChapterPericopes';
+import type { VerseCaretRequest } from '@/features/rte/lib/verse-caret';
 import { type ProjectItem, type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface UsePericopeProps {
@@ -213,6 +214,8 @@ export const usePericope = ({
     revealNextVerse,
   ]);
 
+  const [caretRequest, setCaretRequest] = useState<VerseCaretRequest | null>(null);
+
   /**
    * Advance to the first verse of the next pericope (#314).
    *
@@ -237,6 +240,9 @@ export const usePericope = ({
     if (nextVerseNumber === null) return;
 
     handleActiveVerseChange(nextVerseNumber);
+    // The button goes away with the move, and nothing else would hold the caret: a click into the
+    // new box then landed at the end of its last verse (#479). Its editor takes the caret instead.
+    setCaretRequest({ verseNumber: nextVerseNumber });
   }, [
     isPericopeMode,
     pericopes,
@@ -262,5 +268,6 @@ export const usePericope = ({
     isNextButtonEnabled,
     handleNextClick,
     handleNextPericopeClick,
+    caretRequest,
   };
 };

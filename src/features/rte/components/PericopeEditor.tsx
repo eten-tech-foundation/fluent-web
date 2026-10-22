@@ -6,8 +6,10 @@ import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
+import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
 import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
+import { EDITABLE_EDITOR_SELECTOR } from '../lib/editor-dom';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { headingErrorIn, type HeadingError } from '../lib/heading-markers';
 import {
@@ -17,6 +19,7 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
+import { placeCaretAtVerseEnd, type VerseCaretRequest } from '../lib/verse-caret';
 
 import { HeadingValidationMessage } from './HeadingValidationMessage';
 
@@ -50,6 +53,11 @@ export interface PericopeEditorProps {
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
   onActiveVerseChange?: (verseNumber: number) => void;
+  /**
+   * Focuses the editor with the caret at the end of this verse, when the verse is in this
+   * pericope. Next Pericope asks for it (#479).
+   */
+  caretRequest?: VerseCaretRequest | null;
 }
 
 /**
@@ -74,6 +82,7 @@ export function PericopeEditor({
   continuedParagraph,
   onVersesChange,
   onActiveVerseChange,
+  caretRequest,
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +90,7 @@ export function PericopeEditor({
   useProtectedVerseMarkers(containerRef);
   useNativeRtlSelection(containerRef, readOnly);
   useForwardTextDeletion(containerRef, editorRef, readOnly);
+  useVerseNumberCaret(containerRef, readOnly);
   const [headingError, setHeadingError] = useState<HeadingError>(null);
   const loadedKeyRef = useRef(contentKey);
   /** The `continuedParagraph` the loaded document was built with. */
@@ -151,6 +161,16 @@ export function PericopeEditor({
     loadedOpenRef.current = continuedParagraph;
     if (continuedRef.current !== undefined) loadIntoEditor(knownVersesRef.current);
   }, [contentKey, continuedParagraph, loadIntoEditor]);
+
+  // A request already there when this editor mounted was for an earlier one, e.g. before a view
+  // switch. Every editor gets the request; the one holding the verse takes the caret.
+  const answeredCaretRef = useRef(caretRequest);
+  useEffect(() => {
+    if (readOnly || !caretRequest || caretRequest === answeredCaretRef.current) return;
+    answeredCaretRef.current = caretRequest;
+    const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
+    if (root) placeCaretAtVerseEnd(root, caretRequest.verseNumber);
+  }, [caretRequest, readOnly]);
 
   const handleUsjChange = useCallback(
     (usj: Usj) => {
