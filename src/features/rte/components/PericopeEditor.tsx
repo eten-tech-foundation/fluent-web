@@ -65,8 +65,9 @@ export interface PericopeEditorProps {
  *
  * The editor is **uncontrolled**: it owns the document once loaded, and this component mirrors
  * edits back out as verse rows. Feeding every keystroke back in as a new `usj` prop would fight
- * the editor for the cursor, so it is written back into only in two cases: `contentKey` changed,
- * or the parent filled a verse the editor holds empty (the AI suggestion path).
+ * the editor for the cursor, so it is written back into only in three cases: `contentKey`
+ * changed, the parent filled a verse the editor holds empty (the AI suggestion path), or the
+ * paragraph a continuing first verse sits in changed in the pericope before.
  *
  * Paragraph breaks the translator creates survive the trip out: `usjToPericopeVerses` derives a
  * `{marker, offset}` entry per paragraph, stored beside the verse (fluent-api#264), and stored
