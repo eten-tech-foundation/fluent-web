@@ -110,6 +110,14 @@ describe('PericopeRteGroup', () => {
     expect(screen.queryByRole('button', { name: 'Next Pericope' })).not.toBeInTheDocument();
   });
 
+  it("hands Next Pericope's caret request to the editor", () => {
+    // The editor of the pericope Next Pericope moved to takes the caret in its first verse (#479).
+    const caretRequest = { verseNumber: 1 };
+    renderGroup({ caretRequest });
+
+    expect((editorProps.current as { caretRequest: unknown }).caretRequest).toBe(caretRequest);
+  });
+
   it('does not advance on Enter, which the editor keeps for a paragraph break', () => {
     renderGroup();
 

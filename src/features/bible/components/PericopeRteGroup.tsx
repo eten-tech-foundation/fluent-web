@@ -12,6 +12,7 @@ import {
 } from '@/features/bible/lib/pericope-title';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
 import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
+import type { VerseCaretRequest } from '@/features/rte/lib/verse-caret';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
 interface PericopeRteGroupProps {
@@ -32,6 +33,8 @@ interface PericopeRteGroupProps {
   handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
   handleActiveVerseChange: (verseNumber: number) => void;
   handleNextPericopeClick: () => Promise<void>;
+  /** Next Pericope's request for the caret in the first verse it moved to (#479). */
+  caretRequest?: VerseCaretRequest | null;
   aiSuggestions: Record<number, string>;
   isAiThresholdMet: boolean;
   isAiActive: boolean;
@@ -63,6 +66,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   handleTextChange,
   handleActiveVerseChange,
   handleNextPericopeClick,
+  caretRequest,
   aiSuggestions,
   isAiThresholdMet,
   isAiActive,
@@ -154,6 +158,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
       {beforeContent}
       <PericopeEditor
         bookCode={bookCode}
+        caretRequest={caretRequest}
         chapterNumber={chapterNumber}
         contentKey={contentKey}
         readOnly={readOnly}

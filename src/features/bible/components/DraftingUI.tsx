@@ -355,6 +355,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     isNextButtonEnabled,
     handleNextClick,
     handleNextPericopeClick,
+    caretRequest,
   } = usePericope({
     projectItem,
     sourceVerses,
@@ -1542,6 +1543,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                           bibleContentError={bibleContentError}
                           bibleContentLoading={bibleContentLoading}
                           bibleVerseMap={bibleVerseMap}
+                          caretRequest={caretRequest}
                           contextChapters={pericopeContext.chapters}
                           fullPericopes={fullPericopes}
                           globalNextUntouchedVerse={globalNextUntouchedVerse}

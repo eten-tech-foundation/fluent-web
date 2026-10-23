@@ -168,6 +168,44 @@ describe.each([
     }
   );
 
+  it('pastes into the verse whose number was clicked', async () => {
+    // Firefox put the caret at the end of the verse before the clicked number and Chromium at the
+    // start of the paragraph, so the words went into another verse (#479).
+    const onVersesChange = vi.fn();
+    const { container } = render(
+      <Editor
+        bookCode='GEN'
+        chapterNumber={1}
+        contentKey='number-click'
+        targetLanguage='English'
+        verses={[
+          { verseNumber: 1, text: 'First verse text.', markers: null },
+          { verseNumber: 2, text: 'Second verse text.', markers: null },
+        ]}
+        onVersesChange={onVersesChange}
+      />
+    );
+    await waitFor(() =>
+      expect(container.querySelector('.editor-input')).toHaveTextContent('Second verse text.')
+    );
+    const input = container.querySelector<HTMLElement>('.editor-input')!;
+    await act(async () => {
+      fireEvent.click(input.querySelector('[data-marker="v"][data-number="2"]')!);
+      fireEvent(document, new Event('selectionchange'));
+    });
+    const data = new DataTransfer();
+    data.setData('text/plain', 'Pasted ');
+    fireEvent(
+      input,
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })
+    );
+    await waitFor(() =>
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ verseNumber: 2, text: 'Pasted Second verse text.' }),
+      ])
+    );
+  });
+
   it.each([
     { name: 'plain text', text: 'one two', html: '' },
     { name: 'tab-separated text', text: 'one\ttwo', html: '' },
