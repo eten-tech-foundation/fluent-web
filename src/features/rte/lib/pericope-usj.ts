@@ -18,17 +18,32 @@ const USJ_TYPE = 'USJ';
 const USJ_VERSION = '3.1';
 
 /**
+ * The paragraph a verse opens for its text: its offset-0 marker, or a `p` after its headings.
+ * Without either, the verse continues the paragraph before it.
+ */
+function ownParagraph(verse: PericopeVerseText): string | undefined {
+  const opening = verse.markers?.paragraphs?.find(paragraph => paragraph.offset === 0);
+  if (opening) return opening.marker;
+  return verse.markers?.headings?.length ? PARAGRAPH_MARKER : undefined;
+}
+
+/**
  * Builds the USJ document the editor renders for one pericope.
  *
  * A verse with stored markers opens its own paragraph (offset 0) and splits at mid-text offsets;
  * a verse with none continues whatever paragraph is current, exactly as the USFM export renders
  * legacy rows. The offsets are positions in `text`, which is the same trimmed string the save
  * path derives, so a slice here and a slice in the export agree character for character.
+ *
+ * `continuedParagraph` is the paragraph the chapter has open where a later pericope starts
+ * (`paragraphOpenBefore`). Pericope View builds one document per pericope, so without it a first
+ * verse that only continues a Poetry line would open a new `p`.
  */
 export function pericopeVersesToUsj(
   verses: PericopeVerseText[],
   chapterNumber: number,
-  bookCode?: string
+  bookCode?: string,
+  continuedParagraph?: string
 ): Usj {
   const content: MarkerObject[] = [{ type: 'chapter', marker: 'c', number: String(chapterNumber) }];
   let para: MarkerObject | undefined;
@@ -44,10 +59,11 @@ export function pericopeVersesToUsj(
       content.push({ type: 'para', marker: heading.marker, content: [heading.text] });
     }
     const paragraphs = verse.markers?.paragraphs ?? [];
-    const opening = paragraphs.find(paragraph => paragraph.offset === 0);
-    if (opening) openPara(opening.marker);
-    // The chapter's first verse carries no marker of its own: the classic default paragraph.
-    else if (!para || headings.length > 0) openPara(PARAGRAPH_MARKER);
+    const own = ownParagraph(verse);
+    if (own) openPara(own);
+    // The chapter's first verse carries no marker of its own: the classic default paragraph. A
+    // later pericope's first verse continues the paragraph the chapter has open there.
+    else if (!para) openPara(continuedParagraph ?? PARAGRAPH_MARKER);
 
     const sid = bookCode ? `${bookCode} ${chapterNumber}:${verse.verseNumber}` : undefined;
     para?.content?.push({
@@ -74,6 +90,44 @@ export function pericopeVersesToUsj(
     version: USJ_VERSION,
     content,
   } as Usj;
+}
+
+/**
+ * The paragraph still open after `verses`: the one their document ends in. It is read off
+ * `pericopeVersesToUsj` rather than worked out again, so the two can't disagree about where a
+ * paragraph opens.
+ */
+export function openParagraphAfter(verses: PericopeVerseText[]): string | undefined {
+  if (verses.length === 0) return undefined;
+  const last = pericopeVersesToUsj(verses, 0).content.at(-1);
+  return typeof last === 'object' ? last.marker : undefined;
+}
+
+/**
+ * The paragraph the chapter has open where a pericope starting at `verseNumber` begins, from the
+ * chapter's rows. Verses ahead of it with no row yet sit in the chapter's default paragraph.
+ */
+export function paragraphOpenBefore(
+  rows: PericopeVerseText[],
+  verseNumber: number
+): string | undefined {
+  const before = rows
+    .filter(row => row.verseNumber < verseNumber)
+    .sort((a, b) => a.verseNumber - b.verseNumber);
+  return openParagraphAfter(before) ?? (verseNumber > 1 ? PARAGRAPH_MARKER : undefined);
+}
+
+/**
+ * What a pericope's first verse continues: `open`, the paragraph the chapter has open there,
+ * unless the verse opens a paragraph of its own. `usjToPericopeVerses` reads the document's first
+ * paragraph as a continuation only when it was built as one.
+ */
+export function continuedParagraphOf(
+  verses: PericopeVerseText[],
+  open: string | undefined
+): string | undefined {
+  const first = verses.at(0);
+  return first && !ownParagraph(first) ? open : undefined;
 }
 
 /**
@@ -110,6 +164,8 @@ interface VerseSegment {
   text: string;
   paraMarker: string;
   openedByVerse: boolean;
+  /** Which of the document's paragraphs it is in, counting from 0. */
+  paraIndex: number;
 }
 
 /**
@@ -122,18 +178,29 @@ interface VerseSegment {
  * Segments are trimmed (canonical USJ carries a structural space before the next verse marker
  * that is not part of the verse's own text), so offsets are positions in the exact string that is
  * saved. A paragraph holding no text is not persisted — there is no character to anchor it to.
+ * Words in a paragraph that no verse owns yet (under a heading, or above the chapter's first
+ * verse) open the verse that follows, rather than being dropped.
+ *
+ * With `continuedParagraph` (`continuedParagraphOf` the document's verses), the document's first
+ * paragraph is the one the chapter already had open, not a break: while the first verse's text
+ * starts in it and it keeps that marker, the verse is saved without an opening marker, as it was
+ * stored.
  */
-export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
+export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): PericopeVerseText[] {
   const order: number[] = [];
   const segments = new Map<number, VerseSegment[]>();
   const headings = new Map<number, VerseHeading[]>();
   let pendingHeadings: VerseHeading[] = [];
+  let pendingSegments: VerseSegment[] = [];
   let currentVerse: number | undefined;
+  let paraIndex = -1;
 
   for (const node of usj.content) {
     if (typeof node === 'string') continue;
     const marker = node as MarkerObject;
-    if (marker.type !== 'para' || !marker.content) continue;
+    if (marker.type !== 'para') continue;
+    paraIndex += 1;
+    if (!marker.content) continue;
     let paraMarker = marker.marker ?? PARAGRAPH_MARKER;
     let body = marker.content;
     if (isHeadingMarker(paraMarker)) {
@@ -161,6 +228,7 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
         text: buffer.trim(),
         paraMarker,
         openedByVerse: currentOpenedPara,
+        paraIndex,
       });
       buffer = '';
     };
@@ -190,15 +258,21 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
           segments.set(currentVerse, []);
           order.push(currentVerse);
         }
+        segments.get(currentVerse)?.push(...pendingSegments);
+        pendingSegments = [];
         continue;
       }
       // Character-level markers (\nd, \add …) contribute their text to the verse.
       if (!NON_TEXT_MARKER_TYPES.has(item.type)) buffer += markerText(item);
     }
+    // Words with no verse yet wait for the next one, which they open.
+    if (currentVerse === undefined && buffer.trim() !== '') {
+      pendingSegments.push({ text: buffer.trim(), paraMarker, openedByVerse: true, paraIndex });
+    }
     flush();
   }
 
-  return order.map(verseNumber => {
+  return order.map((verseNumber, verseIndex) => {
     const records = segments.get(verseNumber) ?? [];
     const kept = records.filter(record => record.text !== '');
     const paragraphs: VerseParagraph[] = [];
@@ -211,7 +285,16 @@ export function usjToPericopeVerses(usj: Usj): PericopeVerseText[] {
     // the editor can rebuild.
     const firstTextIndex = records.findIndex(record => record.text !== '');
     const opener = records[Math.max(firstTextIndex, 0)];
-    if (records.length > 0 && (firstTextIndex > 0 || opener.openedByVerse)) {
+    const opensParagraph = records.length > 0 && (firstTextIndex > 0 || opener.openedByVerse);
+    // A later pericope's first verse sitting in the paragraph the chapter already had open there
+    // made no break of its own.
+    const continuesChapter =
+      opensParagraph &&
+      verseIndex === 0 &&
+      !headings.has(verseNumber) &&
+      opener.paraIndex === 0 &&
+      opener.paraMarker === continuedParagraph;
+    if (opensParagraph && !continuesChapter) {
       paragraphs.push({ marker: opener.paraMarker, offset: 0 });
     }
     let offset = 0;

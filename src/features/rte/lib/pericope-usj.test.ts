@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   changedVerses,
+  continuedParagraphOf,
+  openParagraphAfter,
+  paragraphOpenBefore,
   pericopeVersesToUsj,
   usjToPericopeVerses,
   type PericopeVerseText,
@@ -358,6 +361,107 @@ describe('paragraph markers', () => {
     });
   });
 
+  it('starts the next verse with words typed in a new paragraph under a heading', () => {
+    // The paragraph Enter opens under a heading holds no verse marker. No earlier verse in the
+    // section can own its words, so they open the verse below instead of being dropped.
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        { type: 'para', marker: 's1', content: ['Title'] },
+        { type: 'para', marker: 'p', content: ['Typed above.  '] },
+        {
+          type: 'para',
+          marker: 'q1',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'Typed above. First verse.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'q1', offset: 13 },
+          ],
+          headings: [{ marker: 's1', text: 'Title' }],
+        },
+      },
+    ]);
+  });
+
+  it('starts the first verse with words typed above it at the top of the chapter', () => {
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        { type: 'para', marker: 'p', content: ['Before the first verse.'] },
+        { type: 'para', marker: 'p', content: ['   '] },
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'Before the first verse. First verse.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'p', offset: 24 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('still continues the verse above with words in a paragraph between two verses', () => {
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '1' }, 'First verse.'],
+        },
+        { type: 'para', marker: 'p', content: ['More of the first.'] },
+        {
+          type: 'para',
+          marker: 'p',
+          content: [{ type: 'verse', marker: 'v', number: '2' }, 'Second verse.'],
+        },
+      ],
+    } as Usj;
+
+    expect(usjToPericopeVerses(usj)).toEqual([
+      {
+        verseNumber: 1,
+        text: 'First verse. More of the first.',
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'p', offset: 13 },
+          ],
+        },
+      },
+      {
+        verseNumber: 2,
+        text: 'Second verse.',
+        markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+      },
+    ]);
+  });
+
   it('anchors offsets to visible text, unmoved by a footnote', () => {
     const usj: Usj = {
       type: 'USJ',
@@ -431,6 +535,173 @@ describe('paragraph markers', () => {
     ];
 
     expect(usjToPericopeVerses(pericopeVersesToUsj(verses, 1, 'GEN'))).toEqual(verses);
+  });
+});
+
+describe('a pericope that starts inside a paragraph (#530)', () => {
+  // Pericope View builds one document per pericope. In the chapter, verse 14 opens a q1 line that
+  // verses 15 and 16 continue, and the next pericope starts at verse 16.
+  const LATER: PericopeVerseText[] = [
+    { verseNumber: 16, text: 'Verse 16 text.', markers: null },
+    {
+      verseNumber: 17,
+      text: 'Verse 17 text.',
+      markers: { paragraphs: [{ marker: 'p', offset: 0 }] },
+    },
+  ];
+  const markersOf = (usj: Usj): Array<string | undefined> =>
+    usj.content.slice(1).map(node => (typeof node === 'string' ? undefined : node.marker));
+
+  it('opens the first verse in the paragraph the pericope continues', () => {
+    expect(markersOf(pericopeVersesToUsj(LATER, 3, 'JHN', 'q1'))).toEqual(['q1', 'p']);
+  });
+
+  it('does not save the continued paragraph as a break before the first verse', () => {
+    const usj = pericopeVersesToUsj(LATER, 3, 'JHN', 'q1');
+
+    expect(usjToPericopeVerses(usj, 'q1')).toEqual(LATER);
+  });
+
+  it('saves only the break the translator made inside the first verse', () => {
+    const split: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        {
+          type: 'para',
+          marker: 'q1',
+          content: [{ type: 'verse', marker: 'v', number: '16' }, 'Verse 16 '],
+        },
+        { type: 'para', marker: 'q1', content: ['text.'] },
+      ],
+    };
+
+    expect(usjToPericopeVerses(split, 'q1')).toEqual([
+      {
+        verseNumber: 16,
+        text: 'Verse 16 text.',
+        markers: { paragraphs: [{ marker: 'q1', offset: 9 }] },
+      },
+    ]);
+  });
+
+  it('keeps a break the translator typed in front of the first verse', () => {
+    // Enter in front of the number leaves an empty line above it, so the verse now opens a
+    // paragraph of its own.
+    const usj: Usj = {
+      type: 'USJ',
+      version: '3.1',
+      content: [
+        { type: 'chapter', marker: 'c', number: '3' },
+        { type: 'para', marker: 'q1' },
+        {
+          type: 'para',
+          marker: 'q1',
+          content: [{ type: 'verse', marker: 'v', number: '16' }, 'Verse 16 text.'],
+        },
+      ],
+    };
+
+    expect(usjToPericopeVerses(usj, 'q1')[0].markers).toEqual({
+      paragraphs: [{ marker: 'q1', offset: 0 }],
+    });
+  });
+
+  it('still makes the opening paragraph explicit when the pericope continues nothing', () => {
+    expect(usjToPericopeVerses(pericopeVersesToUsj(LATER, 3, 'JHN'))[0].markers).toEqual({
+      paragraphs: [{ marker: 'p', offset: 0 }],
+    });
+  });
+});
+
+describe('openParagraphAfter', () => {
+  it('is the paragraph the last verse leaves open', () => {
+    expect(
+      openParagraphAfter([
+        { verseNumber: 14, text: 'a', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+        { verseNumber: 15, text: 'b', markers: null },
+      ])
+    ).toBe('q1');
+  });
+
+  it('follows a split inside the last verse', () => {
+    expect(
+      openParagraphAfter([
+        {
+          verseNumber: 14,
+          text: 'ab',
+          markers: {
+            paragraphs: [
+              { marker: 'q1', offset: 0 },
+              { marker: 'p', offset: 1 },
+            ],
+          },
+        },
+      ])
+    ).toBe('p');
+  });
+
+  it('is a new p after a heading', () => {
+    expect(
+      openParagraphAfter([
+        { verseNumber: 14, text: 'a', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+        { verseNumber: 15, text: 'b', markers: { headings: [{ marker: 's1', text: 'Title' }] } },
+      ])
+    ).toBe('p');
+  });
+
+  it('is the default p for verses without markers, and nothing before the first verse', () => {
+    expect(openParagraphAfter([{ verseNumber: 1, text: 'a', markers: null }])).toBe('p');
+    expect(openParagraphAfter([])).toBeUndefined();
+  });
+});
+
+describe('paragraphOpenBefore', () => {
+  // Chapter rows as the drafting surface holds them: unordered, and not every verse has one.
+  const rows: PericopeVerseText[] = [
+    { verseNumber: 15, text: 'b', markers: null },
+    { verseNumber: 14, text: 'a', markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+    { verseNumber: 16, text: 'c', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+  ];
+
+  it('is the paragraph the verses before the pericope leave open, in verse order', () => {
+    expect(paragraphOpenBefore(rows, 16)).toBe('q1');
+  });
+
+  it('is the default p when the verses before have no rows yet', () => {
+    expect(paragraphOpenBefore(rows, 9)).toBe('p');
+  });
+
+  it('is nothing at the start of the chapter', () => {
+    expect(paragraphOpenBefore(rows, 1)).toBeUndefined();
+  });
+});
+
+describe('continuedParagraphOf', () => {
+  const pericope = (first: PericopeVerseText['markers']): PericopeVerseText[] => [
+    { verseNumber: 16, text: 'Verse 16 text.', markers: first },
+    { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+  ];
+
+  it('is the open paragraph when the first verse opens none of its own', () => {
+    expect(continuedParagraphOf(pericope(null), 'q1')).toBe('q1');
+    expect(continuedParagraphOf(pericope({ paragraphs: [{ marker: 'p', offset: 5 }] }), 'q1')).toBe(
+      'q1'
+    );
+  });
+
+  it('is nothing when the first verse opens a paragraph or has a heading', () => {
+    expect(
+      continuedParagraphOf(pericope({ paragraphs: [{ marker: 'q1', offset: 0 }] }), 'q1')
+    ).toBeUndefined();
+    expect(
+      continuedParagraphOf(pericope({ headings: [{ marker: 's1', text: 'Title' }] }), 'q1')
+    ).toBeUndefined();
+  });
+
+  it('is nothing at the start of the chapter', () => {
+    expect(continuedParagraphOf(pericope(null), undefined)).toBeUndefined();
   });
 });
 

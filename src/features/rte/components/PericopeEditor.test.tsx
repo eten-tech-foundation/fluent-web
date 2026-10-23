@@ -402,6 +402,77 @@ describe('PericopeEditor', () => {
     ]);
   });
 
+  it('continues the paragraph the pericope before left open, without saving a break (#530)', () => {
+    const onVersesChange = vi.fn();
+    render(
+      <PericopeEditor
+        bookCode={BOOK}
+        chapterNumber={CHAPTER}
+        contentKey='a'
+        continuedParagraph='q1'
+        verses={[
+          { verseNumber: 16, text: 'Verse 16 text.', markers: null },
+          { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+        ]}
+        onVersesChange={onVersesChange}
+      />
+    );
+
+    expect((editor.usj?.content[1] as { marker?: string }).marker).toBe('q1');
+
+    editor.commit?.(editor.usj as Usj);
+    expect(onVersesChange).not.toHaveBeenCalled();
+
+    typeInto(16, 'Verse 16 text. More.');
+    expect(onVersesChange).toHaveBeenCalledWith([
+      { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+    ]);
+  });
+
+  describe('when the pericope before changes the paragraph it leaves open (#530)', () => {
+    const later = (first: PericopeVerseText['markers']): PericopeVerseText[] => [
+      { verseNumber: 16, text: 'Verse 16 text.', markers: first },
+      { verseNumber: 17, text: 'Verse 17 text.', markers: null },
+    ];
+    const firstParagraph = () => (editor.usj?.content[1] as { marker?: string }).marker;
+
+    it('shows the new paragraph and saves the first verse as continuing it', () => {
+      const onVersesChange = vi.fn();
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+      );
+
+      // The box before joins its last two lines into a Poetry line, while this one stays open.
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />);
+      expect(firstParagraph()).toBe('q1');
+
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+      ]);
+    });
+
+    it('leaves a first verse with a paragraph of its own alone', () => {
+      const onVersesChange = vi.fn();
+      const own = { paragraphs: [{ marker: 'p', offset: 0 }] };
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(own)} />
+      );
+
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(own)} />);
+      expect(editor.setUsj).not.toHaveBeenCalled();
+      expect(firstParagraph()).toBe('p');
+
+      // Its break from the paragraph before is still saved, though both are `p`.
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: own },
+      ]);
+    });
+  });
+
   it('does not re-report a split the editor merely re-echoes', () => {
     const onVersesChange = vi.fn();
     render(

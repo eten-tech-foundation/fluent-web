@@ -11,7 +11,7 @@ import {
   withoutPericopeTitle,
 } from '@/features/bible/lib/pericope-title';
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
-import type { PericopeVerseText } from '@/features/rte/lib/pericope-usj';
+import { paragraphOpenBefore, type PericopeVerseText } from '@/features/rte/lib/pericope-usj';
 import type { VerseCaretRequest } from '@/features/rte/lib/verse-caret';
 import { type Source, type TargetVerse, type VerseMarkers } from '@/lib/types';
 
@@ -99,6 +99,22 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     [chapterAssignmentId, chapterNumber, groupVerses]
   );
 
+  // Each pericope is a document of its own. When its first verse doesn't open a paragraph, it
+  // continues the one the chapter has open there, so Chapter and Pericope View agree (#530). Only
+  // the verses before the pericope count: an edit inside it must not change this.
+  const continuedParagraph = useMemo(() => {
+    const first = groupVerses.at(0)?.verseNumber;
+    if (first === undefined) return undefined;
+    return paragraphOpenBefore(
+      verses.map(verse => ({
+        verseNumber: verse.verseNumber,
+        text: verse.content,
+        markers: verse.markers ?? null,
+      })),
+      first
+    );
+  }, [groupVerses, verses]);
+
   const titleVerseNumber = groupVerses[0]?.verseNumber;
   const hiddenTitle = hasTitle
     ? getPericopeTitle(verses.find(verse => verse.verseNumber === titleVerseNumber)?.markers)
@@ -161,6 +177,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         caretRequest={caretRequest}
         chapterNumber={chapterNumber}
         contentKey={contentKey}
+        continuedParagraph={continuedParagraph}
         readOnly={readOnly}
         reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}

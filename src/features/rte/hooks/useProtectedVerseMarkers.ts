@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from 'react';
 
+import { hasStructuralPayload } from '../lib/editor-clipboard';
 import {
   BLOCK_SELECTOR,
   EDITABLE_EDITOR_SELECTOR,
@@ -94,26 +95,20 @@ function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: Deletion
     neighbor.matches(BLOCK_SELECTOR) &&
     isHeadingMarker(block.getAttribute('data-marker') ?? undefined) !==
       isHeadingMarker(neighbor.getAttribute('data-marker') ?? undefined);
+  // Backspace in an empty line under a heading just removes the line: nothing crosses into the
+  // heading. Enter there opens such a line (#397).
+  const removesEmptyLine =
+    backward &&
+    !block.querySelector(SCRIPTURE_MARKER_SELECTOR) &&
+    block.textContent.replace(/[\u200B\s]/g, '') === '';
+  if (crossesHeadingBoundary && removesEmptyLine && !neighbor.matches(SCRIPTURE_MARKER_SELECTOR))
+    return false;
   if (!neighbor.matches(SCRIPTURE_MARKER_SELECTOR) && !crossesHeadingBoundary) return false;
   const edge = document.createRange();
   edge.selectNodeContents(block);
   if (backward) edge.setEnd(range.startContainer, range.startOffset);
   else edge.setStart(range.startContainer, range.startOffset);
   return edge.toString().replace(/\u200B/g, '') === '' && !edge.cloneContents().querySelector('br');
-}
-
-function hasStructuralPayload(data: DataTransfer | null): boolean {
-  if (!data) return false;
-  const html = data.getData('text/html');
-  if (
-    html &&
-    new DOMParser().parseFromString(html, 'text/html').querySelector(SCRIPTURE_MARKER_SELECTOR)
-  ) {
-    return true;
-  }
-  // Lexical prefers its private clipboard format over HTML when both are supplied.
-  const lexical = data.getData('application/x-lexical-editor');
-  return /"type"\s*:\s*"(?:immutable-)?(?:verse|chapter)"/.test(lexical);
 }
 
 /**
