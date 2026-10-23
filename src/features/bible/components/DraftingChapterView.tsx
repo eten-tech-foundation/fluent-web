@@ -121,25 +121,29 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         gridTemplateRows: 'auto minmax(0, 1fr)',
       }}
     >
-      {/* The chapter player shares the heading row, so the source text starts where the target's does. */}
-      <div className='bg-background flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3'>
-        <BibleTabList
-          activeTabId={activeBibleTabId}
-          resourceTab={resourceBibleTab}
-          sourceLabel={projectItem.bibleName}
-          onClose={onBibleTabClose}
-          onSelect={onBibleTabSelect}
-        />
-        {playback && chapterVerseRefs && (
-          <div className='flex min-w-48 flex-1 items-center'>
-            <PericopePlayer
-              groupLabel={String(projectItem.chapterNumber)}
-              kind='chapter'
-              playback={playback}
-              verseRefs={chapterVerseRefs}
-            />
-          </div>
-        )}
+      {/* The chapter player shares the heading row, so the source text starts where the target's
+          does. The row keeps to the top of the cell, level with the target heading, when the
+          target's format bar makes the shared row taller. */}
+      <div className='bg-background min-w-0 px-6 py-3'>
+        <div className='flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2'>
+          <BibleTabList
+            activeTabId={activeBibleTabId}
+            resourceTab={resourceBibleTab}
+            sourceLabel={projectItem.bibleName}
+            onClose={onBibleTabClose}
+            onSelect={onBibleTabSelect}
+          />
+          {playback && chapterVerseRefs && (
+            <div className='flex min-w-48 flex-1 items-center'>
+              <PericopePlayer
+                groupLabel={String(projectItem.chapterNumber)}
+                kind='chapter'
+                playback={playback}
+                verseRefs={chapterVerseRefs}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <div
