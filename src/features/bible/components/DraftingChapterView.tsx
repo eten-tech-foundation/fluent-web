@@ -121,7 +121,8 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
         gridTemplateRows: 'auto minmax(0, 1fr)',
       }}
     >
-      <div className='bg-background min-w-0 px-6 py-3'>
+      {/* The chapter player shares the heading row, so the source text starts where the target's does. */}
+      <div className='bg-background flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3'>
         <BibleTabList
           activeTabId={activeBibleTabId}
           resourceTab={resourceBibleTab}
@@ -129,14 +130,8 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
           onClose={onBibleTabClose}
           onSelect={onBibleTabSelect}
         />
-      </div>
-
-      <div
-        className={`col-start-1 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden ${outlined ? 'rounded-l-md border-y border-l' : ''}`}
-        data-testid='chapter-source-pane'
-      >
         {playback && chapterVerseRefs && (
-          <div className='bg-background z-10 flex min-w-0 shrink-0 items-center border-b px-6 py-2'>
+          <div className='flex min-w-48 flex-1 items-center'>
             <PericopePlayer
               groupLabel={String(projectItem.chapterNumber)}
               kind='chapter'
@@ -145,7 +140,12 @@ export const DraftingChapterView: React.FC<DraftingChapterViewProps> = ({
             />
           </div>
         )}
+      </div>
 
+      <div
+        className={`col-start-1 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden ${outlined ? 'rounded-l-md border-y border-l' : ''}`}
+        data-testid='chapter-source-pane'
+      >
         <div
           ref={sourceViewportRef}
           className='min-h-0 flex-1 overflow-y-auto px-6 py-4'

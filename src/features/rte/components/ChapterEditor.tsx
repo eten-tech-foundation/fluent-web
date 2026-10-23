@@ -330,7 +330,8 @@ export function ChapterEditor({
         }}
         onPasteCapture={handleEditorPaste}
       >
-        <div className='bg-background z-10 flex shrink-0 flex-wrap items-center gap-2 px-6 py-2'>
+        {/* Top-aligned with the source column's heading even when the row grows (chapter player). */}
+        <div className='bg-background z-10 flex shrink-0 flex-wrap content-start items-start gap-2 px-6 py-3'>
           <h3
             className='dark:text-foreground line-clamp-2 min-w-0 flex-[1_1_10rem] text-left text-2xl font-bold [overflow-wrap:anywhere] text-slate-800'
             title={targetLanguage}

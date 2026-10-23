@@ -1258,6 +1258,13 @@ describe('DraftingUI — keyboard shortcuts', () => {
       expect(screen.queryByRole('button', { name: /pericope/i })).not.toBeInTheDocument();
       expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
       expect(ttsRows.map(row => row.verseRef)).toEqual(['1', '2', '3']);
+      // In the heading row beside the Bible tabs, not above the source text, which has to start
+      // where the target text does.
+      expect(screen.getByTestId('chapter-source-pane')).not.toContainElement(
+        screen.getByTestId('tts-group-controls')
+      );
+      const tabs = screen.getByRole('tablist').closest('[data-slot="tabs"]');
+      expect(tabs?.parentElement).toContainElement(screen.getByTestId('tts-group-controls'));
     }
   );
 
