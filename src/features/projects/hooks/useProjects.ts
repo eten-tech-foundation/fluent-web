@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { fetchOrNetworkError, parseErrorMessage } from '@/lib/api-utils';
 import { config } from '@/lib/config';
 import { getActiveGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
@@ -39,7 +40,7 @@ const fetchUserProjects = async (user: User, role?: string): Promise<Project[]> 
 const createProject = async (
   projectData: Omit<CreateProject, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<Project> => {
-  const res = await fetch(`${config.api.url}/projects`, {
+  const res = await fetchOrNetworkError(`${config.api.url}/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -47,7 +48,9 @@ const createProject = async (
     },
     body: JSON.stringify(projectData),
   });
-  if (!res.ok) throw new Error('Failed to create project');
+  // The API says why it refused (a file it cannot parse, a Source Bible without one of the
+  // books), and the dialog shows that reason, so keep it rather than a fixed message (#419, #420).
+  if (!res.ok) await parseErrorMessage(res, 'Failed to create project');
   const data = (await res.json()) as Project;
   return data;
 };

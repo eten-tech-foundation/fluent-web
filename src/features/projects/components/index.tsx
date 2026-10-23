@@ -41,7 +41,11 @@ export const ProjectsWrapper: React.FC = () => {
   // ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT in grant-utils.ts.
   const canCreate = canCreateProject(activeRoleGrants);
 
+  const { reset: resetCreateProject } = createProjectMutation;
+
   const handleOpenCreate = () => {
+    // A failure from an earlier attempt belongs to that attempt, not to a fresh dialog.
+    resetCreateProject();
     void navigate({
       to: '/projects',
       search: { modal: 'create' as const },
@@ -49,6 +53,7 @@ export const ProjectsWrapper: React.FC = () => {
   };
 
   const handleCloseCreate = () => {
+    resetCreateProject();
     void navigate({
       to: '/projects',
       search: {},
@@ -118,7 +123,7 @@ export const ProjectsWrapper: React.FC = () => {
 
       {canCreate && (
         <CreateProjectModal
-          error={createProjectMutation.error?.message}
+          error={createProjectMutation.error}
           isLoading={createProjectMutation.isPending}
           isOpen={modal === 'create'}
           onClose={handleCloseCreate}

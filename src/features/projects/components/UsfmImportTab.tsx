@@ -1,21 +1,17 @@
-import { useCallback, useRef, useState, type DragEvent } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
-import { validateUsfmFile } from '../lib/usfm-validate';
+import { type AcceptedUsfmFile, useUsfmImportFiles } from '../hooks/useUsfmImportFiles';
+import { type UsfmFileProblem } from '../lib/usfm-check';
 
+import { CreateProjectError } from './CreateProjectError';
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
-
-/** A file that passed validation, with the book code detected from its markers. */
-export interface AcceptedUsfmFile {
-  file: File;
-  bookCode: string;
-  /** The file's text, read once at validation so submit does not read it again (#419). */
-  usfm: string;
-}
 
 interface UsfmImportTabProps {
   formData: ProjectFormData;
@@ -24,78 +20,148 @@ interface UsfmImportTabProps {
   /** Create the project from these files plus the fields (#419). */
   onSubmit: (files: AcceptedUsfmFile[]) => void;
   isSubmitting?: boolean;
-  /** Called with the whole batch once every file in it validates. */
-  onFilesAccepted?: (files: AcceptedUsfmFile[]) => void;
+  /** Why the last Create Project failed, if it did (#419, #420). */
+  createError?: Error | null;
 }
 
-type ErrorKey = 'errorNotValidUsfm' | 'errorMissingBookData' | 'errorDuplicateBook';
+const PROBLEM_MESSAGES = {
+  USFM_INVALID: 'errorNotValidUsfm',
+  USFM_BOOK_MISSING: 'errorMissingBookData',
+  USFM_BOOK_DUPLICATE: 'errorDuplicateBook',
+} as const satisfies Record<UsfmFileProblem, string>;
+
+/** The red box the #418 mockup puts under the upload area, one line per problem. */
+const ERROR_BOX =
+  'mt-3.5 rounded-sm border border-[#f5b5b5] bg-[#fde8e8] px-3.5 py-2.5 text-[13px] leading-normal text-[#b91c1c] dark:border-[#6b2b2b] dark:bg-[#3a1f1f] dark:text-[#f5a3a3]';
 
 export function UsfmImportTab({
   formData,
   onFieldChange,
   onSubmit,
   isSubmitting = false,
-  onFilesAccepted,
+  createError = null,
 }: UsfmImportTabProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [accepted, setAccepted] = useState<AcceptedUsfmFile[]>([]);
-  const [error, setError] = useState<ErrorKey | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  // Kept in the tab on purpose: leaving for New and coming back starts the upload over, which
+  // the PM accepted on #418.
+  const { state: importState, selectFiles } = useUsfmImportFiles();
 
-  /** Which selection is current. Reading a file is async, so an older batch can finish last. */
-  const selectionRef = useRef(0);
-
-  /**
-   * #418 rejects the entire import if any single file fails, so nothing is kept unless the whole
-   * batch passes — hence clearing the accepted list before every early return rather than leaving
-   * it holding files from a previous attempt.
-   */
-  const handleFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0) return;
-
-      const selection = ++selectionRef.current;
-      const results: AcceptedUsfmFile[] = [];
-      const seen = new Set<string>();
-
-      for (const file of files) {
-        const text = await file.text();
-
-        // Someone selected again while this batch was still reading. The newer one wins, so
-        // drop this batch instead of letting a stale result overwrite what is on screen.
-        if (selection !== selectionRef.current) return;
-
-        const result = validateUsfmFile(text);
-
-        if (!result.ok) {
-          setAccepted([]);
-          setError(result.reason === 'not-usfm' ? 'errorNotValidUsfm' : 'errorMissingBookData');
-          return;
-        }
-
-        // One file per book, so a second file claiming a book we already have is a mistake
-        // rather than something to silently pick a winner for.
-        if (seen.has(result.bookCode)) {
-          setAccepted([]);
-          setError('errorDuplicateBook');
-          return;
-        }
-
-        seen.add(result.bookCode);
-        results.push({ file, bookCode: result.bookCode, usfm: text });
-      }
-
-      setError(null);
-      setAccepted(results);
-      onFilesAccepted?.(results);
-    },
-    [onFilesAccepted]
-  );
+  const openFilePicker = () => inputRef.current?.click();
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    void handleFiles(Array.from(event.dataTransfer.files));
+    setIsDraggingOver(false);
+    void selectFiles(Array.from(event.dataTransfer.files));
   };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    // Moving onto a child of the drop area also fires dragleave; only leaving the area counts.
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  // Before the files pass, the tab is the upload area (#418); afterwards the fields replace it,
+  // with no way back except closing the dialog (#420).
+  if (importState.status !== 'accepted') {
+    const fileNames = importState.status === 'idle' ? [] : importState.fileNames;
+
+    return (
+      <div className='py-6'>
+        {/* The whole area opens the picker, as in the mockup; the button is the visible cue. */}
+        <div
+          className={cn(
+            'bg-background hover:border-primary hover:bg-muted cursor-pointer rounded-sm border-2 border-dashed px-5 py-8 text-center transition-colors',
+            isDraggingOver ? 'border-primary bg-muted' : 'border-border'
+          )}
+          data-testid='usfm-drop-area'
+          onClick={openFilePicker}
+          onDragLeave={handleDragLeave}
+          onDragOver={event => {
+            event.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDrop={handleDrop}
+        >
+          <Upload aria-hidden className='text-muted-foreground mx-auto mb-2 h-7 w-7' />
+          <p className='text-foreground text-sm leading-normal'>
+            <strong className='font-semibold'>{t('uploadUsfmFiles')}</strong>
+            <br />
+            {t('dropUsfmFiles')}
+          </p>
+          <Button
+            className='hover:border-primary hover:text-primary mt-3.5 h-auto px-4 py-1.5 text-[13px] font-semibold'
+            type='button'
+            variant='outline'
+            onClick={event => {
+              event.stopPropagation();
+              openFilePicker();
+            }}
+          >
+            {t('selectFiles')}
+          </Button>
+          <p className='text-muted-foreground mt-2.5 text-xs'>{t('usfmOnlyFormat')}</p>
+          <input
+            ref={inputRef}
+            multiple
+            className='hidden'
+            data-testid='usfm-file-input'
+            type='file'
+            onChange={event => {
+              const files = Array.from(event.target.files ?? []);
+              // Clearing the value is what lets the same filename be picked twice. Without it the
+              // browser sees no change on the second pick, so a corrected file cannot be retried.
+              event.target.value = '';
+              void selectFiles(files);
+            }}
+            onClick={event => event.stopPropagation()}
+          />
+        </div>
+
+        {fileNames.length > 0 && (
+          <div
+            className='bg-background text-foreground mt-3.5 flex items-center gap-2 rounded-sm border px-3 py-2 text-[13px]'
+            data-testid='selected-files'
+          >
+            {fileNames.length === 1
+              ? fileNames[0]
+              : t('usfmFilesSelected', { count: fileNames.length })}
+          </div>
+        )}
+
+        {importState.status === 'checking' && (
+          <p className='text-muted-foreground mt-3.5 flex items-center gap-2 text-[13px]'>
+            <Loader2 aria-hidden className='h-4 w-4 animate-spin' />
+            {t('checkingUsfmFiles')}
+          </p>
+        )}
+
+        {importState.status === 'rejected' && (
+          <div className={ERROR_BOX} data-testid='usfm-file-errors' role='alert'>
+            {importState.problems.map(({ fileName, problem }, index) => (
+              <p key={`${fileName}-${index}`}>
+                {fileName}: {t(PROBLEM_MESSAGES[problem])}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {importState.status === 'failed' && (
+          <div className={ERROR_BOX} data-testid='usfm-file-errors' role='alert'>
+            <p>
+              {t(
+                importState.reason === 'network' ? 'errorUsfmCheckNetwork' : 'errorUsfmCheckFailed'
+              )}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const accepted = importState.files;
 
   /**
    * #420's rule plus the fields a project cannot exist without: Book(s) comes from the files
@@ -112,74 +178,44 @@ export function UsfmImportTab({
     Boolean(formData.pericopeSetId) &&
     accepted.length > 0;
 
-  // Before any file is accepted the tab is only the upload area; afterwards it is replaced by the
-  // fields, with no way back except closing the dialog (#420).
-  if (accepted.length === 0) {
-    return (
-      <div className='space-y-4 py-6'>
-        <div
-          className='border-muted-foreground/30 flex flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-10'
-          data-testid='usfm-drop-area'
-          onDragOver={event => event.preventDefault()}
-          onDrop={handleDrop}
-        >
-          <Button type='button' variant='outline' onClick={() => inputRef.current?.click()}>
-            {t('selectFile')}
-          </Button>
-          <p className='text-muted-foreground text-sm'>{t('dropUsfmFiles')}</p>
-          <input
-            ref={inputRef}
-            multiple
-            className='hidden'
-            data-testid='usfm-file-input'
-            type='file'
-            onChange={event => {
-              const files = Array.from(event.target.files ?? []);
-              // Clearing the value is what lets the same filename be picked twice. Without it the
-              // browser sees no change on the second pick, so a corrected file cannot be retried.
-              event.target.value = '';
-              void handleFiles(files);
-            }}
-          />
-        </div>
-
-        {error && <p className='text-destructive text-sm font-medium'>{t(error)}</p>}
+  /*
+    The books the API found in the files (#418), named in file order and read-only: the server
+    derives the project's books from the files. A file named for one book that holds another
+    (1CH.usfm with \id GEN) shows up here as the book it really is (#419).
+  */
+  const booksField = (
+    <div className='space-y-2'>
+      <Label>{t('importBooks')}</Label>
+      <div
+        className='bg-muted text-foreground rounded-sm border px-3 py-2 text-sm'
+        data-testid='import-books'
+      >
+        {accepted.map(item => item.bookName).join(', ')}
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className='space-y-6 py-6'>
       <ul className='space-y-1' data-testid='accepted-files'>
         {accepted.map(item => (
-          <li key={item.file.name} className='flex items-center gap-2 text-sm text-(--success)'>
-            <Check className='h-4 w-4' />
+          <li
+            key={item.bookCode}
+            className='flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-(--success)'
+          >
+            <Check aria-hidden className='h-3.5 w-3.5 shrink-0' strokeWidth={2.5} />
             <span className='truncate'>{item.file.name}</span>
           </li>
         ))}
       </ul>
 
-      {/*
-        Book codes come straight from what was already parsed out of each file (#418) — no
-        picker, no per-bible book fetch. The server resolves each code to a bookId itself when
-        the project is created from usfmFiles, so this is read-only confirmation of what was
-        detected, not a selection the user can change here.
-      */}
-      <div data-testid='detected-books'>
-        <p className='text-muted-foreground text-sm font-medium'>{t('detectedBooks')}</p>
-        <ul className='mt-1 flex flex-wrap gap-2'>
-          {accepted.map(item => (
-            <li
-              key={item.bookCode}
-              className='bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium'
-            >
-              {item.bookCode}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ProjectFormFields
+        booksField={booksField}
+        formData={formData}
+        onFieldChange={onFieldChange}
+      />
 
-      <ProjectFormFields formData={formData} onFieldChange={onFieldChange} />
+      {createError && !isSubmitting && <CreateProjectError error={createError} />}
 
       <div className='flex items-center justify-between pt-4'>
         <p className='flex items-center gap-2 text-sm font-medium text-(--success)'>

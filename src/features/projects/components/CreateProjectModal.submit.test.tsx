@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { NetworkError } from '@/lib/api-utils';
 import { config } from '@/lib/config';
+import { server } from '@/test/msw/server';
+import { usfmCheckHandler } from '@/test/msw/usfm-check';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '@/test/render';
 
 import { CreateProjectModal, type CreateProjectData } from './CreateProjectModal';
@@ -37,6 +40,11 @@ vi.mock('./ProjectFormFields', () => ({
 }));
 
 vi.mock('@/lib/services/logger', () => ({ Logger: { logException: vi.fn() } }));
+
+beforeEach(() => {
+  // A dropped file is checked by the API before the fields appear (#419).
+  server.use(usfmCheckHandler());
+});
 
 afterEach(() => {
   config.features.usfmImport = false;
@@ -95,7 +103,7 @@ describe('CreateProjectModal submission', () => {
       // The parent catches its own save errors, so onSave resolving proves nothing. The button
       // only comes back once the failure actually reaches the dialog through `error`.
       expect(submit).toBeDisabled();
-      rerender(<CreateProjectModal {...props} error='Project not created' />);
+      rerender(<CreateProjectModal {...props} error={new Error('Project not created')} />);
       await waitFor(() => expect(submit).toBeEnabled());
       await user.click(submit);
       expect(onSave).toHaveBeenCalledTimes(2);
@@ -150,4 +158,64 @@ describe('CreateProjectModal submission', () => {
     expect(payload.usfmFiles).toHaveLength(1);
     expect(payload.books).toEqual([]);
   });
+});
+
+describe('CreateProjectModal Import tab files', () => {
+  const props = { isOpen: true, onClose: vi.fn(), onSave: vi.fn() };
+
+  it('starts the Import tab empty again when the dialog is reopened', async () => {
+    config.features.usfmImport = true;
+    const { user, rerender } = renderWithProviders(<CreateProjectModal {...props} />);
+    await user.click(screen.getByRole('tab', { name: 'importTab' }));
+    await dropGenesis();
+
+    rerender(<CreateProjectModal {...props} isOpen={false} />);
+    rerender(<CreateProjectModal {...props} />);
+    await user.click(screen.getByRole('tab', { name: 'importTab' }));
+
+    expect(screen.getByTestId('usfm-drop-area')).toBeInTheDocument();
+    expect(screen.queryByTestId('accepted-files')).not.toBeInTheDocument();
+  });
+});
+
+// #419, #420: a failed create used to bring the button back on the Import tab with nothing said.
+describe('CreateProjectModal failures', () => {
+  const failed = (error: Error) => ({ isOpen: true, onClose: vi.fn(), onSave: vi.fn(), error });
+
+  it.each(['new', 'import'] as const)("shows the API's reason in the %s tab", async tab => {
+    config.features.usfmImport = true;
+    const { user } = renderWithProviders(
+      <CreateProjectModal
+        {...failed(new Error('One or more requested books do not belong to the specified Bible'))}
+      />
+    );
+    if (tab === 'import') {
+      await user.click(screen.getByRole('tab', { name: 'importTab' }));
+      await dropGenesis();
+    }
+
+    const alert = screen.getByTestId('create-project-error');
+    expect(alert).toHaveTextContent('errorProjectNotCreated');
+    expect(alert).toHaveTextContent(
+      'One or more requested books do not belong to the specified Bible'
+    );
+  });
+
+  it.each(['new', 'import'] as const)(
+    'says the server could not be reached in the %s tab',
+    async tab => {
+      config.features.usfmImport = true;
+      const { user } = renderWithProviders(
+        <CreateProjectModal {...failed(new NetworkError(new TypeError('Failed to fetch')))} />
+      );
+      if (tab === 'import') {
+        await user.click(screen.getByRole('tab', { name: 'importTab' }));
+        await dropGenesis();
+      }
+
+      expect(screen.getByTestId('create-project-error')).toHaveTextContent(
+        'errorCreateProjectNetwork'
+      );
+    }
+  );
 });

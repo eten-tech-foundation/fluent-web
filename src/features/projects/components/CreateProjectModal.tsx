@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 
-import { Loader2, TriangleAlert } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
+import { type AcceptedUsfmFile } from '@/features/projects/hooks/useUsfmImportFiles';
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
 import { type ConnectivityProfile, type UsfmFilePayload } from '@/lib/types';
 
+import { CreateProjectError } from './CreateProjectError';
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
-import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
+import { UsfmImportTab } from './UsfmImportTab';
 
 export interface CreateProjectData {
   title: string;
@@ -37,8 +39,13 @@ interface CreateProjectModalProps {
   onClose: () => void;
   onSave: (projectData: CreateProjectData) => Promise<void>;
   isLoading?: boolean;
-  error?: string | null;
+  /** Why the last save failed; both tabs show it (#419, #420). */
+  error?: Error | null;
 }
+
+/** The #418 mockup's tabs: semibold, grey until active, then primary with a 2px underline. */
+const TAB_TRIGGER =
+  'text-muted-foreground hover:text-foreground data-[state=active]:text-primary after:bg-primary mr-5 flex-none px-1 text-sm font-semibold';
 
 const EMPTY_FORM_DATA: ProjectFormData = {
   title: '',
@@ -179,25 +186,23 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         </DialogHeader>
         <Tabs defaultValue='new'>
           {config.features.usfmImport && (
-            <TabsList>
-              <TabsTrigger value='new'>{t('newTab')}</TabsTrigger>
-              <TabsTrigger value='import'>{t('importTab')}</TabsTrigger>
+            // Underlined tabs in the primary color, as the #418 mockup draws them.
+            <TabsList className='w-full justify-start border-b' variant='line'>
+              <TabsTrigger className={TAB_TRIGGER} value='new'>
+                {t('newTab')}
+              </TabsTrigger>
+              <TabsTrigger className={TAB_TRIGGER} value='import'>
+                {t('importTab')}
+              </TabsTrigger>
             </TabsList>
           )}
           <TabsContent value='new'>
             <div className='space-y-6 py-6'>
               <ProjectFormFields formData={formData} onFieldChange={updateFormData} />
 
-              <div className='flex items-center justify-end pt-4'>
-                {error && (
-                  <div className='mr-4 flex w-full items-center justify-center gap-2'>
-                    <TriangleAlert className='text-destructive h-4 w-4' />
-                    <p className='text-destructive text-sm font-medium'>
-                      Error: Project not created.
-                    </p>
-                  </div>
-                )}
+              {error && !isSubmitting && <CreateProjectError error={error} />}
 
+              <div className='flex items-center justify-end pt-4'>
                 <Button
                   className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
                   disabled={isButtonDisabled}
@@ -219,6 +224,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           {config.features.usfmImport && (
             <TabsContent value='import'>
               <UsfmImportTab
+                createError={error}
                 formData={formData}
                 isSubmitting={isLoading || isSubmitting}
                 onBooksChange={setBooks}

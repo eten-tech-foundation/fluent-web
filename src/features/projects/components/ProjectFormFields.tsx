@@ -1,3 +1,5 @@
+import { type ReactNode } from 'react';
+
 import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -35,6 +37,8 @@ export interface ProjectFormData {
 interface ProjectFormFieldsProps {
   formData: ProjectFormData;
   onFieldChange: <K extends keyof ProjectFormData>(field: K, value: ProjectFormData[K]) => void;
+  /** The Import tab's read-only Books field, which the #420 mockup puts after Target Language. */
+  booksField?: ReactNode;
 }
 
 /**
@@ -44,7 +48,7 @@ interface ProjectFormFieldsProps {
  * second caller reads the same cache instead of issuing a second request, and it keeps this
  * component from needing a dozen data props.
  */
-export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFieldsProps) {
+export function ProjectFormFields({ formData, onFieldChange, booksField }: ProjectFormFieldsProps) {
   const { t } = useTranslation();
   const { data: languages, isLoading: languagesLoading } = useLanguages();
   const { data: pericopeSets, isLoading: pericopeSetsLoading } = usePericopeSets();
@@ -100,6 +104,8 @@ export function ProjectFormFields({ formData, onFieldChange }: ProjectFormFields
           onClear={() => onFieldChange('targetLanguage', null)}
         />
       </div>
+
+      {booksField}
 
       <div className='space-y-2'>
         <Label className='gap-1' htmlFor='pericopeSet'>
