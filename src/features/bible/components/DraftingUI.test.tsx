@@ -705,9 +705,10 @@ describe('DraftingUI', () => {
           const referenceGroup = screen.getByRole('button', {
             name: /Selected reference neighboring verse/,
           });
-          expect(within(referenceGroup).getByText('1:1')).toBeInTheDocument();
-          expect(within(referenceGroup).getByText('1:2')).toBeInTheDocument();
-          expect(within(referenceGroup).getByText('2:1')).toBeInTheDocument();
+          // Plain verse numbers (1:1, 1:2, then 2:1) with a divider where the chapter changes.
+          expect(within(referenceGroup).getAllByText('1')).toHaveLength(2);
+          expect(within(referenceGroup).getByText('2')).toBeInTheDocument();
+          expect(within(referenceGroup).getByText('Chapter 2')).toBeInTheDocument();
           expect(
             within(referenceGroup).getAllByText(
               currentState === 'loading' ? /loading/i : NO_CONTENT_MESSAGE

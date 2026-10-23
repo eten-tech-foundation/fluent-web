@@ -228,6 +228,9 @@ describe('cross-chapter drafting integration', () => {
     // The visible label is a plain chapter divider; "context (read-only)" is for screen readers.
     expect(within(context).getByText('Chapter 9')).toBeInTheDocument();
     expect(screen.queryByText('Chapter 9 context (read-only)')).not.toBeInTheDocument();
+    // Nothing comes before chapter 8 in this box, so neither side labels it.
+    expect(screen.queryByText('Chapter 8')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Chapter 9')).toHaveLength(2);
     expect(within(context).getByText('Saved Mark 9:1')).toBeInTheDocument();
     expect(within(context).queryByRole('textbox')).not.toBeInTheDocument();
     expect(submit).toBeEnabled();
@@ -293,8 +296,8 @@ describe('cross-chapter drafting integration', () => {
     expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
     // Undrafted neighbors keep their numbers and stay blank.
-    expect(within(context).getByText('8:31')).toBeInTheDocument();
-    expect(within(context).getByText('8:38')).toBeInTheDocument();
+    expect(within(context).getByText('31')).toBeInTheDocument();
+    expect(within(context).getByText('38')).toBeInTheDocument();
     expect(within(context).queryByText('Not drafted')).not.toBeInTheDocument();
     expect(within(context).queryByRole('textbox')).not.toBeInTheDocument();
     await waitFor(() => expect(saved).toHaveLength(1), { timeout: 3500 });
@@ -342,7 +345,9 @@ describe('cross-chapter drafting integration', () => {
     expect(next).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Send to Peer Check' })).toBeDisabled();
     const context = screen.getByRole('region', { name: 'Chapter 8 context (read-only)' });
-    expect(within(context).getByText('Chapter 8')).toBeInTheDocument();
+    // The box starts in chapter 8, so only the change to chapter 9 gets a divider, on both sides.
+    expect(within(context).queryByText('Chapter 8')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Chapter 9')).toHaveLength(2);
     expect(within(context).queryByText('Not drafted')).not.toBeInTheDocument();
 
     await translator.click(next);

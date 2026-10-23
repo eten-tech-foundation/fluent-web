@@ -70,7 +70,6 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[
             chapterNineVerses[1],
             { chapterNumber: 8, verseNumber: 1 },
@@ -81,7 +80,7 @@ describe('PericopeReferenceVerses', () => {
     );
 
     await screen.findByText('Aquifer chapter nine');
-    expect(container.textContent).toMatch(/9:1\s*Aquifer chapter nine\s*9:3\s*Aquifer third verse/);
+    expect(container.textContent).toMatch(/1\s*Aquifer chapter nine\s*3\s*Aquifer third verse/);
     expect(screen.queryByText('Aquifer chapter eight')).not.toBeInTheDocument();
     expect(screen.queryByText('Outside the pericope')).not.toBeInTheDocument();
     expect(container.querySelector('p p')).toBeNull();
@@ -117,7 +116,6 @@ describe('PericopeReferenceVerses', () => {
             bibleId='aq-11'
             bookCode='MRK'
             chapterNumber={9}
-            showChapter={true}
             verses={[chapterNineVerses[0]]}
           />
         </p>
@@ -126,7 +124,6 @@ describe('PericopeReferenceVerses', () => {
             bibleId='yv-11'
             bookCode='MRK'
             chapterNumber={8}
-            showChapter={true}
             verses={[{ chapterNumber: 8, verseNumber: 1 }]}
           />
         </p>
@@ -135,7 +132,6 @@ describe('PericopeReferenceVerses', () => {
             bibleId='yv-11'
             bookCode='MRK'
             chapterNumber={9}
-            showChapter={false}
             verses={[chapterNineVerses[0]]}
           />
         </p>
@@ -146,10 +142,10 @@ describe('PericopeReferenceVerses', () => {
     await within(screen.getByLabelText('YouVersion eight')).findByText('YouVersion chapter eight');
     await within(screen.getByLabelText('Aquifer nine')).findByText('Aquifer chapter nine');
     expect(screen.getByLabelText('Aquifer nine').textContent).toMatch(
-      /^9:1\s*Aquifer chapter nine\s*$/
+      /^1\s*Aquifer chapter nine\s*$/
     );
     expect(screen.getByLabelText('YouVersion eight').textContent).toMatch(
-      /^8:1\s*YouVersion chapter eight\s*$/
+      /^1\s*YouVersion chapter eight\s*$/
     );
     expect(screen.getByLabelText('YouVersion nine').textContent).toMatch(
       /^1\s*YouVersion chapter nine\s*$/
@@ -169,14 +165,13 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[chapterNineVerses[0]]}
         />
       </p>
     );
 
     await screen.findByText('Aquifer chapter nine');
-    expect(screen.getByText('9:1')).toHaveClass('font-sans');
+    expect(screen.getByText('1')).toHaveClass('font-sans');
     expect(screen.getByText('Aquifer chapter nine')).not.toHaveClass('font-sans');
   });
 
@@ -198,14 +193,13 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={chapterNineVerses}
         />
       </p>
     );
 
-    expect(screen.getByText('9:1')).toBeInTheDocument();
-    expect(screen.getByText('9:3')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getAllByText(/loading/i)).toHaveLength(2);
     release();
     await screen.findByText('Aquifer chapter nine');
@@ -229,7 +223,6 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[chapterNineVerses[0]]}
         />
       </p>
@@ -242,14 +235,13 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-12'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[chapterNineVerses[0]]}
         />
       </p>
     );
 
     await screen.findByText(/no content available/i);
-    expect(screen.getByText('9:1')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText('Aquifer chapter nine')).not.toBeInTheDocument();
     expect(screen.queryByText(/unable to load/i)).not.toBeInTheDocument();
   });
@@ -263,14 +255,13 @@ describe('PericopeReferenceVerses', () => {
           bibleId='aq-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[chapterNineVerses[0]]}
         />
       </p>
     );
 
     await screen.findByText(/unable to load/i);
-    expect(screen.getByText('9:1')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
@@ -290,14 +281,13 @@ describe('PericopeReferenceVerses', () => {
             bibleId='aq-11'
             bookCode='MRK'
             chapterNumber={9}
-            showChapter={true}
             verses={[chapterNineVerses[0]]}
           />
         </p>
       );
 
       const failedVerse = await screen.findByText(/unable to load/i);
-      expect(failedVerse.parentElement).toHaveTextContent('9:1');
+      expect(failedVerse.parentElement).toHaveTextContent(/^1\D/);
       expect(failedVerse).toHaveClass('text-muted-foreground', 'text-sm');
       expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
     }
@@ -321,7 +311,6 @@ describe('PericopeReferenceVerses', () => {
             bibleId='aq-11'
             bookCode='MRK'
             chapterNumber={9}
-            showChapter={true}
             verses={chapterNineVerses}
           />
         </p>
@@ -329,7 +318,7 @@ describe('PericopeReferenceVerses', () => {
     );
 
     await screen.findByText('Aquifer cached verse');
-    expect(screen.getByText(/no content available/i).parentElement).toHaveTextContent('9:3');
+    expect(screen.getByText(/no content available/i).parentElement).toHaveTextContent(/^3\D/);
     server.use(
       http.get(
         `${config.api.url}/aquifer/bibles/11/texts`,
@@ -342,9 +331,9 @@ describe('PericopeReferenceVerses', () => {
     });
 
     const failedVerse = await screen.findByText(/unable to load/i);
-    expect(failedVerse.parentElement).toHaveTextContent('9:3');
+    expect(failedVerse.parentElement).toHaveTextContent(/^3\D/);
     const cachedVerse = screen.getByText('Aquifer cached verse');
-    expect(cachedVerse.parentElement).toHaveTextContent('9:1');
+    expect(cachedVerse.parentElement).toHaveTextContent(/^1\D/);
     expect(cachedVerse).not.toHaveClass('text-muted-foreground');
     expect(screen.getAllByText(/unable to load/i)).toHaveLength(1);
     expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
@@ -368,7 +357,6 @@ describe('PericopeReferenceVerses', () => {
           bibleId='yv-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[
             chapterNineVerses[0],
             { chapterNumber: 9, verseNumber: 2 },
@@ -380,8 +368,8 @@ describe('PericopeReferenceVerses', () => {
 
     const unavailableVerses = await screen.findAllByText(/no content available/i);
     const availableVerse = await screen.findByText('YouVersion available verse');
-    expect(unavailableVerses[0].parentElement).toHaveTextContent('9:2');
-    expect(availableVerse.parentElement).toHaveTextContent('9:1');
+    expect(unavailableVerses[0].parentElement).toHaveTextContent(/^2\D/);
+    expect(availableVerse.parentElement).toHaveTextContent(/^1\D/);
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
@@ -408,7 +396,6 @@ describe('PericopeReferenceVerses', () => {
           bibleId='yv-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={chapterNineVerses}
         />
       </p>
@@ -434,14 +421,13 @@ describe('PericopeReferenceVerses', () => {
           bibleId='yv-11'
           bookCode='MRK'
           chapterNumber={9}
-          showChapter={true}
           verses={[chapterNineVerses[0]]}
         />
       </p>
     );
 
     await screen.findByText(/unable to load/i);
-    expect(screen.getByText('9:1')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
   });
 });
