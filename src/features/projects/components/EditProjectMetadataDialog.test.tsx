@@ -2,13 +2,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EditProjectMetadataDialog } from '@/features/projects/components/EditProjectMetadataDialog';
 import { type BookDetails } from '@/features/projects/hooks/useBookDetails';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
 import {
+  act,
   createTestQueryClient,
   fireEvent,
   render,
@@ -88,8 +89,21 @@ function renderDialog(onClose = vi.fn()) {
 const bookTrigger = (name: string) => screen.findByRole('button', { name: new RegExp(name) });
 
 describe('EditProjectMetadataDialog', () => {
+  // jsdom has no scrollIntoView. The dialog calls it once a book has finished opening.
+  const scrollIntoView = vi.fn();
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+  });
+  afterAll(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  });
+
   beforeEach(() => {
     vi.mocked(toast.error).mockClear();
+    scrollIntoView.mockClear();
   });
 
   it('lists the books of the project collapsed', async () => {
@@ -181,7 +195,7 @@ describe('EditProjectMetadataDialog', () => {
 
   it('keeps Close and a save error pinned below the scrolling books', async () => {
     mockApi({ patchStatus: 400, patchMessage: 'must not contain pipes' });
-    const { user } = renderDialog();
+    const { user, unmount } = renderDialog();
 
     await user.click(await bookTrigger('Genesis'));
     await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'a|b');
@@ -191,12 +205,61 @@ describe('EditProjectMetadataDialog', () => {
     const pinned = screen.getByRole('button', { name: 'close' }).closest('.sticky');
     expect(pinned).toHaveClass('bottom-0');
     expect(pinned).toContainElement(alert);
+    // The failed edit is saved again on unmount; let that land while the handlers still exist.
+    unmount();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('must not contain pipes'));
+  });
+
+  it('sizes the scroll padding to the pinned footer as a save error grows it', async () => {
+    // Kasey's review on #596: a fixed padding covered the footer at rest but not with a save
+    // error, so a lower field could stop under it. jsdom has no layout, so the test sets the
+    // footer's height itself and runs the observer the way the browser would.
+    const observed = new Map<Element, () => void>();
+    const realResizeObserver = window.ResizeObserver;
+    window.ResizeObserver = class {
+      private readonly notify: () => void;
+      constructor(callback: ResizeObserverCallback) {
+        this.notify = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe(target: Element) {
+        observed.set(target, this.notify);
+      }
+      unobserve() {}
+      disconnect() {}
+    };
+
+    try {
+      mockApi({ patchStatus: 400, patchMessage: 'must not contain pipes' });
+      const { user, unmount } = renderDialog();
+      await user.click(await bookTrigger('Genesis'));
+      const dialog = screen.getByRole('dialog');
+      const footer = screen.getByRole('button', { name: 'close' }).closest('.sticky');
+      if (!(footer instanceof HTMLElement)) throw new Error('no pinned footer');
+      const resize = (height: number) => {
+        Object.defineProperty(footer, 'offsetHeight', { configurable: true, value: height });
+        act(() => observed.get(footer)?.());
+      };
+
+      resize(80);
+      expect(dialog.style.scrollPaddingBottom).toBe('80px');
+
+      await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'a|b');
+      await user.tab();
+      await screen.findByRole('alert');
+      resize(116); // one line of error
+      expect(dialog.style.scrollPaddingBottom).toBe('116px');
+      resize(136); // a message long enough to wrap
+      expect(dialog.style.scrollPaddingBottom).toBe('136px');
+
+      unmount();
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('must not contain pipes'));
+    } finally {
+      window.ResizeObserver = realResizeObserver;
+    }
   });
 
   it('brings a book into view once it has finished opening', async () => {
     mockApi();
-    const scrollIntoView = vi.fn();
-    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const { user } = renderDialog();
 
     await user.click(await bookTrigger('Genesis'));

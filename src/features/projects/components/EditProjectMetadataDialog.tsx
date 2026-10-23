@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { Loader2 } from 'lucide-react';
@@ -103,6 +103,20 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
   const saveChainRef = useRef<Record<number, Promise<void>>>({});
   const isOpenRef = useRef(isOpen);
   const flushRef = useRef<() => void>(() => {});
+
+  // The pinned footer grows with a save error, more when the message wraps, so the panel's scroll
+  // padding follows its rendered height. An opened book or a focused field then always stops
+  // above the footer instead of under it.
+  const [footerHeight, setFooterHeight] = useState<number>();
+  const footerObserverRef = useRef<ResizeObserver | null>(null);
+  const footerRef = useCallback((footer: HTMLDivElement | null) => {
+    footerObserverRef.current?.disconnect();
+    footerObserverRef.current = null;
+    if (!footer) return;
+    const observer = new ResizeObserver(() => setFooterHeight(footer.offsetHeight));
+    observer.observe(footer);
+    footerObserverRef.current = observer;
+  }, []);
 
   const valueOf = (book: BookDetails, field: TocField): string =>
     drafts[book.bookId]?.[field] ?? serverValues(book)[field];
@@ -241,8 +255,11 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
     >
       {/* The whole panel scrolls, not only the book list: with the page scroll-locked behind the
           dialog, a wheel over the title, the padding or the footer used to do nothing (QA on
-          #398). The scroll padding keeps what scrolls into view clear of the pinned footer. */}
-      <DialogContent className='max-h-[80vh] scroll-pb-24 overflow-y-auto pb-0 sm:max-w-2xl'>
+          #398). */}
+      <DialogContent
+        className='max-h-[80vh] overflow-y-auto pb-0 sm:max-w-2xl'
+        style={{ scrollPaddingBottom: footerHeight }}
+      >
         <DialogHeader>
           <DialogTitle>{t('editProjectMetadata')}</DialogTitle>
           <DialogDescription>{t('editProjectMetadataDescription')}</DialogDescription>
@@ -344,7 +361,7 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
         {/* Pinned to the bottom while the books scroll, so Close and a save error stay in view.
             It carries the panel's bottom padding, which would otherwise scroll in below it, and
             takes over the gap above it, so at rest nothing moves. */}
-        <div className='bg-card sticky bottom-0 -mt-4 grid gap-4 pt-4 pb-6'>
+        <div ref={footerRef} className='bg-card sticky bottom-0 -mt-4 grid gap-4 pt-4 pb-6'>
           {saveError && (
             <p className='text-sm text-red-500' role='alert'>
               {saveError}
