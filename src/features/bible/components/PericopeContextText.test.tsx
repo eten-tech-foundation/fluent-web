@@ -35,6 +35,6 @@ describe('PericopeContextText', () => {
     );
 
     expect(screen.getByText('Drafted context.').closest('.target-scripture')).not.toBeNull();
-    expect(screen.getByText('2:25')).toHaveClass('font-sans');
+    expect(screen.getByText('25')).toHaveClass('font-sans');
   });
 });

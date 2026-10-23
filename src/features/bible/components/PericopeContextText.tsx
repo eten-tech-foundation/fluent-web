@@ -25,8 +25,11 @@ export const PericopeContextText = ({
   );
   const chapterNumbers = [...new Set(refs.map(ref => ref.chapterNumber))];
 
-  return chapterNumbers.map(chapter => {
+  return chapterNumbers.map((chapter, index) => {
     const data = chapters?.get(chapter);
+    // A divider only where the chapter changes, so never above the box's first verse; the
+    // source column marks the same places. "read-only" is said to screen readers.
+    const changesChapter = side === 'after' || index > 0;
     return (
       <section
         key={chapter}
@@ -34,14 +37,13 @@ export const PericopeContextText = ({
           defaultValue: 'Chapter {{chapter}} context (read-only)',
           chapter,
         })}
-        className='text-muted-foreground space-y-1 py-2'
+        className={`text-muted-foreground space-y-1 ${changesChapter ? 'py-2' : 'pb-2'}`}
       >
-        <p className='text-sm font-medium'>
-          {t('pericopeChapterContext', {
-            defaultValue: 'Chapter {{chapter}} context (read-only)',
-            chapter,
-          })}
-        </p>
+        {changesChapter && (
+          <p className='text-sm font-medium'>
+            {t('pericopeCurrentChapter', { defaultValue: 'Chapter {{chapter}}', chapter })}
+          </p>
+        )}
         <p className='target-scripture text-foreground text-base leading-relaxed select-text'>
           {refs
             .filter(ref => ref.chapterNumber === chapter)
@@ -52,9 +54,7 @@ export const PericopeContextText = ({
               )?.content;
               return (
                 <Fragment key={`${chapter}:${ref.verseNumber}`}>
-                  <span className='mr-1.5 font-sans font-bold'>
-                    {chapter}:{ref.verseNumber}
-                  </span>
+                  <span className='mr-1.5 font-sans font-bold'>{ref.verseNumber}</span>
                   <PericopeText
                     className='mr-3'
                     content={content}

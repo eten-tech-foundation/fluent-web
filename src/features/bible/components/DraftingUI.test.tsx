@@ -705,9 +705,10 @@ describe('DraftingUI', () => {
           const referenceGroup = screen.getByRole('button', {
             name: /Selected reference neighboring verse/,
           });
-          expect(within(referenceGroup).getByText('1:1')).toBeInTheDocument();
-          expect(within(referenceGroup).getByText('1:2')).toBeInTheDocument();
-          expect(within(referenceGroup).getByText('2:1')).toBeInTheDocument();
+          // Plain verse numbers (1:1, 1:2, then 2:1) with a divider where the chapter changes.
+          expect(within(referenceGroup).getAllByText('1')).toHaveLength(2);
+          expect(within(referenceGroup).getByText('2')).toBeInTheDocument();
+          expect(within(referenceGroup).getByText('Chapter 2')).toBeInTheDocument();
           expect(
             within(referenceGroup).getAllByText(
               currentState === 'loading' ? /loading/i : NO_CONTENT_MESSAGE
@@ -2016,7 +2017,25 @@ describe('DraftingUI', () => {
       expect(handleTextChange).not.toHaveBeenCalled();
       expect(mockTrackAiUsage).not.toHaveBeenCalled();
       expect(screen.queryByLabelText('Section title')).not.toBeInTheDocument();
+      expect(
+        within(screen.getByTestId('pericope-source-column')).queryByRole('heading', { level: 5 })
+      ).not.toBeInTheDocument();
     });
+
+    it.each([true, false])(
+      'shows the source title above the source text the Section title translates (rte %s)',
+      rte => {
+        config.features.rtePericope = rte;
+        renderWithAi();
+        const source = screen.getByTestId('pericope-source-column');
+        const title = within(source).getByRole('heading', { level: 5, name: 'Creation' });
+        // Above the first verse, inside the same box.
+        expect(
+          title.compareDocumentPosition(within(source).getByText(mockSourceVerses[0].text)) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      }
+    );
 
     it('preserves a title being typed while a suggestion is in flight', async () => {
       mockUseAiSuggestions.mockReturnValue({

@@ -58,6 +58,14 @@ export interface ChapterEditorProps {
   onVersesChange: (changed: PericopeVerseText[]) => void;
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
   onActiveVerseChange?: (verseNumber: number) => void;
+  /**
+   * Places the editor in its parent's layout, replacing the default of filling the container.
+   * The root always has two children, the header row and the body row, so Chapter view can lay
+   * them on its own grid rows (CSS subgrid) next to the source column.
+   */
+  className?: string;
+  /** Frames the body row (format errors and the scrolling text), e.g. its half of an outline. */
+  bodyClassName?: string;
 }
 
 /**
@@ -82,6 +90,8 @@ export function ChapterEditor({
   contentKey,
   onVersesChange,
   onActiveVerseChange,
+  className = 'flex h-full flex-col',
+  bodyClassName = '',
 }: ChapterEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -312,7 +322,7 @@ export function ChapterEditor({
       )}
       <div
         ref={containerRef}
-        className='chapter-editor flex h-full min-h-0 min-w-0 flex-col'
+        className={`chapter-editor min-h-0 min-w-0 ${className}`}
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
         onKeyDownCapture={event => {
@@ -320,7 +330,8 @@ export function ChapterEditor({
         }}
         onPasteCapture={handleEditorPaste}
       >
-        <div className='border-border bg-background z-10 flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-2'>
+        {/* Top-aligned with the source column's heading even when the row grows (chapter player). */}
+        <div className='bg-background z-10 flex shrink-0 flex-wrap content-start items-start gap-2 px-6 py-3'>
           <h3
             className='dark:text-foreground line-clamp-2 min-w-0 flex-[1_1_10rem] text-left text-2xl font-bold [overflow-wrap:anywhere] text-slate-800'
             title={targetLanguage}
@@ -344,31 +355,33 @@ export function ChapterEditor({
             />
           )}
         </div>
-        <HeadingValidationMessage error={headingError} />
-        <div
-          ref={surfaceRef}
-          className='chapter-editor-surface rte-editor relative min-h-0 flex-1 overflow-y-auto px-6 py-4'
-        >
-          <Editorial
-            ref={editorRef}
-            defaultUsj={initialUsj}
-            options={{
-              isReadonly: readOnly,
-              hasExternalUI: true,
-              hasSpellCheck: false,
-              textDirection: 'auto',
-            }}
-            scrRef={scrRef}
-            onScrRefChange={handleScrRefChange}
-            onStateChange={handleStateChange}
-            onUsjChange={handleUsjChange}
-          />
-          <ActiveVerseOutline
-            contentKey={contentKey}
-            readOnly={readOnly}
-            surfaceRef={surfaceRef}
-            onActiveVerseChange={trackActiveVerse}
-          />
+        <div className={`flex min-h-0 flex-1 flex-col ${bodyClassName}`}>
+          <HeadingValidationMessage error={headingError} />
+          <div
+            ref={surfaceRef}
+            className='chapter-editor-surface rte-editor relative min-h-0 flex-1 overflow-y-auto px-6 py-4'
+          >
+            <Editorial
+              ref={editorRef}
+              defaultUsj={initialUsj}
+              options={{
+                isReadonly: readOnly,
+                hasExternalUI: true,
+                hasSpellCheck: false,
+                textDirection: 'auto',
+              }}
+              scrRef={scrRef}
+              onScrRefChange={handleScrRefChange}
+              onStateChange={handleStateChange}
+              onUsjChange={handleUsjChange}
+            />
+            <ActiveVerseOutline
+              contentKey={contentKey}
+              readOnly={readOnly}
+              surfaceRef={surfaceRef}
+              onActiveVerseChange={trackActiveVerse}
+            />
+          </div>
         </div>
       </div>
     </>

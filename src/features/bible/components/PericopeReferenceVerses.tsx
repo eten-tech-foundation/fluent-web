@@ -8,15 +8,14 @@ interface PericopeReferenceVersesProps {
   bookCode: string;
   chapterNumber: number;
   verses: PericopeVerseRef[];
-  showChapter: boolean;
 }
 
+/** Plain verse numbers: the pericope box marks a chapter change with its own divider. */
 export const PericopeReferenceVerses = ({
   bibleId,
   bookCode,
   chapterNumber,
   verses,
-  showChapter,
 }: PericopeReferenceVersesProps) => {
   const bible = /^(aq|yv)-(\d+)$/.exec(bibleId);
   const rawId = bible ? Number(bible[2]) : null;
@@ -55,9 +54,7 @@ export const PericopeReferenceVerses = ({
 
           return (
             <span key={verse.verseNumber} className='mr-3'>
-              <span className='mr-1 font-sans font-bold'>
-                {showChapter ? `${chapterNumber}:${verse.verseNumber}` : verse.verseNumber}
-              </span>
+              <span className='mr-1 font-sans font-bold'>{verse.verseNumber}</span>
               <PericopeText content={text} isError={!!failed} isLoading={!!loading} />{' '}
             </span>
           );

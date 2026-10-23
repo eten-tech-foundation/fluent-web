@@ -1444,6 +1444,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 chapterVerseRefs={chapterVerseRefs}
                 handleActiveVerseChange={handleActiveVerseChange}
                 handleTextChange={handleTextChangeWithTracking}
+                outlined={showResources}
                 playback={ttsPericopeGridProps}
                 projectItem={projectItem}
                 readOnly={readOnly}
