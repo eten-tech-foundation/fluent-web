@@ -36,10 +36,11 @@ import {
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 
 /**
- * A key that types one visible character. A space alone doesn't count: claiming the number for it
- * would leave the number in front of nothing.
+ * A key that types one visible character. Code points are counted, since a letter outside the BMP
+ * (Adlam, say) takes two UTF-16 units; key names like 'Tab' or 'F2' are longer. A space alone
+ * doesn't count: claiming the number for it would leave the number in front of nothing.
  */
-const typesCharacter = (key: string): boolean => key.length === 1 && key.trim() !== '';
+const typesCharacter = (key: string): boolean => Array.from(key).length === 1 && key.trim() !== '';
 
 /** The block element holding the caret. */
 function caretBlockElement(root: HTMLElement): Element | undefined {

@@ -287,6 +287,38 @@ describe('verse numbers stay with their text in the real editor', () => {
       await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
     });
 
+    // Adlam, written for Fula, sits outside the BMP: each letter takes two UTF-16 code units.
+    const [alif, daali] = ['\u{1E900}', '\u{1E901}'];
+
+    it.each([
+      ['with no modifier', { key: alif }],
+      ['with AltGr on Windows', { key: alif, ctrlKey: true, altKey: true, modifierAltGraph: true }],
+    ])(
+      'brings the number in with a letter outside the BMP typed %s, in one undo step',
+      async (_, key) => {
+        const { editor, input, blocks } = await openUnderHeading();
+        expect(fireEvent.keyDown(input, key)).toBe(false);
+        await waitFor(() =>
+          expect(blocks().slice(3)).toEqual([`p: [2]${alif}`, 'p: Second verse.'])
+        );
+        act(() => editor.undo());
+        await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
+      }
+    );
+
+    it('keeps typing after a letter outside the BMP, not between its two halves', async () => {
+      const { input, blocks, onUsjChange } = await openUnderHeading();
+      fireEvent.keyDown(input, { key: alif });
+      await waitFor(() => expect(blocks()[3]).toBe(`p: [2]${alif}`));
+      typeText(input, daali);
+      await waitFor(() => expect(blocks()[3]).toBe(`p: [2]${alif}${daali}`));
+      await waitFor(() =>
+        expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe(
+          `${alif}${daali} Second verse.`
+        )
+      );
+    });
+
     it('brings the number in before an IME composition starts, without typing for it', async () => {
       const { editor, input, blocks } = await openUnderHeading();
       const event = fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
@@ -372,6 +404,9 @@ describe('verse numbers stay with their text in the real editor', () => {
       { key: 'v', ctrlKey: true, altKey: true },
       { key: 'Enter', ctrlKey: true, altKey: true, modifierAltGraph: true },
       { key: 'Tab' },
+      // Key names as short as a letter outside the BMP.
+      { key: 'F2' },
+      { key: 'Dead', ctrlKey: true, altKey: true, modifierAltGraph: true },
       { key: 'N', isComposing: true },
     ])('leaves the number where it is for %j', async keyEvent => {
       const { input, blocks } = await openUnderHeading();
