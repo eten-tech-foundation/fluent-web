@@ -332,8 +332,7 @@ export function ChapterEditor({
             handleEditorKeys(event);
         }}
         onPasteCapture={event => {
-          verseKeys.handlePaste(event);
-          handleEditorPaste(event);
+          if (!verseKeys.handlePaste(event)) handleEditorPaste(event);
         }}
       >
         {/* Top-aligned with the source column's heading even when the row grows (chapter player). */}

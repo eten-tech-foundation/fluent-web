@@ -45,8 +45,7 @@ export const blockStart = (usj: Usj, index: number): number =>
 export const isVerse = (node: UsjNode | undefined): node is MarkerObject =>
   typeof node === 'object' && node.type === 'verse';
 
-export const isBlankText = (node: UsjNode): boolean =>
-  typeof node === 'string' && node.trim() === '';
+const isBlankText = (node: UsjNode): boolean => typeof node === 'string' && node.trim() === '';
 
 /** A paragraph that holds scripture, as opposed to a heading's own words. */
 export const isBodyParagraph = (node: UsjNode | undefined): node is MarkerObject =>
@@ -56,7 +55,7 @@ const isHeadingParagraph = (node: UsjNode | undefined): node is MarkerObject =>
   typeof node === 'object' && node.type === 'para' && isHeadingMarker(node.marker);
 
 /** A body paragraph with no words and no markers, such as a line Enter just opened. */
-export const isBlankParagraph = (node: UsjNode | undefined): node is MarkerObject =>
+const isBlankParagraph = (node: UsjNode | undefined): node is MarkerObject =>
   isBodyParagraph(node) && (node.content ?? []).every(isBlankText);
 
 /** The verse whose number is all a body paragraph holds: a number cut off from its text. */
@@ -67,7 +66,7 @@ export function loneVerseOf(node: UsjNode | undefined): MarkerObject | undefined
 }
 
 /** Editorial's delta embed for a verse number, rebuilt from its USJ node. */
-export function verseEmbed(verse: MarkerObject): DeltaOp {
+function verseEmbed(verse: MarkerObject): DeltaOp {
   const { marker, number, sid, altnumber, pubnumber } = verse;
   return {
     insert: {
@@ -103,7 +102,7 @@ export function applyAtCaret(
 }
 
 /** The selection as a single caret, or undefined for a range. */
-export function collapsedCaret(editor: EditorRef): CaretLocation | undefined {
+function collapsedCaret(editor: EditorRef): CaretLocation | undefined {
   const selection = editor.getSelection();
   if (!selection || !('offset' in selection.start)) return undefined;
   const { start, end } = selection;
@@ -113,7 +112,7 @@ export function collapsedCaret(editor: EditorRef): CaretLocation | undefined {
 }
 
 /** The caret's position in delta units from the start of its block, if the path resolves. */
-export function caretOffsetInBlock(block: MarkerObject, caret: CaretLocation): number | undefined {
+function caretOffsetInBlock(block: MarkerObject, caret: CaretLocation): number | undefined {
   const childIndices = [...caret.jsonPath.matchAll(/\.content\[(\d+)\]/g)]
     .map(match => Number(match[1]))
     .slice(1);
@@ -194,7 +193,7 @@ export function afterWordSpace(block: MarkerObject, caretOffset: number): number
 }
 
 /** No verse comes before this block in its section, so words here belong to the next verse. */
-export function opensSection(usj: Usj, index: number): boolean {
+function opensSection(usj: Usj, index: number): boolean {
   for (let i = index - 1; i >= 0; i -= 1) {
     const node = usj.content[i];
     if (typeof node === 'string') continue;
@@ -208,10 +207,7 @@ export function opensSection(usj: Usj, index: number): boolean {
  * The verse number that opens the next body paragraph with content, unless a heading comes first,
  * with its position in delta units.
  */
-export function verseAfter(
-  usj: Usj,
-  index: number
-): { verse: MarkerObject; at: number } | undefined {
+function verseAfter(usj: Usj, index: number): { verse: MarkerObject; at: number } | undefined {
   for (let i = index + 1; i < usj.content.length; i += 1) {
     const node = usj.content[i];
     if (!isBodyParagraph(node)) return undefined;

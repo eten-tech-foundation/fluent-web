@@ -8,13 +8,9 @@ import { insertParagraph } from './insert-paragraph';
 import { pericopeVersesToUsj, usjToPericopeVerses } from './pericope-usj';
 
 import type { PericopeVerseText } from './pericope-usj';
+import type { CaretLocation } from './verse-numbers';
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
-
-type OffsetLocation = Extract<
-  NonNullable<ReturnType<EditorRef['getSelection']>>['start'],
-  { offset: number }
->;
 
 function verseOne(marker: string, text: string): PericopeVerseText {
   return {
@@ -60,7 +56,7 @@ async function renderRows(rows: PericopeVerseText[]) {
     />
   );
   await waitFor(() => expect(ref.current?.getUsj()).toBeTruthy());
-  const select = async (jsonPath: OffsetLocation['jsonPath'], offset: number) => {
+  const select = async (jsonPath: CaretLocation['jsonPath'], offset: number) => {
     act(() => ref.current!.setSelection({ start: { jsonPath, offset } }));
     await waitFor(() => expect(ref.current!.getSelection()?.start.jsonPath).toBe(jsonPath));
   };

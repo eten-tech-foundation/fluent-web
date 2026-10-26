@@ -19,9 +19,10 @@ Enter, Shift+Enter and Alt+Enter keep a heading's text intact and open an empty 
 the last heading when several are adjacent. The following verse keeps its number, text and format,
 so a Poetry line stays Poetry. The first letter typed in the new `p` brings that verse's number to
 the start of the line, because those words begin the verse; moving the number and typing the letter
-are one undo step. When an IME composition or a paste starts the line instead, two temporary spaces
-hold the caret after the number and are selected, so the words that arrive replace them; left
-behind, they would end up inside the verse once the line is joined to the next. This supports
+are one undo step, and so are moving it and pasting one line of text. When an IME composition or a
+paste of several lines starts the line instead, two temporary spaces hold the caret after the
+number and are selected, so the words that arrive replace them; left behind, they would end up
+inside the verse once the line is joined to the next. This supports
 typing immediately after Enter without storing heading words as scripture.
 An orphan heading without a following verse cannot create body text that has no row to save into.
 

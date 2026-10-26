@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor } from '@/features/rte/components/PericopeEditor';
@@ -46,7 +46,7 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
           }),
           []
         );
-        return react.createElement('div', { 'data-testid': 'editorial' });
+        return react.createElement('div', { 'data-testid': 'editorial', tabIndex: -1 });
       }
     ),
   };
@@ -451,6 +451,57 @@ describe('PericopeEditor', () => {
       expect(onVersesChange).toHaveBeenCalledWith([
         { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
       ]);
+    });
+
+    it('waits until the translator leaves the box before rebuilding it', async () => {
+      // A rebuild resets the caret and the undo history, so it never runs under the translator.
+      const onVersesChange = vi.fn();
+      const props = { bookCode: BOOK, chapterNumber: CHAPTER, contentKey: 'a', onVersesChange };
+      const { rerender } = render(
+        <>
+          <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+          <button type='button'>Elsewhere</button>
+        </>
+      );
+      act(() => screen.getByTestId('editorial').focus());
+
+      rerender(
+        <>
+          <PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />
+          <button type='button'>Elsewhere</button>
+        </>
+      );
+      expect(editor.setUsj).not.toHaveBeenCalled();
+      expect(firstParagraph()).toBe('p');
+
+      // Edits meanwhile are read the way the box was built.
+      typeInto(16, 'Verse 16 text. More.');
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        { verseNumber: 16, text: 'Verse 16 text. More.', markers: null },
+      ]);
+
+      act(() => screen.getByRole('button', { name: 'Elsewhere' }).focus());
+      await waitFor(() => expect(firstParagraph()).toBe('q1'));
+      expect(documentVerses()[0].text).toBe('Verse 16 text. More.');
+    });
+
+    it('keeps waiting when only the window loses focus', async () => {
+      const props = {
+        bookCode: BOOK,
+        chapterNumber: CHAPTER,
+        contentKey: 'a',
+        onVersesChange: vi.fn(),
+      };
+      const { rerender } = render(
+        <PericopeEditor {...props} continuedParagraph='p' verses={later(null)} />
+      );
+      act(() => screen.getByTestId('editorial').focus());
+      rerender(<PericopeEditor {...props} continuedParagraph='q1' verses={later(null)} />);
+
+      // Switching to another app blurs the editor but leaves it the active element.
+      fireEvent.blur(screen.getByTestId('editorial'));
+      await act(() => new Promise(resolve => setTimeout(resolve, 0)));
+      expect(editor.setUsj).not.toHaveBeenCalled();
     });
 
     it('leaves a first verse with a paragraph of its own alone', () => {

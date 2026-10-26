@@ -14,6 +14,10 @@ const MARKER_PADDING = /[\u200B\uFEFF]/g;
 /** Whether a text has words, not just spaces and the editor's marker padding. */
 export const hasWords = (text: string): boolean => text.replace(MARKER_PADDING, '').trim() !== '';
 
+/** A text without its spaces or the editor's marker padding, to compare what two blocks show. */
+export const visibleText = (text: string): string =>
+  text.replace(MARKER_PADDING, '').replace(/\s/g, '');
+
 /** Where a text's words end, before any trailing spaces and marker padding. */
 export const wordsEnd = (text: string): number => text.replace(/[\s\u200B\uFEFF]+$/, '').length;
 

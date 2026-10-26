@@ -13,13 +13,9 @@ import {
 import { useHeadingEnter } from './useHeadingEnter';
 import { useVerseNumberKeys } from './useVerseNumberKeys';
 
+import type { CaretLocation } from '../lib/verse-numbers';
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
-
-type OffsetLocation = Extract<
-  NonNullable<ReturnType<EditorRef['getSelection']>>['start'],
-  { offset: number }
->;
 
 // Enable the browser's beforeinput path before Editorial initializes in jsdom.
 const originalTargetRanges = vi.hoisted(() => {
@@ -88,7 +84,7 @@ async function setup(usj: Usj, readOnly = false) {
   await waitFor(() => expect(editorRef.current?.getUsj()).toBeTruthy());
   const input = rendered.container.querySelector<HTMLElement>('.editor-input')!;
   const editor = editorRef.current!;
-  const select = async (jsonPath: OffsetLocation['jsonPath'], offset: number) => {
+  const select = async (jsonPath: CaretLocation['jsonPath'], offset: number) => {
     act(() => editor.setSelection({ start: { jsonPath, offset } }));
     await waitFor(() => expect(editor.getSelection()?.start.jsonPath).toBe(jsonPath));
   };
@@ -300,27 +296,52 @@ describe('verse numbers stay with their text in the real editor', () => {
       );
     });
 
-    it('leaves no caret host behind once a paste lands', async () => {
+    it('undoes an IME start in one step, leaving no caret host', async () => {
+      // The composition is a transaction of its own; an undo before it lands must not leave the
+      // two spaces behind.
+      const { editor, input, blocks } = await openUnderHeading();
+      fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
+      await waitFor(() => expect(blocks()[3]).toBe('p: [2]  '));
+      act(() => editor.undo());
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
+    });
+
+    const clipboard = (text: string) => ({
+      clipboardData: {
+        types: ['text/plain'],
+        files: [],
+        getData: (type: string) => (type === 'text/plain' ? text : ''),
+      },
+    });
+
+    it('brings the number in with a pasted line, in one undo step', async () => {
+      const { editor, input, blocks, onUsjChange } = await openUnderHeading();
+      fireEvent.paste(input, clipboard('Pasted\twords'));
+      await waitFor(() =>
+        expect(blocks().slice(3)).toEqual(['p: [2]Pasted words', 'p: Second verse.'])
+      );
+      await waitFor(() =>
+        expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe(
+          'Pasted words Second verse.'
+        )
+      );
+      act(() => editor.undo());
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
+    });
+
+    it('leaves no caret host behind once a paste of several lines lands', async () => {
       // Lexical's paste handler tells events apart by these class names, which jsdom lacks.
       vi.stubGlobal('DragEvent', class DragEvent extends Event {});
       vi.stubGlobal('ClipboardEvent', class ClipboardEvent extends Event {});
       try {
-        const { input, blocks, onUsjChange } = await openUnderHeading();
-        const text = 'Pasted words';
-        fireEvent.paste(input, {
-          clipboardData: {
-            types: ['text/plain'],
-            files: [],
-            getData: (type: string) => (type === 'text/plain' ? text : ''),
-          },
-        });
+        const { input, blocks } = await openUnderHeading();
+        fireEvent.paste(input, clipboard('First line\nSecond line'));
         await waitFor(() =>
-          expect(blocks().slice(3)).toEqual(['p: [2]Pasted words', 'p: Second verse.'])
-        );
-        await waitFor(() =>
-          expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].text).toBe(
-            'Pasted words Second verse.'
-          )
+          expect(blocks().slice(3)).toEqual([
+            'p: [2]First line',
+            'p: Second line',
+            'p: Second verse.',
+          ])
         );
       } finally {
         vi.unstubAllGlobals();

@@ -115,10 +115,13 @@ export function PericopeEditor({
   );
   /** USJ we pushed in ourselves; the editor echoes it straight back and that is not an edit. */
   const suppressedJsonRef = useRef('');
+  /** A rebuild waiting for the translator to leave this box. */
+  const pendingRebuildRef = useRef(false);
 
   const loadIntoEditor = useCallback(
     (next: PericopeVerseText[]) => {
       setHeadingError(null);
+      pendingRebuildRef.current = false;
       loadedOpenRef.current = continuedParagraph;
       continuedRef.current = continuedParagraphOf(next, continuedParagraph);
       const usj = pericopeVersesToUsj(next, chapterNumber, bookCode, continuedParagraph);
@@ -155,13 +158,26 @@ export function PericopeEditor({
 
   // The pericope before changed the paragraph it leaves open (its last two lines joined into a
   // Poetry line, say) while this one stayed open. A first verse that continues that paragraph
-  // follows it, as Chapter View shows it, and its next save is read against it. The edit happened
-  // in another pericope, so rebuilding this document takes no caret away.
+  // follows it, as Chapter View shows it, and its next save is read against it. A rebuild resets
+  // the caret and the undo history, so if a row update from outside lands while the translator is
+  // in this box, it waits until they leave it; edits meanwhile are read the way the box was built.
   useEffect(() => {
     if (contentKey !== loadedKeyRef.current || continuedParagraph === loadedOpenRef.current) return;
     loadedOpenRef.current = continuedParagraph;
-    if (continuedRef.current !== undefined) loadIntoEditor(knownVersesRef.current);
+    if (continuedRef.current === undefined) return;
+    if (containerRef.current?.contains(document.activeElement)) pendingRebuildRef.current = true;
+    else loadIntoEditor(knownVersesRef.current);
   }, [contentKey, continuedParagraph, loadIntoEditor]);
+
+  const handleBlur = useCallback(() => {
+    if (!pendingRebuildRef.current) return;
+    // Let focus settle: a move within the box, or the window losing focus, isn't leaving it.
+    setTimeout(() => {
+      if (!pendingRebuildRef.current || containerRef.current?.contains(document.activeElement))
+        return;
+      loadIntoEditor(knownVersesRef.current);
+    });
+  }, [loadIntoEditor]);
 
   // A request already there when this editor mounted was for an earlier one, e.g. before a view
   // switch. Every editor gets the request; the one holding the verse takes the caret.
@@ -216,13 +232,13 @@ export function PericopeEditor({
       ref={containerRef}
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
+      onBlurCapture={handleBlur}
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={event => {
         if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event)) handleEditorKeys(event);
       }}
       onPasteCapture={event => {
-        verseKeys.handlePaste(event);
-        handleEditorPaste(event);
+        if (!verseKeys.handlePaste(event)) handleEditorPaste(event);
       }}
     >
       <HeadingValidationMessage error={headingError} />

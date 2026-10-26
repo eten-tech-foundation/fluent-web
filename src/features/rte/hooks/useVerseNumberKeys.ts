@@ -13,7 +13,9 @@ import {
   EDITOR_SELECTOR,
   VERSE_MARKER_SELECTOR,
   elementAt,
+  hasWords,
   isComposingKey,
+  visibleText,
 } from '../lib/editor-dom';
 import { isHeadingMarker } from '../lib/heading-markers';
 import {
@@ -33,8 +35,6 @@ import {
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 
-const visibleText = (element: Element): string => element.textContent.replace(/[\u200B\s]/g, '');
-
 /** The block element holding the caret. */
 function caretBlockElement(root: HTMLElement): Element | undefined {
   const node = window.getSelection()?.anchorNode;
@@ -48,13 +48,15 @@ function caretBlockElement(root: HTMLElement): Element | undefined {
  * decide, and the editor's own selection is checked instead.
  */
 const mayBeBlank = (block: Element | null | undefined): boolean =>
-  !block || (!block.querySelector(VERSE_MARKER_SELECTOR) && visibleText(block) === '');
+  !block || (!block.querySelector(VERSE_MARKER_SELECTOR) && !hasWords(block.textContent));
 
 /** A line holding one verse number and nothing else. */
 function mayBeLoneVerse(block: Element | null | undefined): boolean {
   if (!block) return true;
   const verses = block.querySelectorAll(VERSE_MARKER_SELECTOR);
-  return verses.length === 1 && visibleText(block) === visibleText(verses[0]);
+  return (
+    verses.length === 1 && visibleText(block.textContent) === visibleText(verses[0].textContent)
+  );
 }
 
 /**
@@ -162,16 +164,34 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
     [editorRef, readOnly]
   );
 
+  /**
+   * Brings the number in for a paste into a line no verse owns yet. Returns true when it took the
+   * paste over: one line of plain text goes in with the number, so one undo takes both back.
+   * Anything else (several lines, the editor's own copied content) is left to the editor, landing
+   * on the selected caret host.
+   */
   const handlePaste = useCallback(
-    (event: ClipboardEvent<HTMLElement>) => {
+    (event: ClipboardEvent<HTMLElement>): boolean => {
       const root =
         event.target instanceof HTMLElement ? event.target.closest(EDITOR_SELECTOR) : null;
       const editor = editorRef.current;
-      if (readOnly || !editor || !(root instanceof HTMLElement)) return;
+      if (readOnly || !editor || !(root instanceof HTMLElement)) return false;
       // A paste the marker guard will refuse, or one with no words, must not move the number.
-      if (hasStructuralPayload(event.clipboardData)) return;
-      if (!event.clipboardData.getData('text/plain').trim()) return;
-      if (mayBeBlank(caretBlockElement(root))) claimNextVerse(editor);
+      const data = event.clipboardData;
+      if (hasStructuralPayload(data)) return false;
+      const text = data.getData('text/plain');
+      if (!text.trim() || !mayBeBlank(caretBlockElement(root))) return false;
+      if (/[\r\n]/.test(text) || data.types.includes('application/x-lexical-editor')) {
+        claimNextVerse(editor);
+        return false;
+      }
+      // Tabs become spaces, as the editor's own paste makes them.
+      const handled = claimNextVerse(editor, text.replace(/\t/g, ' '));
+      if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return handled;
     },
     [editorRef, readOnly]
   );

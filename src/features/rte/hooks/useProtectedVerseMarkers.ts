@@ -6,6 +6,7 @@ import {
   EDITABLE_EDITOR_SELECTOR,
   SCRIPTURE_MARKER_SELECTOR,
   elementAt,
+  hasWords,
 } from '../lib/editor-dom';
 import { isHeadingMarker } from '../lib/heading-markers';
 
@@ -98,9 +99,7 @@ function deletesAdjacentMarker(range: Range, root: HTMLElement, intent: Deletion
   // Backspace in an empty line under a heading just removes the line: nothing crosses into the
   // heading. Enter there opens such a line (#397).
   const removesEmptyLine =
-    backward &&
-    !block.querySelector(SCRIPTURE_MARKER_SELECTOR) &&
-    block.textContent.replace(/[\u200B\s]/g, '') === '';
+    backward && !block.querySelector(SCRIPTURE_MARKER_SELECTOR) && !hasWords(block.textContent);
   if (crossesHeadingBoundary && removesEmptyLine && !neighbor.matches(SCRIPTURE_MARKER_SELECTOR))
     return false;
   if (!neighbor.matches(SCRIPTURE_MARKER_SELECTOR) && !crossesHeadingBoundary) return false;
