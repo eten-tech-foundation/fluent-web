@@ -8,9 +8,18 @@ import { SOURCE_BIBLE_TAB_ID, type ResourceBibleTab } from './BibleTabList';
 import { DraftingChapterView } from './DraftingChapterView';
 
 vi.mock('@/features/rte/components/ChapterEditor', () => ({
-  ChapterEditor: ({ targetLanguage }: { targetLanguage: string }) => (
-    <div data-testid='chapter-editor'>
+  ChapterEditor: ({
+    targetLanguage,
+    className,
+    bodyClassName,
+  }: {
+    targetLanguage: string;
+    className?: string;
+    bodyClassName?: string;
+  }) => (
+    <div className={className} data-testid='chapter-editor'>
       <h3>{targetLanguage}</h3>
+      <div className={bodyClassName} data-testid='chapter-editor-body' />
     </div>
   ),
 }));
@@ -248,5 +257,43 @@ describe('DraftingChapterView', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
     expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
+  });
+
+  it('outlines both panes as one box, with no rule between them, like Pericope view', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        outlined
+        activeBibleTabId={SOURCE_BIBLE_TAB_ID}
+        selectedPanel={1}
+      />
+    );
+    const source = screen.getByTestId('chapter-source-pane');
+    const target = screen.getByTestId('chapter-editor-body');
+    expect(source).toContainElement(screen.getByTestId('chapter-source-viewport'));
+    // The two halves of one rounded outline meet in the middle without a border of their own.
+    expect(source).toHaveClass('rounded-l-md', 'border-y', 'border-l');
+    expect(target).toHaveClass('rounded-r-md', 'border-y', 'border-r');
+    expect(source).not.toHaveClass('border-r');
+    expect(target).not.toHaveClass('border-l');
+    // The editor shares the grid's rows, so its heading lines up with the source heading and the
+    // two halves of the outline start and end on the same lines.
+    const editor = screen.getByTestId('chapter-editor');
+    expect(editor).toHaveClass('row-span-2', 'grid', 'grid-rows-subgrid');
+    expect(editor.className).not.toMatch(/border/);
+  });
+
+  it('leaves the outline off while the resources panel is closed, like Pericope view', () => {
+    render(
+      <DraftingChapterView
+        {...commonProps}
+        activeBibleTabId={SOURCE_BIBLE_TAB_ID}
+        outlined={false}
+        selectedPanel={1}
+      />
+    );
+    expect(screen.getByTestId('chapter-source-pane').className).not.toMatch(/border/);
+    expect(screen.getByTestId('chapter-editor-body').className).not.toMatch(/border/);
+    expect(screen.getByTestId('chapter-editor').className).not.toMatch(/border/);
   });
 });

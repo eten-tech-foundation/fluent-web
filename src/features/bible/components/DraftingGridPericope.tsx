@@ -45,6 +45,10 @@ const PericopeRteGroup = lazy(() =>
   }))
 );
 
+/** One paragraph of source scripture per chapter inside a pericope box. */
+const SOURCE_TEXT_CLASS =
+  'source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200';
+
 /**
  * Source-TTS wiring for the pericope grid (G3a answer (b)). The unit of
  * playback here is the GROUP: one control per card reads that pericope and
@@ -371,8 +375,12 @@ export const PericopeTargetGroup: React.FC<PericopeTargetGroupProps> = ({
 }) => {
   const { t } = useTranslation();
   const hasContext = fullGroup?.verses.some(v => v.chapterNumber !== projectItem.chapterNumber);
+  // The editable chapter's divider marks a chapter change, so it needs earlier verses above it.
+  const hasEarlierChapter = fullGroup?.verses.some(
+    v => v.chapterNumber < projectItem.chapterNumber
+  );
   const beforeContent =
-    hasContext && fullGroup ? (
+    hasEarlierChapter && fullGroup ? (
       <>
         <PericopeContextText
           chapters={contextChapters}
@@ -556,6 +564,8 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
               : undefined;
           const isVerseSpeaking = (chapter: number, verse: number) =>
             tts !== undefined && tts.verseRefFor(verse, chapter) === tts.activeVerseRef;
+          // What the target's Section title box translates; without it that box reads as empty.
+          const sourceTitle = group.pericopeTitle?.trim();
 
           return (
             <div
@@ -624,68 +634,90 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                       }
                     }}
                   >
-                    <p className='source-scripture text-base leading-relaxed text-slate-800 select-text dark:text-slate-200'>
-                      {chapters.map(chapter => {
-                        const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
-                        if (
-                          selectedPanel === 2 &&
-                          chapter !== projectItem.chapterNumber &&
-                          resourceBibleId
-                        ) {
-                          return (
-                            <PericopeReferenceVerses
-                              key={chapter}
-                              bibleId={resourceBibleId}
-                              bookCode={projectItem.bookCode}
-                              chapterNumber={chapter}
-                              showChapter={true}
-                              verses={chapterRefs}
-                            />
-                          );
-                        }
-                        const context = contextChapters?.get(chapter);
-                        const isCurrentChapter = chapter === projectItem.chapterNumber;
-                        const sources = isCurrentChapter ? sourceVerses : context?.sourceVerses;
-                        return chapterRefs.map(ref => {
-                          const content =
-                            selectedPanel === 1
-                              ? sources?.find(v => v.verseNumber === ref.verseNumber)?.text
-                              : isCurrentChapter
-                                ? bibleVerseMap.get(ref.verseNumber)
-                                : undefined;
-                          const loading =
-                            selectedPanel === 1
-                              ? !isCurrentChapter && context?.sourceIsLoading
-                              : bibleContentLoading;
-                          const failed =
-                            selectedPanel === 1
-                              ? !isCurrentChapter && context?.sourceIsError
-                              : isCurrentChapter && bibleContentError;
-                          return (
-                            <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
-                              <span
-                                className={`mr-1.5 font-sans font-bold ${isVerseSpeaking(chapter, ref.verseNumber) ? 'text-primary' : 'text-slate-900 dark:text-slate-100'}`}
-                              >
-                                {chapters.length > 1
-                                  ? `${chapter}:${ref.verseNumber}`
-                                  : ref.verseNumber}
-                              </span>
-                              <PericopeText
-                                className={`mr-3 ${isVerseSpeaking(chapter, ref.verseNumber) ? 'bg-primary/30 rounded-sm' : ''}`}
-                                content={content}
-                                isError={!!failed}
-                                isLoading={!!loading}
-                                testId={
-                                  isVerseSpeaking(chapter, ref.verseNumber)
-                                    ? 'tts-active-verse'
-                                    : undefined
-                                }
+                    {sourceTitle ? (
+                      <h5 className='source-scripture mb-2 text-base font-semibold text-slate-900 dark:text-slate-100'>
+                        {sourceTitle}
+                      </h5>
+                    ) : null}
+                    {chapters.map((chapter, chapterIndex) => {
+                      const chapterRefs = refs.filter(ref => ref.chapterNumber === chapter);
+                      // Plain verse numbers, as on the target side, with a divider where the
+                      // chapter changes.
+                      const divider =
+                        chapterIndex > 0 ? (
+                          <p className='text-muted-foreground py-2 text-sm font-medium'>
+                            {t('pericopeCurrentChapter', {
+                              defaultValue: 'Chapter {{chapter}}',
+                              chapter,
+                            })}
+                          </p>
+                        ) : null;
+                      if (
+                        selectedPanel === 2 &&
+                        chapter !== projectItem.chapterNumber &&
+                        resourceBibleId
+                      ) {
+                        return (
+                          <React.Fragment key={chapter}>
+                            {divider}
+                            <p className={SOURCE_TEXT_CLASS}>
+                              <PericopeReferenceVerses
+                                bibleId={resourceBibleId}
+                                bookCode={projectItem.bookCode}
+                                chapterNumber={chapter}
+                                verses={chapterRefs}
                               />
-                            </React.Fragment>
-                          );
-                        });
-                      })}
-                    </p>
+                            </p>
+                          </React.Fragment>
+                        );
+                      }
+                      const context = contextChapters?.get(chapter);
+                      const isCurrentChapter = chapter === projectItem.chapterNumber;
+                      const sources = isCurrentChapter ? sourceVerses : context?.sourceVerses;
+                      return (
+                        <React.Fragment key={chapter}>
+                          {divider}
+                          <p className={SOURCE_TEXT_CLASS}>
+                            {chapterRefs.map(ref => {
+                              const content =
+                                selectedPanel === 1
+                                  ? sources?.find(v => v.verseNumber === ref.verseNumber)?.text
+                                  : isCurrentChapter
+                                    ? bibleVerseMap.get(ref.verseNumber)
+                                    : undefined;
+                              const loading =
+                                selectedPanel === 1
+                                  ? !isCurrentChapter && context?.sourceIsLoading
+                                  : bibleContentLoading;
+                              const failed =
+                                selectedPanel === 1
+                                  ? !isCurrentChapter && context?.sourceIsError
+                                  : isCurrentChapter && bibleContentError;
+                              return (
+                                <React.Fragment key={`${chapter}:${ref.verseNumber}`}>
+                                  <span
+                                    className={`mr-1.5 font-sans font-bold ${isVerseSpeaking(chapter, ref.verseNumber) ? 'text-primary' : 'text-slate-900 dark:text-slate-100'}`}
+                                  >
+                                    {ref.verseNumber}
+                                  </span>
+                                  <PericopeText
+                                    className={`mr-3 ${isVerseSpeaking(chapter, ref.verseNumber) ? 'bg-primary/30 rounded-sm' : ''}`}
+                                    content={content}
+                                    isError={!!failed}
+                                    isLoading={!!loading}
+                                    testId={
+                                      isVerseSpeaking(chapter, ref.verseNumber)
+                                        ? 'tts-active-verse'
+                                        : undefined
+                                    }
+                                  />
+                                </React.Fragment>
+                              );
+                            })}
+                          </p>
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -184,7 +184,7 @@ describe('cross-chapter pericope display', () => {
 
   it('shows loading for neighboring reference verses while the Bible selection is pending', () => {
     renderChapter(8, { selectedPanel: 2, bibleContentLoading: true });
-    const referenceGroup = screen.getByRole('button', { name: /8:31.*Loading/ });
+    const referenceGroup = screen.getByRole('button', { name: /31.*Loading/ });
     expect(within(referenceGroup).getAllByText('Loading...')).toHaveLength(9);
     expect(within(referenceGroup).queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
   });
@@ -244,11 +244,41 @@ describe('cross-chapter pericope display', () => {
       </>
     );
     expect(
-      within(screen.getByText('7:1').closest('section')!).getByText('Unable to load Bible content.')
+      within(screen.getByRole('region', { name: 'Chapter 7 context (read-only)' })).getByText(
+        'Unable to load Bible content.'
+      )
     ).toBeInTheDocument();
     expect(
-      within(screen.getByText('9:1').closest('section')!).getByText('Loading...')
+      within(screen.getByRole('region', { name: 'Chapter 9 context (read-only)' })).getByText(
+        'Loading...'
+      )
     ).toBeInTheDocument();
+  });
+
+  it('labels a neighboring chapter only where the box changes chapter, with plain verse numbers', () => {
+    const group = {
+      pericopeNumber: '1',
+      pericopeTitle: null,
+      verses: [
+        { chapterNumber: 7, verseNumber: 38 },
+        { chapterNumber: 8, verseNumber: 1 },
+        { chapterNumber: 9, verseNumber: 1 },
+      ],
+    };
+    render(
+      <>
+        <PericopeContextText chapters={new Map()} currentChapter={8} group={group} side='before' />
+        <PericopeContextText chapters={new Map()} currentChapter={8} group={group} side='after' />
+      </>
+    );
+    const before = screen.getByRole('region', { name: 'Chapter 7 context (read-only)' });
+    const after = screen.getByRole('region', { name: 'Chapter 9 context (read-only)' });
+    // Chapter 7 opens the box, so nothing marks it; chapter 9 follows chapter 8, so it does.
+    expect(within(before).queryByText('Chapter 7')).not.toBeInTheDocument();
+    expect(within(after).getByText('Chapter 9')).toBeInTheDocument();
+    expect(within(before).getByText('38')).toBeInTheDocument();
+    expect(within(after).getByText('1')).toBeInTheDocument();
+    expect(screen.queryByText(/\d+:\d+/)).not.toBeInTheDocument();
   });
 
   it('keeps saved context beside unavailable verses without labeling them undrafted', () => {
@@ -298,8 +328,8 @@ describe('cross-chapter pericope display', () => {
       const sourceColumn = screen
         .getAllByRole('heading', { name: '8:31–9:1' })[0]
         .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
-      const currentText = within(sourceColumn).getByText('8:31').nextElementSibling!;
-      const neighborText = within(sourceColumn).getByText('9:1').nextElementSibling!;
+      const currentText = within(sourceColumn).getByText('31').nextElementSibling!;
+      const neighborText = within(sourceColumn).getByText('1').nextElementSibling!;
 
       expect(currentText.textContent).toBe(NO_CONTENT_MESSAGE);
       expect(neighborText.textContent).toBe(loading ? 'Loading...' : NO_CONTENT_MESSAGE);
@@ -319,7 +349,7 @@ describe('cross-chapter pericope display', () => {
       const resourceColumn = screen
         .getAllByRole('heading', { name: '8:31–9:1' })[0]
         .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
-      const resourceText = within(resourceColumn).getByText('8:31').nextElementSibling!;
+      const resourceText = within(resourceColumn).getByText('31').nextElementSibling!;
 
       expect(resourceText.textContent).toBe(loading ? 'Loading...' : NO_CONTENT_MESSAGE);
       expect(resourceText).toHaveClass('text-muted-foreground', 'text-sm');
@@ -349,12 +379,12 @@ describe('cross-chapter pericope display', () => {
       const scriptureColumn = screen
         .getAllByRole('heading', { name: '8:31–9:1' })[0]
         .closest<HTMLElement>('[data-testid="pericope-source-column"]')!;
-      const currentText = within(scriptureColumn).getByText('8:31').nextElementSibling!;
+      const currentText = within(scriptureColumn).getByText('31').nextElementSibling!;
 
       expect(currentText.textContent).toBe(content);
       expect(currentText).not.toHaveClass('text-muted-foreground');
       if (selectedPanel === 1) {
-        const neighborText = within(scriptureColumn).getByText('9:1').nextElementSibling!;
+        const neighborText = within(scriptureColumn).getByText('1').nextElementSibling!;
         expect(neighborText.textContent).toBe(content);
         expect(neighborText).not.toHaveClass('text-muted-foreground');
       }

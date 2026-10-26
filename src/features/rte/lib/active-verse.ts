@@ -69,3 +69,105 @@ export function verseLineRects(range: Range): LineRect[] {
   }
   return rects;
 }
+
+export type OutlinePoint = readonly [x: number, y: number];
+
+interface Band {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The outline around a verse's lines, drawn the way a text selection is. A frame per line would
+ * stack when wrapped: the text plus the gap runs past the line spacing, so each frame crosses the
+ * next. Instead, lines that share horizontal space become one shape, and two lines meet halfway
+ * through the space between them, so nothing overlaps and nothing is left open. A line that shares
+ * no horizontal space with the one above (a short last line left of a late start) gets its own
+ * shape, touching the first at that same halfway line.
+ */
+export function verseOutlineShapes(lines: LineRect[], gap: number): OutlinePoint[][] {
+  const sorted = [...lines].sort((a, b) => a.top - b.top);
+  const bands: Band[] = sorted.map((line, index) => {
+    const previous = index > 0 ? sorted[index - 1] : undefined;
+    const next = sorted.at(index + 1);
+    return {
+      left: line.left - gap,
+      right: line.left + line.width + gap,
+      top: previous ? (previous.top + previous.height + line.top) / 2 : line.top - gap,
+      bottom: next ? (line.top + line.height + next.top) / 2 : line.top + line.height + gap,
+    };
+  });
+
+  const shapes: OutlinePoint[][] = [];
+  let run: Band[] = [];
+  const close = () => {
+    if (run.length === 0) return;
+    // Down the right edges, then back up the left edges.
+    const right = run.flatMap(band => [
+      [band.right, band.top] as const,
+      [band.right, band.bottom] as const,
+    ]);
+    const left = [...run]
+      .reverse()
+      .flatMap(band => [[band.left, band.bottom] as const, [band.left, band.top] as const]);
+    shapes.push(corners([...right, ...left]));
+    run = [];
+  };
+  for (const band of bands) {
+    const above = run.at(-1);
+    if (above && !(band.left < above.right && above.left < band.right)) close();
+    run.push(band);
+  }
+  close();
+  return shapes;
+}
+
+/** Only the points where the outline turns: no repeats, none partway along a straight edge. */
+function corners(points: readonly OutlinePoint[]): OutlinePoint[] {
+  const distinct = points.filter((point, index) =>
+    index === 0
+      ? point[0] !== points.at(-1)?.[0] || point[1] !== points.at(-1)?.[1]
+      : point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1]
+  );
+  return distinct.filter((point, index) => {
+    const before = distinct[(index + distinct.length - 1) % distinct.length];
+    const after = distinct[(index + 1) % distinct.length];
+    const turn =
+      (point[0] - before[0]) * (after[1] - point[1]) -
+      (point[1] - before[1]) * (after[0] - point[0]);
+    return turn !== 0;
+  });
+}
+
+/**
+ * An SVG path along `shape`, its corners rounded by up to `radius`. Points sit on half pixels so
+ * a one-pixel stroke draws sharp instead of blurring across two rows.
+ */
+export function outlinePath(shape: readonly OutlinePoint[], radius: number): string {
+  const points = corners(
+    shape.map(([x, y]) => [Math.round(x) + 0.5, Math.round(y) + 0.5] as const)
+  );
+  const toward = (from: OutlinePoint, to: OutlinePoint, distance: number) => {
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    return [
+      from[0] + ((to[0] - from[0]) / length) * distance,
+      from[1] + ((to[1] - from[1]) / length) * distance,
+    ] as const;
+  };
+  const format = ([x, y]: OutlinePoint) => `${Number(x.toFixed(2))} ${Number(y.toFixed(2))}`;
+  const turns = points.map((point, index) => {
+    const before = points[(index + points.length - 1) % points.length];
+    const after = points[(index + 1) % points.length];
+    const round = Math.min(
+      radius,
+      Math.hypot(point[0] - before[0], point[1] - before[1]) / 2,
+      Math.hypot(after[0] - point[0], after[1] - point[1]) / 2
+    );
+    const enter = toward(point, before, round);
+    const leave = toward(point, after, round);
+    return `${index === 0 ? 'M' : 'L'}${format(enter)}Q${format(point)} ${format(leave)}`;
+  });
+  return `${turns.join('')}Z`;
+}

@@ -41,7 +41,8 @@ response updates only the assignment it belongs to, preserving any newer project
 
 ## Section titles
 
-A group with a source title displays a separate Section title input. Its value is the first
+A group with a source title displays a separate Section title input, and the source column shows
+that title above the group's source text, so the input has visible text to translate. Its value is the first
 top-level section heading (`s` or `s1`) in `markers.headings` on the group's first source-backed
 verse. References, subtitles (`s2` and deeper), other headings and paragraph markers are preserved.
 The rich text body omits only the identified title while the input is present, then restores it

@@ -6,6 +6,13 @@
  * live in `editor-shared.css`; this sheet is only what the chapter surface wants on top of them.
  */
 
+/* The source column beside this one has no editor padding and a `text-2xl` chapter heading
+   (DraftingChapterView). Matching both keeps the chapter numbers and the lines of text level
+   across the two columns. */
+.chapter-editor-surface .editor-input {
+  padding: 0;
+}
+
 .chapter-editor-surface p {
   line-height: var(--leading-relaxed);
   margin: 0 0 0.7em;
@@ -15,18 +22,23 @@
    heading above each box already says which chapter it is. */
 .chapter-editor-surface .chapter {
   display: block;
-  font-size: 1.6em;
+  font-size: 1.5rem;
+  line-height: 2rem;
   font-weight: 700;
-  margin: 0 0 0.5em;
+  margin: 0 0 0.75rem;
 }
 
 /* The outline layer never participates in text selection or scripture serialization. */
 .active-verse-outline {
   pointer-events: none;
 }
-.active-verse-outline > span {
+/* One shape around the whole verse, however many lines it wraps to (see verseOutlineShapes). */
+.active-verse-outline > svg {
   position: absolute;
-  outline: 1px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: 2px;
+  overflow: visible;
+}
+.active-verse-outline path {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1px;
 }

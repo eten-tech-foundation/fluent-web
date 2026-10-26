@@ -28,13 +28,13 @@ describe('pericope text states', () => {
     expect(screen.getByText('Loading...')).toHaveClass('font-sans');
   });
 
-  it('distinguishes an undrafted verse after a successful request', () => {
+  it('leaves an undrafted verse blank after a successful request', () => {
     const { rerender } = render(
-      <PericopeText content='' emptyState='not-drafted' isError={true} />
+      <PericopeText content='' emptyState='not-drafted' isError={true} testId='verse' />
     );
     expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    rerender(<PericopeText content='' emptyState='not-drafted' testId='verse' />);
+    expect(screen.getByTestId('verse')).toBeEmptyDOMElement();
     expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
-    rerender(<PericopeText content='' emptyState='not-drafted' />);
-    expect(screen.getByText('Not drafted')).toHaveClass('text-muted-foreground', 'text-sm');
   });
 });
