@@ -272,6 +272,21 @@ describe('verse numbers stay with their text in the real editor', () => {
       await waitFor(() => expect(blocks().slice(3)).toEqual(['p: [2]N', 'p: Second verse.']));
     });
 
+    it.each([
+      // Windows reports AltGr as Ctrl+Alt, and Chrome keeps both flags set beside AltGraph.
+      ['AltGr on Windows', { key: '€', ctrlKey: true, altKey: true, modifierAltGraph: true }],
+      ['AltGr elsewhere', { key: '€', modifierAltGraph: true }],
+      ['Option on a Mac', { key: 'ø', altKey: true }],
+    ])('brings the number in with a letter typed with %s, in one undo step', async (_, key) => {
+      const { editor, input, blocks } = await openUnderHeading();
+      expect(fireEvent.keyDown(input, key)).toBe(false);
+      await waitFor(() =>
+        expect(blocks().slice(3)).toEqual([`p: [2]${key.key}`, 'p: Second verse.'])
+      );
+      act(() => editor.undo());
+      await waitFor(() => expect(blocks().slice(3)).toEqual(['p: ', 'p: [2]Second verse.']));
+    });
+
     it('brings the number in before an IME composition starts, without typing for it', async () => {
       const { editor, input, blocks } = await openUnderHeading();
       const event = fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
@@ -353,6 +368,9 @@ describe('verse numbers stay with their text in the real editor', () => {
       { key: 'Shift' },
       { key: ' ' },
       { key: 'a', ctrlKey: true },
+      // Ctrl+Alt that isn't AltGr, e.g. a desktop shortcut on Linux.
+      { key: 'v', ctrlKey: true, altKey: true },
+      { key: 'Enter', ctrlKey: true, altKey: true, modifierAltGraph: true },
       { key: 'Tab' },
       { key: 'N', isComposing: true },
     ])('leaves the number where it is for %j', async keyEvent => {

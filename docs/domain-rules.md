@@ -80,11 +80,13 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   paragraph under the last heading instead. Words typed in a line no verse owns yet, under a
   heading or above the first verse, bring the next verse's number to the start of that line
   first, and `usjToPericopeVerses` saves such words as the start of the next verse rather than
-  dropping them. A typed letter or a pasted line comes in with the number in one undo step. For an
+  dropping them. A typed letter (with Alt or AltGr too, which Windows reports as Ctrl+Alt) or a
+  pasted line comes in with the number in one undo step. For an
   IME composition or a paste of several lines, the spaces that hold the caret after the number
   until words arrive are replaced by them, never left inside the verse. Tests:
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
-  first letter", "brings the number in with a pasted line, in one undo step", "leaves no caret host
+  first letter", "brings the number in with a letter typed with %s, in one undo step", "brings
+  the number in with a pasted line, in one undo step", "leaves no caret host
   behind once a paste of several lines lands" and "moves the number down with its text on %s too";
   `src/features/rte/lib/pericope-usj.test.ts` › "starts the next verse with words typed in a new
   paragraph under a heading".
