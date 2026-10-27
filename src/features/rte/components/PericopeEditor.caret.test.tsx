@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor, type PericopeEditorProps } from './PericopeEditor';
@@ -82,5 +82,40 @@ describe('PericopeEditor caret requests (#479)', () => {
     request({ verseNumber: 10 }, { readOnly: true });
 
     expect(document.activeElement).not.toBe(root);
+  });
+});
+
+describe('PericopeEditor clicks (#479)', () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+  });
+
+  it('reports the verse the caret is in after a click in its words', async () => {
+    const onVerseClick = vi.fn();
+    const { container } = renderEditor({ onVerseClick });
+    const root = await editorRoot(container);
+    const words = [...root.querySelectorAll('span')]
+      .flatMap(span => [...span.childNodes])
+      .find(node => node.textContent?.includes('Ninth'))!;
+
+    window.getSelection()!.collapse(words, 3);
+    fireEvent.click(root);
+
+    expect(onVerseClick).toHaveBeenCalledWith(9);
+  });
+
+  it('reports the empty verse whose number the caret follows', async () => {
+    const onVerseClick = vi.fn();
+    const { container } = renderEditor({ onVerseClick });
+    const root = await editorRoot(container);
+    const marker = root.querySelector('[data-number="10"]')!;
+    const paragraph = marker.parentElement!;
+
+    window
+      .getSelection()!
+      .collapse(paragraph, Array.prototype.indexOf.call(paragraph.childNodes, marker) + 1);
+    fireEvent.click(root);
+
+    expect(onVerseClick).toHaveBeenCalledWith(10);
   });
 });
