@@ -226,6 +226,36 @@ describe('structural edits in Editorial history', () => {
     for (const row of rows) expect(body(row.verseNumber).textContent?.trim()).toBe(row.text);
   });
 
+  // #530 QA: Paragraph on verse 2 put a paragraph break after verse 2 as well as before it.
+  it('starts a paragraph at the verse on Paragraph, and the verses after it stay in it', async () => {
+    const { input, verse, body, onVersesChange, history, user } = await setup();
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    await waitFor(() => expect(verse(2).parentElement).not.toBe(verse(1).parentElement));
+    expect(verse(3).parentElement).toBe(verse(2).parentElement);
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      { ...rows[1], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+    ]);
+    await history();
+    await waitFor(() => expect(verse(2).parentElement).toBe(verse(1).parentElement));
+  });
+
+  it('changes nothing on Paragraph in a verse that already starts its paragraph', async () => {
+    const verses = rows.map(row =>
+      row.verseNumber === 2
+        ? { ...row, markers: { paragraphs: [{ marker: 'p', offset: 0 }] } }
+        : row
+    );
+    const { input, verse, body, onVersesChange, user } = await setup(verses);
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(verse(3).parentElement).toBe(verse(2).parentElement);
+    expect(onVersesChange).not.toHaveBeenCalled();
+  });
+
   it('saves a heading level undo after insertion has already been undone and redone', async () => {
     const { input, body, onVersesChange, history, user } = await setup();
     const heading = () =>

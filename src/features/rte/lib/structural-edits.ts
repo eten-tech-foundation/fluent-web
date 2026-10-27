@@ -93,7 +93,11 @@ export function formatVerseBlock(editor: EditorRef, verseNumber: number, marker:
       operation: { insert: '\n', attributes: paragraphAttributes(active.block.marker) },
     });
 
-  if (next?.blockIndex === active.blockIndex)
+  if (active.block.marker === marker) {
+    // Already in a block of this format, the verse only starts a new one, and the verses after it
+    // stay in it, as a paragraph marker in front of a verse means (#530 QA).
+    if (active.startsBlock) return false;
+  } else if (next?.blockIndex === active.blockIndex)
     edits.push({
       offset: next.offset,
       operation: { insert: '\n', attributes: paragraphAttributes(marker) },
