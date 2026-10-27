@@ -108,9 +108,13 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
 
   // Only the book list scrolls. The page behind the dialog is scroll-locked, so a wheel over the
   // title or the footer would do nothing at all (QA on #398); it moves the list instead.
-  const scrollListFromOutside = (event: React.WheelEvent) => {
+  const scrollListFromOutside = (event: React.WheelEvent<HTMLDivElement>) => {
     const list = listRef.current;
     if (!list || (event.target instanceof Node && list.contains(event.target))) return;
+    // In a window too short for the list's minimum the whole dialog scrolls, and the browser
+    // already moves it. The 1 px allows for rounding when everything fits.
+    const panel = event.currentTarget;
+    if (panel.scrollHeight > panel.clientHeight + 1) return;
     const step =
       event.deltaMode === WheelEvent.DOM_DELTA_LINE
         ? 40
@@ -257,9 +261,11 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
     >
       {/* The title, the X and Close stay put and only the book list scrolls, like a standard
           dialog (Chad on #398). Each part carries its own padding, so the list spans the whole
-          width and the strip beside its scrollbar scrolls too. */}
+          width and the strip beside its scrollbar scrolls too. The list keeps room for a book
+          row; in a window too short even for that (a big zoom, say), the dialog itself scrolls
+          rather than squeezing the list to nothing (CodeRabbit on #599). */}
       <DialogContent
-        className='flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-2xl'
+        className='flex max-h-[80vh] flex-col gap-0 overflow-y-auto p-0 sm:max-w-2xl'
         onWheel={scrollListFromOutside}
       >
         <DialogHeader className='px-6 pt-6 pb-4'>
@@ -267,7 +273,9 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
           <DialogDescription>{t('editProjectMetadataDescription')}</DialogDescription>
         </DialogHeader>
 
-        <div ref={listRef} className='min-h-0 flex-1 overflow-y-auto px-6'>
+        {/* Relative, so the fields' sr-only markers (absolutely positioned) belong to the list:
+            otherwise they stretch the dialog's own scroll area and the dialog scrolls too. */}
+        <div ref={listRef} className='relative min-h-16 flex-1 overflow-y-auto px-6'>
           {isLoading ? (
             <div className='flex items-center justify-center gap-2 py-8'>
               <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
