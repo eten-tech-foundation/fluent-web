@@ -256,6 +256,36 @@ describe('structural edits in Editorial history', () => {
     expect(onVersesChange).not.toHaveBeenCalled();
   });
 
+  // Found with #530 QA: a click in the source column takes the DOM selection, and with it the
+  // outline's verse, while the editor keeps its caret. Poetry Line then restyled the whole paragraph.
+  it('formats only the caret verse after focus has moved out of the editor', async () => {
+    const { input, verse, body, onVersesChange, user } = await setup();
+    await select(input, body(2), 3);
+    const outside = document.body.appendChild(document.createElement('p'));
+    outside.textContent = 'Source text';
+    await act(async () => {
+      const range = document.createRange();
+      range.setStart(outside.firstChild!, 2);
+      range.collapse(true);
+      document.getSelection()!.removeAllRanges();
+      document.getSelection()!.addRange(range);
+      fireEvent(document, new Event('selectionchange'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    try {
+      await user.click(screen.getByRole('button', { name: 'Poetry Line' }));
+      await waitFor(() => expect(verse(2).parentElement).toHaveAttribute('data-marker', 'q1'));
+      expect(verse(1).parentElement).toHaveAttribute('data-marker', 'p');
+      expect(verse(3).parentElement).toHaveAttribute('data-marker', 'p');
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        { ...rows[1], markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+        { ...rows[2], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+      ]);
+    } finally {
+      outside.remove();
+    }
+  });
+
   it('saves a heading level undo after insertion has already been undone and redone', async () => {
     const { input, body, onVersesChange, history, user } = await setup();
     const heading = () =>
