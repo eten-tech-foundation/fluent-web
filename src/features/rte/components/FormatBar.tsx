@@ -182,7 +182,10 @@ export function FormatBar({
   disabled = false,
 }: FormatBarProps) {
   const { t } = useTranslation();
-  const kind = blockKindOf(blockMarker);
+  // With no cursor in the editor there is no block to format, so nothing reads as pressed and
+  // every control is off, as Section Heading and Insert paragraph already were (#530 QA).
+  const hasBlock = blockMarker !== undefined;
+  const kind = hasBlock ? blockKindOf(blockMarker) : undefined;
   const level = levelOf(blockMarker) ?? 1;
   const canIndent = indentedMarker(blockMarker) !== undefined;
   const canOutdent = outdentedMarker(blockMarker) !== undefined;
@@ -197,9 +200,8 @@ export function FormatBar({
         {KINDS.map(option => {
           const insideHeading = isHeadingMarker(blockMarker);
           const unavailable =
-            option.kind === 'heading'
-              ? !insideHeading && (!canAddHeading || blockMarker === undefined)
-              : insideHeading;
+            !hasBlock ||
+            (option.kind === 'heading' ? !insideHeading && !canAddHeading : insideHeading);
           const Icon = option.icon;
           const label = t(option.labelKey, option.fallback);
           const className = `h-7 w-7 rounded-md p-0 transition-colors ${
@@ -241,7 +243,7 @@ export function FormatBar({
       {onInsertParagraph && (
         <FormatButton
           className={ICON_BUTTON}
-          disabled={disabled || blockMarker === undefined}
+          disabled={disabled || !hasBlock}
           label={t('insertParagraph', 'Insert paragraph')}
           onClick={onInsertParagraph}
           onMouseDown={event => event.preventDefault()}

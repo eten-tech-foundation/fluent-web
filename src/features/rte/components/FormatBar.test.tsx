@@ -54,6 +54,29 @@ describe('formatting tooltips', () => {
     }
   );
 
+  // #530 QA: with no cursor in the editor, Paragraph read as pressed and Poetry Line as available.
+  it('turns every control off, none pressed, while the editor has no cursor', async () => {
+    const user = userEvent.setup();
+    const onFormat = vi.fn();
+    render(
+      <FormatBar
+        canAddHeading
+        blockMarker={undefined}
+        onFormat={onFormat}
+        onInsertParagraph={vi.fn()}
+      />
+    );
+
+    for (const name of ['Paragraph', 'Section Heading', 'Poetry Line', 'Insert paragraph']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toBeDisabled();
+      expect(button).not.toHaveAttribute('aria-pressed', 'true');
+    }
+    await user.hover(screen.getByRole('button', { name: 'Paragraph' }).parentElement!);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/^Paragraph$/);
+    expect(onFormat).not.toHaveBeenCalled();
+  });
+
   it('names unavailable headings on keyboard focus without formatting scripture', async () => {
     const user = userEvent.setup();
     const onFormat = vi.fn();
