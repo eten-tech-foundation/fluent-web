@@ -31,7 +31,9 @@ a deliberate exception to #397's literal request for a _new_ Paragraph. The next
 the number from its text. Roslin's [October 16 QA on #397](https://github.com/eten-tech-foundation/fluent-web/issues/397#issuecomment-6212370155)
 reported that Enter at the end of a heading did not create a new Paragraph block, which settled that
 detail. Empty spacer paragraphs still do not survive the offset-based row contract; they have no
-character to anchor them to, so an unused one is gone after a reload. The separate
+character to anchor them to, so an unused one is gone after a reload. Since #530 the exception is
+an empty `p` right before a Poetry line that starts with a verse number, which is saved as that
+line's `\p` (see docs/features/paragraph-insertion/design.md). The separate
 [Insert paragraph action in #531](https://github.com/eten-tech-foundation/fluent-web/pull/531) does
 the same from a heading and handles repeated insertion within verse text.
 

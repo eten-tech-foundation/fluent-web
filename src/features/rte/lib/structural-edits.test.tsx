@@ -2,10 +2,14 @@ import { createRef } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 import { act, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { pericopeVersesToUsj, usjToPericopeVerses } from './pericope-usj';
-import { formatVerseBlock, insertSectionHeading } from './structural-edits';
+import { pericopeVersesToUsj, usjToPericopeVerses, type PericopeVerseText } from './pericope-usj';
+import {
+  formatVerseBlock,
+  insertSectionHeading,
+  paragraphBeforePoetryLine,
+} from './structural-edits';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
@@ -132,5 +136,77 @@ describe('structural delta boundaries', () => {
     await waitFor(() => expect(usjToPericopeVerses(ref.current!.getUsj()!)).toEqual(formatted));
     act(() => ref.current!.undo());
     await waitFor(() => expect(usjToPericopeVerses(ref.current!.getUsj()!)).toEqual(before));
+  });
+});
+
+// #530: Paragraph on a Poetry line starts a paragraph at the verse and keeps the line Poetry, the
+// way USFM writes `\p` then `\q1 \v 3`.
+describe('a paragraph that starts with a Poetry line', () => {
+  const P = { paragraphs: [{ marker: 'p', offset: 0 }] };
+  const Q1 = { paragraphs: [{ marker: 'q1', offset: 0 }] };
+  const P_THEN_Q1 = {
+    paragraphs: [
+      { marker: 'p', offset: 0 },
+      { marker: 'q1', offset: 0 },
+    ],
+  };
+  const markersOf = (ref: { current: EditorRef | null }) =>
+    ref
+      .current!.getUsj()!
+      .content.slice(1)
+      .map(node => (typeof node === 'string' ? '' : node.marker));
+
+  async function poetry(rows: PericopeVerseText[]) {
+    const ref = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
+    return { ref, saved: () => usjToPericopeVerses(ref.current!.getUsj()!) };
+  }
+
+  it('puts an empty p before a verse that starts its Poetry line, in one undo step', async () => {
+    const { ref, saved } = await poetry([
+      { verseNumber: 1, text: 'First.', markers: P },
+      { verseNumber: 2, text: 'Second.', markers: Q1 },
+      { verseNumber: 3, text: 'Third.', markers: null },
+    ]);
+    const before = saved();
+    act(() => {
+      expect(paragraphBeforePoetryLine(ref.current!, 2)).toBe(true);
+    });
+    await waitFor(() => expect(markersOf(ref)).toEqual(['p', 'p', 'q1']));
+    expect(saved()).toEqual([before[0], { ...before[1], markers: P_THEN_Q1 }, before[2]]);
+    act(() => ref.current!.undo());
+    await waitFor(() => expect(saved()).toEqual(before));
+  });
+
+  it('gives a verse in the middle of a Poetry line a line of its own first', async () => {
+    const { ref, saved } = await poetry([
+      { verseNumber: 1, text: 'First.', markers: P },
+      { verseNumber: 2, text: 'Second.', markers: Q1 },
+      { verseNumber: 3, text: 'Third.', markers: null },
+    ]);
+    act(() => {
+      expect(paragraphBeforePoetryLine(ref.current!, 3)).toBe(true);
+    });
+    await waitFor(() => expect(markersOf(ref)).toEqual(['p', 'q1', 'p', 'q1']));
+    expect(saved().map(row => row.markers)).toEqual([P, Q1, P_THEN_Q1]);
+  });
+
+  it('changes nothing when the paragraph is already there', async () => {
+    const { ref } = await poetry([
+      { verseNumber: 1, text: 'First.', markers: P },
+      { verseNumber: 2, text: 'Second.', markers: P_THEN_Q1 },
+    ]);
+    const applyUpdate = vi.spyOn(ref.current!, 'applyUpdate');
+    expect(paragraphBeforePoetryLine(ref.current!, 2)).toBe(true);
+    expect(applyUpdate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a verse whose line is not Poetry to the usual Paragraph', async () => {
+    const { ref } = await poetry([
+      { verseNumber: 1, text: 'First.', markers: P },
+      { verseNumber: 2, text: 'Second.', markers: null },
+    ]);
+    const applyUpdate = vi.spyOn(ref.current!, 'applyUpdate');
+    expect(paragraphBeforePoetryLine(ref.current!, 2)).toBe(false);
+    expect(applyUpdate).not.toHaveBeenCalled();
   });
 });

@@ -189,7 +189,24 @@ describe('Enter from a heading in the real editor', () => {
     expect(usj.content[4]).toEqual({ ...verseTwoBody, marker: 'q2' });
     expect(container.querySelector('[data-marker="q2"] [data-marker="v"]')).toHaveTextContent('2');
     expect(container.querySelector('[data-marker="q2"]')).toHaveTextContent('Second verse.');
-    expect(usjToPericopeVerses(usj)).toEqual(verses);
+    // An empty p right before a Poetry line is the `\p` that starts its paragraph (#530), so it is
+    // saved, ahead of the line's own marker.
+    expect(usjToPericopeVerses(usj)).toEqual(
+      verses.map(row =>
+        row.verseNumber === 2
+          ? {
+              ...row,
+              markers: {
+                ...row.markers,
+                paragraphs: [
+                  { marker: 'p', offset: 0 },
+                  { marker: 'q2', offset: 0 },
+                ],
+              },
+            }
+          : row
+      )
+    );
     act(() => editorRef.current!.undo());
     await waitFor(() => expect(container.querySelectorAll('[data-marker="p"]')).toHaveLength(1));
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(verses);
