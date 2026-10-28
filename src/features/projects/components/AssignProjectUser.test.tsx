@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type * as useProjectUsersModule from '@/features/projects/hooks/useProjectUsers';
-import { type ChapterAssignmentProgress } from '@/lib/types';
+import { ROLES, type ChapterAssignmentProgress, type User } from '@/lib/types';
 import { fireEvent, renderWithProviders, screen } from '@/test/render';
 
 import { AssignProjectUsers } from './AssignProjectUsers';
@@ -113,5 +113,113 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     fireEvent.click(cancelButton);
 
     expect(screen.queryByText(/Remove Alice Drafter from this project/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', () => {
+  const orgUsers: User[] = [
+    {
+      id: 10,
+      username: 'alice',
+      displayName: 'Alice Drafter',
+      email: 'alice@example.com',
+      role: 'Project Translator',
+      orgGrants: [{ orgId: 1, roleId: 3, roleName: 'Project Translator', permissions: [] }],
+    },
+    {
+      id: 20,
+      username: 'bob_org_manager',
+      displayName: 'Bob OrgManager',
+      email: 'bob@example.com',
+      role: ROLES.ORG_MANAGER,
+      orgGrants: [{ orgId: 1, roleId: 1, roleName: ROLES.ORG_MANAGER, permissions: [] }],
+    },
+  ];
+
+  it('negative test: does not list an Org Manager who was not explicitly added to the project', async () => {
+    renderWithProviders(
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        projectId={1}
+        users={orgUsers}
+        usersLoading={false}
+      />
+    );
+
+    // Alice is an explicitly added project user and appears in the table
+    expect(screen.getByText('Alice Drafter')).toBeInTheDocument();
+    // Bob is an Org Manager with only an org grant and must NOT appear in the table
+    expect(screen.queryByText('Bob OrgManager')).not.toBeInTheDocument();
+  });
+
+  it('positive test: Org Manager not yet added to project appears in the "Add User" dropdown', async () => {
+    renderWithProviders(
+      <AssignProjectUsers
+        isAddUserOpen
+        chapterAssignments={[]}
+        projectId={1}
+        users={orgUsers}
+        usersLoading={false}
+      />
+    );
+
+    // Click the user selector trigger button
+    const selectTriggerSpan = screen.getByText('Select user(s)');
+    const selectTriggerBtn = selectTriggerSpan.closest('button') ?? selectTriggerSpan;
+    fireEvent.pointerDown(selectTriggerBtn);
+    fireEvent.click(selectTriggerBtn);
+
+    // Unassigned Org Manager Bob appears in the options
+    expect(await screen.findByText('bob_org_manager')).toBeInTheDocument();
+    // Alice is already in the project so she should not appear in the available dropdown options
+    expect(screen.queryByText('alice')).not.toBeInTheDocument();
+  });
+
+  it('negative test: filters out Org Manager rows if returned by legacy API and surfaces them in Add User dropdown', async () => {
+    const useProjectUsersModuleActual = await import('@/features/projects/hooks/useProjectUsers');
+    const spy = vi.spyOn(useProjectUsersModuleActual, 'useProjectUsers');
+    spy.mockReturnValue({
+      data: [
+        {
+          projectId: 1,
+          userId: 10,
+          displayName: 'Alice Drafter',
+          roleID: 3,
+          roleName: 'Project Translator',
+        },
+        {
+          projectId: 1,
+          userId: 20,
+          displayName: 'Bob OrgManager',
+          roleID: 1,
+          roleName: ROLES.ORG_MANAGER,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+
+    renderWithProviders(
+      <AssignProjectUsers
+        isAddUserOpen
+        chapterAssignments={[]}
+        projectId={1}
+        users={orgUsers}
+        usersLoading={false}
+      />
+    );
+
+    // In the table: Alice is present, but Bob (Org Manager) is filtered out
+    expect(screen.getByText('Alice Drafter')).toBeInTheDocument();
+    expect(screen.queryByText('Bob OrgManager')).not.toBeInTheDocument();
+
+    // In the Add User dropdown: Bob is available to add
+    const selectTriggerSpan = screen.getByText('Select user(s)');
+    const selectTriggerBtn = selectTriggerSpan.closest('button') ?? selectTriggerSpan;
+    fireEvent.pointerDown(selectTriggerBtn);
+    fireEvent.click(selectTriggerBtn);
+
+    expect(await screen.findByText('bob_org_manager')).toBeInTheDocument();
   });
 });
