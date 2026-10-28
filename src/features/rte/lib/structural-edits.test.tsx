@@ -108,4 +108,29 @@ describe('structural delta boundaries', () => {
     act(() => ref.current!.redo());
     await waitFor(() => expect(usjToPericopeVerses(ref.current!.getUsj()!)).toEqual(formatted));
   });
+
+  it('starts a paragraph at a verse inside one, keeping the verses after it in it', async () => {
+    const usj = pericopeVersesToUsj(
+      [
+        { verseNumber: 1, text: 'First.', markers: null },
+        { verseNumber: 2, text: 'Second.', markers: null },
+        { verseNumber: 3, text: 'Third.', markers: null },
+      ],
+      1,
+      'GEN'
+    );
+    const ref = await setup(usj);
+    const before = usjToPericopeVerses(ref.current!.getUsj()!);
+    act(() => {
+      formatVerseBlock(ref.current!, 2, 'p');
+    });
+    const formatted = [
+      before[0],
+      { ...before[1], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+      before[2],
+    ];
+    await waitFor(() => expect(usjToPericopeVerses(ref.current!.getUsj()!)).toEqual(formatted));
+    act(() => ref.current!.undo());
+    await waitFor(() => expect(usjToPericopeVerses(ref.current!.getUsj()!)).toEqual(before));
+  });
 });

@@ -92,13 +92,18 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const [updatingRoleUserIds, setUpdatingRoleUserIds] = useState<Set<number>>(new Set());
 
   const {
-    data: projectUsers,
+    data: rawProjectUsers,
     isLoading: projectUsersLoading,
     isError: projectUsersError,
     refetch: refetchProjectUsers,
   } = useProjectUsers(projectId, {
     enabled: !!projectId,
   });
+
+  const projectUsers = useMemo(
+    () => rawProjectUsers?.filter(pu => pu.roleName !== ROLES.ORG_MANAGER),
+    [rawProjectUsers]
+  );
 
   const addProjectUsersMutation = useAddProjectUsers(projectId);
   const removeProjectUserMutation = useRemoveProjectUser(projectId);

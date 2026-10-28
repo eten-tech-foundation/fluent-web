@@ -124,6 +124,42 @@ describe('scopeBlockFormatToVerse', () => {
     expect(changed.map(v => v.verseNumber)).toEqual([2, 3]);
   });
 
+  // #530 QA: Paragraph on verse 2 of a paragraph put a break after verse 2 as well.
+  it('starts a new block at the verse when it is already in one of that format', () => {
+    const { updated, changed } = scopeBlockFormatToVerse(unsplit, 2, 'p')!;
+    expect(updated[1].markers?.paragraphs).toEqual([{ marker: 'p', offset: 0 }]);
+    expect(updated[2]).toBe(unsplit[2]);
+    expect(changed.map(v => v.verseNumber)).toEqual([2]);
+  });
+
+  it('keeps the verses after it in a Poetry block it starts the same way', () => {
+    const inPoetry = [
+      verse(1, 'First.', [{ marker: 'q1', offset: 0 }]),
+      verse(2, 'Second.'),
+      verse(3, 'Third.'),
+    ];
+    const { updated, changed } = scopeBlockFormatToVerse(inPoetry, 2, 'q1')!;
+    expect(updated[1].markers?.paragraphs).toEqual([{ marker: 'q1', offset: 0 }]);
+    expect(updated[2]).toBe(inPoetry[2]);
+    expect(changed.map(v => v.verseNumber)).toEqual([2]);
+  });
+
+  it.each([
+    [
+      'opens it with that marker',
+      [verse(1, 'First.'), verse(2, 'Second.', [{ marker: 'p', offset: 0 }])],
+    ],
+    [
+      'opens it under a heading',
+      [
+        verse(1, 'First.'),
+        { ...verse(2, 'Second.'), markers: { headings: [{ marker: 's1', text: 'T' }] } },
+      ],
+    ],
+  ])('returns null for a verse that already %s, so nothing splits after it', (_, start) => {
+    expect(scopeBlockFormatToVerse([...start, verse(3, 'Third.')], 2, 'p')).toBeNull();
+  });
+
   it('returns null when the active verse is already a single-verse block (formatPara handles it)', () => {
     const rows = [
       verse(1, 'First.'),

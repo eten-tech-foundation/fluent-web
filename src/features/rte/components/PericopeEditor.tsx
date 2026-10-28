@@ -19,7 +19,7 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
-import { placeCaretAtVerseEnd, type VerseCaretRequest } from '../lib/verse-caret';
+import { placeCaretAtVerseEnd, verseAtCaret, type VerseCaretRequest } from '../lib/verse-caret';
 
 import { HeadingValidationMessage } from './HeadingValidationMessage';
 
@@ -54,6 +54,12 @@ export interface PericopeEditorProps {
   /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
   onActiveVerseChange?: (verseNumber: number) => void;
   /**
+   * Called after every click in the editor with the verse the caret is in, or undefined when it
+   * isn't in a verse (a heading, say). `onActiveVerseChange` only reports a move to another verse
+   * inside this editor, so a click back into a pericope box at the same verse says nothing (#479).
+   */
+  onVerseClick?: (verseNumber: number | undefined) => void;
+  /**
    * Focuses the editor with the caret at the end of this verse, when the verse is in this
    * pericope. Next Pericope asks for it (#479).
    */
@@ -83,6 +89,7 @@ export function PericopeEditor({
   continuedParagraph,
   onVersesChange,
   onActiveVerseChange,
+  onVerseClick,
   caretRequest,
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
@@ -223,6 +230,14 @@ export function PericopeEditor({
     [onActiveVerseChange]
   );
 
+  // React handles the click after useVerseNumberCaret has moved the caret, so this reads where the
+  // translator's click finally put it.
+  const handleClick = useCallback(() => {
+    if (!onVerseClick) return;
+    const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
+    onVerseClick(root ? verseAtCaret(root, document.getSelection()) : undefined);
+  }, [onVerseClick]);
+
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
   const verseKeys = useVerseNumberKeys(editorRef, readOnly);
@@ -233,6 +248,7 @@ export function PericopeEditor({
       className='pericope-editor rte-editor'
       data-testid='pericope-editor'
       onBlurCapture={handleBlur}
+      onClick={handleClick}
       onContextMenuCapture={handleEditorContextMenu}
       onKeyDownCapture={event => {
         if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event)) handleEditorKeys(event);

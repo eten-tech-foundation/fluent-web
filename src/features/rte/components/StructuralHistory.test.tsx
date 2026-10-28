@@ -226,6 +226,66 @@ describe('structural edits in Editorial history', () => {
     for (const row of rows) expect(body(row.verseNumber).textContent?.trim()).toBe(row.text);
   });
 
+  // #530 QA: Paragraph on verse 2 put a paragraph break after verse 2 as well as before it.
+  it('starts a paragraph at the verse on Paragraph, and the verses after it stay in it', async () => {
+    const { input, verse, body, onVersesChange, history, user } = await setup();
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    await waitFor(() => expect(verse(2).parentElement).not.toBe(verse(1).parentElement));
+    expect(verse(3).parentElement).toBe(verse(2).parentElement);
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      { ...rows[1], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+    ]);
+    await history();
+    await waitFor(() => expect(verse(2).parentElement).toBe(verse(1).parentElement));
+  });
+
+  it('changes nothing on Paragraph in a verse that already starts its paragraph', async () => {
+    const verses = rows.map(row =>
+      row.verseNumber === 2
+        ? { ...row, markers: { paragraphs: [{ marker: 'p', offset: 0 }] } }
+        : row
+    );
+    const { input, verse, body, onVersesChange, user } = await setup(verses);
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(verse(3).parentElement).toBe(verse(2).parentElement);
+    expect(onVersesChange).not.toHaveBeenCalled();
+  });
+
+  // Found with #530 QA: a click in the source column takes the DOM selection, and with it the
+  // outline's verse, while the editor keeps its caret. Poetry Line then restyled the whole paragraph.
+  it('formats only the caret verse after focus has moved out of the editor', async () => {
+    const { input, verse, body, onVersesChange, user } = await setup();
+    await select(input, body(2), 3);
+    const outside = document.body.appendChild(document.createElement('p'));
+    outside.textContent = 'Source text';
+    await act(async () => {
+      const range = document.createRange();
+      range.setStart(outside.firstChild!, 2);
+      range.collapse(true);
+      document.getSelection()!.removeAllRanges();
+      document.getSelection()!.addRange(range);
+      fireEvent(document, new Event('selectionchange'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    try {
+      await user.click(screen.getByRole('button', { name: 'Poetry Line' }));
+      await waitFor(() => expect(verse(2).parentElement).toHaveAttribute('data-marker', 'q1'));
+      expect(verse(1).parentElement).toHaveAttribute('data-marker', 'p');
+      expect(verse(3).parentElement).toHaveAttribute('data-marker', 'p');
+      expect(onVersesChange).toHaveBeenLastCalledWith([
+        { ...rows[1], markers: { paragraphs: [{ marker: 'q1', offset: 0 }] } },
+        { ...rows[2], markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+      ]);
+    } finally {
+      outside.remove();
+    }
+  });
+
   it('saves a heading level undo after insertion has already been undone and redone', async () => {
     const { input, body, onVersesChange, history, user } = await setup();
     const heading = () =>

@@ -72,7 +72,8 @@ const fetchProjectUsers = async (projectId: number): Promise<ProjectUser[]> => {
 
   if (!res.ok) throw new Error('Failed to fetch project users');
 
-  return (await res.json()) as ProjectUser[];
+  const users = (await res.json()) as ProjectUser[];
+  return users.filter(u => u.roleName !== ROLES.ORG_MANAGER);
 };
 
 const addProjectUsers = async (

@@ -509,16 +509,25 @@ describe('ChapterEditor', () => {
       expect(editor.formatPara).toHaveBeenCalledWith('q2');
     });
 
-    it('does not claim a block the editor had no cursor to apply', async () => {
+    it('keeps the block controls off until the editor has a cursor', async () => {
       const user = userEvent.setup();
       render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
 
-      // Nothing reported, so nothing is selected and `formatPara` has nothing to act on. The
-      // editor is still asked, but the bar must not sit there claiming a block that never took.
-      await user.click(screen.getByRole('button', { name: 'Poetry Line' }));
-
-      expect(editor.formatPara).toHaveBeenCalledWith('q1');
+      // Nothing reported, so nothing is selected and there is no block to format (#530 QA).
+      const paragraph = () => screen.getByRole('button', { name: 'Paragraph' });
+      const poetry = () => screen.getByRole('button', { name: 'Poetry Line' });
+      expect(paragraph()).toBeDisabled();
+      expect(paragraph()).toHaveAttribute('aria-pressed', 'false');
+      expect(poetry()).toBeDisabled();
+      await user.click(poetry());
+      expect(editor.formatPara).not.toHaveBeenCalled();
       expect(screen.queryByTestId('poetry-indent')).not.toBeInTheDocument();
+
+      reportBlock('p');
+      expect(paragraph()).toBeEnabled();
+      expect(paragraph()).toHaveAttribute('aria-pressed', 'true');
+      await user.click(poetry());
+      expect(editor.formatPara).toHaveBeenCalledWith('q1');
     });
 
     it('says so when the cursor is in a block it cannot author', () => {

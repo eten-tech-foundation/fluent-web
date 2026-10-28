@@ -2,8 +2,10 @@
 
 The Chapter format bar has two separate paragraph controls:
 
-- **Paragraph** converts the current body block to `p` and remains pressed while that format is active.
+- **Paragraph** converts the current body block to `p` and remains pressed while that format is active. It only changes the verse the cursor is in: in a Poetry block that verse becomes a `p` line of its own, and the next line stays Poetry. Inside a `p` that holds several verses, it starts a new paragraph at that verse, and the verses after it stay in it ([#530](https://github.com/eten-tech-foundation/fluent-web/issues/530) QA). A verse that already starts its paragraph is left as it is.
 - **Insert paragraph** splits at the cursor and places the cursor in a new `p`. It can be clicked repeatedly. With text selected it does nothing, so selected text stays intact; place a caret first.
+
+Until the cursor is in the editor, every control in the bar is off and none reads as pressed, since there is no block to format yet ([#530](https://github.com/eten-tech-foundation/fluent-web/issues/530) QA).
 
 The button is only in the Chapter view format bar. Paragraphs it inserts still round-trip through Pericope view.
 

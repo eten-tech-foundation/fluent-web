@@ -68,19 +68,13 @@ const TruncatedProjectCell = ({ text, isNavigating }: { text: string; isNavigati
   );
 };
 
-const ChapterStatusCell: React.FC<{
-  projectId: number;
-  chapterStatus: string;
-  statusLabel?: string;
-}> = ({ projectId, chapterStatus, statusLabel }) => {
-  const { getStageLabel } = useProjectWorkflow(projectId);
-  if (statusLabel) {
-    return <>{statusLabel}</>;
-  }
-  return <>{getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel)}</>;
-};
-
-const TruncatedTextCell = ({ text }: { text: string }) => {
+const TruncatedTextCell = ({
+  text,
+  align = 'start',
+}: {
+  text: string;
+  align?: 'start' | 'center' | 'end';
+}) => {
   const textRef = useRef<HTMLDivElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
 
@@ -107,7 +101,7 @@ const TruncatedTextCell = ({ text }: { text: string }) => {
     <Tooltip>
       <TooltipTrigger asChild>{content}</TooltipTrigger>
       <TooltipContent
-        align='center'
+        align={align}
         className='bg-popover text-popover-foreground border-border rounded-md border px-4 py-2.5 text-sm font-semibold whitespace-nowrap shadow-lg'
         side='top'
       >
@@ -115,6 +109,17 @@ const TruncatedTextCell = ({ text }: { text: string }) => {
       </TooltipContent>
     </Tooltip>
   );
+};
+
+const ChapterStatusCell: React.FC<{
+  projectId: number;
+  chapterStatus: string;
+  statusLabel?: string;
+}> = ({ projectId, chapterStatus, statusLabel }) => {
+  const { getStageLabel } = useProjectWorkflow(projectId);
+  const text =
+    statusLabel ?? getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel);
+  return <TruncatedTextCell text={text} />;
 };
 
 const formatDate = (dateString: string) => {
