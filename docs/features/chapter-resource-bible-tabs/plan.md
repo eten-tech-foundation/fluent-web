@@ -4,7 +4,7 @@
 
 The [QA feedback on #471](https://github.com/eten-tech-foundation/fluent-web/issues/471#issuecomment-5809993641) supersedes the multiple-resource-tab behavior in the original plan below. The source remains first and non-closable. Selecting another resource replaces the second tab, including its content and loading/error state; reselecting the same resource preserves its loaded content. Late responses for a replaced resource must not restore it.
 
-Chapter, Verse and Pericope share `BibleTabList`. Long labels truncate without adding a resource-tab scrollbar. An empty chapter, or a missing verse within a partially available chapter, displays `This Bible verse doesn't have content for this passage.` Loading and request failures remain distinct from an empty passage in all three views, both for the whole passage and for a single missing verse.
+Chapter, Verse and Pericope share `BibleTabList`. Long labels truncate without adding a resource-tab scrollbar. An empty chapter, or a missing verse within a partially available chapter, displays `This Bible does not have content for this passage.` Loading and request failures remain distinct from an empty passage in all three views, both for the whole passage and for a single missing verse.
 
 Regression coverage includes repeated replacement, source selection, same-resource selection, closing the resource, hiding/reopening Resources, interrupted requests, late success/error responses and switching drafting views. This correction is independent of PR #508; shared RTE validation before main and Roslin's QA acceptance remain required.
 
@@ -25,7 +25,7 @@ Regression coverage includes repeated replacement, source selection, same-resour
 - The Chapter View always displays `projectItem.bibleName`.
 - Selecting a Bible in Resources adds or activates a tab without removing the source Bible or previously opened resource Bibles.
 - Closing a resource Bible never closes the source Bible.
-- A resource Bible with no verses displays `This Bible verse doesn't have content for this passage.` after loading finishes.
+- A resource Bible with no verses displays `This Bible does not have content for this passage.` after loading finishes.
 - The source tab stays pinned at reduced width while the resource-tab section scrolls horizontally.
 - Keep changes limited to the drafting/resource-Bible interaction described by issue #471.
 
@@ -138,9 +138,7 @@ render(
   />
 );
 expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
-expect(
-  screen.getByText("This Bible verse doesn't have content for this passage.")
-).toBeInTheDocument();
+expect(screen.getByText('This Bible does not have content for this passage.')).toBeInTheDocument();
 ```
 
 Add a third case that opens two resource tabs, switches back to `WEB`, and verifies the source verse text is rendered again.

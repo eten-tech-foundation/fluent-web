@@ -28,7 +28,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, fallback?: string) =>
       key === 'noContentAvailable'
-        ? "This Bible verse doesn't have content for this passage."
+        ? 'This Bible does not have content for this passage.'
         : (fallback ?? key),
   }),
 }));
@@ -140,7 +140,7 @@ describe('DraftingChapterView', () => {
       'true'
     );
     expect(
-      screen.getByText("This Bible verse doesn't have content for this passage.")
+      screen.getByText('This Bible does not have content for this passage.')
     ).toBeInTheDocument();
   });
 
@@ -184,7 +184,7 @@ describe('DraftingChapterView', () => {
     );
     expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
     expect(
-      screen.queryByText("This Bible verse doesn't have content for this passage.")
+      screen.queryByText('This Bible does not have content for this passage.')
     ).not.toBeInTheDocument();
   });
 
@@ -222,7 +222,7 @@ describe('DraftingChapterView', () => {
       );
       expect(screen.getByText('Available reference text')).toBeInTheDocument();
       expect(
-        screen.getByText("This Bible verse doesn't have content for this passage.")
+        screen.getByText('This Bible does not have content for this passage.')
       ).toBeInTheDocument();
       expect(screen.queryByText('The earth was formless.')).not.toBeInTheDocument();
     }
@@ -238,7 +238,7 @@ describe('DraftingChapterView', () => {
       />
     );
     expect(
-      screen.getByText("This Bible verse doesn't have content for this passage.")
+      screen.getByText('This Bible does not have content for this passage.')
     ).toBeInTheDocument();
     expect(screen.queryByText('Outside the displayed passage')).not.toBeInTheDocument();
   });
@@ -253,7 +253,7 @@ describe('DraftingChapterView', () => {
       />
     );
     expect(
-      screen.queryByText("This Bible verse doesn't have content for this passage.")
+      screen.queryByText('This Bible does not have content for this passage.')
     ).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'WEB' })).toBeInTheDocument();
     expect(screen.getByTestId('chapter-editor')).toBeInTheDocument();
