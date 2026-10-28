@@ -26,6 +26,7 @@ import {
 } from '../lib/pericope-usj';
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
 import { formatVerseBlock, insertSectionHeading } from '../lib/structural-edits';
+import { verseAtCaret } from '../lib/verse-numbers';
 
 import { ActiveVerseOutline } from './ActiveVerseOutline';
 import { FormatBar } from './FormatBar';
@@ -266,8 +267,11 @@ export function ChapterEditor({
       // A fresh chapter is one paragraph holding every verse, and the editor's own block
       // formatting restyles the whole block — one click would turn 31 verses into poetry (#427).
       // When the active verse's paragraph spans further than itself, the format is scoped to that
-      // verse by inserting paragraph boundaries in one local history transaction.
-      const activeVerse = activeVerseRef.current;
+      // verse by inserting paragraph boundaries in one local history transaction. The outline's
+      // verse follows the DOM selection, which a click in the source column takes away while the
+      // editor keeps its caret; the verse then comes from that caret, so the click still formats
+      // one verse and not the whole paragraph.
+      const activeVerse = activeVerseRef.current ?? verseAtCaret(editor);
       const scoped =
         activeVerse === undefined
           ? null

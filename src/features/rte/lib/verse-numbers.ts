@@ -144,6 +144,41 @@ export function caretInBlock(
   return caretOffset === undefined ? undefined : { usj, index, block, caretOffset };
 }
 
+/**
+ * The verse a point in the document belongs to, by the rule the active-verse outline uses: the
+ * last verse number before it, unless a heading or the chapter number comes between. Text before
+ * the first number in its block belongs to that number's verse, which is how it is saved.
+ */
+export function verseAt(usj: Usj, index: number, caretOffset: number): number | undefined {
+  let verse: number | undefined;
+  for (const [blockIndex, node] of usj.content.slice(0, index + 1).entries()) {
+    if (typeof node !== 'object') continue;
+    if (node.type === 'chapter' || isHeadingMarker(node.marker)) {
+      verse = undefined;
+      continue;
+    }
+    let offset = 0;
+    for (const child of node.content ?? []) {
+      const atCaret = blockIndex === index && offset >= caretOffset;
+      if (atCaret && verse !== undefined) return verse;
+      if (isVerse(child)) {
+        verse = Number(child.number);
+        if (atCaret) return verse;
+      }
+      offset += deltaLength(child);
+    }
+  }
+  return verse;
+}
+
+/** The verse the editor's own caret is in. It still answers after focus has left the editor. */
+export function verseAtCaret(editor: EditorRef): number | undefined {
+  const caret = caretInBlock(editor);
+  return caret && isBodyParagraph(caret.block)
+    ? verseAt(caret.usj, caret.index, caret.caretOffset)
+    : undefined;
+}
+
 /** Only blank text comes before the caret in its block. */
 export function atTextStart(block: MarkerObject, caretOffset: number): boolean {
   let offset = 0;

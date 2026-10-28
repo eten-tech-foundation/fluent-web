@@ -141,6 +141,20 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
   );
 
   const isGroupActive = groupVerses.some(gv => gv.verseNumber === activeVerseId);
+
+  // A click in the text of a pericope that isn't the active one makes it active, as a click on its
+  // source does (#479). It waits for the click rather than the focus: making a pericope active
+  // scrolls the page, which would move the words under a drag that is selecting them. Inside the
+  // active pericope a click changes nothing, so the page doesn't jump with every click.
+  const handleVerseClick = useCallback(
+    (verseNumber: number | undefined) => {
+      if (readOnly || isGroupActive) return;
+      const clicked = groupVerses.find(gv => gv.verseNumber === verseNumber) ?? groupVerses.at(0);
+      if (clicked) handleActiveVerseChange(clicked.verseNumber);
+    },
+    [readOnly, isGroupActive, groupVerses, handleActiveVerseChange]
+  );
+
   const isPericopeDrafted = groupVerses.every(gv =>
     verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
   );
@@ -182,6 +196,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
         onActiveVerseChange={handleActiveVerseChange}
+        onVerseClick={handleVerseClick}
         onVersesChange={handleVersesChange}
       />
       {afterContent}

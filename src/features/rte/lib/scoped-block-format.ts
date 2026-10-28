@@ -28,16 +28,28 @@ function openBlockMarkerAfter(rows: PericopeVerseText[], index: number): string 
   return PARAGRAPH_MARKER;
 }
 
+/** The marker of the block a row's verse starts in. */
+function blockMarkerAt(rows: PericopeVerseText[], index: number): string {
+  const row = rows[index];
+  const opening = row.markers?.paragraphs?.find(paragraph => paragraph.offset === 0);
+  if (opening) return opening.marker;
+  if (row.markers?.headings?.length) return PARAGRAPH_MARKER;
+  return openBlockMarkerAfter(rows, index - 1);
+}
+
 /**
  * Scopes body formatting (Poetry Line, Paragraph) to the verse the cursor is in.
  *
  * A fresh chapter is a single paragraph holding every verse, so the editor's own block formatting
  * would restyle the whole chapter at once (#427). Instead: the active verse opens a block with the
  * chosen marker, and the following verse reopens a block with the marker of the paragraph it was
- * in — so formatting one verse inside a poetry block does not silently end the poetry.
+ * in — so formatting one verse inside a poetry block does not silently end the poetry. A verse
+ * already in a block of the chosen format only starts a new one, and the verses after it stay in
+ * it, as a paragraph marker in front of a verse means (#530 QA).
  *
  * Returns the full updated row list plus just the rows that changed (what the save path needs), or
- * `null` when the active verse already is a single-verse block — there the editor's own
+ * `null` when the active verse already is a single-verse block or already starts a block of that
+ * format — there the editor's own
  * `formatPara` does the same thing while keeping the cursor, so the caller should use it.
  */
 export function scopeBlockFormatToVerse(
@@ -51,6 +63,8 @@ export function scopeBlockFormatToVerse(
   const active = rows[index];
   const next = index + 1 < rows.length ? rows[index + 1] : undefined;
   if (opensBlock(active) && (!next || opensBlock(next))) return null;
+  const sameFormat = blockMarkerAt(rows, index) === marker;
+  if (sameFormat && opensBlock(active)) return null;
 
   // Resolved before any rewrite: the follower reopens the block that was open where it starts.
   // The active verse keeps its own mid-text splits, so that block is the same before and after.
@@ -62,7 +76,7 @@ export function scopeBlockFormatToVerse(
   };
 
   const updatedNext: PericopeVerseText | undefined =
-    next && !opensBlock(next)
+    next && !opensBlock(next) && !sameFormat
       ? {
           ...next,
           markers: {

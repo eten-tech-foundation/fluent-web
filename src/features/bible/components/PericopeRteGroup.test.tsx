@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -108,6 +108,46 @@ describe('PericopeRteGroup', () => {
     renderGroup({ activeVerseId: 9 });
 
     expect(screen.queryByRole('button', { name: 'Next Pericope' })).not.toBeInTheDocument();
+  });
+
+  describe('a click in the editor (#479)', () => {
+    const clickVerse = (verseNumber: number | undefined) =>
+      act(() =>
+        (editorProps.current as { onVerseClick: (n?: number) => void }).onVerseClick(verseNumber)
+      );
+
+    it('makes the pericope active, at the verse the caret is in, while another one is', () => {
+      renderGroup({ activeVerseId: 9 });
+
+      clickVerse(2);
+
+      expect(handleActiveVerseChange).toHaveBeenCalledWith(2);
+    });
+
+    it('falls back to the first verse when the caret is not in a verse', () => {
+      renderGroup({ activeVerseId: 9 });
+
+      clickVerse(undefined);
+
+      expect(handleActiveVerseChange).toHaveBeenCalledWith(1);
+    });
+
+    it('leaves the active pericope as it is', () => {
+      // Making a pericope active scrolls the page; a click inside the active one must not.
+      renderGroup({ activeVerseId: 1 });
+
+      clickVerse(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+
+    it('does nothing read-only', () => {
+      renderGroup({ activeVerseId: 9, readOnly: true });
+
+      clickVerse(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
   });
 
   it("hands Next Pericope's caret request to the editor", () => {

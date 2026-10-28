@@ -35,6 +35,13 @@ import {
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 
+/**
+ * A key that types one visible character. Code points are counted, since a letter outside the BMP
+ * (Adlam, say) takes two UTF-16 units; key names like 'Tab' or 'F2' are longer. A space alone
+ * doesn't count: claiming the number for it would leave the number in front of nothing.
+ */
+const typesCharacter = (key: string): boolean => Array.from(key).length === 1 && key.trim() !== '';
+
 /** The block element holding the caret. */
 function caretBlockElement(root: HTMLElement): Element | undefined {
   const node = window.getSelection()?.anchorNode;
@@ -84,12 +91,15 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
       const root =
         event.target instanceof HTMLElement ? event.target.closest(EDITOR_SELECTOR) : null;
       const editor = editorRef.current;
+      // Windows reports AltGr as Ctrl+Alt, and Chrome keeps both flags set beside AltGraph. A
+      // character typed with it is typing, not a Ctrl shortcut.
+      const typedWithAltGraph = event.getModifierState('AltGraph') && typesCharacter(event.key);
       if (
         readOnly ||
         !editor ||
         !(root instanceof HTMLElement) ||
         event.defaultPrevented ||
-        event.ctrlKey ||
+        (event.ctrlKey && !typedWithAltGraph) ||
         event.metaKey ||
         event.nativeEvent.isComposing
       )
@@ -155,9 +165,8 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
         );
       }
 
-      // A typed character, Alt allowed for the special characters some layouts put there. A space
-      // alone does not claim the number: it would leave the number in front of nothing.
-      if (event.key.length === 1 && event.key.trim() !== '' && mayBeBlank(block))
+      // A typed character, Alt and AltGr allowed for the special characters some layouts put there.
+      if (typesCharacter(event.key) && mayBeBlank(block))
         return consume(claimNextVerse(editor, event.key));
       return false;
     },

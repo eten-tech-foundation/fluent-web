@@ -1,3 +1,4 @@
+import { activeVerseRange } from './active-verse';
 import {
   BLOCK_SELECTOR,
   SCRIPTURE_MARKER_SELECTOR,
@@ -39,6 +40,19 @@ function lastWords(
     if (hasWords(text.data)) last = text;
   }
   return last;
+}
+
+/**
+ * The verse the caret is in, or undefined outside a verse (a heading, say). Right after a verse
+ * number it is that number's verse: an empty verse is only its number, so a click leaves the caret
+ * between it and the next number, a point `activeVerseRange` gives to the next verse.
+ */
+export function verseAtCaret(root: HTMLElement, selection: Selection | null): number | undefined {
+  const before = selection?.focusNode?.childNodes[selection.focusOffset - 1];
+  if (before instanceof Element && before.matches(VERSE_MARKER_SELECTOR) && root.contains(before))
+    return Number(before.getAttribute('data-number'));
+  const active = activeVerseRange(root, selection);
+  return active ? Number(active.verse) : undefined;
 }
 
 /**
