@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Portal as TooltipPortal } from '@radix-ui/react-tooltip';
 import { Loader2 } from 'lucide-react';
@@ -104,19 +104,21 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
   const isOpenRef = useRef(isOpen);
   const flushRef = useRef<() => void>(() => {});
 
-  // The pinned footer grows with a save error, more when the message wraps, so the panel's scroll
-  // padding follows its rendered height. An opened book or a focused field then always stops
-  // above the footer instead of under it.
-  const [footerHeight, setFooterHeight] = useState<number>();
-  const footerObserverRef = useRef<ResizeObserver | null>(null);
-  const footerRef = useCallback((footer: HTMLDivElement | null) => {
-    footerObserverRef.current?.disconnect();
-    footerObserverRef.current = null;
-    if (!footer) return;
-    const observer = new ResizeObserver(() => setFooterHeight(footer.offsetHeight));
-    observer.observe(footer);
-    footerObserverRef.current = observer;
-  }, []);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Only the book list scrolls. The page behind the dialog is scroll-locked, so a wheel over the
+  // title or the footer would do nothing at all (QA on #398); it moves the list instead.
+  const scrollListFromOutside = (event: React.WheelEvent) => {
+    const list = listRef.current;
+    if (!list || (event.target instanceof Node && list.contains(event.target))) return;
+    const step =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 40
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? list.clientHeight
+          : 1;
+    list.scrollBy({ top: event.deltaY * step });
+  };
 
   const valueOf = (book: BookDetails, field: TocField): string =>
     drafts[book.bookId]?.[field] ?? serverValues(book)[field];
@@ -253,19 +255,19 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
         if (!open) handleClose();
       }}
     >
-      {/* The whole panel scrolls, not only the book list: with the page scroll-locked behind the
-          dialog, a wheel over the title, the padding or the footer used to do nothing (QA on
-          #398). */}
+      {/* The title, the X and Close stay put and only the book list scrolls, like a standard
+          dialog (Chad on #398). Each part carries its own padding, so the list spans the whole
+          width and the strip beside its scrollbar scrolls too. */}
       <DialogContent
-        className='max-h-[80vh] overflow-y-auto pb-0 sm:max-w-2xl'
-        style={{ scrollPaddingBottom: footerHeight }}
+        className='flex max-h-[80vh] flex-col gap-0 p-0 sm:max-w-2xl'
+        onWheel={scrollListFromOutside}
       >
-        <DialogHeader>
+        <DialogHeader className='px-6 pt-6 pb-4'>
           <DialogTitle>{t('editProjectMetadata')}</DialogTitle>
           <DialogDescription>{t('editProjectMetadataDescription')}</DialogDescription>
         </DialogHeader>
 
-        <div>
+        <div ref={listRef} className='min-h-0 flex-1 overflow-y-auto px-6'>
           {isLoading ? (
             <div className='flex items-center justify-center gap-2 py-8'>
               <Loader2 className='h-5 w-5 animate-spin text-gray-500' />
@@ -358,10 +360,8 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
           )}
         </div>
 
-        {/* Pinned to the bottom while the books scroll, so Close and a save error stay in view.
-            It carries the panel's bottom padding, which would otherwise scroll in below it, and
-            takes over the gap above it, so at rest nothing moves. */}
-        <div ref={footerRef} className='bg-card sticky bottom-0 -mt-4 grid gap-4 pt-4 pb-6'>
+        {/* Outside the list, so Close and a save error are always in view. */}
+        <div className='grid gap-4 px-6 pt-4 pb-6'>
           {saveError && (
             <p className='text-sm text-red-500' role='alert'>
               {saveError}
