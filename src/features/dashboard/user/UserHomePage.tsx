@@ -118,7 +118,7 @@ const ChapterStatusCell: React.FC<{
 }> = ({ projectId, chapterStatus, statusLabel }) => {
   const { getStageLabel } = useProjectWorkflow(projectId);
   const text =
-    statusLabel || getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel);
+    statusLabel ?? getStatusDisplay(chapterStatus as ChapterAssignmentStatusType, getStageLabel);
   return <TruncatedTextCell text={text} />;
 };
 
