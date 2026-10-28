@@ -201,12 +201,28 @@ describe('EditProjectMetadataDialog', () => {
     renderDialog();
     const genesis = await bookTrigger('Genesis');
 
-    expect(screen.getByRole('dialog')).not.toHaveClass('overflow-y-auto');
     const list = bookList();
     expect(list).toContainElement(genesis);
     expect(list).not.toContainElement(screen.getByRole('heading', { name: 'editProjectMetadata' }));
     expect(list).not.toContainElement(screen.getByRole('button', { name: 'Close' }));
     expect(list).not.toContainElement(screen.getByRole('button', { name: 'close' }));
+  });
+
+  it('keeps room for a book row, and lets the dialog scroll when even that does not fit', async () => {
+    // CodeRabbit on #599: in a window too short for the header and the footer, a list allowed to
+    // shrink to nothing leaves no book reachable. The dialog's own scroll is only a fallback: at
+    // normal sizes it has nothing to scroll.
+    mockApi();
+    renderDialog();
+    await bookTrigger('Genesis');
+
+    const list = bookList();
+    expect(list).toHaveClass('min-h-16');
+    expect(list).not.toHaveClass('min-h-0');
+    expect(screen.getByRole('dialog')).toHaveClass('overflow-y-auto');
+    // The fields' sr-only markers are absolutely positioned. Unless the list is their containing
+    // block they stretch the dialog's own scroll area, and the dialog scrolls at normal sizes too.
+    expect(list).toHaveClass('relative');
   });
 
   it('keeps a save error next to Close, outside the scrolling books', async () => {
@@ -243,6 +259,19 @@ describe('EditProjectMetadataDialog', () => {
     // Over the books themselves the browser scrolls the list on its own.
     fireEvent.wheel(genesis, { deltaY: 100 });
     expect(scrollBy).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves the wheel to the browser when the whole dialog scrolls in a short window', async () => {
+    mockApi();
+    renderDialog();
+    await bookTrigger('Genesis');
+    const dialog = screen.getByRole('dialog');
+    Object.defineProperty(dialog, 'clientHeight', { configurable: true, value: 205 });
+    Object.defineProperty(dialog, 'scrollHeight', { configurable: true, value: 234 });
+
+    // Moving the list too would scroll two boxes for one turn of the wheel.
+    fireEvent.wheel(screen.getByRole('heading', { name: 'editProjectMetadata' }), { deltaY: 100 });
+    expect(scrollBy).not.toHaveBeenCalled();
   });
 
   it('brings a book into view once it has finished opening', async () => {
