@@ -551,13 +551,17 @@ describe('DraftingUI', () => {
       await selectLanguage(user, 'English');
       await user.click(await screen.findByText('ENG — English Bible'));
 
-      expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+      expect(
+        await screen.findByText('This Bible is temporarily unavailable. Please try again later.')
+      ).toBeInTheDocument();
       expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
       await user.click(screen.getByRole('tab', { name: 'WEB' }));
       expect(
         screen.getByText('In the beginning God created the heaven and the earth.')
       ).toBeInTheDocument();
-      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+      ).not.toBeInTheDocument();
     });
 
     it('keeps Aquifer 404 unavailable rather than showing a server error', async () => {
@@ -572,7 +576,9 @@ describe('DraftingUI', () => {
       await user.click(await screen.findByText('ENG — English Bible'));
 
       expect(await screen.findByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
-      expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+      ).not.toBeInTheDocument();
     });
 
     it.each([undefined, '', '   '])(
@@ -621,7 +627,9 @@ describe('DraftingUI', () => {
       expect(queryClient.getQueriesData({ queryKey: ['aquifer-bible-text'] })).not.toHaveLength(0);
       expect(queryClient.getQueryState(['aquifer-bible-text', 1, 'GEN', 1])?.status).toBe('error');
       // Verse 2 is not in the cached text, so its row reports the failed request.
-      expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+      expect(
+        await screen.findByText('This Bible is temporarily unavailable. Please try again later.')
+      ).toBeInTheDocument();
       expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
       expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
     });
@@ -824,7 +832,9 @@ describe('DraftingUI', () => {
           expect(screen.queryByRole('tab', { name: 'SPA' })).not.toBeInTheDocument();
           expect(screen.getByText('Bible 1 verse content')).toBeInTheDocument();
           expect(screen.queryByText('Replaced Spanish content')).not.toBeInTheDocument();
-          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+          expect(
+            screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+          ).not.toBeInTheDocument();
         } finally {
           releaseText();
         }
@@ -920,7 +930,9 @@ describe('DraftingUI', () => {
           });
           // The unmounted panel cannot publish the response until it is shown again.
           expect(screen.queryByText('Hidden request completed')).not.toBeInTheDocument();
-          expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+          expect(
+            screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+          ).not.toBeInTheDocument();
 
           if (path === 'the Bible tab') {
             await user.click(screen.getByRole('tab', { name: 'ENG' }));
@@ -932,7 +944,11 @@ describe('DraftingUI', () => {
           if (result === 'success') {
             expect(await screen.findByText('Hidden request completed')).toBeInTheDocument();
           } else {
-            expect(await screen.findByText('Unable to load Bible content.')).toBeInTheDocument();
+            expect(
+              await screen.findByText(
+                'This Bible is temporarily unavailable. Please try again later.'
+              )
+            ).toBeInTheDocument();
           }
           expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
           expect(screen.getByRole('tab', { name: 'ENG' })).toHaveAttribute('aria-selected', 'true');
@@ -1212,7 +1228,9 @@ describe('DraftingUI', () => {
 
     expect(screen.getByText(NO_CONTENT_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText('Replaced Bible response')).not.toBeInTheDocument();
-    expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Loading Bible' })).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Empty Bible' })).toHaveAttribute(
       'aria-selected',
@@ -1223,7 +1241,11 @@ describe('DraftingUI', () => {
 
   it.each([
     ['loading', 'Refetch Partial Bible', 'Loading...'],
-    ['error', 'Fail Partial Bible', 'Unable to load Bible content.'],
+    [
+      'error',
+      'Fail Partial Bible',
+      'This Bible is temporarily unavailable. Please try again later.',
+    ],
   ])(
     'shows %s instead of missing content for an unavailable verse in verse mode',
     async (_state, action, message) => {

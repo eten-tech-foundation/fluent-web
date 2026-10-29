@@ -156,7 +156,9 @@ describe('cross-chapter pericope display', () => {
       fullPericopes: [localGroup],
       bibleContentError: true,
     });
-    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(
+      screen.getByText('This Bible is temporarily unavailable. Please try again later.')
+    ).toBeInTheDocument();
     expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
   });
@@ -168,7 +170,9 @@ describe('cross-chapter pericope display', () => {
       bibleContentError: true,
     });
     expect(screen.getByText('Retained reference verse')).not.toHaveClass('text-muted-foreground');
-    expect(screen.getAllByText('Unable to load Bible content.')).toHaveLength(7);
+    expect(
+      screen.getAllByText('This Bible is temporarily unavailable. Please try again later.')
+    ).toHaveLength(7);
     expect(screen.getAllByText(NO_CONTENT_MESSAGE)).toHaveLength(1);
     expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
     expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
@@ -245,7 +249,7 @@ describe('cross-chapter pericope display', () => {
     );
     expect(
       within(screen.getByRole('region', { name: 'Chapter 7 context (read-only)' })).getByText(
-        'Unable to load Bible content.'
+        'This Bible is temporarily unavailable. Please try again later.'
       )
     ).toBeInTheDocument();
     expect(

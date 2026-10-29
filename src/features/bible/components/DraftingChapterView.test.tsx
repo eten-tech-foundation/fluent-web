@@ -182,7 +182,9 @@ describe('DraftingChapterView', () => {
         selectedPanel={2}
       />
     );
-    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(
+      screen.getByText('This Bible is temporarily unavailable. Please try again later.')
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('This Bible does not have content for this passage.')
     ).not.toBeInTheDocument();
@@ -205,7 +207,9 @@ describe('DraftingChapterView', () => {
       />
     );
     expect(screen.getByText('Cached chapter text')).toBeInTheDocument();
-    expect(screen.queryByText('Unable to load Bible content.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
+    ).not.toBeInTheDocument();
   });
   it.each([undefined, '', '   '])(
     'shows the missing-passage message beside available verses (%s)',

@@ -14,7 +14,11 @@ describe('pericope text states', () => {
 
   it.each([
     { isLoading: true, isError: true, expected: 'Loading...' },
-    { isLoading: false, isError: true, expected: 'Unable to load Bible content.' },
+    {
+      isLoading: false,
+      isError: true,
+      expected: 'This Bible is temporarily unavailable. Please try again later.',
+    },
     { isLoading: false, isError: false, expected: 'No content available' },
   ])('shows $expected for blank content', ({ isLoading, isError, expected }) => {
     render(<PericopeText content='   ' isError={isError} isLoading={isLoading} />);
@@ -32,7 +36,9 @@ describe('pericope text states', () => {
     const { rerender } = render(
       <PericopeText content='' emptyState='not-drafted' isError={true} testId='verse' />
     );
-    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(
+      screen.getByText('This Bible is temporarily unavailable. Please try again later.')
+    ).toBeInTheDocument();
     rerender(<PericopeText content='' emptyState='not-drafted' testId='verse' />);
     expect(screen.getByTestId('verse')).toBeEmptyDOMElement();
     expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
