@@ -190,6 +190,24 @@ describe('a paragraph that starts with a Poetry line', () => {
     expect(saved().map(row => row.markers)).toEqual([P, Q1, P_THEN_Q1]);
   });
 
+  // Kasey and CodeRabbit on #606: the bar only authors up to q2, but an imported line can be deeper.
+  it.each(['q3', 'q4'])('keeps an imported %s line at its level', async marker => {
+    const { ref, saved } = await poetry([
+      { verseNumber: 1, text: 'First.', markers: P },
+      { verseNumber: 2, text: 'Second.', markers: { paragraphs: [{ marker, offset: 0 }] } },
+    ]);
+    act(() => {
+      expect(paragraphBeforePoetryLine(ref.current!, 2)).toBe(true);
+    });
+    await waitFor(() => expect(markersOf(ref)).toEqual(['p', 'p', marker]));
+    expect(saved()[1].markers).toEqual({
+      paragraphs: [
+        { marker: 'p', offset: 0 },
+        { marker, offset: 0 },
+      ],
+    });
+  });
+
   it('changes nothing when the paragraph is already there', async () => {
     const { ref } = await poetry([
       { verseNumber: 1, text: 'First.', markers: P },

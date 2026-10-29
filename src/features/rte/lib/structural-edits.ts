@@ -1,4 +1,4 @@
-import { blockKindOf, PARAGRAPH_MARKER } from './block-types';
+import { isPoetryLine, PARAGRAPH_MARKER } from './block-types';
 import { isHeadingMarker } from './heading-markers';
 import { remapTextSelection } from './remap-text-selection';
 
@@ -135,16 +135,17 @@ const isEmptyParagraph = (node: Usj['content'][number] | undefined): boolean =>
 
 /**
  * Paragraph on a Poetry line (#530): a new paragraph starts at the verse and the line stays
- * Poetry, the way USFM writes `\p` then `\q1 \v 3`. An empty `p` goes in right before the verse's
- * line; a verse in the middle of its line first gets a line of its own in the same style. Returns
- * false when the verse's line isn't Poetry, so the caller formats it as usual.
+ * Poetry at its level, `\q3` and `\q4` included, the way USFM writes `\p` then `\q1 \v 3`. An empty
+ * `p` goes in right before the verse's line; a verse in the middle of its line first gets a line of
+ * its own in the same style. Returns false when the verse's line isn't Poetry, so the caller
+ * formats it as usual.
  */
 export function paragraphBeforePoetryLine(editor: EditorRef, verseNumber: number): boolean {
   editor.getSelection();
   const usj = editor.getUsj();
   if (!usj) return false;
   const active = verseLocations(usj).find(verse => verse.number === verseNumber);
-  if (!active || blockKindOf(active.block.marker) !== 'poetry') return false;
+  if (!active || !isPoetryLine(active.block.marker)) return false;
   // The verse already starts a paragraph of its own.
   if (active.startsBlock && isEmptyParagraph(usj.content[active.blockIndex - 1])) return true;
   applyStructuralEdit(editor, [

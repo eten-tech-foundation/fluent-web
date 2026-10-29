@@ -302,6 +302,13 @@ describe('structural edits in Editorial history', () => {
     );
     expect(verse(2).parentElement).toHaveAttribute('data-marker', 'q1');
     expect(verse(2).parentElement?.previousElementSibling).toHaveTextContent(/^\s*$/);
+    // The cursor stays where it was in the Poetry line, so the bar still shows Poetry Line pressed.
+    expect(document.getSelection()!.anchorNode).toBe(body(2));
+    expect(document.getSelection()!.anchorOffset).toBe(3);
+    expect(screen.getByRole('button', { name: 'Poetry Line' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
     expect(onVersesChange).toHaveBeenLastCalledWith([
       {
         ...verses[1],

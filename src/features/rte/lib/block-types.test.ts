@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { blockKindOf, indentedMarker, levelOf, markerFor, outdentedMarker } from './block-types';
+import {
+  blockKindOf,
+  indentedMarker,
+  isPoetryLine,
+  levelOf,
+  markerFor,
+  outdentedMarker,
+} from './block-types';
+
+describe('isPoetryLine', () => {
+  // #530: Paragraph keeps any Poetry line as it is, so it has to know the levels the bar can't author.
+  it('takes every Poetry level, the imported \\q3 and \\q4 included', () => {
+    for (const marker of ['q', 'q1', 'q2', 'q3', 'q4']) expect(isPoetryLine(marker)).toBe(true);
+  });
+
+  it('leaves out everything else', () => {
+    for (const marker of [undefined, 'p', 's1', 'qr', 'qc', 'q5', 'li1']) {
+      expect(isPoetryLine(marker)).toBe(false);
+    }
+  });
+});
 
 describe('blockKindOf', () => {
   it('classifies the three authorable kinds', () => {

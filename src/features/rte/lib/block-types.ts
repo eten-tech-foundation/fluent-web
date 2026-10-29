@@ -31,6 +31,13 @@ const HEADING_PATTERN = /^s([1-4])?$/;
  */
 const POETRY_PATTERN = /^q([1-2])?$/;
 
+/**
+ * Any Poetry line, the imported `\q3` and `\q4` included. The bar only authors up to `\q2`, but a
+ * change that keeps a line as it is, like Paragraph on a Poetry line (#530), works on every level.
+ */
+export const isPoetryLine = (marker: string | undefined): boolean =>
+  marker !== undefined && /^q[1-4]?$/.test(marker);
+
 /** Which of the bar's three kinds a marker belongs to. `undefined` (no cursor) reads as prose. */
 export function blockKindOf(marker: string | undefined): BlockKind {
   if (marker === undefined) return 'paragraph';

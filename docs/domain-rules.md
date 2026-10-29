@@ -72,9 +72,10 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   through the editor shape unchanged".
 - Offsets increase through a verse's paragraphs, except one pair: a `p` at offset 0 right before
   the verse's own line at offset 0, an empty `\p` then `\q1 \v 3` (a paragraph that starts with a
-  Poetry line, #530). Paragraph on a Poetry line writes it, and the save path keeps an empty `p`
-  right before a line that starts with a verse number as that pair. fluent-api#473 accepts it,
-  exports it and imports it, and has to ship first. Tests:
+  Poetry line, #530). Paragraph on a Poetry line of any level writes it
+  (`paragraphBeforePoetryLine` in `src/features/rte/lib/structural-edits.ts`), and the save path
+  (`usjToPericopeVerses`) keeps an empty `p` right before a line that starts with a verse number
+  as that pair. fluent-api#473 accepts it, exports it and imports it, and has to ship first. Tests:
   `src/features/rte/lib/pericope-usj.test.ts` › "saves the empty p ahead of the line, and reloads
   the same"; `src/features/rte/lib/structural-edits.test.tsx` › "puts an empty p before a verse
   that starts its Poetry line, in one undo step".
