@@ -28,7 +28,7 @@ check here never replaces one in the API.
   "renders View Audio button when user is PM and audio exists". No test covers the audio route
   redirect itself.
 - Part of chapter assignment is only checked in the browser. [fluent-api](https://github.com/eten-tech-foundation/fluent-api/blob/ce8cade6530329535b7ce4a1b248a66ac20b07d7/src/domains/projects/chapter-assignments/project-chapter-assignments.route.ts#L231-L298)'s `assign-selected`
-  checks the permission, project access, organization membership and that the drafter and peer
+  checks the permission, project access, org membership and that the drafter and peer
   checker are different people. It doesn't check that both are Project Translators or that the
   chapter's status still allows the change. `src/features/projects/components/AssignUsersDialog.tsx`
   locks the drafter from peer check on and the peer checker from community review on, and

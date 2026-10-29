@@ -45,7 +45,7 @@ The ticket describes the current state slightly differently from what is in the 
 
 **D2 → Self-change block is the guard.** An OM cannot change their own role — only another OM can demote them, which guarantees ≥1 OM always remains. Self-removal via `DELETE` is blocked for the same reason (and the remove action is hidden on the caller's row).
 
-**D3 → Role column precedence (top wins):** no role → `Organization Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
+**D3 → Role column precedence (top wins):** no role → `Org Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
 
 **New scope:** an OM can remove a user from the org entirely — confirm banner warns "Their chapter assignments will be removed." when the target holds assignments (mirrors `AssignProjectUsers`).
 
