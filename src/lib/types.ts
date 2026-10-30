@@ -390,7 +390,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
-  [ROLES.ORG_MEMBER]: 'Organization Member',
+  [ROLES.ORG_MEMBER]: 'Org Member',
 };
 
 export function getDisplayRole(roleName: string): string {

@@ -94,7 +94,7 @@ describe('UsersWrapper', () => {
 
     const trigger = await screen.findByRole('combobox');
     // The users query resolves async; the role is seeded when it does.
-    await waitFor(() => expect(trigger).toHaveTextContent('Organization Member'));
+    await waitFor(() => expect(trigger).toHaveTextContent('Org Member'));
 
     await user.click(trigger);
     await user.click(await screen.findByRole('option', { name: 'Org Manager' }));
@@ -165,7 +165,7 @@ describe('UsersWrapper', () => {
     const { user } = render(<UsersWrapper />);
 
     const trigger = await screen.findByRole('combobox');
-    await waitFor(() => expect(trigger).toHaveTextContent('Organization Member'));
+    await waitFor(() => expect(trigger).toHaveTextContent('Org Member'));
     await user.click(trigger);
     await user.click(await screen.findByRole('option', { name: 'Org Manager' }));
     await user.click(screen.getByRole('button', { name: 'saveUser' }));
@@ -173,7 +173,7 @@ describe('UsersWrapper', () => {
     await screen.findByText('Error: Role was not saved.');
     // Dialog is still open, and the dropdown reverted to the pre-save role.
     expect(screen.getByRole('button', { name: 'saveUser' })).toBeInTheDocument();
-    await waitFor(() => expect(trigger).toHaveTextContent('Organization Member'));
+    await waitFor(() => expect(trigger).toHaveTextContent('Org Member'));
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -246,7 +246,7 @@ describe('UsersWrapper', () => {
       (await screen.findByText(email)).closest('tr') as HTMLTableRowElement;
 
     await waitFor(async () => {
-      expect(await rowFor('member@example.com')).toHaveTextContent('Organization Member');
+      expect(await rowFor('member@example.com')).toHaveTextContent('Org Member');
       expect(await rowFor('pm@example.com')).toHaveTextContent('Project Manager');
       expect(await rowFor('om@example.com')).toHaveTextContent('Org Manager');
     });
