@@ -1038,4 +1038,86 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     // The cross-chapter pericope matches and displays the pericope take
     expect(screen.getByText('Take 1')).toBeInTheDocument();
   });
+
+  it('handles cross-chapter pericope in verse view (shows covered verses, lists active take, shows conflict indicator)', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    currentPericopes = [
+      {
+        pericopeNumber: '1',
+        pericopeTitle: null,
+        verses: [
+          { verseNumber: 1, chapterNumber: 6 },
+          { verseNumber: 2, chapterNumber: 6 },
+          { verseNumber: 1, chapterNumber: 7 },
+        ],
+      },
+    ];
+
+    // No direct verse recordings, only a cross-chapter pericope recording (clean with active take)
+    currentRecordings = [
+      {
+        id: 300,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p300.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        conflictStatus: 'clean',
+        activeTakeId: 3001,
+        startChapter: 6,
+        startVerse: 1,
+        endChapter: 7,
+        endVerse: 1,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 3001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-3001',
+            downloadUrl: 'https://example.com/3001.webm',
+            granularity: 'pericope',
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 7,
+            endVerse: 1,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // 1. Covered verse rows in chapter 6 (Verse 1 and Verse 2) are present
+    expect(screen.getByRole('button', { name: /Verse 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Verse 2/i })).toBeInTheDocument();
+
+    // 2. Active take is listed under the covered verse with cross-chapter label
+    expect(screen.getByText(/Take 1 - Pericope - vv\. ch\. 6:1–ch\. 7:1/i)).toBeInTheDocument();
+
+    // 3. When in conflict, conflict indicator and message are displayed
+    currentRecordings = [
+      {
+        ...currentRecordings[0],
+        conflictStatus: 'conflict',
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    expect(screen.getAllByText('Conflict in pericope vv. ch. 6:1–ch. 7:1').length).toBeGreaterThan(
+      0
+    );
+  });
 });

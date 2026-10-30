@@ -9,7 +9,7 @@ import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useResolveConflict } from '@/features/audio/hooks/useResolveConflict';
 import {
   isPericopeRecording,
-  pericopeSpan,
+  pericopeCoversVerse,
   resolvePericopeBounds,
   useStitchedAudio,
 } from '@/features/audio/hooks/useStitchedAudio';
@@ -216,15 +216,14 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
           // Direct pericope recordings
           const directPericopeRecs = pericopeRecordings.filter(r => {
-            const span = pericopeSpan(r);
-            if (!span) return false;
-
             const bounds = resolvePericopeBounds(r);
+            if (!bounds) return false;
+
             const firstVerse = group.verses[0];
             const lastVerse = group.verses[group.verses.length - 1];
 
             if (
-              bounds?.startChapter != null &&
+              bounds.startChapter != null &&
               bounds.endChapter != null &&
               firstVerse &&
               lastVerse
@@ -237,7 +236,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
               );
             }
 
-            return span[0] === startVerse && span[1] === endVerse;
+            return bounds.startVerse === startVerse && bounds.endVerse === endVerse;
           });
 
           // Verse recordings for verses in this pericope
@@ -336,12 +335,50 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     for (const r of verseRecordings) {
       verseNumSet.add(r.verseNumber);
     }
+
+    // Collect available verses in this chapter from targetVerses or pericopes
+    const chapterVerseNumbers = new Set<number>();
+    if (targetVerses) {
+      for (const tv of targetVerses) {
+        chapterVerseNumbers.add(tv.verseNumber);
+      }
+    }
+    if (pericopes) {
+      for (const p of pericopes) {
+        for (const v of p.verses) {
+          if (v.chapterNumber === projectItem.chapterNumber) {
+            chapterVerseNumbers.add(v.verseNumber);
+          }
+        }
+      }
+    }
+
     for (const pr of pericopeRecordings) {
-      const span = pericopeSpan(pr);
-      if (!span) continue;
-      const [start, end] = span;
-      for (let v = start; v <= end; v++) {
-        verseNumSet.add(v);
+      const bounds = resolvePericopeBounds(pr);
+      if (!bounds) continue;
+      if (chapterVerseNumbers.size > 0) {
+        for (const v of chapterVerseNumbers) {
+          if (pericopeCoversVerse(bounds, v, projectItem.chapterNumber)) {
+            verseNumSet.add(v);
+          }
+        }
+      } else {
+        // Fallback when neither targetVerses nor pericopes have loaded yet
+        if (
+          bounds.startChapter == null ||
+          bounds.endChapter == null ||
+          bounds.startChapter === bounds.endChapter
+        ) {
+          for (let v = bounds.startVerse; v <= bounds.endVerse; v++) {
+            verseNumSet.add(v);
+          }
+        } else if (bounds.startChapter === projectItem.chapterNumber) {
+          verseNumSet.add(bounds.startVerse);
+        } else if (bounds.endChapter === projectItem.chapterNumber) {
+          for (let v = 1; v <= bounds.endVerse; v++) {
+            verseNumSet.add(v);
+          }
+        }
       }
     }
 
@@ -352,10 +389,9 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
       // Check if this verse is covered by a pericope recording
       const coveringPericope = pericopeRecordings.find(pr => {
-        const span = pericopeSpan(pr);
-        if (!span) return false;
-        const [start, end] = span;
-        return v >= start && v <= end;
+        const bounds = resolvePericopeBounds(pr);
+        if (!bounds) return false;
+        return pericopeCoversVerse(bounds, v, projectItem.chapterNumber);
       });
 
       const hasDirectConflict = Boolean(r && isConflict(r));
@@ -369,12 +405,18 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
       let conflictRecordedMode: 'verse' | 'pericope' | undefined;
 
       if (hasPericopeConflict && coveringPericope) {
-        const span = pericopeSpan(coveringPericope);
-        if (span) {
+        const bounds = resolvePericopeBounds(coveringPericope);
+        if (bounds) {
           conflictRecordedMode = 'pericope';
-          const [start, end] = span;
+          const isCrossChapter =
+            bounds.startChapter != null &&
+            bounds.endChapter != null &&
+            bounds.startChapter !== bounds.endChapter;
+          const range = isCrossChapter
+            ? `ch. ${bounds.startChapter}:${bounds.startVerse}–ch. ${bounds.endChapter}:${bounds.endVerse}`
+            : `${bounds.startVerse}-${bounds.endVerse}`;
           crossViewConflict = t('conflictInPericope', 'Conflict in pericope vv. {{range}}', {
-            range: `${start}-${end}`,
+            range,
           });
           if (!hasDirectConflict) {
             isOppositeModeConflict = true;
@@ -395,7 +437,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         conflictRecordedMode,
       };
     });
-  }, [audioData, displayMode, pericopes, projectItem.chapterNumber, t]);
+  }, [audioData, displayMode, pericopes, projectItem.chapterNumber, t, targetVerses]);
 
   // ---------- All-resolved chip ----------
 
@@ -475,10 +517,9 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
       // Find pericope recordings covering this verse
       const coveringPericopes = pericopeRecordings.filter(pr => {
-        const span = pericopeSpan(pr);
-        if (!span) return false;
-        const [start, end] = span;
-        return v >= start && v <= end;
+        const bounds = resolvePericopeBounds(pr);
+        if (!bounds) return false;
+        return pericopeCoversVerse(bounds, v, projectItem.chapterNumber);
       });
 
       const pericopeTakes: ReviewTake[] = [];
@@ -487,24 +528,27 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         // the cross-view conflict indicator and message apply instead."
         if (isConflict(pr)) continue;
 
-        const span = pericopeSpan(pr);
-        if (!span) continue;
-        const [start, end] = span;
-        const range = `${start}-${end}`;
+        const bounds = resolvePericopeBounds(pr);
+        if (!bounds) continue;
+        const isCrossChapter =
+          bounds.startChapter != null &&
+          bounds.endChapter != null &&
+          bounds.startChapter !== bounds.endChapter;
+        const range = isCrossChapter
+          ? `ch. ${bounds.startChapter}:${bounds.startVerse}–ch. ${bounds.endChapter}:${bounds.endVerse}`
+          : `${bounds.startVerse}-${bounds.endVerse}`;
         if (pr.activeTakeId === null) continue;
-        const takesToShow = pr.takes.filter(t => t.id === pr.activeTakeId);
-        takesToShow.forEach((take, idx) => {
-          const takeIndex = pr.takes.findIndex(t => t.id === take.id);
-          const takeNumber = takeIndex >= 0 ? takeIndex + 1 : idx + 1;
-          pericopeTakes.push({
-            ...take,
-            displayLabel: t('takePericopeLabel', 'Take {{takeNumber}} - Pericope - vv. {{range}}', {
-              takeNumber,
-              range,
-            }),
-            bibleTextId: pr.bibleTextId,
-            isCoveringPericope: true,
-          });
+        const takeIndex = pr.takes.findIndex(t => t.id === pr.activeTakeId);
+        if (takeIndex < 0) continue;
+        const take = pr.takes[takeIndex];
+        pericopeTakes.push({
+          ...take,
+          displayLabel: t('takePericopeLabel', 'Take {{takeNumber}} - Pericope - vv. {{range}}', {
+            takeNumber: takeIndex + 1,
+            range,
+          }),
+          bibleTextId: pr.bibleTextId,
+          isCoveringPericope: true,
         });
       }
 
@@ -513,7 +557,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
 
     // Pericope mode
     return selectedPassage.recordings.flatMap(r => r.takes);
-  }, [selectedPassage, displayMode, audioData, t]);
+  }, [selectedPassage, displayMode, audioData, projectItem.chapterNumber, t]);
 
   // Show contributor names only when the passage has takes from more than one contributor (spec #383)
   const showContributor = useMemo(() => {
@@ -544,17 +588,16 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
     const v = selectedPassage?.verseNumbers[0];
     if (v !== undefined) {
       const coveringPericope = pericopeRecordings.find(pr => {
-        const span = pericopeSpan(pr);
-        if (!span) return false;
-        const [start, end] = span;
-        return v >= start && v <= end && !isConflict(pr);
+        const bounds = resolvePericopeBounds(pr);
+        if (!bounds) return false;
+        return pericopeCoversVerse(bounds, v, projectItem.chapterNumber) && !isConflict(pr);
       });
       if (coveringPericope && coveringPericope.activeTakeId !== null) {
         return coveringPericope.activeTakeId;
       }
     }
     return null;
-  }, [selectedPassage, displayMode, stitchedAudio, audioData]);
+  }, [selectedPassage, displayMode, stitchedAudio, audioData, projectItem.chapterNumber]);
 
   const selectedHasConflict = selectedPassage?.hasConflict ?? false;
 

@@ -23,12 +23,7 @@ export interface PericopeBounds {
   endVerse: number;
 }
 
-export type PericopeSpan = [number, number] & {
-  startChapter?: number | null;
-  endChapter?: number | null;
-  startVerse?: number | null;
-  endVerse?: number | null;
-};
+export type PericopeSpan = PericopeBounds;
 
 export interface UseStitchedAudioOptions {
   /** Ordered list of verse numbers in the pericope */
@@ -71,28 +66,32 @@ export function isPericopeRecording(r: VerseAudioRecording): boolean {
   );
 }
 
+type BoundedTake = VerseAudioTake & { startVerse: number; endVerse: number };
+
+function isBoundedTake(t: VerseAudioTake): t is BoundedTake {
+  return typeof t.startVerse === 'number' && typeof t.endVerse === 'number';
+}
+
+function takeToBounds(t: BoundedTake, r: VerseAudioRecording): PericopeBounds {
+  return {
+    startChapter: t.startChapter ?? r.startChapter,
+    startVerse: t.startVerse,
+    endChapter: t.endChapter ?? r.endChapter,
+    endVerse: t.endVerse,
+  };
+}
+
 /** Resolve chapter and verse boundaries for a pericope recording or its takes */
 export function resolvePericopeBounds(r: VerseAudioRecording): PericopeBounds | null {
   if (!isPericopeRecording(r)) return null;
 
   // 1. Choose a bounded take marked as pericope-level
   const pericopeTake = r.takes.find(
-    t =>
-      (t.granularity === 'pericope' || t.isPericope === true) &&
-      typeof t.startVerse === 'number' &&
-      typeof t.endVerse === 'number'
+    (t): t is BoundedTake =>
+      isBoundedTake(t) && (t.granularity === 'pericope' || t.isPericope === true)
   );
-  if (
-    pericopeTake &&
-    typeof pericopeTake.startVerse === 'number' &&
-    typeof pericopeTake.endVerse === 'number'
-  ) {
-    return {
-      startChapter: pericopeTake.startChapter ?? r.startChapter,
-      startVerse: pericopeTake.startVerse,
-      endChapter: pericopeTake.endChapter ?? r.endChapter,
-      endVerse: pericopeTake.endVerse,
-    };
+  if (pericopeTake) {
+    return takeToBounds(pericopeTake, r);
   }
 
   // 2. Recording-level fallback (when no take-level pericope marker exists)
@@ -108,20 +107,9 @@ export function resolvePericopeBounds(r: VerseAudioRecording): PericopeBounds | 
   // 3. Fallback to any bounded take when no take-level granularity marker exists
   const hasTakeGranularityMarker = r.takes.some(t => t.granularity != null || t.isPericope != null);
   if (!hasTakeGranularityMarker) {
-    const takeWithSpan = r.takes.find(
-      t => typeof t.startVerse === 'number' && typeof t.endVerse === 'number'
-    );
-    if (
-      takeWithSpan &&
-      typeof takeWithSpan.startVerse === 'number' &&
-      typeof takeWithSpan.endVerse === 'number'
-    ) {
-      return {
-        startChapter: takeWithSpan.startChapter ?? r.startChapter,
-        startVerse: takeWithSpan.startVerse,
-        endChapter: takeWithSpan.endChapter ?? r.endChapter,
-        endVerse: takeWithSpan.endVerse,
-      };
+    const takeWithSpan = r.takes.find(isBoundedTake);
+    if (takeWithSpan) {
+      return takeToBounds(takeWithSpan, r);
     }
   }
 
@@ -142,39 +130,29 @@ export function resolvePericopeBounds(r: VerseAudioRecording): PericopeBounds | 
   return null;
 }
 
-export function pericopeSpan(r: VerseAudioRecording): PericopeSpan | null {
-  const bounds = resolvePericopeBounds(r);
-  if (!bounds) return null;
-
-  const span: PericopeSpan = [bounds.startVerse, bounds.endVerse];
-  Object.defineProperties(span, {
-    startChapter: {
-      value: bounds.startChapter,
-      writable: true,
-      configurable: true,
-      enumerable: false,
-    },
-    endChapter: {
-      value: bounds.endChapter,
-      writable: true,
-      configurable: true,
-      enumerable: false,
-    },
-    startVerse: {
-      value: bounds.startVerse,
-      writable: true,
-      configurable: true,
-      enumerable: false,
-    },
-    endVerse: {
-      value: bounds.endVerse,
-      writable: true,
-      configurable: true,
-      enumerable: false,
-    },
-  });
-  return span;
+/**
+ * Check whether pericope bounds cover a specific verse in a given chapter.
+ */
+export function pericopeCoversVerse(
+  bounds: PericopeBounds,
+  verse: number,
+  chapter: number
+): boolean {
+  const { startChapter, endChapter, startVerse, endVerse } = bounds;
+  if (startChapter == null || endChapter == null) {
+    return verse >= startVerse && verse <= endVerse;
+  }
+  if (chapter < startChapter || chapter > endChapter) return false;
+  if (startChapter === endChapter) {
+    return verse >= startVerse && verse <= endVerse;
+  }
+  if (chapter === startChapter) return verse >= startVerse;
+  if (chapter === endChapter) return verse <= endVerse;
+  return true; // middle chapter of the span: fully covered
 }
+
+/** Alias of resolvePericopeBounds returning PericopeBounds directly */
+export const pericopeSpan = resolvePericopeBounds;
 
 export function useStitchedAudio({
   verseNumbers,
@@ -189,33 +167,31 @@ export function useStitchedAudio({
     // Check for pericope-level recordings covering this pericope
     const pericopeRecordings = recordings.filter(r => {
       if (!isPericopeRecording(r)) return false;
-      const span = pericopeSpan(r);
-      if (!span) return false;
+      const bounds = resolvePericopeBounds(r);
+      if (!bounds) return false;
 
       // When matching takes, compare only the pericope’s portion within the
       // current chapter so recordings spanning chapter boundaries resolve to their takes
       // rather than stitched audio.
       if (
-        span.startChapter != null &&
-        span.endChapter != null &&
-        span.startChapter !== span.endChapter
+        bounds.startChapter != null &&
+        bounds.endChapter != null &&
+        bounds.startChapter !== bounds.endChapter
       ) {
-        if (currentChapter != null) {
-          if (currentChapter === span.startChapter) {
-            return span[0] === startVerse;
-          }
-          if (currentChapter === span.endChapter) {
-            return span[1] === endVerse;
-          }
-          if (currentChapter > span.startChapter && currentChapter < span.endChapter) {
-            return true;
-          }
-          return false;
+        if (currentChapter == null) return false;
+        if (currentChapter === bounds.startChapter) {
+          return bounds.startVerse === startVerse;
         }
-        return span[0] === startVerse || span[1] === endVerse;
+        if (currentChapter === bounds.endChapter) {
+          return bounds.endVerse === endVerse;
+        }
+        if (currentChapter > bounds.startChapter && currentChapter < bounds.endChapter) {
+          return true;
+        }
+        return false;
       }
 
-      return span[0] === startVerse && span[1] === endVerse;
+      return bounds.startVerse === startVerse && bounds.endVerse === endVerse;
     });
 
     const pericopeTakes = pericopeRecordings.flatMap(r => r.takes);
@@ -280,5 +256,5 @@ export function useStitchedAudio({
       skippedVerses,
       totalDuration,
     };
-  }, [verseNumbers, recordings]);
+  }, [verseNumbers, recordings, currentChapter]);
 }

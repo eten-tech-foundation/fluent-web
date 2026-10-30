@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import { type VerseAudioRecording } from '@/lib/types';
 
-import { isPericopeRecording, pericopeSpan, useStitchedAudio } from './useStitchedAudio';
+import {
+  isPericopeRecording,
+  pericopeCoversVerse,
+  resolvePericopeBounds,
+  useStitchedAudio,
+} from './useStitchedAudio';
 
 describe('useStitchedAudio', () => {
   const makeRecording = (
@@ -240,23 +245,33 @@ describe('useStitchedAudio', () => {
   });
 });
 
-describe('pericopeSpan', () => {
-  it('returns [start, end] when pericopeRange is present on recording', () => {
+describe('resolvePericopeBounds', () => {
+  it('returns bounds when pericopeRange is present on recording', () => {
     const r = {
       pericopeRange: [3, 7] as [number, number],
       takes: [],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toEqual([3, 7]);
+    expect(resolvePericopeBounds(r)).toEqual({
+      startChapter: undefined,
+      startVerse: 3,
+      endChapter: undefined,
+      endVerse: 7,
+    });
   });
 
-  it('returns [start, end] when pericopeRange is on take', () => {
+  it('returns bounds when pericopeRange is on take', () => {
     const r = {
       takes: [{ pericopeRange: [4, 8] }],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toEqual([4, 8]);
+    expect(resolvePericopeBounds(r)).toEqual({
+      startChapter: undefined,
+      startVerse: 4,
+      endChapter: undefined,
+      endVerse: 8,
+    });
   });
 
-  it('returns [start, end] when startVerse and endVerse are present with granularity pericope', () => {
+  it('returns bounds when startVerse and endVerse are present with granularity pericope', () => {
     const r = {
       granularity: 'pericope',
       startChapter: 1,
@@ -265,10 +280,15 @@ describe('pericopeSpan', () => {
       endVerse: 5,
       takes: [],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toEqual([1, 5]);
+    expect(resolvePericopeBounds(r)).toEqual({
+      startChapter: 1,
+      startVerse: 1,
+      endChapter: 1,
+      endVerse: 5,
+    });
   });
 
-  it('returns [start, end] when startVerse and endVerse are on take with granularity pericope', () => {
+  it('returns bounds when startVerse and endVerse are on take with granularity pericope', () => {
     const r = {
       granularity: 'pericope',
       takes: [
@@ -281,7 +301,12 @@ describe('pericopeSpan', () => {
         },
       ],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toEqual([2, 6]);
+    expect(resolvePericopeBounds(r)).toEqual({
+      startChapter: 1,
+      startVerse: 2,
+      endChapter: 1,
+      endVerse: 6,
+    });
   });
 
   it('prefers bounded take marked as pericope-level over take without granularity marker', () => {
@@ -303,10 +328,15 @@ describe('pericopeSpan', () => {
         },
       ],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toEqual([2, 5]);
+    expect(resolvePericopeBounds(r)).toEqual({
+      startChapter: 1,
+      startVerse: 2,
+      endChapter: 1,
+      endVerse: 5,
+    });
   });
 
-  it('retains chapter-aware bounds on the returned span', () => {
+  it('retains chapter-aware bounds on the returned bounds', () => {
     const r = {
       granularity: 'pericope',
       startChapter: 6,
@@ -315,10 +345,13 @@ describe('pericopeSpan', () => {
       endVerse: 2,
       takes: [],
     } as unknown as VerseAudioRecording;
-    const span = pericopeSpan(r);
-    expect(span).toEqual([20, 2]);
-    expect(span?.startChapter).toBe(6);
-    expect(span?.endChapter).toBe(7);
+    const bounds = resolvePericopeBounds(r);
+    expect(bounds).toEqual({
+      startChapter: 6,
+      startVerse: 20,
+      endChapter: 7,
+      endVerse: 2,
+    });
   });
 
   it('returns null for a verse recording even when startVerse and endVerse are present', () => {
@@ -330,7 +363,7 @@ describe('pericopeSpan', () => {
       endVerse: 3,
       takes: [],
     } as unknown as VerseAudioRecording;
-    expect(pericopeSpan(r)).toBeNull();
+    expect(resolvePericopeBounds(r)).toBeNull();
   });
 });
 
@@ -360,5 +393,69 @@ describe('isPericopeRecording', () => {
       takes: [{ granularity: 'pericope' }],
     } as unknown as VerseAudioRecording;
     expect(isPericopeRecording(r)).toBe(true);
+  });
+});
+
+describe('pericopeCoversVerse', () => {
+  it('handles single-chapter bounds', () => {
+    const bounds = {
+      startChapter: 1,
+      startVerse: 5,
+      endChapter: 1,
+      endVerse: 10,
+    };
+    expect(pericopeCoversVerse(bounds, 4, 1)).toBe(false);
+    expect(pericopeCoversVerse(bounds, 5, 1)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 8, 1)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 10, 1)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 11, 1)).toBe(false);
+    expect(pericopeCoversVerse(bounds, 5, 2)).toBe(false);
+  });
+
+  it('handles cross-chapter bounds spanning ch 6 v 30 to ch 7 v 2', () => {
+    const bounds = {
+      startChapter: 6,
+      startVerse: 30,
+      endChapter: 7,
+      endVerse: 2,
+    };
+    // Chapter 5: outside
+    expect(pericopeCoversVerse(bounds, 30, 5)).toBe(false);
+
+    // Chapter 6: startChapter, covers verse >= 30
+    expect(pericopeCoversVerse(bounds, 29, 6)).toBe(false);
+    expect(pericopeCoversVerse(bounds, 30, 6)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 35, 6)).toBe(true);
+
+    // Chapter 7: endChapter, covers verse <= 2
+    expect(pericopeCoversVerse(bounds, 1, 7)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 2, 7)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 3, 7)).toBe(false);
+
+    // Chapter 8: outside
+    expect(pericopeCoversVerse(bounds, 1, 8)).toBe(false);
+  });
+
+  it('handles multi-chapter pericopes spanning 3+ chapters', () => {
+    const bounds = {
+      startChapter: 1,
+      startVerse: 10,
+      endChapter: 3,
+      endVerse: 5,
+    };
+    // Middle chapter 2: fully covered
+    expect(pericopeCoversVerse(bounds, 1, 2)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 99, 2)).toBe(true);
+  });
+
+  it('handles bounds without chapter numbers (legacy fallback)', () => {
+    const bounds = {
+      startVerse: 2,
+      endVerse: 5,
+    };
+    expect(pericopeCoversVerse(bounds, 1, 1)).toBe(false);
+    expect(pericopeCoversVerse(bounds, 2, 1)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 5, 1)).toBe(true);
+    expect(pericopeCoversVerse(bounds, 6, 1)).toBe(false);
   });
 });
