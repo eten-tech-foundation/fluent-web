@@ -286,6 +286,42 @@ describe('structural edits in Editorial history', () => {
     }
   });
 
+  // #530: Chad, following the USFM spec's `\p` followed by `\q` lines.
+  it('keeps a Poetry line on Paragraph and starts a paragraph right before it', async () => {
+    const markers = {
+      1: null,
+      2: { paragraphs: [{ marker: 'q1', offset: 0 }] },
+      3: { paragraphs: [{ marker: 'p', offset: 0 }] },
+    };
+    const verses = rows.map(row => ({ ...row, markers: markers[row.verseNumber as 1 | 2 | 3] }));
+    const { input, verse, body, onVersesChange, user } = await setup(verses);
+    await select(input, body(2), 3);
+    await user.click(screen.getByRole('button', { name: 'Paragraph' }));
+    await waitFor(() =>
+      expect(verse(2).parentElement?.previousElementSibling).toHaveAttribute('data-marker', 'p')
+    );
+    expect(verse(2).parentElement).toHaveAttribute('data-marker', 'q1');
+    expect(verse(2).parentElement?.previousElementSibling).toHaveTextContent(/^\s*$/);
+    // The cursor stays where it was in the Poetry line, so the bar still shows Poetry Line pressed.
+    expect(document.getSelection()!.anchorNode).toBe(body(2));
+    expect(document.getSelection()!.anchorOffset).toBe(3);
+    expect(screen.getByRole('button', { name: 'Poetry Line' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(onVersesChange).toHaveBeenLastCalledWith([
+      {
+        ...verses[1],
+        markers: {
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'q1', offset: 0 },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('saves a heading level undo after insertion has already been undone and redone', async () => {
     const { input, body, onVersesChange, history, user } = await setup();
     const heading = () =>

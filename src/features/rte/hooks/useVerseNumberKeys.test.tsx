@@ -551,4 +551,33 @@ describe('verse numbers stay with their text in the real editor', () => {
       await waitFor(() => expect(blocks()).toEqual(loaded));
     });
   });
+
+  // #530: the blank line Paragraph puts before a Poetry line is the `\p` that starts its paragraph.
+  describe('removing the paragraph before a Poetry line', () => {
+    it.each(['Backspace', 'Delete'])(
+      '%s on the blank line removes it and keeps the Poetry line',
+      async key => {
+        const verses = withVerseTwo({
+          paragraphs: [
+            { marker: 'p', offset: 0 },
+            { marker: 'q1', offset: 0 },
+          ],
+        });
+        const { input, select, blocks, onUsjChange } = await setup(
+          pericopeVersesToUsj(verses, 1, 'GEN')
+        );
+        expect(blocks().slice(1)).toEqual(['p: [1]First verse.', 'p: ', 'q1: [2]Second verse.']);
+        await select('$.content[2]', 0);
+        fireEvent.keyDown(input, { key });
+        await waitFor(() =>
+          expect(blocks().slice(1)).toEqual(['p: [1]First verse.', 'q1: [2]Second verse.'])
+        );
+        await waitFor(() =>
+          expect(usjToPericopeVerses(onUsjChange.mock.lastCall![0])[1].markers).toEqual({
+            paragraphs: [{ marker: 'q1', offset: 0 }],
+          })
+        );
+      }
+    );
+  });
 });
