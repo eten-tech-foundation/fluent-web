@@ -353,6 +353,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       <AddMilestoneDialog
         isOpen={isAddMilestoneOpen}
+        project={project}
         projectId={project.id}
         sourceBible={project.sourceBibleId}
         onClose={() => setIsAddMilestoneOpen(false)}

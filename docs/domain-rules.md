@@ -138,13 +138,15 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   `src/features/rte/lib/format-heading.test.tsx`,
   `src/features/rte/lib/scoped-block-format.test.ts` and
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx`.
-- A project created from USFM sends the files as `usfmFiles` and `bookId: []`, and [fluent-api](https://github.com/eten-tech-foundation/fluent-api)
-  takes the books from the files. The import tab (`src/features/projects/lib/usfm-validate.ts`) is
-  all or nothing: one file that isn't USFM, has no book code or repeats a book clears the whole
-  batch. Tests: `src/features/projects/components/CreateProjectModal.submit.test.tsx` › "drops a
-  manual book selection when the submit carries usfm files";
-  `src/features/projects/components/UsfmImportTab.test.tsx` › "imports nothing when one file of
-  several is not USFM".
+- USFM import creates one milestone in an existing project, from the Import tab of Add Milestone.
+  [fluent-api](https://github.com/eten-tech-foundation/fluent-api) decides which book each file
+  is and whether it can be imported, so the upload check and the import can't disagree. Each file
+  is checked when it is added and refused on its own: not USFM, no book, a book already listed, a
+  book the project holds in any milestone (removed ones too, since an import never merges) or a
+  book its Source Bible lacks. Tests:
+  `src/features/projects/components/UsfmMilestoneImportTab.test.tsx` › "refuses each bad file in
+  its own box and keeps the good ones" and "refuses the later of two files for one book added at
+  the same time".
 - Speech is synthesized only for a Bible whose `ttsLicenseStatus` is `allowed`. `forbidden`,
   `unknown` and a missing status all bar it, and `licenceBar` in
   `src/features/tts/resolver/licenceFence.ts` is the one place that reads the status. A barred
