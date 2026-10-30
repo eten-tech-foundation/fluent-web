@@ -219,8 +219,8 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             const bounds = resolvePericopeBounds(r);
             if (!bounds) return false;
 
-            const firstVerse = group.verses[0];
-            const lastVerse = group.verses[group.verses.length - 1];
+            const firstVerse = group.verses.at(0);
+            const lastVerse = group.verses.at(-1);
 
             if (
               bounds.startChapter != null &&
