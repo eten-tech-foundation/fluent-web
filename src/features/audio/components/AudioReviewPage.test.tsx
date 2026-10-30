@@ -162,9 +162,11 @@ vi.mock('@/features/pericopes/hooks/useChapterPericopes', () => ({
   }),
 }));
 
+const mockResolveMutate = vi.fn();
+
 vi.mock('@/features/audio/hooks/useResolveConflict', () => ({
   useResolveConflict: () => ({
-    mutate: vi.fn(),
+    mutate: mockResolveMutate,
   }),
 }));
 
@@ -608,10 +610,73 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
 
     renderPage();
 
-    // Select as Draft button should appear exactly once (for take 112 belonging to verse recording),
+    // Select as Draft button should appear for both takes belonging to verse recording (11 and 112),
     // and NOT for covering pericope take 991.
     const selectButtons = screen.getAllByRole('button', { name: /select as draft/i });
-    expect(selectButtons).toHaveLength(1);
+    expect(selectButtons).toHaveLength(2);
+  });
+
+  it('allows selecting the current active draft take to resolve a conflict', () => {
+    useAppStore.setState({
+      displayMode: 'verse',
+      userdetail: {
+        id: 1,
+        username: 'alice',
+        displayName: 'Alice',
+        email: 'alice@example.com',
+        role: 'user',
+        grants: [
+          {
+            orgId: 1,
+            projectId: 1,
+            roleId: 1,
+            roleName: 'Project Manager',
+            permissions: [],
+          },
+        ],
+        lastActiveOrgId: 1,
+      },
+    });
+
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+        activeTakeId: 11,
+        takes: [
+          mockRecordings[0].takes[0],
+          {
+            id: 112,
+            uploadedBy: 2,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 5,
+            contentHash: 'hash-112',
+            downloadUrl: 'https://example.com/112.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      },
+    ];
+
+    renderPage();
+
+    // Verify "Current Draft" indicator is visible
+    expect(screen.getByText('Current Draft')).toBeInTheDocument();
+
+    // Both takes have "Select as Draft" buttons
+    const selectButtons = screen.getAllByRole('button', { name: /select as draft/i });
+    expect(selectButtons).toHaveLength(2);
+
+    // Clicking "Select as Draft" on Take 1 (which is the current draft, take 11) calls mutate
+    fireEvent.click(selectButtons[0]);
+    expect(mockResolveMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        takeId: 11,
+      }),
+      expect.anything()
+    );
   });
 
   it('renders without crashing when there are no recordings or passages', () => {
@@ -786,5 +851,273 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     expect(
       screen.getByText('Stitched from verse recordings, vv. 1-2 (cont. in ch. 7)')
     ).toBeInTheDocument();
+  });
+
+  it('displays active pericope take on all covered verses when switching from pericope to verse view (backend contract)', () => {
+    useAppStore.setState({ displayMode: 'pericope' });
+
+    currentRecordings = [
+      {
+        id: 100,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p100.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        startChapter: 6,
+        startVerse: 1,
+        endChapter: 6,
+        endVerse: 2,
+        conflictStatus: 'clean',
+        activeTakeId: 1001,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 1001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-1001',
+            downloadUrl: 'https://example.com/1001.webm',
+            granularity: 'pericope',
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 6,
+            endVerse: 2,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // In pericope view: since pericope recording exists, takes list is rendered with the pericope take
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+
+    // Now switch to verse view
+    act(() => {
+      useAppStore.setState({ displayMode: 'verse' });
+    });
+
+    // Both verse 1 and verse 2 buttons exist in the list
+    expect(screen.getByRole('button', { name: /verse 1/i })).toBeInTheDocument();
+    const verse2Btn = screen.getByRole('button', { name: /verse 2/i });
+    expect(verse2Btn).toBeInTheDocument();
+
+    // On verse 1: active pericope take is shown
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
+
+    // Click verse 2: active pericope take is also shown on verse 2
+    fireEvent.click(verse2Btn);
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
+  });
+
+  it('does not show covering pericope take under verse when activeTakeId is null, while preserving access in pericope view', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    currentRecordings = [
+      {
+        id: 100,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p100.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        startChapter: 6,
+        startVerse: 1,
+        endChapter: 6,
+        endVerse: 2,
+        conflictStatus: 'clean',
+        activeTakeId: null, // No active take
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 1001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-1001',
+            downloadUrl: 'https://example.com/1001.webm',
+            granularity: 'pericope',
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 6,
+            endVerse: 2,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // In verse view: since activeTakeId is null, no covering pericope take should be shown
+    expect(screen.queryByText(/Take 1 - Pericope/i)).not.toBeInTheDocument();
+
+    // Switch to pericope view: access to all takes is preserved
+    act(() => {
+      useAppStore.setState({ displayMode: 'pericope' });
+    });
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+  });
+
+  it('matches cross-chapter pericope when range fields exist only on a take', () => {
+    useAppStore.setState({ displayMode: 'pericope' });
+
+    currentPericopes = [
+      {
+        pericopeNumber: '1',
+        pericopeTitle: null,
+        verses: [
+          { verseNumber: 1, chapterNumber: 6 },
+          { verseNumber: 2, chapterNumber: 6 },
+          { verseNumber: 1, chapterNumber: 7 },
+          { verseNumber: 2, chapterNumber: 7 },
+        ],
+      },
+    ];
+
+    currentRecordings = [
+      {
+        id: 200,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p200.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        conflictStatus: 'clean',
+        activeTakeId: 2001,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 2001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-2001',
+            downloadUrl: 'https://example.com/2001.webm',
+            granularity: 'pericope',
+            // Range fields exist ONLY on the take, matching cross-chapter pericope (ch 6 v 1 to ch 7 v 2)
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 7,
+            endVerse: 2,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // The cross-chapter pericope matches and displays the pericope take
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+  });
+
+  it('handles cross-chapter pericope in verse view (shows covered verses, lists active take, shows conflict indicator)', () => {
+    useAppStore.setState({ displayMode: 'verse' });
+
+    currentPericopes = [
+      {
+        pericopeNumber: '1',
+        pericopeTitle: null,
+        verses: [
+          { verseNumber: 1, chapterNumber: 6 },
+          { verseNumber: 2, chapterNumber: 6 },
+          { verseNumber: 1, chapterNumber: 7 },
+        ],
+      },
+    ];
+
+    // No direct verse recordings, only a cross-chapter pericope recording (clean with active take)
+    currentRecordings = [
+      {
+        id: 300,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p300.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        conflictStatus: 'clean',
+        activeTakeId: 3001,
+        startChapter: 6,
+        startVerse: 1,
+        endChapter: 7,
+        endVerse: 1,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 3001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-3001',
+            downloadUrl: 'https://example.com/3001.webm',
+            granularity: 'pericope',
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 7,
+            endVerse: 1,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // 1. Covered verse rows in chapter 6 (Verse 1 and Verse 2) are present
+    expect(screen.getByRole('button', { name: /Verse 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Verse 2/i })).toBeInTheDocument();
+
+    // 2. Active take is listed under the covered verse with cross-chapter label
+    expect(screen.getByText(/Take 1 - Pericope - vv\. ch\. 6:1–ch\. 7:1/i)).toBeInTheDocument();
+
+    // 3. When in conflict, conflict indicator and message are displayed
+    currentRecordings = [
+      {
+        ...currentRecordings[0],
+        conflictStatus: 'conflict',
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    expect(screen.getAllByText('Conflict in pericope vv. ch. 6:1–ch. 7:1').length).toBeGreaterThan(
+      0
+    );
   });
 });
