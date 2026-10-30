@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ChapterAssignmentStatus, type ProjectItem, type Source } from '@/lib/types';
+import { BIBLE_UNAVAILABLE_MESSAGE } from '@/test/drafting-i18n';
 
 import { SOURCE_BIBLE_TAB_ID, type ResourceBibleTab } from './BibleTabList';
 import { DraftingChapterView } from './DraftingChapterView';
@@ -182,9 +183,7 @@ describe('DraftingChapterView', () => {
         selectedPanel={2}
       />
     );
-    expect(
-      screen.getByText('This Bible is temporarily unavailable. Please try again later.')
-    ).toBeInTheDocument();
+    expect(screen.getByText(BIBLE_UNAVAILABLE_MESSAGE)).toBeInTheDocument();
     expect(
       screen.queryByText('This Bible does not have content for this passage.')
     ).not.toBeInTheDocument();
@@ -207,9 +206,7 @@ describe('DraftingChapterView', () => {
       />
     );
     expect(screen.getByText('Cached chapter text')).toBeInTheDocument();
-    expect(
-      screen.queryByText('This Bible is temporarily unavailable. Please try again later.')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(BIBLE_UNAVAILABLE_MESSAGE)).not.toBeInTheDocument();
   });
   it.each([undefined, '', '   '])(
     'shows the missing-passage message beside available verses (%s)',

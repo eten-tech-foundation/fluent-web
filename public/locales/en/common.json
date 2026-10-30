@@ -50,6 +50,7 @@
   "connectivityTooltipSometimes": "Sometimes Connected — The app silently caches assigned chapters in the background when WiFi is detected; assigned translators take no action.",
   "connectivityTooltipRarely": "Rarely Connected — The app prompts translators to prepare their device each time WiFi is detected before going offline.",
   "noContentAvailable": "This Bible does not have content for this passage.",
+  "errorLoadingBibleContent": "This Bible is temporarily unavailable. Please try again later.",
   "formatBar": "Formatting",
   "blockParagraph": "Paragraph",
   "insertParagraph": "Insert paragraph",

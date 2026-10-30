@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { PericopeText } from '@/features/bible/components/PericopeText';
+import { BIBLE_UNAVAILABLE_MESSAGE } from '@/test/drafting-i18n';
 
 describe('pericope text states', () => {
   it('preserves loaded text while its request is loading or in error', () => {
@@ -17,7 +18,7 @@ describe('pericope text states', () => {
     {
       isLoading: false,
       isError: true,
-      expected: 'This Bible is temporarily unavailable. Please try again later.',
+      expected: BIBLE_UNAVAILABLE_MESSAGE,
     },
     { isLoading: false, isError: false, expected: 'No content available' },
   ])('shows $expected for blank content', ({ isLoading, isError, expected }) => {
@@ -36,9 +37,7 @@ describe('pericope text states', () => {
     const { rerender } = render(
       <PericopeText content='' emptyState='not-drafted' isError={true} testId='verse' />
     );
-    expect(
-      screen.getByText('This Bible is temporarily unavailable. Please try again later.')
-    ).toBeInTheDocument();
+    expect(screen.getByText(BIBLE_UNAVAILABLE_MESSAGE)).toBeInTheDocument();
     rerender(<PericopeText content='' emptyState='not-drafted' testId='verse' />);
     expect(screen.getByTestId('verse')).toBeEmptyDOMElement();
     expect(screen.queryByText('Not drafted')).not.toBeInTheDocument();
