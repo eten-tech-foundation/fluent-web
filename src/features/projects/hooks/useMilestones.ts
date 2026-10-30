@@ -2,7 +2,15 @@ import { useMemo } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { fetchOrNetworkError } from '@/lib/api-utils';
 import { config } from '@/lib/config';
+
+import {
+  UsfmImportConflictError,
+  UsfmImportRejectedError,
+  type UsfmFileUpload,
+  type UsfmFileVerdict,
+} from '../lib/usfm-import';
 
 export type ProjectUnitStatus = 'not_started' | 'in_progress' | 'completed';
 export type MilestoneType = 'text' | 'audio';
@@ -64,6 +72,42 @@ const createMilestone = async (
   return (await res.json()) as Milestone;
 };
 
+export interface ImportUsfmMilestoneInput {
+  name: string;
+  files: UsfmFileUpload[];
+}
+
+/**
+ * Creates one milestone from USFM files (#419). A refused file comes back as
+ * UsfmImportRejectedError with every file's verdict; a book the project gained after the upload
+ * check comes back as UsfmImportConflictError.
+ */
+const importUsfmMilestone = async (
+  projectId: string | number,
+  input: ImportUsfmMilestoneInput
+): Promise<Milestone> => {
+  const res = await fetchOrNetworkError(
+    `${config.api.url}/projects/${projectId}/milestones/import`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }
+  );
+  if (res.ok) return (await res.json()) as Milestone;
+
+  const body = (await res.json().catch(() => null)) as {
+    message?: string;
+    files?: UsfmFileVerdict[];
+  } | null;
+  if (res.status === 400 && body?.files) throw new UsfmImportRejectedError(body.files);
+  if (res.status === 409) {
+    throw new UsfmImportConflictError(body?.message ?? 'A book in this import is in the project');
+  }
+  throw new Error(body?.message ?? 'Failed to import the milestone');
+};
+
 const updateMilestone = async (
   projectId: string | number,
   id: number,
@@ -91,6 +135,16 @@ export const useCreateMilestone = (projectId: string | number) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateMilestoneInput) => createMilestone(projectId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: milestonesKey(projectId) });
+    },
+  });
+};
+
+export const useImportUsfmMilestone = (projectId: string | number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ImportUsfmMilestoneInput) => importUsfmMilestone(projectId, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: milestonesKey(projectId) });
     },

@@ -39,9 +39,11 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
 ## Features
 
 - `src/features/projects/`: the project list, project creation
-  (`components/CreateProjectModal.tsx`, with the USFM import tab in
-  `components/UsfmImportTab.tsx` and `lib/usfm-validate.ts`), the project page and the milestone
-  page. The milestone page (`components/MilestoneDetailPage.tsx`) holds the chapter table, chapter
+  (`components/CreateProjectModal.tsx`), the project page and the milestone page. The project
+  page's Add Milestone dialog (`components/AddMilestoneDialog.tsx`) has a USFM Import tab
+  (`components/UsfmMilestoneImportTab.tsx`, `hooks/useUsfmMilestoneFiles.ts` and
+  `lib/usfm-import.ts`) that calls `POST /projects/:id/milestones/usfm-validation` and
+  `POST /projects/:id/milestones/import`. The milestone page (`components/MilestoneDetailPage.tsx`) holds the chapter table, chapter
   assignment (`components/AssignUsersDialog.tsx`), book metadata
   (`components/EditProjectMetadataDialog.tsx`) and USFM export
   (`components/ExportProjectDialog.tsx`, a ZIP from `POST /project-units/:id/usfm`).
