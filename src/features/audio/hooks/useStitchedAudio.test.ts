@@ -200,6 +200,44 @@ describe('useStitchedAudio', () => {
     expect(result.current.hasOnlyPerVerseRecordings).toBe(true);
     expect(result.current.hasActivePericopeTake).toBe(false);
   });
+
+  it('resolves cross-chapter pericope to its takes rather than stitched audio for current chapter portion', () => {
+    const crossChapterRecording = {
+      id: 99,
+      verseNumber: 20,
+      granularity: 'pericope',
+      startChapter: 6,
+      startVerse: 20,
+      endChapter: 7,
+      endVerse: 2,
+      conflictStatus: 'clean',
+      activeTakeId: 991,
+      takes: [
+        {
+          id: 991,
+          downloadUrl: 'https://example.com/p991.webm',
+          durationSeconds: 30,
+          granularity: 'pericope',
+          startChapter: 6,
+          startVerse: 20,
+          endChapter: 7,
+          endVerse: 2,
+        },
+      ],
+    } as unknown as VerseAudioRecording;
+
+    const { result } = renderHook(() =>
+      useStitchedAudio({
+        verseNumbers: [20, 21, 22],
+        recordings: [crossChapterRecording],
+        currentChapter: 6,
+      })
+    );
+
+    expect(result.current.hasOnlyPerVerseRecordings).toBe(false);
+    expect(result.current.hasActivePericopeTake).toBe(true);
+    expect(result.current.activePericopeTake?.id).toBe(991);
+  });
 });
 
 describe('pericopeSpan', () => {
@@ -244,6 +282,43 @@ describe('pericopeSpan', () => {
       ],
     } as unknown as VerseAudioRecording;
     expect(pericopeSpan(r)).toEqual([2, 6]);
+  });
+
+  it('prefers bounded take marked as pericope-level over take without granularity marker', () => {
+    const r = {
+      granularity: 'pericope',
+      takes: [
+        {
+          startChapter: 1,
+          startVerse: 1,
+          endChapter: 1,
+          endVerse: 10,
+        },
+        {
+          granularity: 'pericope',
+          startChapter: 1,
+          startVerse: 2,
+          endChapter: 1,
+          endVerse: 5,
+        },
+      ],
+    } as unknown as VerseAudioRecording;
+    expect(pericopeSpan(r)).toEqual([2, 5]);
+  });
+
+  it('retains chapter-aware bounds on the returned span', () => {
+    const r = {
+      granularity: 'pericope',
+      startChapter: 6,
+      startVerse: 20,
+      endChapter: 7,
+      endVerse: 2,
+      takes: [],
+    } as unknown as VerseAudioRecording;
+    const span = pericopeSpan(r);
+    expect(span).toEqual([20, 2]);
+    expect(span?.startChapter).toBe(6);
+    expect(span?.endChapter).toBe(7);
   });
 
   it('returns null for a verse recording even when startVerse and endVerse are present', () => {

@@ -10,6 +10,7 @@ import { useResolveConflict } from '@/features/audio/hooks/useResolveConflict';
 import {
   isPericopeRecording,
   pericopeSpan,
+  resolvePericopeBounds,
   useStitchedAudio,
 } from '@/features/audio/hooks/useStitchedAudio';
 import { targetTextQueryOptions } from '@/features/bible/hooks/useBibleTarget';
@@ -217,19 +218,25 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           const directPericopeRecs = pericopeRecordings.filter(r => {
             const span = pericopeSpan(r);
             if (!span) return false;
+
+            const bounds = resolvePericopeBounds(r);
+            const firstVerse = group.verses[0];
+            const lastVerse = group.verses[group.verses.length - 1];
+
             if (
-              r.startChapter != null &&
-              r.endChapter != null &&
-              group.verses[0] &&
-              group.verses[group.verses.length - 1]
+              bounds?.startChapter != null &&
+              bounds.endChapter != null &&
+              firstVerse &&
+              lastVerse
             ) {
               return (
-                r.startChapter === group.verses[0].chapterNumber &&
-                r.startVerse === group.verses[0].verseNumber &&
-                r.endChapter === group.verses[group.verses.length - 1].chapterNumber &&
-                r.endVerse === group.verses[group.verses.length - 1].verseNumber
+                bounds.startChapter === firstVerse.chapterNumber &&
+                bounds.startVerse === firstVerse.verseNumber &&
+                bounds.endChapter === lastVerse.chapterNumber &&
+                bounds.endVerse === lastVerse.verseNumber
               );
             }
+
             return span[0] === startVerse && span[1] === endVerse;
           });
 
@@ -437,6 +444,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
   const stitchedAudio = useStitchedAudio({
     verseNumbers: selectedPassage?.verseNumbers ?? EMPTY_VERSE_NUMBERS,
     recordings: audioData?.items ?? [],
+    currentChapter: projectItem.chapterNumber,
   });
 
   // Map each take.id to its parent recording's bibleTextId
@@ -483,8 +491,8 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         if (!span) continue;
         const [start, end] = span;
         const range = `${start}-${end}`;
-        const takesToShow =
-          pr.activeTakeId !== null ? pr.takes.filter(t => t.id === pr.activeTakeId) : pr.takes;
+        if (pr.activeTakeId === null) continue;
+        const takesToShow = pr.takes.filter(t => t.id === pr.activeTakeId);
         takesToShow.forEach((take, idx) => {
           const takeIndex = pr.takes.findIndex(t => t.id === take.id);
           const takeNumber = takeIndex >= 0 ? takeIndex + 1 : idx + 1;
