@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { type VerseAudioRecording } from '@/lib/types';
 
-import { pericopeSpan, useStitchedAudio } from './useStitchedAudio';
+import { isPericopeRecording, pericopeSpan, useStitchedAudio } from './useStitchedAudio';
 
 describe('useStitchedAudio', () => {
   const makeRecording = (
@@ -218,12 +218,72 @@ describe('pericopeSpan', () => {
     expect(pericopeSpan(r)).toEqual([4, 8]);
   });
 
-  it('returns null when range is missing or incomplete', () => {
+  it('returns [start, end] when startVerse and endVerse are present with granularity pericope', () => {
     const r = {
-      verseNumber: 3,
-      isPericope: true,
+      granularity: 'pericope',
+      startChapter: 1,
+      startVerse: 1,
+      endChapter: 1,
+      endVerse: 5,
+      takes: [],
+    } as unknown as VerseAudioRecording;
+    expect(pericopeSpan(r)).toEqual([1, 5]);
+  });
+
+  it('returns [start, end] when startVerse and endVerse are on take with granularity pericope', () => {
+    const r = {
+      granularity: 'pericope',
+      takes: [
+        {
+          granularity: 'pericope',
+          startChapter: 1,
+          startVerse: 2,
+          endChapter: 1,
+          endVerse: 6,
+        },
+      ],
+    } as unknown as VerseAudioRecording;
+    expect(pericopeSpan(r)).toEqual([2, 6]);
+  });
+
+  it('returns null for a verse recording even when startVerse and endVerse are present', () => {
+    const r = {
+      granularity: 'verse',
+      startChapter: 1,
+      startVerse: 3,
+      endChapter: 1,
+      endVerse: 3,
       takes: [],
     } as unknown as VerseAudioRecording;
     expect(pericopeSpan(r)).toBeNull();
+  });
+});
+
+describe('isPericopeRecording', () => {
+  it('returns true when granularity is pericope', () => {
+    const r = {
+      granularity: 'pericope',
+      startVerse: 1,
+      endVerse: 4,
+      takes: [],
+    } as unknown as VerseAudioRecording;
+    expect(isPericopeRecording(r)).toBe(true);
+  });
+
+  it('returns false when granularity is verse', () => {
+    const r = {
+      granularity: 'verse',
+      startVerse: 1,
+      endVerse: 1,
+      takes: [],
+    } as unknown as VerseAudioRecording;
+    expect(isPericopeRecording(r)).toBe(false);
+  });
+
+  it('returns true when a take has granularity pericope', () => {
+    const r = {
+      takes: [{ granularity: 'pericope' }],
+    } as unknown as VerseAudioRecording;
+    expect(isPericopeRecording(r)).toBe(true);
   });
 });

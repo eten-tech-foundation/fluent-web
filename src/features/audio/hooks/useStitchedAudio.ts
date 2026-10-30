@@ -43,14 +43,34 @@ export interface StitchedAudioResult {
 /** Check if a recording is at pericope granularity */
 export function isPericopeRecording(r: VerseAudioRecording): boolean {
   return (
-    r.isPericope === true ||
     r.granularity === 'pericope' ||
+    r.isPericope === true ||
     Boolean(r.pericopeRange && r.pericopeRange[0] !== r.pericopeRange[1]) ||
-    r.takes.some(t => t.isPericope)
+    r.takes.some(
+      t =>
+        t.granularity === 'pericope' ||
+        t.isPericope === true ||
+        Boolean(t.pericopeRange && t.pericopeRange[0] !== t.pericopeRange[1])
+    )
   );
 }
 
 export function pericopeSpan(r: VerseAudioRecording): [number, number] | null {
+  if (!isPericopeRecording(r)) return null;
+
+  if (typeof r.startVerse === 'number' && typeof r.endVerse === 'number') {
+    return [r.startVerse, r.endVerse];
+  }
+  const takeWithSpan = r.takes.find(
+    t => typeof t.startVerse === 'number' && typeof t.endVerse === 'number'
+  );
+  if (
+    takeWithSpan &&
+    typeof takeWithSpan.startVerse === 'number' &&
+    typeof takeWithSpan.endVerse === 'number'
+  ) {
+    return [takeWithSpan.startVerse, takeWithSpan.endVerse];
+  }
   const range = r.pericopeRange ?? r.takes[0]?.pericopeRange;
   if (range) {
     const [start, end] = range;

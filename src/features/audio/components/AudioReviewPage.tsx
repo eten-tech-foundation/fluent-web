@@ -217,6 +217,19 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
           const directPericopeRecs = pericopeRecordings.filter(r => {
             const span = pericopeSpan(r);
             if (!span) return false;
+            if (
+              r.startChapter != null &&
+              r.endChapter != null &&
+              group.verses[0] &&
+              group.verses[group.verses.length - 1]
+            ) {
+              return (
+                r.startChapter === group.verses[0].chapterNumber &&
+                r.startVerse === group.verses[0].verseNumber &&
+                r.endChapter === group.verses[group.verses.length - 1].chapterNumber &&
+                r.endVerse === group.verses[group.verses.length - 1].verseNumber
+              );
+            }
             return span[0] === startVerse && span[1] === endVerse;
           });
 
@@ -470,11 +483,15 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
         if (!span) continue;
         const [start, end] = span;
         const range = `${start}-${end}`;
-        pr.takes.forEach((take, idx) => {
+        const takesToShow =
+          pr.activeTakeId !== null ? pr.takes.filter(t => t.id === pr.activeTakeId) : pr.takes;
+        takesToShow.forEach((take, idx) => {
+          const takeIndex = pr.takes.findIndex(t => t.id === take.id);
+          const takeNumber = takeIndex >= 0 ? takeIndex + 1 : idx + 1;
           pericopeTakes.push({
             ...take,
             displayLabel: t('takePericopeLabel', 'Take {{takeNumber}} - Pericope - vv. {{range}}', {
-              takeNumber: idx + 1,
+              takeNumber,
               range,
             }),
             bibleTextId: pr.bibleTextId,
@@ -820,8 +837,7 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                     isPM &&
                     selectedHasConflict &&
                     !effectivePassage.isOppositeModeConflict &&
-                    !take.isCoveringPericope &&
-                    take.id !== activeTakeId;
+                    !take.isCoveringPericope;
 
                   return (
                     <TakeCard

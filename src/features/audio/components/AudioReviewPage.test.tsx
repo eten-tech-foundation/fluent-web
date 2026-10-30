@@ -162,9 +162,11 @@ vi.mock('@/features/pericopes/hooks/useChapterPericopes', () => ({
   }),
 }));
 
+const mockResolveMutate = vi.fn();
+
 vi.mock('@/features/audio/hooks/useResolveConflict', () => ({
   useResolveConflict: () => ({
-    mutate: vi.fn(),
+    mutate: mockResolveMutate,
   }),
 }));
 
@@ -608,10 +610,73 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
 
     renderPage();
 
-    // Select as Draft button should appear exactly once (for take 112 belonging to verse recording),
+    // Select as Draft button should appear for both takes belonging to verse recording (11 and 112),
     // and NOT for covering pericope take 991.
     const selectButtons = screen.getAllByRole('button', { name: /select as draft/i });
-    expect(selectButtons).toHaveLength(1);
+    expect(selectButtons).toHaveLength(2);
+  });
+
+  it('allows selecting the current active draft take to resolve a conflict', () => {
+    useAppStore.setState({
+      displayMode: 'verse',
+      userdetail: {
+        id: 1,
+        username: 'alice',
+        displayName: 'Alice',
+        email: 'alice@example.com',
+        role: 'user',
+        grants: [
+          {
+            orgId: 1,
+            projectId: 1,
+            roleId: 1,
+            roleName: 'Project Manager',
+            permissions: [],
+          },
+        ],
+        lastActiveOrgId: 1,
+      },
+    });
+
+    currentRecordings = [
+      {
+        ...mockRecordings[0],
+        conflictStatus: 'conflict',
+        activeTakeId: 11,
+        takes: [
+          mockRecordings[0].takes[0],
+          {
+            id: 112,
+            uploadedBy: 2,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 5,
+            contentHash: 'hash-112',
+            downloadUrl: 'https://example.com/112.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      },
+    ];
+
+    renderPage();
+
+    // Verify "Current Draft" indicator is visible
+    expect(screen.getByText('Current Draft')).toBeInTheDocument();
+
+    // Both takes have "Select as Draft" buttons
+    const selectButtons = screen.getAllByRole('button', { name: /select as draft/i });
+    expect(selectButtons).toHaveLength(2);
+
+    // Clicking "Select as Draft" on Take 1 (which is the current draft, take 11) calls mutate
+    fireEvent.click(selectButtons[0]);
+    expect(mockResolveMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        takeId: 11,
+      }),
+      expect.anything()
+    );
   });
 
   it('renders without crashing when there are no recordings or passages', () => {
@@ -786,5 +851,73 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     expect(
       screen.getByText('Stitched from verse recordings, vv. 1-2 (cont. in ch. 7)')
     ).toBeInTheDocument();
+  });
+
+  it('displays active pericope take on all covered verses when switching from pericope to verse view (backend contract)', () => {
+    useAppStore.setState({ displayMode: 'pericope' });
+
+    currentRecordings = [
+      {
+        id: 100,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p100.webm',
+        verseNumber: 1,
+        granularity: 'pericope',
+        startChapter: 6,
+        startVerse: 1,
+        endChapter: 6,
+        endVerse: 2,
+        conflictStatus: 'clean',
+        activeTakeId: 1001,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 1001,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-1001',
+            downloadUrl: 'https://example.com/1001.webm',
+            granularity: 'pericope',
+            startChapter: 6,
+            startVerse: 1,
+            endChapter: 6,
+            endVerse: 2,
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+    ];
+
+    renderPage();
+
+    // In pericope view: since pericope recording exists, takes list is rendered with the pericope take
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+
+    // Now switch to verse view
+    act(() => {
+      useAppStore.setState({ displayMode: 'verse' });
+    });
+
+    // Both verse 1 and verse 2 buttons exist in the list
+    expect(screen.getByRole('button', { name: /verse 1/i })).toBeInTheDocument();
+    const verse2Btn = screen.getByRole('button', { name: /verse 2/i });
+    expect(verse2Btn).toBeInTheDocument();
+
+    // On verse 1: active pericope take is shown
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
+
+    // Click verse 2: active pericope take is also shown on verse 2
+    fireEvent.click(verse2Btn);
+    expect(screen.getByText('Take 1 - Pericope - vv. 1-2')).toBeInTheDocument();
   });
 });
