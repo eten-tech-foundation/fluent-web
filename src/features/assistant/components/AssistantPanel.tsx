@@ -155,7 +155,8 @@ export function AssistantPanel({
     baseRequest,
     request,
   ]);
-  const displayedBriefing = conversation.pinned ?? briefing.data;
+  // Render the same signed snapshot that admission will freeze, including newly exposed widgets.
+  const displayedBriefing = conversation.pinned ?? conversation.briefing;
 
   useEffect(() => {
     if (

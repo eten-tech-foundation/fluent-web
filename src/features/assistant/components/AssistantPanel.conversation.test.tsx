@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ComponentProps } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -14,13 +14,36 @@ import {
 } from './AssistantConversationProvider';
 import { AssistantPanel } from './AssistantPanel';
 
+import type { AssistantMarkdown as MarkdownRenderer } from './AssistantMarkdown';
 import type { AssistantConversation } from '../assistant.conversation';
 import type { TurnUpdate, streamAssistantTurn } from '../assistant.turn.client';
 
 const test = vi.hoisted(() => ({
+  clickNewMacro: false,
   publish: null as ((update: TurnUpdate) => void) | null,
   owner: null as AssistantConversation | null,
 }));
+vi.mock('./AssistantMarkdown', async importOriginal => {
+  const actual = await importOriginal<{ AssistantMarkdown: typeof MarkdownRenderer }>();
+  return {
+    AssistantMarkdown: (props: ComponentProps<typeof actual.AssistantMarkdown>) => {
+      const element = useRef<HTMLDivElement>(null);
+      useLayoutEffect(() => {
+        if (!test.clickNewMacro || !props.source.includes('Later macro?')) return;
+        const button = element.current?.querySelector<HTMLButtonElement>('button');
+        if (!button || button.disabled) return;
+        test.clickNewMacro = false;
+        // Click as soon as the new widget commits, before the Panel's passive observer effect.
+        button.click();
+      }, [props.source]);
+      return (
+        <div ref={element}>
+          <actual.AssistantMarkdown {...props} />
+        </div>
+      );
+    },
+  };
+});
 vi.mock('../assistant.turn.client', () => ({
   streamAssistantTurn: vi.fn<typeof streamAssistantTurn>((_project, _request, publish) => {
     test.publish = publish;
@@ -83,6 +106,7 @@ function start(controller: ReadableStreamDefaultController<Uint8Array>) {
   );
 }
 afterEach(() => {
+  test.clickNewMacro = false;
   cleanup();
   for (const stream of streams.splice(0)) {
     try {
@@ -156,6 +180,60 @@ describe('panel observes workspace-owned conversation', () => {
     expect(screen.getByText('Hidden answer')).toBeVisible();
     expect(test.owner!.getSnapshot().turns[0].attempts[0].prefix?.markdown).toBe('Hidden answer');
     expect(requests).toBe(1);
+  });
+  it('pins the exact later signed delta when its newly visible macro is clicked before passive effects', async () => {
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    server.use(
+      http.get(`${config.api.url}/projects/1/assistant/languages`, () =>
+        HttpResponse.json({
+          languages: [{ code: 'en', displayName: 'English' }],
+          defaultLanguage: 'en',
+          englishFallback: 'en',
+        })
+      ),
+      http.post(
+        `${config.api.url}/projects/1/assistant/briefing`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                stream = controller;
+                streams.push(controller);
+                controller.enqueue(
+                  frame('briefing_started', 1, {
+                    ...metadata,
+                    attemptId: 'briefing',
+                    references: ['JHN 1:1'],
+                  })
+                );
+                controller.enqueue(frame('briefing_delta', 2, { delta: 'Earlier prefix' }));
+              },
+            }),
+            { headers: { 'Content-Type': 'text/event-stream' } }
+          )
+      )
+    );
+    mount();
+    await screen.findByText('Earlier prefix');
+    test.clickNewMacro = true;
+    const added = '\n\nNew visible detail.\n\n{{fluent:v1:suggested_question|Later macro?}}';
+    await act(async () => {
+      stream.enqueue(
+        frame('briefing_delta', 3, {
+          delta: added,
+          prefix: { sequence: 2, complete: false, receipt: 'later-receipt' },
+        })
+      );
+    });
+    await waitFor(() => expect(test.owner!.getSnapshot().turns).toHaveLength(1));
+    expect(test.owner!.getSnapshot().pinned).toMatchObject({
+      source: `Earlier prefix${added}`,
+      integrity: {
+        prefix: { markdown: `Earlier prefix${added}`, sequence: 2, receipt: 'later-receipt' },
+      },
+    });
+    expect(screen.getByText('New visible detail.')).toBeVisible();
+    expect(test.owner!.getSnapshot().turns[0].input.text).toBe('Later macro?');
   });
   it('refreshes briefing once after context_changed received while pane is hidden', async () => {
     let requests = 0;
