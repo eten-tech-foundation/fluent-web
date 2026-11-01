@@ -44,26 +44,35 @@ function started(activeVerse = 16) {
   };
 }
 
-function complete(markdown: string, cacheHit?: boolean) {
+function complete(markdown: string, cacheHit?: boolean, outputLanguage = 'hi') {
   return {
     type: 'briefing_complete',
     markdown,
     operationVersion: 'passage-briefing-v1',
     cacheEpoch: '1',
     outputContractVersion: 'fluent-widgets-v1',
-    outputLanguage: 'hi',
+    outputLanguage,
     ...(cacheHit === undefined ? {} : { cacheHit }),
   };
 }
 
-function completedStream(markdown = 'Briefing', cacheHit?: boolean) {
+function completedStream(markdown = 'Briefing', cacheHit?: boolean, outputLanguage = 'hi') {
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(frame(started()));
       controller.enqueue(frame({ type: 'briefing_delta', delta: markdown }));
-      controller.enqueue(frame(complete(markdown, cacheHit)));
+      controller.enqueue(frame(complete(markdown, cacheHit, outputLanguage)));
       controller.close();
     },
+  });
+}
+
+async function expectCompletedEnglishBriefing() {
+  await waitFor(() => {
+    expect(screen.getByText('en briefing')).toBeVisible();
+    expect(screen.queryByText('Preparing this passage briefing…')).not.toBeInTheDocument();
+    expect(screen.queryByText('The briefing did not finish.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 }
 
@@ -224,10 +233,18 @@ describe('AssistantPanel', () => {
         });
       }),
       http.post(`${api}/projects/7/assistant/briefing`, async ({ request }) => {
-        bodies.push((await request.json()) as Record<string, unknown>);
-        return new HttpResponse(completedStream(), {
-          headers: { 'Content-Type': 'text/event-stream' },
-        });
+        const body = (await request.json()) as Record<string, unknown>;
+        bodies.push(body);
+        return new HttpResponse(
+          completedStream(
+            `${String(body.outputLanguage)} briefing`,
+            undefined,
+            String(body.outputLanguage)
+          ),
+          {
+            headers: { 'Content-Type': 'text/event-stream' },
+          }
+        );
       })
     );
     const user = userEvent.setup();
@@ -241,12 +258,14 @@ describe('AssistantPanel', () => {
       'en'
     );
     await waitFor(() => expect(bodies).toHaveLength(2));
+    await expectCompletedEnglishBriefing();
     first.unmount();
 
     render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
       wrapper: wrapper(),
     });
     await waitFor(() => expect(bodies).toHaveLength(3));
+    await expectCompletedEnglishBriefing();
     expect(selections).toEqual([null, 'en']);
     expect(bodies.map(body => body.outputLanguage)).toEqual(['hi', 'en', 'en']);
     expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('en');
@@ -266,16 +285,25 @@ describe('AssistantPanel', () => {
         });
       }),
       http.post(`${api}/projects/7/assistant/briefing`, async ({ request }) => {
-        bodies.push((await request.json()) as Record<string, unknown>);
-        return new HttpResponse(completedStream(), {
-          headers: { 'Content-Type': 'text/event-stream' },
-        });
+        const body = (await request.json()) as Record<string, unknown>;
+        bodies.push(body);
+        return new HttpResponse(
+          completedStream(
+            `${String(body.outputLanguage)} briefing`,
+            undefined,
+            String(body.outputLanguage)
+          ),
+          {
+            headers: { 'Content-Type': 'text/event-stream' },
+          }
+        );
       })
     );
     render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
       wrapper: wrapper(),
     });
     await waitFor(() => expect(bodies).toHaveLength(1));
+    await expectCompletedEnglishBriefing();
     expect(selections).toEqual(['removed']);
     expect(bodies.map(body => body.outputLanguage)).toEqual(['en']);
     expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('en');
