@@ -207,6 +207,82 @@ describe('AssistantPanel', () => {
     expect(bodies[1]).toMatchObject({ outputLanguage: 'en' });
   });
 
+  it('restores the chosen language through a fresh workspace and query cache', async () => {
+    const selections: Array<string | null> = [];
+    const bodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${api}/projects/7/assistant/languages`, ({ request }) => {
+        const selected = new URL(request.url).searchParams.get('selected');
+        selections.push(selected);
+        return HttpResponse.json({
+          languages: [
+            { code: 'en', displayName: 'English' },
+            { code: 'hi', displayName: 'Hindi' },
+          ],
+          defaultLanguage: selected === 'en' ? 'en' : 'hi',
+          englishFallback: 'en',
+        });
+      }),
+      http.post(`${api}/projects/7/assistant/briefing`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return new HttpResponse(completedStream(), {
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      })
+    );
+    const user = userEvent.setup();
+    const first = render(
+      <AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />,
+      { wrapper: wrapper() }
+    );
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Assistant output language' }),
+      'en'
+    );
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    first.unmount();
+
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    await waitFor(() => expect(bodies).toHaveLength(3));
+    expect(selections).toEqual([null, 'en']);
+    expect(bodies.map(body => body.outputLanguage)).toEqual(['hi', 'en', 'en']);
+    expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('en');
+  });
+
+  it('replaces an unsupported saved language before requesting a briefing', async () => {
+    localStorage.setItem(ASSISTANT_STORAGE_KEYS.outputLanguage, 'removed');
+    const selections: Array<string | null> = [];
+    const bodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(`${api}/projects/7/assistant/languages`, ({ request }) => {
+        selections.push(new URL(request.url).searchParams.get('selected'));
+        return HttpResponse.json({
+          languages: [{ code: 'en', displayName: 'English' }],
+          defaultLanguage: 'en',
+          englishFallback: 'en',
+        });
+      }),
+      http.post(`${api}/projects/7/assistant/briefing`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return new HttpResponse(completedStream(), {
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      })
+    );
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(selections).toEqual(['removed']);
+    expect(bodies.map(body => body.outputLanguage)).toEqual(['en']);
+    expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('en');
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['English']);
+    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBe('en');
+  });
+
   it('sends only force-on debug choices and makes force fresh a one-attempt cache bypass', async () => {
     localStorage.setItem(ASSISTANT_STORAGE_KEYS.ignoreCache, 'true');
     const bodies: Array<Record<string, unknown>> = [];

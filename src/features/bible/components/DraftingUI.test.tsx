@@ -2361,25 +2361,28 @@ describe('DraftingUI', () => {
   });
 
   describe('Assistant feature flag and saved tab', () => {
-    it('shows the third tab only when Assistant is effectively enabled', async () => {
-      const user = userEvent.setup();
-      mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
-      render(
-        <DraftingUI
-          projectItem={mockProjectItem}
-          sourceVerses={mockSourceVerses}
-          targetVerses={mockTargetVerses}
-          userdetail={{ id: 1 } as unknown as User}
-        />
-      );
+    it.each([true, false])(
+      'shows Assistant when translation AI is enabled=%s',
+      async isAiEnabled => {
+        const user = userEvent.setup();
+        mockFeatureFlag.mockImplementation(name => name !== 'sourceAudio');
+        render(
+          <DraftingUI
+            projectItem={{ ...mockProjectItem, isAiEnabled }}
+            sourceVerses={mockSourceVerses}
+            targetVerses={mockTargetVerses}
+            userdetail={{ id: 1 } as unknown as User}
+          />
+        );
 
-      await user.click(screen.getByRole('button', { pressed: false }));
-      expect(screen.getAllByRole('tab').slice(0, 3)).toEqual([
-        screen.getByRole('tab', { name: 'AI Assistant' }),
-        screen.getByRole('tab', { name: 'Resources' }),
-        screen.getByRole('tab', { name: /Checks/ }),
-      ]);
-    });
+        await user.click(screen.getByRole('button', { pressed: false }));
+        expect(screen.getAllByRole('tab').slice(0, 3)).toEqual([
+          screen.getByRole('tab', { name: 'AI Assistant' }),
+          screen.getByRole('tab', { name: 'Resources' }),
+          screen.getByRole('tab', { name: /Checks/ }),
+        ]);
+      }
+    );
 
     it.each(['verse', 'pericope'] as const)(
       'shows the complete cross-chapter canonical reference in %s mode',
