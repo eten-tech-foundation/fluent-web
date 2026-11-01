@@ -76,7 +76,11 @@ function start(controller: ReadableStreamDefaultController<Uint8Array>) {
   controller.enqueue(
     frame('briefing_started', 1, { ...metadata, attemptId: 'briefing', references: ['JHN 1:1'] })
   );
-  controller.enqueue(frame('briefing_delta', 2, { delta: 'Frozen briefing' }));
+  controller.enqueue(
+    frame('briefing_delta', 2, {
+      delta: 'Frozen briefing\n\n{{fluent:v1:suggested_question|Macro?}}',
+    })
+  );
 }
 afterEach(() => {
   cleanup();
@@ -117,9 +121,8 @@ describe('panel observes workspace-owned conversation', () => {
     mount();
     await screen.findByText('Frozen briefing');
     await waitFor(() => expect(test.owner!.getSnapshot().briefing?.integrity).toBeDefined());
-    act(() => {
-      expect(test.owner!.submit('Macro?', 'suggested_question')).toBeNull();
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Macro?' }));
+    expect(test.owner!.getSnapshot().turns).toHaveLength(1);
     await act(async () => {
       stream.enqueue(
         frame('briefing_delta', 3, {
@@ -131,7 +134,7 @@ describe('panel observes workspace-owned conversation', () => {
         frame('briefing_complete', 4, {
           ...metadata,
           outputLanguage: 'en',
-          markdown: 'Frozen briefing later',
+          markdown: 'Frozen briefing\n\n{{fluent:v1:suggested_question|Macro?}} later',
           prefix: { sequence: 2, complete: true, receipt: 'complete' },
         })
       );
@@ -150,6 +153,7 @@ describe('panel observes workspace-owned conversation', () => {
       })
     );
     fireEvent.click(screen.getByText('Hide panel'));
+    expect(screen.getByText('Hidden answer')).toBeVisible();
     expect(test.owner!.getSnapshot().turns[0].attempts[0].prefix?.markdown).toBe('Hidden answer');
     expect(requests).toBe(1);
   });
@@ -185,7 +189,7 @@ describe('panel observes workspace-owned conversation', () => {
     expect(requests).toBe(1);
     fireEvent.click(screen.getByText('Hide panel'));
     await waitFor(() => expect(requests).toBe(2));
-    expect(screen.getByText('Pending question')).toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveValue('Pending question');
     fireEvent.click(screen.getByText('Hide panel'));
     fireEvent.click(screen.getByText('Hide panel'));
     expect(requests).toBe(2);

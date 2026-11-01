@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { LoaderCircle, RefreshCw } from 'lucide-react';
 
 import {
   passageBriefingQueryKey,
@@ -25,6 +26,7 @@ import {
 } from '../assistant.types';
 
 import { useAssistantConversation } from './AssistantConversationProvider';
+import { AssistantConversationView } from './AssistantConversationView';
 import { AssistantMarkdown } from './AssistantMarkdown';
 
 const CONTEXT_DEBOUNCE_MS = 250;
@@ -248,43 +250,53 @@ export function AssistantPanel({
         </div>
       </div>
 
-      <div aria-live='polite' className='min-h-0 flex-1 overflow-y-auto px-3 py-4'>
-        {languages.isError && (
-          <FailureMessage message='Assistant languages are unavailable right now.' />
+      <AssistantConversationView enabled={contextReady && contextIsCurrent && !languages.isError}>
+        {(submit, questionsEnabled) => (
+          <>
+            {languages.isError && (
+              <FailureMessage message='Assistant languages are unavailable right now.' />
+            )}
+            {!languages.isError &&
+              contextReady &&
+              contextIsCurrent &&
+              outputLanguage &&
+              displayedBriefing?.source && (
+                <AssistantMarkdown
+                  outputContractVersion={displayedBriefing.metadata?.outputContractVersion ?? null}
+                  source={displayedBriefing.source}
+                  onSuggestedQuestion={questionsEnabled ? submit : undefined}
+                />
+              )}
+            {!conversation.pinned &&
+              !languages.isError &&
+              contextReady &&
+              outputLanguage &&
+              (!contextIsCurrent ||
+                (briefing.isFetching && briefing.data?.phase !== 'complete')) && (
+                <p className='text-muted-foreground flex items-center gap-2 text-sm' role='status'>
+                  <LoaderCircle aria-hidden='true' className='size-4 animate-spin' />
+                  Preparing this passage briefing…
+                </p>
+              )}
+            {!conversation.pinned &&
+              contextReady &&
+              contextIsCurrent &&
+              (briefing.isError || selectedAttempt.cancelled) && (
+                <div role='alert'>
+                  <FailureMessage message='The briefing did not finish.' />
+                  <button
+                    className='text-primary mt-2 text-sm font-semibold underline underline-offset-2'
+                    type='button'
+                    onClick={() => startAttempt(false)}
+                  >
+                    <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
+                    Retry
+                  </button>
+                </div>
+              )}
+          </>
         )}
-        {!languages.isError &&
-          contextReady &&
-          contextIsCurrent &&
-          outputLanguage &&
-          displayedBriefing?.source && (
-            <AssistantMarkdown
-              outputContractVersion={displayedBriefing.metadata?.outputContractVersion ?? null}
-              source={displayedBriefing.source}
-            />
-          )}
-        {!conversation.pinned &&
-          !languages.isError &&
-          contextReady &&
-          outputLanguage &&
-          (!contextIsCurrent || (!briefing.data?.source && briefing.isFetching)) && (
-            <p className='text-muted-foreground text-sm'>Preparing this passage briefing…</p>
-          )}
-        {!conversation.pinned &&
-          contextReady &&
-          contextIsCurrent &&
-          (briefing.isError || selectedAttempt.cancelled) && (
-            <div role='alert'>
-              <FailureMessage message='The briefing did not finish.' />
-              <button
-                className='text-primary mt-2 text-sm font-semibold underline underline-offset-2'
-                type='button'
-                onClick={() => startAttempt(false)}
-              >
-                Retry
-              </button>
-            </div>
-          )}
-      </div>
+      </AssistantConversationView>
 
       {localForceOn && (
         <div

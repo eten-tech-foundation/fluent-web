@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ASSISTANT_OUTPUT_CONTRACT_VERSION } from '../assistant.types';
@@ -12,6 +12,52 @@ const renderMarkdown = (
 ) => render(<AssistantMarkdown outputContractVersion={version} source={source} />);
 
 describe('AssistantMarkdown', () => {
+  it('submits only recognized text widgets with exact text and one event', () => {
+    const submit = vi.fn();
+    render(
+      <AssistantMarkdown
+        outputContractVersion={ASSISTANT_OUTPUT_CONTRACT_VERSION}
+        source={[
+          macro('  Exact question?  '),
+          `\`${macro('Code?')}\``,
+          `[${macro('Link?')}](https://example.com)`,
+          '<div>{{fluent:v1:suggested_question|HTML?}}</div>',
+          '<span>{{fluent:v1:suggested_question|Inline HTML?}}</span>',
+          '{{fluent:v1:suggested_question|Unfinished',
+        ].join('\n\n')}
+        onSuggestedQuestion={submit}
+      />
+    );
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Exact question?' }));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledWith('  Exact question?  ', expect.any(MouseEvent));
+    expect(screen.getByText(macro('Code?'))).toBeVisible();
+    expect(screen.getByText(macro('Link?'))).toBeVisible();
+    expect(screen.getByText(/Inline HTML/)).toHaveTextContent(macro('Inline HTML?'));
+    expect(screen.getByText('<div>{{fluent:v1:suggested_question|HTML?}}</div>')).toBeVisible();
+  });
+
+  it('keeps keyboard focus on a suggested button as output and callbacks update', () => {
+    const view = render(
+      <AssistantMarkdown
+        outputContractVersion={ASSISTANT_OUTPUT_CONTRACT_VERSION}
+        source={macro('Question?')}
+        onSuggestedQuestion={() => {}}
+      />
+    );
+    const question = screen.getByRole('button', { name: 'Question?' });
+    question.focus();
+    view.rerender(
+      <AssistantMarkdown
+        outputContractVersion={ASSISTANT_OUTPUT_CONTRACT_VERSION}
+        source={`${macro('Question?')}\n\nLater output`}
+        onSuggestedQuestion={() => {}}
+      />
+    );
+    expect(question).toHaveFocus();
+  });
+
   it('activates a suggested question only after every possible delimiter split is complete', () => {
     const source = macro('What does this phrase mean?');
     for (let split = 0; split < source.length; split += 1) {

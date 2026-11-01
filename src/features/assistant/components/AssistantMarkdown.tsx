@@ -1,4 +1,4 @@
-import { type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { createContext, useContext, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 
 import ReactMarkdown, { type Components, type UrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -79,9 +79,13 @@ function createSuggestedQuestionsPlugin(prepared: PreparedSource) {
   return () => (tree: MarkdownNode) => {
     const visit = (parent: MarkdownNode, blocked: boolean) => {
       const nextChildren: MarkdownNode[] = [];
+      // Inline HTML is split across siblings; keep its entire paragraph inert.
+      const containsInlineHtml =
+        parent.type !== 'root' && parent.children?.some(child => child.type === 'html');
       for (const child of parent.children ?? []) {
         const childBlocked =
           blocked ||
+          !!containsInlineHtml ||
           child.type === 'link' ||
           child.type === 'linkReference' ||
           child.type === 'image' ||
@@ -92,6 +96,10 @@ function createSuggestedQuestionsPlugin(prepared: PreparedSource) {
             nextChildren.push(...replacement);
             continue;
           }
+        } else if (child.type === 'html' && child.value) {
+          const replacement = macroNodes(child.value, prepared, false);
+          child.type = 'text';
+          if (replacement) child.value = replacement.map(node => node.value ?? '').join('');
         } else if ((child.type === 'code' || child.type === 'inlineCode') && child.value) {
           const replacement = macroNodes(child.value, prepared, false);
           if (replacement) child.value = replacement.map(node => node.value ?? '').join('');
@@ -119,7 +127,31 @@ type ButtonProps = ComponentPropsWithoutRef<'button'> & {
   'data-fluent-suggested-question'?: string;
 };
 
+const SuggestedQuestionContext = createContext<
+  ((question: string, event: object) => void) | undefined
+>(undefined);
+
+function SuggestedQuestionButton({ node: _node, children, ...props }: ButtonProps) {
+  const onSuggestedQuestion = useContext(SuggestedQuestionContext);
+  return (
+    <button
+      {...props}
+      className='border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 my-1 block w-full rounded-md border px-3 py-2 text-left text-sm font-semibold disabled:opacity-50'
+      data-testid='suggested-question'
+      disabled={!onSuggestedQuestion}
+      type='button'
+      onClick={event => {
+        const question = props['data-fluent-suggested-question'];
+        if (question) onSuggestedQuestion?.(question, event.nativeEvent);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 const markdownComponents: Components = {
+  button: SuggestedQuestionButton,
   a: ({ node: _node, href, children, ...props }) =>
     href ? (
       <a {...props} href={href} rel='noopener noreferrer' target='_blank'>
@@ -128,16 +160,6 @@ const markdownComponents: Components = {
     ) : (
       <span>{children}</span>
     ),
-  button: ({ node: _node, children, ...props }: ButtonProps) => (
-    <button
-      className='border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 my-1 block w-full rounded-md border px-3 py-2 text-left text-sm font-semibold transition-colors'
-      data-testid='suggested-question'
-      type='button'
-      {...props}
-    >
-      {children}
-    </button>
-  ),
   img: ({ node: _node, alt }) => (
     <span className='text-muted-foreground' data-testid='blocked-assistant-image'>
       {alt ?? '[image]'}
@@ -187,24 +209,28 @@ const ALLOWED_ELEMENTS = [
 export function AssistantMarkdown({
   source,
   outputContractVersion,
+  onSuggestedQuestion,
 }: {
   source: string;
   outputContractVersion: string | null;
+  onSuggestedQuestion?: (question: string, event: object) => void;
 }): ReactNode {
   const supportsWidgets = outputContractVersion === ASSISTANT_OUTPUT_CONTRACT_VERSION;
   const prepared = prepareSource(source, supportsWidgets);
   return (
-    <div className='assistant-markdown text-foreground space-y-3 text-sm leading-relaxed'>
-      <ReactMarkdown
-        skipHtml
-        unwrapDisallowed
-        allowedElements={[...ALLOWED_ELEMENTS]}
-        components={markdownComponents}
-        remarkPlugins={[remarkGfm, createSuggestedQuestionsPlugin(prepared)]}
-        urlTransform={safeUrlTransform}
-      >
-        {prepared.markdown}
-      </ReactMarkdown>
-    </div>
+    <SuggestedQuestionContext.Provider value={onSuggestedQuestion}>
+      <div className='assistant-markdown text-foreground space-y-3 text-sm leading-relaxed'>
+        <ReactMarkdown
+          skipHtml
+          unwrapDisallowed
+          allowedElements={[...ALLOWED_ELEMENTS]}
+          components={markdownComponents}
+          remarkPlugins={[remarkGfm, createSuggestedQuestionsPlugin(prepared)]}
+          urlTransform={safeUrlTransform}
+        >
+          {prepared.markdown}
+        </ReactMarkdown>
+      </div>
+    </SuggestedQuestionContext.Provider>
   );
 }
