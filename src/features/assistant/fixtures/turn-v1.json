@@ -1,0 +1,306 @@
+{
+  "request": {
+    "protocol": "fluent-turn-v1",
+    "bookCode": "JHN",
+    "chapter": 1,
+    "activeVerse": 1,
+    "outputLanguage": "en",
+    "grounding": "english",
+    "contextReceipt": "fixture-context-not-a-signature",
+    "briefing": {
+      "markdown": "The Word was in the beginning.",
+      "sequence": 1,
+      "complete": true,
+      "receipt": "fixture-briefing-not-a-signature"
+    },
+    "turns": [],
+    "submission": {
+      "kind": "new",
+      "turnId": "turn-1",
+      "attemptId": "attempt-1",
+      "input": {
+        "text": "#help @hindi What does Word mean here?",
+        "origin": "typed"
+      }
+    },
+    "dont_cache": true
+  },
+  "context": {
+    "projectId": 1,
+    "sourceBible": "synthetic-public-domain-fixture",
+    "sourceLanguageCode": "eng",
+    "verses": [
+      {
+        "bookCode": "JHN",
+        "chapter": 1,
+        "verse": 1,
+        "text": "In the beginning was the Word."
+      }
+    ],
+    "outputLanguage": "en",
+    "responseLanguageHint": "en",
+    "guidanceSlug": "default",
+    "resourceLanguage": "en",
+    "groundingInstruction": "Use biblical translation resources.",
+    "authorizationScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sourceRevision": "source-v1",
+    "resourceRevision": "resource-v1",
+    "operationVersion": "passage-turn-v1",
+    "profileVersion": "fluent-profile-v1",
+    "resourcePolicyVersion": "fluent-resource-policy-v1",
+    "epoch": "1"
+  },
+  "events": [
+    {
+      "protocol": "fluent-turn-v1",
+      "type": "turn_started",
+      "operationId": "operation-1",
+      "turnId": "turn-1",
+      "attemptId": "attempt-1",
+      "contextReceipt": "fixture-context-not-a-signature",
+      "projection": {
+        "historyWindow": 5,
+        "omittedTurnIds": [],
+        "emptyTurnIds": []
+      }
+    },
+    {
+      "protocol": "fluent-turn-v1",
+      "type": "turn_delta",
+      "operationId": "operation-1",
+      "turnId": "turn-1",
+      "attemptId": "attempt-1",
+      "delta": "The Word",
+      "sequence": 1,
+      "receipt": "fixture-prefix-not-a-signature"
+    },
+    {
+      "protocol": "fluent-turn-v1",
+      "type": "turn_complete",
+      "operationId": "operation-1",
+      "turnId": "turn-1",
+      "attemptId": "attempt-1",
+      "sequence": 1,
+      "receipt": "fixture-complete-not-a-signature"
+    },
+    {
+      "protocol": "fluent-turn-v1",
+      "type": "turn_error",
+      "operationId": "operation-1",
+      "turnId": "turn-1",
+      "attemptId": "attempt-1",
+      "code": "timed_out",
+      "retryable": true
+    },
+    {
+      "protocol": "fluent-turn-v1",
+      "type": "context_changed"
+    }
+  ],
+  "payloads": [
+    {
+      "protocol": "fluent-turn-v1",
+      "keyId": "fixture-key",
+      "actorId": 1,
+      "contextDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "context"
+    },
+    {
+      "protocol": "fluent-turn-v1",
+      "keyId": "fixture-key",
+      "actorId": 1,
+      "contextDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "prefix",
+      "operation": "turn",
+      "parentDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "inputDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "projectionDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "outputDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "sequence": 1,
+      "complete": false
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "new-after-partial",
+      "request": {
+        "protocol": "fluent-turn-v1",
+        "bookCode": "JHN",
+        "chapter": 1,
+        "activeVerse": 1,
+        "outputLanguage": "en",
+        "grounding": "english",
+        "contextReceipt": "fixture-context-not-a-signature",
+        "briefing": {
+          "markdown": "The Word was in the beginning.",
+          "sequence": 1,
+          "complete": true,
+          "receipt": "fixture-briefing-not-a-signature"
+        },
+        "turns": [
+          {
+            "turnId": "previous-turn",
+            "input": {
+              "text": "What does beginning mean?",
+              "origin": "suggested_question"
+            },
+            "selectedAttemptId": "replacement-attempt",
+            "attempts": [
+              {
+                "attemptId": "empty-attempt",
+                "operationId": "operation-empty",
+                "state": "failed",
+                "prefix": null
+              },
+              {
+                "attemptId": "replacement-attempt",
+                "operationId": "operation-replacement",
+                "state": "interrupted",
+                "prefix": {
+                  "markdown": "It introduces",
+                  "sequence": 1,
+                  "complete": false,
+                  "receipt": "fixture-partial-not-a-signature"
+                }
+              }
+            ]
+          }
+        ],
+        "submission": {
+          "kind": "new",
+          "turnId": "turn-1",
+          "attemptId": "attempt-1",
+          "input": {
+            "text": "#help @hindi What does Word mean here?",
+            "origin": "typed"
+          }
+        },
+        "dont_cache": true
+      },
+      "history": [
+        {
+          "user_message": "User question (JSON data): \"What does beginning mean?\"",
+          "assistant_response": "[Incomplete visible answer]\nIt introduces"
+        }
+      ],
+      "emptyTurnIds": []
+    },
+    {
+      "name": "retry-excludes-current",
+      "request": {
+        "protocol": "fluent-turn-v1",
+        "bookCode": "JHN",
+        "chapter": 1,
+        "activeVerse": 1,
+        "outputLanguage": "en",
+        "grounding": "english",
+        "contextReceipt": "fixture-context-not-a-signature",
+        "briefing": {
+          "markdown": "The Word was in the beginning.",
+          "sequence": 1,
+          "complete": true,
+          "receipt": "fixture-briefing-not-a-signature"
+        },
+        "turns": [
+          {
+            "turnId": "previous-turn",
+            "input": {
+              "text": "What does beginning mean?",
+              "origin": "suggested_question"
+            },
+            "selectedAttemptId": "replacement-attempt",
+            "attempts": [
+              {
+                "attemptId": "empty-attempt",
+                "operationId": "operation-empty",
+                "state": "failed",
+                "prefix": null
+              },
+              {
+                "attemptId": "replacement-attempt",
+                "operationId": "operation-replacement",
+                "state": "interrupted",
+                "prefix": {
+                  "markdown": "It introduces",
+                  "sequence": 1,
+                  "complete": false,
+                  "receipt": "fixture-partial-not-a-signature"
+                }
+              }
+            ]
+          }
+        ],
+        "submission": {
+          "kind": "retry",
+          "turnId": "previous-turn",
+          "attemptId": "third-attempt",
+          "input": {
+            "text": "What does beginning mean?",
+            "origin": "suggested_question"
+          }
+        },
+        "dont_cache": true
+      },
+      "history": [],
+      "emptyTurnIds": []
+    },
+    {
+      "name": "new-after-empty",
+      "request": {
+        "protocol": "fluent-turn-v1",
+        "bookCode": "JHN",
+        "chapter": 1,
+        "activeVerse": 1,
+        "outputLanguage": "en",
+        "grounding": "english",
+        "contextReceipt": "fixture-context-not-a-signature",
+        "briefing": {
+          "markdown": "The Word was in the beginning.",
+          "sequence": 1,
+          "complete": true,
+          "receipt": "fixture-briefing-not-a-signature"
+        },
+        "turns": [
+          {
+            "turnId": "previous-turn",
+            "input": {
+              "text": "What does beginning mean?",
+              "origin": "suggested_question"
+            },
+            "selectedAttemptId": "empty-attempt",
+            "attempts": [
+              {
+                "attemptId": "empty-attempt",
+                "operationId": "operation-empty",
+                "state": "failed",
+                "prefix": null
+              }
+            ]
+          }
+        ],
+        "submission": {
+          "kind": "new",
+          "turnId": "turn-1",
+          "attemptId": "attempt-1",
+          "input": {
+            "text": "#help @hindi What does Word mean here?",
+            "origin": "typed"
+          }
+        },
+        "dont_cache": true
+      },
+      "history": [],
+      "emptyTurnIds": ["previous-turn"]
+    }
+  ],
+  "briefingIntegrity": {
+    "protocol": "fluent-turn-v1",
+    "contextReceipt": "fixture-context-not-a-signature",
+    "operationId": "briefing-operation",
+    "prefix": {
+      "sequence": 1,
+      "complete": false,
+      "receipt": "fixture-briefing-not-a-signature"
+    }
+  }
+}

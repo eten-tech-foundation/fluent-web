@@ -358,3 +358,7 @@ describe('Next Verse position when the rendered rows change', () => {
     expect(next.parentElement).toHaveStyle({ top: '600px' });
   });
 });
+
+vi.mock('@/features/assistant/components/AssistantConversationProvider', () => ({
+  AssistantNavigationBridge: () => null,
+}));

@@ -20,6 +20,7 @@ import {
   canonicalPassageBriefingSelection,
   nextPassageBriefingContext,
 } from '@/features/assistant/assistant.navigation';
+import { AssistantNavigationBridge } from '@/features/assistant/components/AssistantConversationProvider';
 import { AssistantPanel } from '@/features/assistant/components/AssistantPanel';
 import { useChapterAudio } from '@/features/audio/hooks/useChapterAudio';
 import { useAiSuggestions, useTrackAiUsage } from '@/features/bible/hooks/useAiSuggestions';
@@ -378,8 +379,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
     revealedVerses,
     lastRevealedVerseHasContent,
     displayMode,
-    includeFullPericopes:
-      displayMode === 'pericope' || (assistantEnabled && activeLeftTab === 'assistant'),
+    includeFullPericopes: displayMode === 'pericope' || assistantEnabled,
     getSaveStatus,
     saveImmediately,
     handleActiveVerseChange,
@@ -1380,6 +1380,28 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   return (
     <div className='flex h-full flex-col overflow-hidden'>
+      <AssistantNavigationBridge
+        navigation={{
+          context: assistantSelection?.context ?? rawAssistantContext,
+          ready: assistantEnabled && assistantContextReady,
+          passageChapters: assistantContextReady
+            ? [
+                ...new Set(
+                  fullPericopes
+                    .find(group =>
+                      group.verses.some(
+                        verse =>
+                          verse.chapterNumber === projectItem.chapterNumber &&
+                          verse.verseNumber === activeVerseId
+                      )
+                    )
+                    ?.verses.map(verse => verse.chapterNumber) ?? [projectItem.chapterNumber]
+                ),
+              ]
+            : undefined,
+          intent: `${projectItem.projectId}:${projectItem.chapterAssignmentId}`,
+        }}
+      />
       <RecordedNoticeDialog notice={tts.recordedNoticeDialog} onClose={tts.closeRecordedNotice} />
       <DraftingHeader
         activeFindingsCount={activeFindingsCount}

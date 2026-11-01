@@ -1,3 +1,5 @@
+import type { AssistantPrefix } from './assistant.turn.types';
+
 export const ASSISTANT_OUTPUT_CONTRACT_VERSION = 'fluent-widgets-v1';
 export const ASSISTANT_WEB_REQUEST_VERSION = 'passage-briefing-web-v1';
 
@@ -52,6 +54,8 @@ export interface PassageBriefingData {
   outputLanguage: string;
   /** True only when Fluent API explicitly reports a completed backend cache hit. */
   cacheHit: boolean;
+  integrity?: { contextReceipt: string; operationId: string; prefix: AssistantPrefix };
+  continuationUnavailable?: 'temporarily_unavailable' | 'context_too_large';
 }
 
 export type AssistantFailureCode =

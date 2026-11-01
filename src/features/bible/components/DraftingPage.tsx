@@ -4,6 +4,7 @@ import { useMatch, useNavigate } from '@tanstack/react-router';
 import { Loader } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { AssistantConversationProvider } from '@/features/assistant/components/AssistantConversationProvider';
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
@@ -120,28 +121,43 @@ const DraftingPage: React.FC = () => {
     projectItem
   );
 
-  if (!loaderData || !userdetail || !projectItem) {
-    return (
+  const assistantIntent = currentProjectItem ?? projectItem;
+  const intent = assistantIntent
+    ? `${assistantIntent.projectId}:${assistantIntent.chapterAssignmentId}`
+    : 'unresolved';
+  const content =
+    !loaderData || !userdetail || !projectItem ? (
       <div className='flex h-screen items-center justify-center'>
         <Loader className='h-8 w-8 animate-spin' />
       </div>
+    ) : (
+      <DraftingAudioPageBoundary
+        key={translationMatch ? 'translation' : 'view'}
+        pageKey={String(projectItem.chapterAssignmentId)}
+      >
+        <DraftingUI
+          key={projectItem.chapterAssignmentId}
+          projectItem={projectItem}
+          readOnly={isReadOnly}
+          sourceVerses={loaderData.sourceVerses}
+          targetVerses={loaderData.targetVerses}
+          userdetail={userdetail}
+        />
+      </DraftingAudioPageBoundary>
     );
-  }
-
   return (
-    <DraftingAudioPageBoundary
-      key={translationMatch ? 'translation' : 'view'}
-      pageKey={String(projectItem.chapterAssignmentId)}
+    <AssistantConversationProvider
+      actorId={userdetail?.id ?? null}
+      intent={intent}
+      projectId={assistantIntent?.projectId ?? null}
+      selector={
+        assistantIntent
+          ? { bookCode: assistantIntent.bookCode, chapter: assistantIntent.chapterNumber }
+          : undefined
+      }
     >
-      <DraftingUI
-        key={projectItem.chapterAssignmentId}
-        projectItem={projectItem}
-        readOnly={isReadOnly}
-        sourceVerses={loaderData.sourceVerses}
-        targetVerses={loaderData.targetVerses}
-        userdetail={userdetail}
-      />
-    </DraftingAudioPageBoundary>
+      {content}
+    </AssistantConversationProvider>
   );
 };
 

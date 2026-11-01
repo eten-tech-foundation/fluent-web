@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { config } from '@/lib/config';
 
 import {
+  assistantDelivery,
+  assistantFrames,
+  assistantResponseJson,
+  malformedStream,
+  utf8Bytes,
+  type AssistantDelivery,
+} from './assistant.stream';
+import { briefingIntegrityMetadataSchema, TURN_LIMITS } from './assistant.turn.types';
+import {
   AssistantBriefingError,
   type AssistantFailureCode,
   type AssistantLanguagesResponse,
@@ -86,18 +95,22 @@ export function buildPassageBriefingBody(request: PassageBriefingRequest): Recor
   };
 }
 
-async function responseFailure(response: Response): Promise<AssistantBriefingError> {
+async function responseFailure(
+  response: Response,
+  delivery?: AssistantDelivery
+): Promise<AssistantBriefingError> {
   let code = response.status === 429 ? 'rate_limited' : 'temporarily_unavailable';
   let retryable = response.status >= 429;
   let retryAfterSeconds: number | undefined;
   try {
     const parsed = errorSchema
       .pick({ code: true, retryable: true, retryAfter: true })
-      .parse(await response.json());
+      .parse(await assistantResponseJson(response, delivery));
     code = parsed.code;
     retryable = parsed.retryable;
     retryAfterSeconds = parsed.retryAfter;
-  } catch {
+  } catch (failure) {
+    if (failure instanceof AssistantBriefingError && failure.code === 'timed_out') throw failure;
     // Never surface an arbitrary server body or upstream/provider detail.
   }
   return new AssistantBriefingError(normalizedFailure(code), retryable, retryAfterSeconds);
@@ -118,58 +131,82 @@ export async function fetchAssistantLanguages(
   return parsed.data;
 }
 
-interface ParsedSseEvent {
-  event: string | null;
-  data: string;
-}
-
-function parseEventBlock(block: string): ParsedSseEvent | null {
-  let event: string | null = null;
-  const data: string[] = [];
-  for (const line of block.split(/\r?\n/)) {
-    if (line.startsWith(':')) continue;
-    const separator = line.indexOf(':');
-    const field = separator === -1 ? line : line.slice(0, separator);
-    let value = separator === -1 ? '' : line.slice(separator + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
-    if (field === 'event') event = value;
-    if (field === 'data') data.push(value);
-  }
-  return data.length === 0 ? null : { event, data: data.join('\n') };
-}
-
 export async function* parseAssistantEventStream(
-  body: ReadableStream<Uint8Array>
-): AsyncGenerator<StreamEvent> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let reading = true;
-  while (reading) {
-    const { done, value } = await reader.read();
-    reading = !done;
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: reading });
-    let boundary = /\r?\n\r?\n/.exec(buffer);
-    while (boundary) {
-      const parsed = parseEventBlock(buffer.slice(0, boundary.index));
-      buffer = buffer.slice(boundary.index + boundary[0].length);
-      if (parsed) {
-        let json: unknown;
-        try {
-          json = JSON.parse(parsed.data);
-        } catch {
-          throw new AssistantBriefingError('malformed_upstream_response', true);
-        }
-        const event = streamEventSchema.safeParse(json);
-        if (!event.success || (parsed.event !== null && parsed.event !== event.data.type)) {
-          throw new AssistantBriefingError('malformed_upstream_response', true);
-        }
-        yield event.data;
-      }
-      boundary = /\r?\n\r?\n/.exec(buffer);
-    }
+  body: ReadableStream<Uint8Array>,
+  delivery?: AssistantDelivery
+): AsyncGenerator<StreamEvent & Record<string, unknown>> {
+  for await (const raw of assistantFrames(body, delivery)) {
+    const event = streamEventSchema.safeParse(raw);
+    if (!event.success) throw malformedStream();
+    yield { ...(raw as Record<string, unknown>), ...event.data };
   }
-  if (buffer.trim()) throw new AssistantBriefingError('stream_incomplete', true);
+}
+
+function commitIntegrity(
+  current: PassageBriefingData,
+  event: Record<string, unknown>
+): PassageBriefingData {
+  if (event.continuationUnavailable !== undefined) {
+    if (
+      event.continuationUnavailable !== 'temporarily_unavailable' &&
+      event.continuationUnavailable !== 'context_too_large'
+    )
+      throw malformedStream();
+    if (
+      event.contextReceipt !== undefined ||
+      event.prefix !== undefined ||
+      event.protocol !== undefined
+    )
+      throw malformedStream();
+    return {
+      ...current,
+      integrity: undefined,
+      continuationUnavailable: event.continuationUnavailable,
+    };
+  }
+  if (
+    event.protocol === undefined &&
+    event.contextReceipt === undefined &&
+    event.prefix === undefined &&
+    event.operationId === undefined
+  ) {
+    if (current.integrity) throw malformedStream();
+    return current;
+  }
+  if (current.continuationUnavailable) throw malformedStream();
+  const parsed = briefingIntegrityMetadataSchema.safeParse({
+    protocol: event.protocol,
+    contextReceipt: event.contextReceipt,
+    operationId: event.operationId,
+    prefix: event.prefix,
+  });
+  if (!parsed.success || !parsed.data.prefix) throw malformedStream();
+  const metadata = parsed.data;
+  const prefix = parsed.data.prefix;
+  const previous = current.integrity;
+  if (!previous && event.type !== 'briefing_started') throw malformedStream();
+  const complete = event.type === 'briefing_complete';
+  const expected =
+    event.type === 'briefing_started'
+      ? 0
+      : (previous?.prefix.sequence ?? 0) + (event.type === 'briefing_delta' ? 1 : 0);
+  if (
+    metadata.operationId !== current.metadata?.attemptId ||
+    (previous && metadata.contextReceipt !== previous.contextReceipt) ||
+    prefix.sequence !== expected ||
+    prefix.complete !== complete ||
+    current.source.length > TURN_LIMITS.outputChars ||
+    utf8Bytes(current.source) > TURN_LIMITS.outputBytes
+  )
+    throw malformedStream();
+  return {
+    ...current,
+    integrity: {
+      contextReceipt: metadata.contextReceipt,
+      operationId: metadata.operationId,
+      prefix: { ...prefix, markdown: current.source },
+    },
+  };
 }
 
 export async function streamPassageBriefing(
@@ -177,81 +214,90 @@ export async function streamPassageBriefing(
   publish: (data: PassageBriefingData) => void,
   signal?: AbortSignal
 ): Promise<PassageBriefingData> {
-  let response: Response;
+  const delivery = assistantDelivery(signal);
   try {
-    response = await fetch(
-      `${config.api.url}/projects/${String(request.projectId)}/assistant/briefing`,
-      {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPassageBriefingBody(request)),
-        signal,
-      }
-    );
-  } catch {
-    throw new AssistantBriefingError('network_error', true);
-  }
-  if (!response.ok) throw await responseFailure(response);
-  if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
-    throw new AssistantBriefingError('malformed_upstream_response', true);
-  }
-
-  let current: PassageBriefingData = {
-    source: '',
-    phase: 'streaming',
-    metadata: null,
-    outputLanguage: request.outputLanguage,
-    cacheHit: false,
-  };
-  publish(current);
-  let started = false;
-  let completed = false;
-  for await (const event of parseAssistantEventStream(response.body)) {
-    if (completed) throw new AssistantBriefingError('malformed_upstream_response', true);
-    if (event.type === 'briefing_started') {
-      if (started) throw new AssistantBriefingError('malformed_upstream_response', true);
-      started = true;
-      current = {
-        ...current,
-        metadata: {
-          attemptId: event.attemptId,
-          operationVersion: event.operationVersion,
-          cacheEpoch: event.cacheEpoch,
-          outputContractVersion: event.outputContractVersion,
-          references: event.references,
-        },
-      };
-    } else if (event.type === 'briefing_delta') {
-      if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
-      current = { ...current, source: current.source + event.delta };
-    } else if (event.type === 'briefing_error') {
-      if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
-      throw new AssistantBriefingError(
-        normalizedFailure(event.code),
-        event.retryable,
-        event.retryAfter
+    let response: Response;
+    try {
+      response = await delivery.wait(
+        fetch(`${config.api.url}/projects/${String(request.projectId)}/assistant/briefing`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildPassageBriefingBody(request)),
+          signal: delivery.signal,
+        })
       );
-    } else {
-      if (
-        !started ||
-        current.metadata === null ||
-        current.source !== event.markdown ||
-        current.metadata.operationVersion !== event.operationVersion ||
-        current.metadata.cacheEpoch !== event.cacheEpoch ||
-        current.metadata.outputContractVersion !== event.outputContractVersion ||
-        request.outputLanguage !== event.outputLanguage
-      ) {
-        throw new AssistantBriefingError('malformed_upstream_response', true);
-      }
-      completed = true;
-      current = { ...current, phase: 'complete', cacheHit: event.cacheHit === true };
+      delivery.activity();
+    } catch (error) {
+      if (error instanceof AssistantBriefingError) throw error;
+      throw new AssistantBriefingError('network_error', true);
     }
-    // Completion becomes observable only after the stream closes cleanly. Until then a trailing
-    // event, truncated frame, or reader failure can still invalidate the provider response.
-    if (!completed) publish(current);
+    if (!response.ok) throw await delivery.wait(responseFailure(response, delivery));
+    if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+      throw new AssistantBriefingError('malformed_upstream_response', true);
+    }
+
+    let current: PassageBriefingData = {
+      source: '',
+      phase: 'streaming',
+      metadata: null,
+      outputLanguage: request.outputLanguage,
+      cacheHit: false,
+    };
+    publish(current);
+    let started = false;
+    let completed = false;
+    for await (const event of parseAssistantEventStream(response.body, delivery)) {
+      if (completed) throw new AssistantBriefingError('malformed_upstream_response', true);
+      if (event.type === 'briefing_started') {
+        if (started) throw new AssistantBriefingError('malformed_upstream_response', true);
+        started = true;
+        current = {
+          ...current,
+          metadata: {
+            attemptId: event.attemptId,
+            operationVersion: event.operationVersion,
+            cacheEpoch: event.cacheEpoch,
+            outputContractVersion: event.outputContractVersion,
+            references: event.references,
+          },
+        };
+      } else if (event.type === 'briefing_delta') {
+        if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
+        current = { ...current, source: current.source + event.delta };
+        if (utf8Bytes(current.source) > 96_000) throw malformedStream();
+      } else if (event.type === 'briefing_error') {
+        if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
+        commitIntegrity(current, event);
+        throw new AssistantBriefingError(
+          normalizedFailure(event.code),
+          event.retryable,
+          event.retryAfter
+        );
+      } else {
+        if (
+          !started ||
+          current.metadata === null ||
+          current.source !== event.markdown ||
+          current.metadata.operationVersion !== event.operationVersion ||
+          current.metadata.cacheEpoch !== event.cacheEpoch ||
+          current.metadata.outputContractVersion !== event.outputContractVersion ||
+          request.outputLanguage !== event.outputLanguage
+        ) {
+          throw new AssistantBriefingError('malformed_upstream_response', true);
+        }
+        completed = true;
+        current = { ...current, phase: 'complete', cacheHit: event.cacheHit === true };
+      }
+      current = commitIntegrity(current, event);
+      // Completion becomes observable only after the stream closes cleanly. Until then a trailing
+      // event, truncated frame, or reader failure can still invalidate the provider response.
+      if (!completed) publish(current);
+    }
+    if (current.phase !== 'complete') throw new AssistantBriefingError('stream_incomplete', true);
+    publish(current);
+    return current;
+  } finally {
+    delivery.close();
   }
-  if (current.phase !== 'complete') throw new AssistantBriefingError('stream_incomplete', true);
-  publish(current);
-  return current;
 }

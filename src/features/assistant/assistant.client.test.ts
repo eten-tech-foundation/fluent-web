@@ -109,7 +109,7 @@ describe('Assistant API client', () => {
     ]);
   });
 
-  it('publishes accumulated deltas before a verified completion without consuming an abort signal', async () => {
+  it('publishes accumulated deltas under its own bounded delivery signal', async () => {
     let init: RequestInit | undefined;
     vi.spyOn(globalThis, 'fetch').mockImplementation((_url, requestInit) => {
       init = requestInit;
@@ -131,7 +131,7 @@ describe('Assistant API client', () => {
     expect(updates).toContain('Hello ');
     expect(updates).toContain('Hello world');
     expect(result).toMatchObject({ source: 'Hello world', phase: 'complete', cacheHit: false });
-    expect(init?.signal).toBeUndefined();
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('passes an explicitly authorized private-attempt cancellation signal to fetch', async () => {
@@ -145,7 +145,7 @@ describe('Assistant API client', () => {
     });
 
     const result = streamPassageBriefing(request, () => undefined, controller.signal);
-    expect(receivedSignal).toBe(controller.signal);
+    expect(receivedSignal).toBeInstanceOf(AbortSignal);
     controller.abort();
     await expect(result).rejects.toMatchObject({ code: 'network_error', retryable: true });
   });

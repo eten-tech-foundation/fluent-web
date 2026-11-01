@@ -15,6 +15,7 @@ import {
 } from '../assistant.queries';
 import { ASSISTANT_STORAGE_KEYS } from '../assistant.storage';
 
+import { AssistantConversationProvider } from './AssistantConversationProvider';
 import { AssistantPanel } from './AssistantPanel';
 
 const api = config.api.url;
@@ -77,7 +78,11 @@ function byteStream(chunks: Uint8Array[]) {
 
 function wrapper(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <AssistantConversationProvider actorId={1} intent='7:1' projectId={7}>
+        {children}
+      </AssistantConversationProvider>
+    </QueryClientProvider>
   );
 }
 

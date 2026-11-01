@@ -199,12 +199,14 @@ export function passageBriefingQueryOptions(
 export function usePassageBriefing(
   queryClient: QueryClient,
   request: PassageBriefingRequest,
-  enabled: boolean
+  enabled: boolean,
+  subscribed = true
 ): UseQueryResult<PassageBriefingData> {
   const queryKey = passageBriefingQueryKey(request);
   const selectedAttemptFailed = queryClient.getQueryState(queryKey)?.status === 'error';
   return useQuery({
     ...passageBriefingQueryOptions(queryClient, request),
+    subscribed,
     // A failed selected attempt is terminal until the user selects a new attempt with Retry.
     // This also blocks stale-data and persistent-bypass refetchOnMount behavior.
     enabled: enabled && !selectedAttemptFailed,

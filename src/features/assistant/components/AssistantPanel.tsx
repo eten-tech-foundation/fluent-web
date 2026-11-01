@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -24,6 +24,7 @@ import {
   type PassageBriefingRequest,
 } from '../assistant.types';
 
+import { useAssistantConversation } from './AssistantConversationProvider';
 import { AssistantMarkdown } from './AssistantMarkdown';
 
 const CONTEXT_DEBOUNCE_MS = 250;
@@ -65,11 +66,18 @@ export function AssistantPanel({
   reference,
 }: AssistantPanelProps) {
   const queryClient = useQueryClient();
+  const { owner, state: conversation } = useAssistantConversation();
+  useLayoutEffect(() => {
+    owner.navigate({ context, ready: contextReady, intent: owner.getSnapshot().intent });
+  }, [owner, context, contextReady]);
   const persistedLanguage = useRef(readAssistantOutputLanguage()).current;
   const languages = useAssistantLanguages(context.projectId, persistedLanguage, true);
-  const [outputLanguage, setOutputLanguage] = useState('');
+  const outputLanguage = conversation.outputLanguage;
+  const setOutputLanguage = (language: string) => owner.configure(language);
   const [ignoreCache, setIgnoreCache] = useState(readAssistantIgnoreCache);
-  const [grounding, setGrounding] = useState<AssistantGroundingChoice>('configured');
+  const grounding = conversation.grounding;
+  const setGrounding = (choice: AssistantGroundingChoice) =>
+    owner.configure(outputLanguage, choice);
   const touchedSuccessors = useRef(new Set<string>());
   const debouncedContext = useDebouncedContext(context);
 
@@ -78,10 +86,14 @@ export function AssistantPanel({
     if (!response) return;
     const supported = response.languages.some(language => language.code === outputLanguage);
     if (!supported) {
-      setOutputLanguage(response.defaultLanguage);
+      owner.configure(response.defaultLanguage);
       writeAssistantOutputLanguage(response.defaultLanguage);
     }
-  }, [languages.data, outputLanguage]);
+  }, [languages.data, outputLanguage, owner]);
+
+  useEffect(() => {
+    if (!localForceOn && grounding !== 'configured') owner.configure(outputLanguage, 'configured');
+  }, [localForceOn, grounding, owner, outputLanguage]);
 
   const diagnosticGrounding = localForceOn ? grounding : null;
   const storedIgnoreCache = localForceOn && ignoreCache;
@@ -108,12 +120,44 @@ export function AssistantPanel({
   const briefing = usePassageBriefing(
     queryClient,
     request,
-    contextReady && contextIsCurrent && outputLanguage !== '' && !selectedAttempt.cancelled
+    contextReady &&
+      contextIsCurrent &&
+      outputLanguage !== '' &&
+      !selectedAttempt.cancelled &&
+      !conversation.pinned,
+    !conversation.pinned
   );
   const queryIdentity = JSON.stringify(request);
+  useEffect(() => {
+    if (!owner.consumeRefresh()) return;
+    startPassageBriefingAttempt(queryClient, baseRequest, false);
+  }, [owner, conversation.refresh, queryClient, baseRequest]);
+  useEffect(() => {
+    if (
+      contextReady &&
+      contextIsCurrent &&
+      request.outputLanguage === conversation.outputLanguage &&
+      JSON.stringify(selectedPassageBriefingRequest(queryClient, baseRequest)) ===
+        JSON.stringify(request)
+    )
+      owner.observeBriefing(briefing.data ?? null, conversation.generation);
+  }, [
+    owner,
+    briefing.data,
+    contextReady,
+    contextIsCurrent,
+    request.outputLanguage,
+    conversation.outputLanguage,
+    conversation.generation,
+    queryClient,
+    baseRequest,
+    request,
+  ]);
+  const displayedBriefing = conversation.pinned ?? briefing.data;
 
   useEffect(() => {
     if (
+      conversation.pinned ||
       briefing.data?.phase !== 'complete' ||
       !contextIsCurrent ||
       request.ignoreCache ||
@@ -136,6 +180,7 @@ export function AssistantPanel({
     if (queryClient.getQueryState(passageBriefingQueryKey(successor))?.status === 'error') return;
     void prefetchPassageBriefing(queryClient, successor);
   }, [
+    conversation.pinned,
     briefing.data?.phase,
     contextIsCurrent,
     diagnosticGrounding,
@@ -148,6 +193,10 @@ export function AssistantPanel({
   ]);
 
   const startAttempt = (forceFresh: boolean) => {
+    if (forceFresh) {
+      owner.reset();
+      owner.consumeRefresh();
+    }
     startPassageBriefingAttempt(queryClient, baseRequest, forceFresh);
   };
 
@@ -155,8 +204,8 @@ export function AssistantPanel({
     localForceOn &&
     contextReady &&
     contextIsCurrent &&
-    briefing.data?.phase === 'complete' &&
-    briefing.data.cacheHit;
+    displayedBriefing?.phase === 'complete' &&
+    displayedBriefing.cacheHit;
 
   return (
     <div
@@ -207,30 +256,34 @@ export function AssistantPanel({
           contextReady &&
           contextIsCurrent &&
           outputLanguage &&
-          briefing.data?.source && (
+          displayedBriefing?.source && (
             <AssistantMarkdown
-              outputContractVersion={briefing.data.metadata?.outputContractVersion ?? null}
-              source={briefing.data.source}
+              outputContractVersion={displayedBriefing.metadata?.outputContractVersion ?? null}
+              source={displayedBriefing.source}
             />
           )}
-        {!languages.isError &&
+        {!conversation.pinned &&
+          !languages.isError &&
           contextReady &&
           outputLanguage &&
           (!contextIsCurrent || (!briefing.data?.source && briefing.isFetching)) && (
             <p className='text-muted-foreground text-sm'>Preparing this passage briefing…</p>
           )}
-        {contextReady && contextIsCurrent && (briefing.isError || selectedAttempt.cancelled) && (
-          <div role='alert'>
-            <FailureMessage message='The briefing did not finish.' />
-            <button
-              className='text-primary mt-2 text-sm font-semibold underline underline-offset-2'
-              type='button'
-              onClick={() => startAttempt(false)}
-            >
-              Retry
-            </button>
-          </div>
-        )}
+        {!conversation.pinned &&
+          contextReady &&
+          contextIsCurrent &&
+          (briefing.isError || selectedAttempt.cancelled) && (
+            <div role='alert'>
+              <FailureMessage message='The briefing did not finish.' />
+              <button
+                className='text-primary mt-2 text-sm font-semibold underline underline-offset-2'
+                type='button'
+                onClick={() => startAttempt(false)}
+              >
+                Retry
+              </button>
+            </div>
+          )}
       </div>
 
       {localForceOn && (
