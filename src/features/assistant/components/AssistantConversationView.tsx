@@ -211,9 +211,9 @@ export function AssistantConversationView({
           <textarea
             aria-describedby={!typedAvailable ? 'assistant-composer-help' : undefined}
             aria-label={t('assistant.question', 'Question about this passage')}
-            className='border-input bg-background max-h-32 min-h-10 min-w-0 flex-1 resize-y rounded-md border px-3 py-2 text-sm'
+            className='border-input bg-background max-h-32 min-h-16 min-w-0 flex-1 resize-y rounded-md border px-3 py-2 text-sm'
             placeholder={t('assistant.placeholder', 'Ask a question about this passage...')}
-            rows={1}
+            rows={2}
             value={state.draft}
             onChange={event => {
               owner.setDraft(event.target.value);
