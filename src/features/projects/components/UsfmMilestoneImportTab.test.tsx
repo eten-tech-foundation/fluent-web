@@ -263,6 +263,36 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     expect(toast.success).toHaveBeenCalledWith('milestoneCreated');
   });
 
+  it('locks the upload area and the remove buttons while the import runs', async () => {
+    let finish!: () => void;
+    server.use(
+      http.post(USFM_IMPORT_URL, async () => {
+        await new Promise<void>(resolve => {
+          finish = resolve;
+        });
+        return HttpResponse.json({ id: 500, name: 'Short Letters' }, { status: 201 });
+      })
+    );
+    const { user, onImported } = renderTab();
+
+    drop([bookFile('JAS'), bookFile('JUD')]);
+    await settled();
+    await user.type(screen.getByLabelText('*milestoneName'), 'Short Letters');
+    await user.click(importButton());
+
+    const remove = screen.getByRole('button', { name: 'removeUsfmFile Kachi-Koli-JAS.usfm' });
+    await waitFor(() => expect(remove).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'selectFile' })).toBeDisabled();
+    expect(screen.getByTestId('usfm-file-input')).toBeDisabled();
+    expect(screen.getByTestId('usfm-drop-area')).toHaveAttribute('aria-disabled', 'true');
+    drop([bookFile('1PE')]);
+    expect(screen.queryByText('checkingUsfmFiles')).not.toBeInTheDocument();
+
+    finish();
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    expect(listedFiles()).toEqual(['Kachi-Koli-JAS.usfm', 'Kachi-Koli-JUD.usfm']);
+  });
+
   it('takes the files the import refused off the list, each with its error', async () => {
     server.use(
       http.post(USFM_IMPORT_URL, async ({ request }) => {

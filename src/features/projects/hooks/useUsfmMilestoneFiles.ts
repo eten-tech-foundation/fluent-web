@@ -28,7 +28,10 @@ export type UsfmFileErrorReason =
   | 'CHECK_NETWORK'
   | 'CHECK_FAILED';
 
-/** A refused file, shown in its own box under the upload area until it is dismissed (#418). */
+/**
+ * A refused file, shown in its own box under the upload area. Adding more files leaves it there;
+ * only its X takes it away (Chad on #418).
+ */
 export interface UsfmFileError {
   id: string;
   fileName: string;
@@ -37,14 +40,6 @@ export interface UsfmFileError {
   milestoneName?: string | null;
   sourceBibleName?: string;
 }
-
-/**
- * Whether adding files clears the error boxes already on screen. #418 says an error stays "until
- * the user dismisses it or adds another file", but until the PM answers the question on #418 the
- * agreed default is that each box stays until its X is clicked.
- */
-// Widened to boolean so the branch that reads it stays typed for both answers.
-const NEW_FILES_CLEAR_ERRORS = false as boolean;
 
 type CheckOutcome =
   | { id: string; fileName: string; usfm: string; verdict: UsfmFileVerdict }
@@ -83,11 +78,7 @@ const errorFromVerdict = (
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'checking':
-      return {
-        ...state,
-        errors: NEW_FILES_CLEAR_ERRORS ? [] : state.errors,
-        checking: state.checking + action.count,
-      };
+      return { ...state, checking: state.checking + action.count };
     case 'checked': {
       const files = [...state.files];
       const errors = [...state.errors];
@@ -102,12 +93,14 @@ function reducer(state: State, action: Action): State {
         } else if (files.some(file => file.bookCode === verdict.bookCode)) {
           // Two adds checked at the same time can't see each other's books, so the one that
           // finishes second is caught here instead.
-          errors.push({
-            id: outcome.id,
-            fileName: outcome.fileName,
-            reason: 'USFM_BOOK_DUPLICATE',
-            bookName: verdict.bookName,
-          });
+          errors.push(
+            errorFromVerdict(outcome.id, {
+              ...verdict,
+              ok: false,
+              error: 'USFM_BOOK_DUPLICATE',
+              message: '',
+            })
+          );
         } else {
           files.push({
             id: outcome.id,
@@ -219,8 +212,28 @@ export function useUsfmMilestoneFiles(projectId: number) {
     [nextId]
   );
 
+  /**
+   * The project gained one of `sent`'s books after the upload check, so the import was refused as
+   * a whole (409). Checking the files again names the book and takes its file off the list.
+   * Returns how many files were refused; 0 when none was, or the check itself failed.
+   */
+  const recheck = useCallback(
+    async (sent: ListedUsfmFile[]) => {
+      try {
+        const verdicts = await checkMilestoneUsfmFiles(projectId, sent, []);
+        return refuse(sent, verdicts);
+      } catch (error) {
+        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
+          source: 'usfm milestone import recheck',
+        });
+        return 0;
+      }
+    },
+    [projectId, refuse]
+  );
+
   const removeFile = useCallback((id: string) => dispatch({ type: 'remove', id }), []);
   const dismissError = useCallback((id: string) => dispatch({ type: 'dismiss', id }), []);
 
-  return { ...state, addFiles, refuse, removeFile, dismissError };
+  return { ...state, addFiles, refuse, recheck, removeFile, dismissError };
 }

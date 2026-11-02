@@ -143,7 +143,9 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   is and whether it can be imported, so the upload check and the import can't disagree. Each file
   is checked when it is added and refused on its own: not USFM, no book, a book already listed, a
   book the project holds in any milestone (removed ones too, since an import never merges) or a
-  book its Source Bible lacks. Tests:
+  book its Source Bible lacks. The web side is `src/features/projects/hooks/useUsfmMilestoneFiles.ts`
+  (the list, one error per refused file, two adds of one book at once) and
+  `src/features/projects/lib/usfm-import.ts` (the check request and Bible order). Tests:
   `src/features/projects/components/UsfmMilestoneImportTab.test.tsx` › "refuses each bad file in
   its own box and keeps the good ones" and "refuses the later of two files for one book added at
   the same time".

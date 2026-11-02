@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { fetchOrNetworkError } from '@/lib/api-utils';
+import { postJson, readErrorBody } from '@/lib/api-utils';
 import { config } from '@/lib/config';
 
 import {
+  toUploads,
   UsfmImportConflictError,
   UsfmImportRejectedError,
   type UsfmFileUpload,
@@ -86,21 +87,13 @@ const importUsfmMilestone = async (
   projectId: string | number,
   input: ImportUsfmMilestoneInput
 ): Promise<Milestone> => {
-  const res = await fetchOrNetworkError(
-    `${config.api.url}/projects/${projectId}/milestones/import`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    }
-  );
+  const res = await postJson(`${config.api.url}/projects/${projectId}/milestones/import`, {
+    name: input.name,
+    files: toUploads(input.files),
+  });
   if (res.ok) return (await res.json()) as Milestone;
 
-  const body = (await res.json().catch(() => null)) as {
-    message?: string;
-    files?: UsfmFileVerdict[];
-  } | null;
+  const body = await readErrorBody<{ message?: string; files?: UsfmFileVerdict[] }>(res);
   if (res.status === 400 && body?.files) throw new UsfmImportRejectedError(body.files);
   if (res.status === 409) {
     throw new UsfmImportConflictError(body?.message ?? 'A book in this import is in the project');

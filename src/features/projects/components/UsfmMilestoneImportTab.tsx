@@ -13,13 +13,8 @@ import { cn } from '@/lib/utils';
 
 import { useImportUsfmMilestone } from '../hooks/useMilestones';
 import { type ProjectDetails } from '../hooks/useProjectDetails';
+import { type UsfmFileError, useUsfmMilestoneFiles } from '../hooks/useUsfmMilestoneFiles';
 import {
-  type ListedUsfmFile,
-  type UsfmFileError,
-  useUsfmMilestoneFiles,
-} from '../hooks/useUsfmMilestoneFiles';
-import {
-  checkMilestoneUsfmFiles,
   compareBibleOrder,
   UsfmImportConflictError,
   UsfmImportRejectedError,
@@ -86,15 +81,22 @@ export function UsfmMilestoneImportTab({
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [name, setName] = useState('');
-  const { files, errors, checking, addFiles, refuse, removeFile, dismissError } =
+  const { files, errors, checking, addFiles, refuse, recheck, removeFile, dismissError } =
     useUsfmMilestoneFiles(projectId);
   const importMilestone = useImportUsfmMilestone(projectId);
+  // While the import runs, the list is what was sent: a file added now would be dropped unseen
+  // when the dialog closes, and one removed now would be imported anyway.
+  const isImporting = importMilestone.isPending;
 
-  const openFilePicker = () => inputRef.current?.click();
+  const openFilePicker = () => {
+    if (!isImporting) inputRef.current?.click();
+  };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    // Always prevented, or the browser would open the dropped file in place of the app.
     event.preventDefault();
     setIsDraggingOver(false);
+    if (isImporting) return;
     void addFiles(Array.from(event.dataTransfer.files));
   };
 
@@ -110,44 +112,21 @@ export function UsfmMilestoneImportTab({
     .map(file => file.bookName)
     .join(', ');
 
-  const canImport =
-    Boolean(name.trim()) && files.length > 0 && checking === 0 && !importMilestone.isPending;
-
-  /**
-   * The project gained one of the books after the upload check, so the import was refused as a
-   * whole (409). Checking the files again names the book and takes its file off the list.
-   */
-  const showConflict = async (sent: ListedUsfmFile[]) => {
-    try {
-      const verdicts = await checkMilestoneUsfmFiles(
-        projectId,
-        sent.map(({ fileName, usfm }) => ({ fileName, usfm })),
-        []
-      );
-      if (refuse(sent, verdicts) > 0) return;
-    } catch (error) {
-      Logger.logException(error instanceof Error ? error : new Error(String(error)), {
-        source: 'usfm milestone import recheck',
-      });
-    }
-    toast.error(t('milestoneImportFailed'));
-  };
+  const canImport = Boolean(name.trim()) && files.length > 0 && checking === 0 && !isImporting;
 
   const handleImport = async () => {
     if (!canImport) return;
     const sent = files;
     try {
-      await importMilestone.mutateAsync({
-        name: name.trim(),
-        files: sent.map(({ fileName, usfm }) => ({ fileName, usfm })),
-      });
+      await importMilestone.mutateAsync({ name: name.trim(), files: sent });
       toast.success(t('milestoneCreated'));
       onImported();
     } catch (error) {
       if (error instanceof UsfmImportRejectedError) {
         if (refuse(sent, error.verdicts) > 0) return;
       } else if (error instanceof UsfmImportConflictError) {
-        await showConflict(sent);
+        if ((await recheck(sent)) > 0) return;
+        toast.error(t('milestoneImportFailed'));
         return;
       }
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -163,15 +142,23 @@ export function UsfmMilestoneImportTab({
     <div className='grid gap-4 py-4'>
       {/* The whole area opens the picker, as in the mockup; the button is the visible cue. */}
       <div
+        aria-disabled={isImporting}
         className={cn(
-          'bg-background hover:border-primary hover:bg-muted cursor-pointer rounded-sm border-2 border-dashed px-5 py-6 text-center transition-colors',
-          isDraggingOver ? 'border-primary bg-muted' : 'border-border'
+          'bg-background rounded-sm border-2 border-dashed px-5 py-6 text-center transition-colors',
+          isImporting
+            ? 'cursor-not-allowed opacity-60'
+            : 'hover:border-primary hover:bg-muted cursor-pointer',
+          isDraggingOver && !isImporting ? 'border-primary bg-muted' : 'border-border'
         )}
         data-testid='usfm-drop-area'
         onClick={openFilePicker}
         onDragLeave={handleDragLeave}
         onDragOver={event => {
           event.preventDefault();
+          if (isImporting) {
+            event.dataTransfer.dropEffect = 'none';
+            return;
+          }
           setIsDraggingOver(true);
         }}
         onDrop={handleDrop}
@@ -184,6 +171,7 @@ export function UsfmMilestoneImportTab({
         </p>
         <Button
           className='hover:border-primary hover:text-primary mt-3.5 h-auto px-4 py-1.5 text-[13px] font-semibold'
+          disabled={isImporting}
           type='button'
           variant='outline'
           onClick={event => {
@@ -197,8 +185,11 @@ export function UsfmMilestoneImportTab({
         <input
           ref={inputRef}
           multiple
+          // The picker opens on USFM files; anything else that gets through is still checked.
+          accept='.usfm,.sfm,.txt'
           className='hidden'
           data-testid='usfm-file-input'
+          disabled={isImporting}
           type='file'
           onChange={event => {
             const picked = Array.from(event.target.files ?? []);
@@ -252,7 +243,8 @@ export function UsfmMilestoneImportTab({
               </span>
               <button
                 aria-label={t('removeUsfmFile', { fileName: file.fileName })}
-                className='text-muted-foreground hover:text-foreground shrink-0'
+                className='text-muted-foreground hover:text-foreground shrink-0 disabled:cursor-not-allowed disabled:opacity-50'
+                disabled={isImporting}
                 type='button'
                 onClick={() => removeFile(file.id)}
               >

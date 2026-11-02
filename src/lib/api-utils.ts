@@ -2,8 +2,13 @@ export interface ApiErrorResponse {
   message?: string;
 }
 
+/** The JSON body of a failed response, or null when it has none. */
+export const readErrorBody = async <T extends ApiErrorResponse = ApiErrorResponse>(
+  res: Response
+): Promise<T | null> => (await res.json().catch(() => null)) as T | null;
+
 export const parseErrorMessage = async (res: Response, fallback: string): Promise<never> => {
-  const error = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+  const error = await readErrorBody(res);
   throw new Error(error?.message ?? fallback);
 };
 
@@ -35,3 +40,12 @@ export const fetchOrNetworkError = async (
     throw new NetworkError(error);
   }
 };
+
+/** A JSON POST with the session cookie, through fetchOrNetworkError. */
+export const postJson = (url: string, body: unknown): Promise<Response> =>
+  fetchOrNetworkError(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });

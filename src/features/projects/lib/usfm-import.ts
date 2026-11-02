@@ -1,6 +1,6 @@
 import { VALID_BOOK_CODES } from '@eten-tech-foundation/scripture-utilities';
 
-import { fetchOrNetworkError, parseErrorMessage } from '@/lib/api-utils';
+import { parseErrorMessage, postJson } from '@/lib/api-utils';
 import { config } from '@/lib/config';
 
 /** Why the API refused a file for the Add Milestone import (#418). */
@@ -30,6 +30,10 @@ export interface UsfmFileUpload {
   fileName: string;
   usfm: string;
 }
+
+/** Only the name and text of each file go to the API, whatever else the caller keeps on it. */
+export const toUploads = (files: UsfmFileUpload[]): UsfmFileUpload[] =>
+  files.map(({ fileName, usfm }) => ({ fileName, usfm }));
 
 /** Any USFM marker: a backslash and a marker name, such as `\id`, `\c` or `\mt1`. */
 const MARKER = /\\[a-zA-Z]+\d*/;
@@ -65,15 +69,10 @@ export async function checkMilestoneUsfmFiles(
   files: UsfmFileUpload[],
   listedBookCodes: string[]
 ): Promise<UsfmFileVerdict[]> {
-  const res = await fetchOrNetworkError(
-    `${config.api.url}/projects/${projectId}/milestones/usfm-validation`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files, listedBookCodes }),
-    }
-  );
+  const res = await postJson(`${config.api.url}/projects/${projectId}/milestones/usfm-validation`, {
+    files: toUploads(files),
+    listedBookCodes,
+  });
   if (!res.ok) await parseErrorMessage(res, 'Failed to check the USFM files');
 
   const { files: verdicts } = (await res.json()) as { files: UsfmFileVerdict[] };

@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
 import { useCreateMilestone, useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { config } from '@/lib/config';
-import { cn } from '@/lib/utils';
 
 import { type UsfmImportDestination, UsfmMilestoneImportTab } from './UsfmMilestoneImportTab';
 
@@ -84,10 +83,12 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
       <DialogContent
-        className={cn(
-          'max-h-[90vh] overflow-x-hidden overflow-y-auto',
-          config.features.usfmImport ? 'sm:max-w-[540px]' : 'sm:max-w-[425px]'
-        )}
+        // The Import tab is taller and wider than New, so only it needs the wider, scrolling box.
+        className={
+          config.features.usfmImport
+            ? 'max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-[540px]'
+            : 'sm:max-w-[425px]'
+        }
       >
         <DialogHeader>
           <DialogTitle>{t('addMilestone')}</DialogTitle>
