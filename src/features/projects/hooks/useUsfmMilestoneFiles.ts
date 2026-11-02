@@ -22,7 +22,11 @@ export interface ListedUsfmFile {
 }
 
 /** A problem with the file itself, or the check itself failing (no answer, or an error). */
-export type UsfmFileErrorReason = UsfmFileProblem | 'CHECK_NETWORK' | 'CHECK_FAILED';
+export type UsfmFileErrorReason =
+  | UsfmFileProblem
+  | 'FILE_UNREADABLE'
+  | 'CHECK_NETWORK'
+  | 'CHECK_FAILED';
 
 /** A refused file, shown in its own box under the upload area until it is dismissed (#418). */
 export interface UsfmFileError {
@@ -44,7 +48,11 @@ const NEW_FILES_CLEAR_ERRORS = false as boolean;
 
 type CheckOutcome =
   | { id: string; fileName: string; usfm: string; verdict: UsfmFileVerdict }
-  | { id: string; fileName: string; reason: 'USFM_INVALID' | 'CHECK_NETWORK' | 'CHECK_FAILED' };
+  | {
+      id: string;
+      fileName: string;
+      reason: 'USFM_INVALID' | 'FILE_UNREADABLE' | 'CHECK_NETWORK' | 'CHECK_FAILED';
+    };
 
 interface State {
   files: ListedUsfmFile[];
@@ -152,24 +160,35 @@ export function useUsfmMilestoneFiles(projectId: number) {
 
       let outcomes: CheckOutcome[];
       try {
-        const texts = await Promise.all(files.map(file => file.text()));
+        // A file that can't be read (a dropped folder, a file removed since it was picked) is
+        // refused on its own; the rest of the drop is still checked.
+        const reads = await Promise.allSettled(files.map(file => file.text()));
+        const texts = reads.map(read => (read.status === 'fulfilled' ? read.value : null));
         // Text without a single marker never goes to the API. The rest go in one request, so
         // every file's problem shows at once.
-        const toCheck = texts.flatMap((text, index) => (looksLikeUsfm(text) ? [index] : []));
+        const toCheck = texts.flatMap((text, index) =>
+          text !== null && looksLikeUsfm(text) ? [index] : []
+        );
         const verdicts =
           toCheck.length > 0
             ? await checkMilestoneUsfmFiles(
                 projectId,
-                toCheck.map(index => ({ fileName: files[index].name, usfm: texts[index] })),
+                toCheck.map(index => ({ fileName: files[index].name, usfm: texts[index] ?? '' })),
                 listedRef.current
               )
             : [];
         const verdictByIndex = new Map(toCheck.map((index, i) => [index, verdicts[i]]));
         outcomes = files.map((file, index) => {
           const verdict = verdictByIndex.get(index);
-          return verdict
-            ? { id: ids[index], fileName: file.name, usfm: texts[index], verdict }
-            : { id: ids[index], fileName: file.name, reason: 'USFM_INVALID' };
+          const text = texts[index];
+          if (verdict && text !== null) {
+            return { id: ids[index], fileName: file.name, usfm: text, verdict };
+          }
+          return {
+            id: ids[index],
+            fileName: file.name,
+            reason: text === null ? 'FILE_UNREADABLE' : 'USFM_INVALID',
+          };
         });
       } catch (error) {
         Logger.logException(error instanceof Error ? error : new Error(String(error)), {

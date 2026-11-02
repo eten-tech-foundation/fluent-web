@@ -87,6 +87,7 @@
   "errorBookInMilestone": "{{book}} already exists in {{milestone}}.",
   "errorBookInProject": "{{book}} already exists in this project.",
   "errorBookNotInSourceBible": "{{book}} is not in {{bible}}.",
+  "errorFileUnreadable": "Couldn't read this file.",
   "errorUsfmCheckNetwork": "Couldn't check this file. Check your connection and try again.",
   "errorUsfmCheckFailed": "Couldn't check this file. Please try again.",
   "uploadUsfmFiles": "Upload USFM files",

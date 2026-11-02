@@ -63,6 +63,8 @@ function useErrorMessage() {
         return t('errorBookNotInSourceBible', { book, bible: error.sourceBibleName ?? '' });
       case 'CHECK_NETWORK':
         return t('errorUsfmCheckNetwork');
+      case 'FILE_UNREADABLE':
+        return t('errorFileUnreadable');
       case 'CHECK_FAILED':
         return t('errorUsfmCheckFailed');
     }

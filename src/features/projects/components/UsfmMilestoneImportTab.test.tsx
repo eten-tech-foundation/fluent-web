@@ -360,6 +360,20 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     expect(importButton()).toBeEnabled();
   });
 
+  it('refuses a file that cannot be read on its own, and still checks the rest', async () => {
+    renderTab();
+    const folder = new File([''], 'Letters');
+    Object.defineProperty(folder, 'text', {
+      value: () => Promise.reject(new DOMException('A folder', 'NotReadableError')),
+    });
+
+    drop([folder, bookFile('JUD')]);
+    await settled();
+
+    expect(errorBoxes()).toEqual(['Letters: errorFileUnreadable']);
+    expect(listedFiles()).toEqual(['Kachi-Koli-JUD.usfm']);
+  });
+
   it('shows a no-connection error for each file whose check got no answer', async () => {
     server.use(http.post(USFM_CHECK_URL, () => HttpResponse.error()));
     renderTab();
