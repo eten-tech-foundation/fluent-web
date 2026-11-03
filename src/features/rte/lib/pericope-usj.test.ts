@@ -615,6 +615,100 @@ describe('a pericope that starts inside a paragraph (#530)', () => {
   });
 });
 
+// #530: a paragraph that starts with a Poetry line, written `\p` then `\q1 \v 3` in USFM.
+describe('an empty p before the line a verse starts', () => {
+  const P_THEN_Q1 = {
+    paragraphs: [
+      { marker: 'p', offset: 0 },
+      { marker: 'q1', offset: 0 },
+    ],
+  };
+  const rows: PericopeVerseText[] = [
+    { verseNumber: 1, text: 'First.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
+    { verseNumber: 2, text: 'Second.', markers: P_THEN_Q1 },
+  ];
+  const verse = (number: string) => ({ type: 'verse', marker: 'v', number }) as const;
+  const document = (...content: Usj['content']): Usj =>
+    ({ type: 'USJ', version: '3.1', content }) as Usj;
+
+  it('loads as an empty p, then the verse on its own line', () => {
+    expect(pericopeVersesToUsj(rows, 1).content.slice(1)).toEqual([
+      { type: 'para', marker: 'p', content: [verse('1'), 'First.'] },
+      { type: 'para', marker: 'p', content: [] },
+      { type: 'para', marker: 'q1', content: [verse('2'), 'Second.'] },
+    ]);
+  });
+
+  it('saves the empty p ahead of the line, and reloads the same', () => {
+    expect(usjToPericopeVerses(pericopeVersesToUsj(rows, 1))).toEqual(rows);
+    const editorShape = document(
+      { type: 'para', marker: 'p', content: [verse('1'), 'First.'] },
+      { type: 'para', marker: 'p' },
+      { type: 'para', marker: 'q1', content: [verse('2'), 'Second.'] }
+    );
+    expect(usjToPericopeVerses(editorShape)).toEqual(rows);
+  });
+
+  it('counts a p holding only the caret spaces as empty', () => {
+    const usj = document(
+      { type: 'para', marker: 'p', content: [verse('1'), 'First.'] },
+      { type: 'para', marker: 'p', content: ['  '] },
+      { type: 'para', marker: 'q1', content: [verse('2'), 'Second.'] }
+    );
+    expect(usjToPericopeVerses(usj)[1].markers).toEqual(P_THEN_Q1);
+  });
+
+  it('keeps it under a heading too', () => {
+    const usj = document(
+      { type: 'para', marker: 's1', content: ['A song'] },
+      { type: 'para', marker: 'p' },
+      { type: 'para', marker: 'q1', content: [verse('1'), 'One.'] }
+    );
+    expect(usjToPericopeVerses(usj)[0].markers).toEqual({
+      ...P_THEN_Q1,
+      headings: [{ marker: 's1', text: 'A song' }],
+    });
+  });
+
+  it.each([
+    [
+      'before a p line',
+      [
+        { type: 'para', marker: 'p' },
+        { type: 'para', marker: 'p', content: [verse('2'), 'Second.'] },
+      ],
+      [{ marker: 'p', offset: 0 }],
+    ],
+    [
+      'before a line with words ahead of its number',
+      [
+        { type: 'para', marker: 'p' },
+        { type: 'para', marker: 'q1', content: ['Before ', verse('2'), 'Second.'] },
+      ],
+      null,
+    ],
+    [
+      'when it is a Poetry line, not a p',
+      [
+        { type: 'para', marker: 'q2' },
+        { type: 'para', marker: 'q1', content: [verse('2'), 'Second.'] },
+      ],
+      [{ marker: 'q1', offset: 0 }],
+    ],
+  ])('drops an empty paragraph %s, as before', (_, blocks, paragraphs) => {
+    const usj = document(
+      { type: 'para', marker: 'p', content: [verse('1'), 'First.'] },
+      ...(blocks as Usj['content'])
+    );
+    expect(usjToPericopeVerses(usj)[1].markers?.paragraphs ?? null).toEqual(paragraphs);
+  });
+
+  it('leaves the line it opens as the paragraph open after the verse', () => {
+    expect(openParagraphAfter(rows)).toBe('q1');
+    expect(continuedParagraphOf(rows.slice(1), 'p')).toBeUndefined();
+  });
+});
+
 describe('openParagraphAfter', () => {
   it('is the paragraph the last verse leaves open', () => {
     expect(
