@@ -28,7 +28,10 @@ export const PericopeText = ({
     : isLoading
       ? t('loading', 'Loading...')
       : isError
-        ? t('errorLoadingBibleContent', 'Unable to load Bible content.')
+        ? t(
+            'errorLoadingBibleContent',
+            'This Bible is temporarily unavailable. Please try again later.'
+          )
         : emptyState === 'not-drafted'
           ? ''
           : t('noContentAvailable', 'No content available');

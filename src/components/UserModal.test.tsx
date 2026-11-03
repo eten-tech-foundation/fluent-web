@@ -55,13 +55,13 @@ const setup = (overrides: Partial<React.ComponentProps<typeof UserModal>> = {}) 
 };
 
 describe('UserModal — create', () => {
-  it('offers Organization Member + Org Manager in the role dropdown (project roles stay project-scoped)', async () => {
+  it('offers Org Member + Org Manager in the role dropdown (project roles stay project-scoped)', async () => {
     const { user } = setup();
 
     await user.click(screen.getByRole('combobox'));
 
     const options = await screen.findAllByRole('option');
-    expect(options.map(o => o.textContent)).toEqual(['Organization Member', 'Org Manager']);
+    expect(options.map(o => o.textContent)).toEqual(['Org Member', 'Org Manager']);
   });
 
   it('blocks submit and shows the duplicate notice when the email already belongs to the org', async () => {
@@ -76,7 +76,7 @@ describe('UserModal — create', () => {
 });
 
 describe('UserModal — edit', () => {
-  it('offers Organization Member + Org Manager, initialised to the org-level role', async () => {
+  it('offers Org Member + Org Manager, initialised to the org-level role', async () => {
     const { user } = setup({
       mode: 'edit',
       user: member({
@@ -93,10 +93,10 @@ describe('UserModal — edit', () => {
 
     await user.click(trigger);
     const options = await screen.findAllByRole('option');
-    expect(options.map(o => o.textContent)).toEqual(['Organization Member', 'Org Manager']);
+    expect(options.map(o => o.textContent)).toEqual(['Org Member', 'Org Manager']);
   });
 
-  it('shows Organization Member (not the project role) for a PM with no org-level role', () => {
+  it('shows Org Member (not the project role) for a PM with no org-level role', () => {
     setup({
       mode: 'edit',
       user: member({
@@ -104,7 +104,7 @@ describe('UserModal — edit', () => {
       }),
     });
 
-    expect(screen.getByRole('combobox')).toHaveTextContent('Organization Member');
+    expect(screen.getByRole('combobox')).toHaveTextContent('Org Member');
   });
 
   it('disables the role dropdown for the current user (D2 self-change)', () => {
@@ -132,7 +132,7 @@ describe('UserModal — edit', () => {
     });
 
     const trigger = screen.getByRole('combobox');
-    expect(trigger).toHaveTextContent('Organization Member');
+    expect(trigger).toHaveTextContent('Org Member');
 
     await user.click(trigger);
     await user.click(await screen.findByRole('option', { name: 'Org Manager' }));
@@ -140,6 +140,6 @@ describe('UserModal — edit', () => {
 
     await user.click(screen.getByRole('button', { name: 'saveUser' }));
 
-    await waitFor(() => expect(trigger).toHaveTextContent('Organization Member'));
+    await waitFor(() => expect(trigger).toHaveTextContent('Org Member'));
   });
 });

@@ -7,7 +7,11 @@ import { DraftingGridPericope } from '@/features/bible/components/DraftingGridPe
 import { PericopeContextText } from '@/features/bible/components/PericopeContextText';
 import { config } from '@/lib/config';
 import type { PericopeGroup, ProjectItem, Source } from '@/lib/types';
-import { initDraftingTestI18n, NO_CONTENT_MESSAGE } from '@/test/drafting-i18n';
+import {
+  BIBLE_UNAVAILABLE_MESSAGE,
+  initDraftingTestI18n,
+  NO_CONTENT_MESSAGE,
+} from '@/test/drafting-i18n';
 
 const fullGroup: PericopeGroup = {
   pericopeNumber: '29_2',
@@ -156,7 +160,7 @@ describe('cross-chapter pericope display', () => {
       fullPericopes: [localGroup],
       bibleContentError: true,
     });
-    expect(screen.getByText('Unable to load Bible content.')).toBeInTheDocument();
+    expect(screen.getByText(BIBLE_UNAVAILABLE_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText(NO_CONTENT_MESSAGE)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
   });
@@ -168,7 +172,7 @@ describe('cross-chapter pericope display', () => {
       bibleContentError: true,
     });
     expect(screen.getByText('Retained reference verse')).not.toHaveClass('text-muted-foreground');
-    expect(screen.getAllByText('Unable to load Bible content.')).toHaveLength(7);
+    expect(screen.getAllByText(BIBLE_UNAVAILABLE_MESSAGE)).toHaveLength(7);
     expect(screen.getAllByText(NO_CONTENT_MESSAGE)).toHaveLength(1);
     expect(screen.getByText('Saved Mark 9:1')).toBeInTheDocument();
     expect(screen.getByLabelText('Translation for verse 31')).toHaveValue('Draft 8:31');
@@ -245,7 +249,7 @@ describe('cross-chapter pericope display', () => {
     );
     expect(
       within(screen.getByRole('region', { name: 'Chapter 7 context (read-only)' })).getByText(
-        'Unable to load Bible content.'
+        BIBLE_UNAVAILABLE_MESSAGE
       )
     ).toBeInTheDocument();
     expect(

@@ -390,7 +390,7 @@ const roleDisplayNames: Partial<Record<RoleName, string>> = {
   [ROLES.ORG_OWNER]: 'Org Owner',
   [ROLES.ORG_MANAGER]: 'Org Manager',
   [ROLES.PROJECT_OBSERVER]: 'Observer',
-  [ROLES.ORG_MEMBER]: 'Organization Member',
+  [ROLES.ORG_MEMBER]: 'Org Member',
 };
 
 export function getDisplayRole(roleName: string): string {
@@ -465,6 +465,11 @@ export interface VerseAudioTake {
   downloadUrl: string;
   createdAt: string;
   updatedAt: string;
+  granularity?: 'verse' | 'pericope';
+  startChapter?: number | null;
+  startVerse?: number | null;
+  endChapter?: number | null;
+  endVerse?: number | null;
   isPericope?: boolean;
   pericopeRange?: [number, number];
   pericopeNumber?: string;
@@ -483,11 +488,15 @@ export interface VerseAudioRecording {
   activeTakeId: number | null;
   verseNumber: number;
 
-  downloadUrl: string;
+  downloadUrl: string | null;
   takes: VerseAudioTake[];
   createdAt: string;
   updatedAt: string;
   granularity?: 'verse' | 'pericope';
+  startChapter?: number | null;
+  startVerse?: number | null;
+  endChapter?: number | null;
+  endVerse?: number | null;
   isPericope?: boolean;
   pericopeRange?: [number, number];
 }

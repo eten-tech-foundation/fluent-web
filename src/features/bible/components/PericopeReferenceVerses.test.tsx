@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
 import { config } from '@/lib/config';
+import { BIBLE_UNAVAILABLE_MESSAGE } from '@/test/drafting-i18n';
 import { server } from '@/test/msw/server';
 import {
   act,
@@ -243,7 +244,7 @@ describe('PericopeReferenceVerses', () => {
     await screen.findByText(/no content available/i);
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText('Aquifer chapter nine')).not.toBeInTheDocument();
-    expect(screen.queryByText(/unable to load/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(BIBLE_UNAVAILABLE_MESSAGE)).not.toBeInTheDocument();
   });
 
   it('shows a failed resource request beside its verse label', async () => {
@@ -260,7 +261,7 @@ describe('PericopeReferenceVerses', () => {
       </p>
     );
 
-    await screen.findByText(/unable to load/i);
+    await screen.findByText(BIBLE_UNAVAILABLE_MESSAGE);
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
@@ -286,7 +287,7 @@ describe('PericopeReferenceVerses', () => {
         </p>
       );
 
-      const failedVerse = await screen.findByText(/unable to load/i);
+      const failedVerse = await screen.findByText(BIBLE_UNAVAILABLE_MESSAGE);
       expect(failedVerse.parentElement).toHaveTextContent(/^1\D/);
       expect(failedVerse).toHaveClass('text-muted-foreground', 'text-sm');
       expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
@@ -330,12 +331,12 @@ describe('PericopeReferenceVerses', () => {
       await queryClient.invalidateQueries({ queryKey: ['aquifer-bible-text', 11, 'MRK', 9] });
     });
 
-    const failedVerse = await screen.findByText(/unable to load/i);
+    const failedVerse = await screen.findByText(BIBLE_UNAVAILABLE_MESSAGE);
     expect(failedVerse.parentElement).toHaveTextContent(/^3\D/);
     const cachedVerse = screen.getByText('Aquifer cached verse');
     expect(cachedVerse.parentElement).toHaveTextContent(/^1\D/);
     expect(cachedVerse).not.toHaveClass('text-muted-foreground');
-    expect(screen.getAllByText(/unable to load/i)).toHaveLength(1);
+    expect(screen.getAllByText(BIBLE_UNAVAILABLE_MESSAGE)).toHaveLength(1);
     expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
   });
 
@@ -426,7 +427,7 @@ describe('PericopeReferenceVerses', () => {
       </p>
     );
 
-    await screen.findByText(/unable to load/i);
+    await screen.findByText(BIBLE_UNAVAILABLE_MESSAGE);
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByText(/no content available/i)).not.toBeInTheDocument();
   });

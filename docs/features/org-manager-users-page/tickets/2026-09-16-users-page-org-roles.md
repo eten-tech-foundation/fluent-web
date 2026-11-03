@@ -27,7 +27,7 @@ The Role dropdown offered Project Manager **and** Translator (`src/lib/constants
 
 - **D1 → Option (b):** The Users page manages org-level roles only. Project roles stay project-scoped and are set on the project. The dropdown offers `Org Manager` (and `Org Member` in Edit = demote). A PM can be promoted to OM; an OM+PM demoted keeps their PM grant.
 - **D2 → Self-change block is the guard:** an Org Manager cannot change their own role — only another OM can demote them, so the org always keeps ≥1 OM. Self-removal is likewise blocked (API + hidden row action).
-- **D3 → role column order (top wins):** no role → `Organization Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
+- **D3 → role column order (top wins):** no role → `Org Member`; org-level role; else project roles in order `Project Manager` → `Translator` → `Observer`.
 - **New scope:** an Org Manager can remove a user from the org; a confirm banner warns "Their chapter assignments will be removed." when the target holds assignments (same pattern as project removal).
 
 ## Tasks

@@ -52,6 +52,8 @@ export const PericopeContextText = ({
               const content = data?.targetVerses.find(
                 v => v.verseNumber === ref.verseNumber
               )?.content;
+              // Only a failed source Bible says the Bible is unavailable. The drafts come from
+              // the app's own API, and DraftingUI reports a failed draft request with Retry.
               return (
                 <Fragment key={`${chapter}:${ref.verseNumber}`}>
                   <span className='mr-1.5 font-sans font-bold'>{ref.verseNumber}</span>
@@ -59,7 +61,7 @@ export const PericopeContextText = ({
                     className='mr-3'
                     content={content}
                     emptyState={source ? 'not-drafted' : 'unavailable'}
-                    isError={data?.isError}
+                    isError={data?.sourceIsError}
                     isLoading={data?.isLoading}
                   />
                 </Fragment>
