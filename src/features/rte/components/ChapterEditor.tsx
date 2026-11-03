@@ -8,6 +8,7 @@ import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
 import { useProtectedVerseMarkers } from '../hooks/useProtectedVerseMarkers';
 import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
 import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
+import { PARAGRAPH_MARKER } from '../lib/block-types';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
 import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
@@ -25,7 +26,11 @@ import {
   type PericopeVerseText,
 } from '../lib/pericope-usj';
 import { scopeBlockFormatToVerse } from '../lib/scoped-block-format';
-import { formatVerseBlock, insertSectionHeading } from '../lib/structural-edits';
+import {
+  formatVerseBlock,
+  insertSectionHeading,
+  paragraphBeforePoetryLine,
+} from '../lib/structural-edits';
 import { verseAtCaret } from '../lib/verse-numbers';
 
 import { ActiveVerseOutline } from './ActiveVerseOutline';
@@ -272,6 +277,13 @@ export function ChapterEditor({
       // editor keeps its caret; the verse then comes from that caret, so the click still formats
       // one verse and not the whole paragraph.
       const activeVerse = activeVerseRef.current ?? verseAtCaret(editor);
+      // On a Poetry line, Paragraph starts a paragraph at the verse and keeps the line (#530).
+      if (
+        marker === PARAGRAPH_MARKER &&
+        activeVerse !== undefined &&
+        paragraphBeforePoetryLine(editor, activeVerse)
+      )
+        return;
       const scoped =
         activeVerse === undefined
           ? null
