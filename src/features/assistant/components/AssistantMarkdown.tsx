@@ -6,9 +6,8 @@ import remarkGfm from 'remark-gfm';
 
 import { ASSISTANT_OUTPUT_CONTRACT_VERSION } from '../assistant.types';
 
-export const MAX_SUGGESTED_QUESTION_LENGTH = 300;
 const FLUENT_DIRECTIVE_PATTERN = /\{\{fluent:[^\r\n]*?(?:\}\}|(?=\r?$))/gm;
-const SUGGESTED_QUESTION_PATTERN = /^\{\{fluent:v1:suggested_question\|([^{}\r\n]{1,300})\}\}$/;
+const SUGGESTED_QUESTION_PATTERN = /^\{\{fluent:v1:suggested_question\|([^{}\r\n]+)\}\}$/;
 
 interface MarkdownNode {
   type: string;

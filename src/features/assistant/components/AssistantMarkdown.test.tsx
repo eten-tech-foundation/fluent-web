@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ASSISTANT_OUTPUT_CONTRACT_VERSION } from '../assistant.types';
 
-import { AssistantMarkdown, MAX_SUGGESTED_QUESTION_LENGTH } from './AssistantMarkdown';
+import { AssistantMarkdown } from './AssistantMarkdown';
 
 const macro = (question: string) => `{{fluent:v1:suggested_question|${question}}}`;
 const renderMarkdown = (
@@ -37,6 +37,28 @@ describe('AssistantMarkdown', () => {
     expect(screen.getByText(/Inline HTML/)).toHaveTextContent(macro('Inline HTML?'));
     expect(screen.getByText('<div>{{fluent:v1:suggested_question|HTML?}}</div>')).toBeVisible();
   });
+
+  it.each([316, 6000])(
+    'renders and submits a complete %i-character question without a renderer cap',
+    length => {
+      const question = 'What does this passage mean in its historical context? '
+        .repeat(120)
+        .slice(0, length);
+      const submit = vi.fn();
+      render(
+        <AssistantMarkdown
+          outputContractVersion={ASSISTANT_OUTPUT_CONTRACT_VERSION}
+          source={macro(question)}
+          onSuggestedQuestion={submit}
+        />
+      );
+      const button = screen.getByRole('button');
+      expect(button.textContent).toBe(question);
+      fireEvent.click(button);
+      expect(submit).toHaveBeenCalledExactlyOnceWith(question, expect.any(MouseEvent));
+      expect(screen.queryByText(macro(question))).not.toBeInTheDocument();
+    }
+  );
 
   it('keeps keyboard focus on a suggested button as output and callbacks update', () => {
     const view = render(
@@ -90,15 +112,13 @@ ${macro('Standalone question?')}`);
     expect(screen.getByRole('list')).toBeInTheDocument();
   });
 
-  it('keeps malformed, incomplete, unknown, escaped, and oversized macros readable and inert', () => {
-    const oversized = 'q'.repeat(MAX_SUGGESTED_QUESTION_LENGTH + 1);
+  it('keeps malformed, incomplete, unknown, and escaped macros readable and inert', () => {
     const source = [
       '{{fluent:v1:suggested_question|unfinished',
       '{{fluent:v2:suggested_question|Unknown version?}}',
       '{{fluent:v1:unknown|Unknown widget?}}',
       '{{fluent:v1:suggested_question|}}',
       '{{fluent:v1:suggested_question|   }}',
-      `{{fluent:v1:suggested_question|${oversized}}}`,
       `\\${macro('Escaped question?')}`,
     ].join('\n\n');
     renderMarkdown(source);
