@@ -5,14 +5,11 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguages } from '@/features/projects/hooks/useLanguages';
-import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
-import { type ConnectivityProfile, type UsfmFilePayload } from '@/lib/types';
+import { type ConnectivityProfile } from '@/lib/types';
 
 import { ProjectFormFields, type ProjectFormData } from './ProjectFormFields';
-import { UsfmImportTab, type AcceptedUsfmFile } from './UsfmImportTab';
 
 export interface CreateProjectData {
   title: string;
@@ -20,16 +17,8 @@ export interface CreateProjectData {
   sourceLanguage: number;
   sourceBible: number;
   pericopeSetId: number;
-  /**
-   * Manually picked books (New tab). Omitted/empty when creating from USFM
-   * import, since the server derives books from usfmFiles instead — sending
-   * both would put two contradictory book sets in one request.
-   */
-  books?: number[];
   /** Optional; becomes the default connectivity profile for milestones created under this project. */
   connectivityProfile?: ConnectivityProfile | null;
-  /** Present only when creating from existing data: the server derives the books from these. */
-  usfmFiles?: UsfmFilePayload[];
 }
 
 interface CreateProjectModalProps {
@@ -61,10 +50,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   const [formData, setFormData] = useState<ProjectFormData>(EMPTY_FORM_DATA);
 
-  // books live outside ProjectFormData on purpose: UsfmImportTab already
-  // treats book selection as its own concern via onBooksChange rather than routing it through onFieldChange
-  const [books, setBooks] = useState<number[]>([]);
-
   // ProjectFormFields runs the field queries; this one stays because a languages failure
   // replaces the whole dialog with an error rather than rendering the form.
   const { error: languagesError } = useLanguages();
@@ -72,7 +57,6 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setFormData(EMPTY_FORM_DATA);
-      setBooks([]);
     }
     setIsSubmitting(false);
   }, [isOpen]);
@@ -100,7 +84,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     );
   };
 
-  const handleSubmit = async (files?: AcceptedUsfmFile[]): Promise<void> => {
+  const handleSubmit = async (): Promise<void> => {
     if (isSubmitting) {
       return;
     }
@@ -119,19 +103,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         targetLanguage: formData.targetLanguage,
         sourceLanguage: formData.sourceLanguage,
         sourceBible: formData.sourceBible,
-        // Both tabs share formData, so a book list picked on the New tab outlives a switch to
-        // Import. The files carry their own books and the server derives bookId from them, so
-        // sending the manual list too would put two contradictory book sets in one request.
-        books: files ? [] : books,
         connectivityProfile: formData.connectivityProfile,
         pericopeSetId: formData.pericopeSetId,
-        ...(files && {
-          usfmFiles: files.map(item => ({
-            fileName: item.file.name,
-            bookCode: item.bookCode,
-            usfm: item.usfm,
-          })),
-        }),
       });
     } catch (error) {
       Logger.logException(error instanceof Error ? error : new Error(String(error)), {
@@ -177,57 +150,35 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         <DialogHeader>
           <DialogTitle>{t('createProject')}</DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue='new'>
-          {config.features.usfmImport && (
-            <TabsList>
-              <TabsTrigger value='new'>{t('newTab')}</TabsTrigger>
-              <TabsTrigger value='import'>{t('importTab')}</TabsTrigger>
-            </TabsList>
-          )}
-          <TabsContent value='new'>
-            <div className='space-y-6 py-6'>
-              <ProjectFormFields formData={formData} onFieldChange={updateFormData} />
+        {/* USFM import lives on Add Milestone (#418), so this is the blank-project form only. */}
+        <div className='space-y-6 py-6'>
+          <ProjectFormFields formData={formData} onFieldChange={updateFormData} />
 
-              <div className='flex items-center justify-end pt-4'>
-                {error && (
-                  <div className='mr-4 flex w-full items-center justify-center gap-2'>
-                    <TriangleAlert className='text-destructive h-4 w-4' />
-                    <p className='text-destructive text-sm font-medium'>
-                      Error: Project not created.
-                    </p>
-                  </div>
-                )}
-
-                <Button
-                  className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
-                  disabled={isButtonDisabled}
-                  type='button'
-                  onClick={() => void handleSubmit()}
-                >
-                  {isLoading ? (
-                    <div className='flex items-center gap-2'>
-                      <Loader2 className='h-4 w-4 animate-spin' />
-                      <span>Creating...</span>
-                    </div>
-                  ) : (
-                    t('createProject')
-                  )}
-                </Button>
+          <div className='flex items-center justify-end pt-4'>
+            {error && (
+              <div className='mr-4 flex w-full items-center justify-center gap-2'>
+                <TriangleAlert className='text-destructive h-4 w-4' />
+                <p className='text-destructive text-sm font-medium'>Error: Project not created.</p>
               </div>
-            </div>
-          </TabsContent>
-          {config.features.usfmImport && (
-            <TabsContent value='import'>
-              <UsfmImportTab
-                formData={formData}
-                isSubmitting={isLoading || isSubmitting}
-                onBooksChange={setBooks}
-                onFieldChange={updateFormData}
-                onSubmit={files => void handleSubmit(files)}
-              />
-            </TabsContent>
-          )}
-        </Tabs>
+            )}
+
+            <Button
+              className='bg-primary hover:bg-primary/90 text-primary-foreground hover:cursor-pointer'
+              disabled={isButtonDisabled}
+              type='button'
+              onClick={() => void handleSubmit()}
+            >
+              {isLoading ? (
+                <div className='flex items-center gap-2'>
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                  <span>Creating...</span>
+                </div>
+              ) : (
+                t('createProject')
+              )}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
