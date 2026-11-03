@@ -70,6 +70,7 @@ type StreamEvent = z.infer<typeof streamEventSchema>;
 
 const FAILURE_CODES = new Set<AssistantFailureCode>([
   'invalid_request',
+  'invalid_configuration',
   'unsupported_language',
   'context_too_large',
   'rate_limited',
@@ -118,17 +119,37 @@ async function responseFailure(
 
 export async function fetchAssistantLanguages(
   projectId: number,
-  persistedSelection: string | null
+  persistedSelection: string | null,
+  signal?: AbortSignal
 ): Promise<AssistantLanguagesResponse> {
-  const url = new URL(`${config.api.url}/projects/${String(projectId)}/assistant/languages`);
-  if (persistedSelection) url.searchParams.set('selected', persistedSelection);
-  const response = await fetch(url, { credentials: 'include' });
-  if (!response.ok) throw await responseFailure(response);
-  const parsed = languagesResponseSchema.safeParse(await response.json());
-  if (!parsed.success) {
-    throw new AssistantBriefingError('malformed_upstream_response', true);
+  const delivery = assistantDelivery(signal);
+  try {
+    const url = new URL(`${config.api.url}/projects/${String(projectId)}/assistant/languages`);
+    if (persistedSelection) url.searchParams.set('selected', persistedSelection);
+    const response = await delivery.wait(
+      fetch(url, {
+        credentials: 'include',
+        signal: delivery.signal,
+      })
+    );
+    delivery.activity();
+    if (!response.ok) throw await responseFailure(response, delivery);
+    let body: unknown;
+    try {
+      body = await assistantResponseJson(response, delivery);
+    } catch (error) {
+      if (error instanceof AssistantBriefingError) throw error;
+      throw malformedStream();
+    }
+    const parsed = languagesResponseSchema.safeParse(body);
+    if (!parsed.success) throw malformedStream();
+    return parsed.data;
+  } catch (error) {
+    if (error instanceof AssistantBriefingError) throw error;
+    throw new AssistantBriefingError('network_error', true);
+  } finally {
+    delivery.close();
   }
-  return parsed.data;
 }
 
 export async function* parseAssistantEventStream(

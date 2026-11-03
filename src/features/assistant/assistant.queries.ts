@@ -36,7 +36,7 @@ export function useAssistantLanguages(
 ): UseQueryResult<AssistantLanguagesResponse> {
   return useQuery({
     queryKey: assistantLanguagesQueryKey(projectId, persisted),
-    queryFn: () => fetchAssistantLanguages(projectId, persisted),
+    queryFn: ({ signal }) => fetchAssistantLanguages(projectId, persisted, signal),
     enabled,
     staleTime: LANGUAGE_STALE_TIME,
     gcTime: ASSISTANT_QUERY_DEFAULTS.gcTime,

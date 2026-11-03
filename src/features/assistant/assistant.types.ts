@@ -59,6 +59,7 @@ export interface PassageBriefingData {
 }
 
 export type AssistantFailureCode =
+  | 'invalid_configuration'
   | 'invalid_request'
   | 'unsupported_language'
   | 'context_too_large'

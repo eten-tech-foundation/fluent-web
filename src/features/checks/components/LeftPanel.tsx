@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 
-import { Sparkles } from 'lucide-react';
+import { Sparkle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { type LeftTab } from '@/features/bible/hooks/useResourceStatePersistence';
@@ -140,6 +141,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   showChecksTab = true,
   showAssistantTab = false,
 }) => {
+  const { t } = useTranslation();
   const hasActiveFindings = activeFindingsCount > 0;
   // When the Checks tab is hidden, the shared panel must never try to render the
   // (absent) checks body. The parent forces `activeTab` back to 'resources', but
@@ -176,11 +178,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       >
         {showAssistantTab && (
           <TabButton
-            icon={<Sparkles aria-hidden='true' className='h-5 w-5' />}
+            icon={
+              <Sparkle
+                aria-hidden='true'
+                className={cn('h-5 w-5', effectiveTab === 'assistant' && 'text-primary')}
+              />
+            }
             id={TAB_IDS.assistant}
             isActive={effectiveTab === 'assistant'}
-            label='AI Assistant'
-            tooltip='AI Assistant'
+            label={t('assistant.tab', 'AI Assistant')}
+            tooltip={t('assistant.tab', 'AI Assistant')}
             onClick={() => onTabChange('assistant')}
             onKeyDown={event => handleTabKeyDown(event, 'assistant')}
           />

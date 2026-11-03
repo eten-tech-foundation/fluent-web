@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
@@ -116,6 +116,52 @@ beforeEach(() => {
 });
 
 describe('AssistantPanel', () => {
+  it('keeps language discovery failure visible and retries explicitly without assuming English', async () => {
+    let discoveries = 0;
+    const briefings = vi.fn();
+    server.use(
+      http.get(`${api}/projects/7/assistant/languages`, () => {
+        discoveries++;
+        return discoveries === 1
+          ? HttpResponse.json({ code: 'temporarily_unavailable', retryable: true }, { status: 503 })
+          : HttpResponse.json({
+              languages: [{ code: 'en', displayName: 'English' }],
+              defaultLanguage: 'en',
+              englishFallback: 'en',
+            });
+      }),
+      http.post(`${api}/projects/7/assistant/briefing`, () => {
+        briefings();
+        return new HttpResponse(completedStream('Recovered language list', false, 'en'), {
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      })
+    );
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('languages are unavailable');
+    expect(briefings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry languages' }));
+    expect(await screen.findByText('Recovered language list')).toBeVisible();
+    expect(discoveries).toBe(2);
+  });
+
+  it('shows a persistent invalid configuration message without offering a network retry', async () => {
+    server.use(
+      http.get(`${api}/projects/7/assistant/languages`, () =>
+        HttpResponse.json({ code: 'invalid_configuration', retryable: false }, { status: 503 })
+      )
+    );
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('configuration is invalid');
+    expect(screen.queryByRole('button', { name: 'Retry languages' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Send question' })).toBeDisabled();
+  });
+
   it('waits for canonical pericope resolution instead of requesting the active verse early', async () => {
     const bodies: Array<Record<string, unknown>> = [];
     server.use(
@@ -618,7 +664,7 @@ describe('AssistantPanel', () => {
       terminalController?.enqueue(frame({ type: 'briefing_delta', delta: 'trailing' }));
       terminalController?.close();
     });
-    expect(await screen.findByRole('alert')).toHaveTextContent('did not finish');
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be read');
     expect(view.container.querySelector('[data-cache-hit]')).toHaveAttribute(
       'data-cache-hit',
       'false'
@@ -659,7 +705,7 @@ describe('AssistantPanel', () => {
       }
     );
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('did not finish');
+    expect(await screen.findByRole('alert')).toHaveTextContent('timed out');
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('Retried briefing')).toBeVisible();
     expect(calls).toBe(2);
@@ -731,7 +777,7 @@ describe('AssistantPanel', () => {
     );
 
     expect(await screen.findByText('Partial ordinary briefing')).toBeVisible();
-    expect(await screen.findByRole('alert')).toHaveTextContent('did not finish');
+    expect(await screen.findByRole('alert')).toHaveTextContent('timed out');
     view.unmount();
 
     const agedNow = Date.now() + ASSISTANT_QUERY_DEFAULTS.staleTime + 1;
@@ -786,7 +832,7 @@ describe('AssistantPanel', () => {
     });
 
     expect(await screen.findByText('Partial private briefing')).toBeVisible();
-    expect(await screen.findByRole('alert')).toHaveTextContent('did not finish');
+    expect(await screen.findByRole('alert')).toHaveTextContent('timed out');
     view.unmount();
     render(<AssistantPanel {...panelProps} localForceOn nextContext={null} />, {
       wrapper: Wrapper,
@@ -1041,3 +1087,5 @@ describe('AssistantPanel', () => {
     expect(requested).not.toContain(17);
   });
 });
+
+afterEach(() => vi.restoreAllMocks());

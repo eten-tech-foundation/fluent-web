@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   passageBriefingQueryKey,
@@ -19,6 +20,7 @@ import {
   writeAssistantOutputLanguage,
 } from '../assistant.storage';
 import {
+  AssistantBriefingError,
   type AssistantGroundingChoice,
   type PassageBriefingBaseRequest,
   type PassageBriefingContext,
@@ -26,7 +28,7 @@ import {
 } from '../assistant.types';
 
 import { useAssistantConversation } from './AssistantConversationProvider';
-import { AssistantConversationView } from './AssistantConversationView';
+import { AssistantConversationView, AssistantFailure } from './AssistantConversationView';
 import { AssistantMarkdown } from './AssistantMarkdown';
 
 const CONTEXT_DEBOUNCE_MS = 250;
@@ -67,6 +69,7 @@ export function AssistantPanel({
   localForceOn,
   reference,
 }: AssistantPanelProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { owner, state: conversation } = useAssistantConversation();
   useLayoutEffect(() => {
@@ -124,6 +127,8 @@ export function AssistantPanel({
     request,
     contextReady &&
       contextIsCurrent &&
+      !!languages.data &&
+      !languages.isError &&
       outputLanguage !== '' &&
       !selectedAttempt.cancelled &&
       !conversation.pinned,
@@ -212,15 +217,18 @@ export function AssistantPanel({
 
   return (
     <div
-      className={`relative flex h-full min-h-0 flex-col ${cacheHitWash ? 'bg-purple-100/70' : ''}`}
+      className={`border-border relative m-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border ${cacheHitWash ? 'bg-purple-100/70' : 'bg-background'}`}
       data-cache-hit={cacheHitWash ? 'true' : 'false'}
+      style={{ height: 'calc(100% - 1.5rem)' }}
     >
       <div className='border-border border-b px-3 py-3'>
         {reference ? (
           <h2 className='text-foreground mb-2 text-sm font-bold'>{reference}</h2>
         ) : (
           <p className='text-muted-foreground mb-2 text-sm'>
-            {contextError ? 'Passage context unavailable.' : 'Resolving passage…'}
+            {contextError
+              ? t('assistant.contextUnavailable', 'Passage context unavailable.')
+              : t('assistant.resolving', 'Resolving passage…')}
           </p>
         )}
         <div className='flex items-center gap-2'>
@@ -228,10 +236,10 @@ export function AssistantPanel({
             className='text-muted-foreground text-xs font-semibold'
             htmlFor='assistant-language'
           >
-            Output language
+            {t('assistant.outputLanguage', 'Output language')}
           </label>
           <select
-            aria-label='Assistant output language'
+            aria-label={t('assistant.outputLanguageLabel', 'Assistant output language')}
             className='border-input bg-background min-w-0 flex-1 rounded-md border px-2 py-1 text-sm'
             disabled={!languages.data || languages.isError}
             id='assistant-language'
@@ -241,7 +249,7 @@ export function AssistantPanel({
               writeAssistantOutputLanguage(event.target.value);
             }}
           >
-            {!languages.data && <option value=''>Loading…</option>}
+            {!languages.data && <option value=''>{t('assistant.loading', 'Loading…')}</option>}
             {languages.data?.languages.map(language => (
               <option key={language.code} value={language.code}>
                 {language.displayName}
@@ -251,11 +259,47 @@ export function AssistantPanel({
         </div>
       </div>
 
-      <AssistantConversationView enabled={contextReady && contextIsCurrent && !languages.isError}>
+      <AssistantConversationView
+        enabled={
+          contextReady &&
+          contextIsCurrent &&
+          (!!languages.data || !!conversation.pinned) &&
+          !languages.isError
+        }
+      >
         {(submit, questionsEnabled) => (
           <>
             {languages.isError && (
-              <FailureMessage message='Assistant languages are unavailable right now.' />
+              <div className='flex flex-wrap items-center gap-2' role='alert'>
+                <FailureMessage
+                  message={
+                    languages.error instanceof AssistantBriefingError &&
+                    languages.error.code === 'invalid_configuration'
+                      ? t(
+                          'assistant.failure.invalid_configuration',
+                          'Assistant language configuration is invalid. Contact your administrator to correct it.'
+                        )
+                      : t(
+                          'assistant.languagesUnavailable',
+                          'Assistant languages are unavailable right now.'
+                        )
+                  }
+                />
+                {!(
+                  languages.error instanceof AssistantBriefingError &&
+                  languages.error.code === 'invalid_configuration'
+                ) && (
+                  <button
+                    className='text-destructive border-destructive shrink-0 rounded-md border px-2 py-1 text-sm'
+                    type='button'
+                    onClick={() => {
+                      void languages.refetch();
+                    }}
+                  >
+                    {t('assistant.retryLanguages', 'Retry languages')}
+                  </button>
+                )}
+              </div>
             )}
             {!languages.isError &&
               contextReady &&
@@ -276,22 +320,28 @@ export function AssistantPanel({
                 (briefing.isFetching && briefing.data?.phase !== 'complete')) && (
                 <p className='text-muted-foreground flex items-center gap-2 text-sm' role='status'>
                   <LoaderCircle aria-hidden='true' className='size-4 animate-spin' />
-                  Preparing this passage briefing…
+                  {t('assistant.preparing', 'Preparing this passage briefing…')}
                 </p>
               )}
             {!conversation.pinned &&
               contextReady &&
               contextIsCurrent &&
               (briefing.isError || selectedAttempt.cancelled) && (
-                <div role='alert'>
-                  <FailureMessage message='The briefing did not finish.' />
+                <div className='flex flex-wrap items-center gap-2' role='alert'>
+                  <AssistantFailure
+                    error={
+                      briefing.error instanceof AssistantBriefingError
+                        ? briefing.error
+                        : new AssistantBriefingError('stream_incomplete', true)
+                    }
+                  />
                   <button
-                    className='text-primary mt-2 text-sm font-semibold underline underline-offset-2'
+                    className='text-destructive border-destructive shrink-0 rounded-md border px-2 py-1 text-sm'
                     type='button'
                     onClick={() => startAttempt(false)}
                   >
                     <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
-                    Retry
+                    {t('assistant.retry', 'Retry')}
                   </button>
                 </div>
               )}
@@ -304,14 +354,14 @@ export function AssistantPanel({
           className='border-primary/30 bg-background fixed right-4 bottom-4 z-50 w-64 rounded-lg border p-3 text-xs shadow-lg'
           data-testid='assistant-debug-controls'
         >
-          <p className='mb-2 font-bold'>Assistant debug</p>
+          <p className='mb-2 font-bold'>{t('assistant.debug', 'Assistant debug')}</p>
           <button
             className='border-input hover:bg-muted mb-3 w-full rounded-md border px-2 py-1.5 font-semibold'
             disabled={!contextReady || !outputLanguage}
             type='button'
             onClick={() => startAttempt(true)}
           >
-            Force fresh generation
+            {t('assistant.forceFresh', 'Force fresh generation')}
           </button>
           <label className='mb-3 flex items-center gap-2'>
             <input
@@ -322,10 +372,10 @@ export function AssistantPanel({
                 writeAssistantIgnoreCache(event.target.checked);
               }}
             />
-            Ignore cache
+            {t('assistant.ignoreCache', 'Ignore cache')}
           </label>
           <label className='block font-semibold' htmlFor='assistant-grounding'>
-            Grounding resources
+            {t('assistant.grounding', 'Grounding resources')}
           </label>
           <select
             className='border-input bg-background mt-1 w-full rounded-md border px-2 py-1'
@@ -333,9 +383,11 @@ export function AssistantPanel({
             value={grounding}
             onChange={event => setGrounding(event.target.value as AssistantGroundingChoice)}
           >
-            <option value='configured'>Configured behavior</option>
-            <option value='output_language'>Same language as output</option>
-            <option value='english'>English resources</option>
+            <option value='configured'>{t('assistant.configured', 'Configured behavior')}</option>
+            <option value='output_language'>
+              {t('assistant.sameLanguage', 'Same language as output')}
+            </option>
+            <option value='english'>{t('assistant.englishResources', 'English resources')}</option>
           </select>
         </div>
       )}

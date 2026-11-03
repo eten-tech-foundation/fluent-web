@@ -1,5 +1,6 @@
 import { createContext, useContext, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components, type UrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -136,7 +137,7 @@ function SuggestedQuestionButton({ node: _node, children, ...props }: ButtonProp
   return (
     <button
       {...props}
-      className='border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 my-1 block w-full rounded-md border px-3 py-2 text-left text-sm font-semibold disabled:opacity-50'
+      className='border-border text-primary hover:bg-muted my-1 block w-full rounded-md border bg-white px-3 py-2 text-left text-sm font-normal disabled:opacity-50'
       data-testid='suggested-question'
       disabled={!onSuggestedQuestion}
       type='button'
@@ -150,6 +151,15 @@ function SuggestedQuestionButton({ node: _node, children, ...props }: ButtonProp
   );
 }
 
+function AssistantImage({ alt }: ComponentPropsWithoutRef<'img'>) {
+  const { t } = useTranslation();
+  return (
+    <span className='text-muted-foreground' data-testid='blocked-assistant-image'>
+      {alt ?? t('assistant.image', '[image]')}
+    </span>
+  );
+}
+
 const markdownComponents: Components = {
   button: SuggestedQuestionButton,
   a: ({ node: _node, href, children, ...props }) =>
@@ -160,11 +170,7 @@ const markdownComponents: Components = {
     ) : (
       <span>{children}</span>
     ),
-  img: ({ node: _node, alt }) => (
-    <span className='text-muted-foreground' data-testid='blocked-assistant-image'>
-      {alt ?? '[image]'}
-    </span>
-  ),
+  img: AssistantImage,
   table: ({ node: _node, children, ...props }) => (
     <div className='my-3 overflow-x-auto'>
       <table {...props} className='w-full border-collapse text-sm'>

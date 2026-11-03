@@ -10,6 +10,8 @@ import { useAssistantConversation } from './AssistantConversationProvider';
 import { AssistantMarkdown } from './AssistantMarkdown';
 
 const failureCopy: Record<AssistantFailureCode, string> = {
+  invalid_configuration:
+    'Assistant language configuration is invalid. Contact your administrator to correct it.',
   invalid_request: 'Enter a question before sending.',
   unsupported_language: 'This output language is unavailable.',
   context_too_large:
@@ -45,6 +47,25 @@ export function AssistantConversationView({
     error: AssistantBriefingError;
   } | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const placeholder = t('assistant.placeholder', 'Ask a question about this passage...');
+  useLayoutEffect(() => {
+    const element = composer.current;
+    if (!element) return;
+    const resize = () => {
+      element.style.height = 'auto';
+      element.style.height = `${Math.min(128, Math.max(40, element.scrollHeight + 2))}px`;
+    };
+    resize();
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      resize();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [state.draft, placeholder]);
   const following = useRef(true);
   const bringSubmissionIntoView = useRef(false);
   const composing = useRef(false);
@@ -119,27 +140,29 @@ export function AssistantConversationView({
                     {t('assistant.answering', 'Preparing an answer…')}
                   </p>
                 )}
-                {attempt.failure && <AssistantFailure error={attempt.failure} />}
-                {attempt.state === 'interrupted' && (
-                  <p className='text-muted-foreground text-sm'>
-                    {t('assistant.interrupted', 'This answer was interrupted by a new question.')}
-                  </p>
-                )}
-                {retryable && (
-                  <button
-                    className='text-primary mt-2 inline-flex items-center gap-1 text-sm font-semibold'
-                    disabled={!available}
-                    type='button'
-                    onClick={event => {
-                      const error = owner.retry(event.nativeEvent);
-                      setAdmission(error ? { generation: state.generation, error } : null);
-                      if (!error) bringSubmissionIntoView.current = true;
-                    }}
-                  >
-                    <RefreshCw aria-hidden='true' className='size-4' />
-                    {t('assistant.retry', 'Retry')}
-                  </button>
-                )}
+                <div className='flex flex-wrap items-center gap-2'>
+                  {attempt.failure && <AssistantFailure error={attempt.failure} />}
+                  {attempt.state === 'interrupted' && (
+                    <p className='text-muted-foreground text-sm'>
+                      {t('assistant.interrupted', 'This answer was interrupted by a new question.')}
+                    </p>
+                  )}
+                  {retryable && (
+                    <button
+                      className='text-destructive border-destructive inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-sm'
+                      disabled={!available}
+                      type='button'
+                      onClick={event => {
+                        const error = owner.retry(event.nativeEvent);
+                        setAdmission(error ? { generation: state.generation, error } : null);
+                        if (!error) bringSubmissionIntoView.current = true;
+                      }}
+                    >
+                      <RefreshCw aria-hidden='true' className='size-4' />
+                      {t('assistant.retry', 'Retry')}
+                    </button>
+                  )}
+                </div>
               </section>
             );
           })}
@@ -201,7 +224,7 @@ export function AssistantConversationView({
           </div>
         )}
         <form
-          className='flex items-end gap-2'
+          className='relative flex items-end'
           onSubmit={event => {
             event.preventDefault();
             if (!composing.current && typedAvailable)
@@ -209,11 +232,12 @@ export function AssistantConversationView({
           }}
         >
           <textarea
+            ref={composer}
             aria-describedby={!typedAvailable ? 'assistant-composer-help' : undefined}
             aria-label={t('assistant.question', 'Question about this passage')}
-            className='border-input bg-background max-h-32 min-h-16 min-w-0 flex-1 resize-y rounded-md border px-3 py-2 text-sm'
-            placeholder={t('assistant.placeholder', 'Ask a question about this passage...')}
-            rows={2}
+            className='border-input bg-background max-h-32 min-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-md border py-2 pr-12 pl-3 text-sm'
+            placeholder={placeholder}
+            rows={1}
             value={state.draft}
             onChange={event => {
               owner.setDraft(event.target.value);
@@ -241,7 +265,7 @@ export function AssistantConversationView({
           />
           <button
             aria-label={t('assistant.send', 'Send question')}
-            className='bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-md disabled:opacity-50'
+            className='bg-primary text-primary-foreground absolute right-1 bottom-1 flex size-8 items-center justify-center rounded-md disabled:opacity-50'
             disabled={!typedAvailable || !state.draft.trim()}
             type='submit'
           >
