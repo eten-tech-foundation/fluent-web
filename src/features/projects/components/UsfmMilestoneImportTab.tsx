@@ -85,8 +85,10 @@ export function UsfmMilestoneImportTab({
     useUsfmMilestoneFiles(projectId);
   const importMilestone = useImportUsfmMilestone(projectId);
   // While the import runs, the list is what was sent: a file added now would be dropped unseen
-  // when the dialog closes, and one removed now would be imported anyway.
-  const isImporting = importMilestone.isPending;
+  // when the dialog closes, and one removed now would be imported anyway. It covers the whole
+  // handler, not just the request: after a 409 the files are checked again before the list
+  // changes, and a second Import meanwhile would get a second 409 and a second error box.
+  const [isImporting, setIsImporting] = useState(false);
 
   // The dialog's own X and Esc still close it during an import, which unmounts this tab. The
   // import goes on and its result must not close a dialog the user has opened again since.
@@ -127,6 +129,7 @@ export function UsfmMilestoneImportTab({
   const handleImport = async () => {
     if (!canImport) return;
     const sent = files;
+    setIsImporting(true);
     try {
       await importMilestone.mutateAsync({ name: name.trim(), files: sent });
       // The milestone exists either way, so the toast still says so.
@@ -146,6 +149,8 @@ export function UsfmMilestoneImportTab({
       toast.error(
         t(error instanceof NetworkError ? 'errorImportNetwork' : 'milestoneImportFailed')
       );
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -305,11 +310,11 @@ export function UsfmMilestoneImportTab({
       </dl>
 
       <div className='flex justify-end gap-3 pt-2'>
-        <Button disabled={importMilestone.isPending} variant='outline' onClick={onCancel}>
+        <Button disabled={isImporting} variant='outline' onClick={onCancel}>
           {t('cancel')}
         </Button>
         <Button disabled={!canImport} onClick={() => void handleImport()}>
-          {importMilestone.isPending && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+          {isImporting && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
           {t('importMilestone')}
         </Button>
       </div>

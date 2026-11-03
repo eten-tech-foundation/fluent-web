@@ -288,6 +288,8 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     drop([bookFile('1PE')]);
     expect(screen.queryByText('checkingUsfmFiles')).not.toBeInTheDocument();
 
+    // The button locks before the request reaches the handler that sets finish.
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
     finish();
     await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
     expect(listedFiles()).toEqual(['Kachi-Koli-JAS.usfm', 'Kachi-Koli-JUD.usfm']);
@@ -312,6 +314,7 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     await waitFor(() => expect(importButton()).toBeDisabled());
 
     // The dialog's X closes it mid-import; the user may already have opened it again.
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
     unmount();
     finish();
 
@@ -395,6 +398,65 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     );
     expect(listedFiles()).toEqual(['Kachi-Koli-JUD.usfm']);
     expect(onImported).not.toHaveBeenCalled();
+  });
+
+  it('stays locked after a 409 until the files have been checked again', async () => {
+    const { user } = renderTab();
+
+    drop([bookFile('JAS'), bookFile('JUD')]);
+    await settled();
+    let imports = 0;
+    let finishRecheck!: () => void;
+    server.use(
+      http.post(USFM_IMPORT_URL, () => {
+        imports += 1;
+        return HttpResponse.json(
+          { message: 'A book in this import already exists in the project' },
+          { status: 409 }
+        );
+      }),
+      http.post(USFM_CHECK_URL, async ({ request }) => {
+        const { files } = (await request.json()) as { files: UsfmFileUpload[] };
+        await new Promise<void>(resolve => {
+          finishRecheck = resolve;
+        });
+        return HttpResponse.json({
+          files: files.map(({ fileName }) =>
+            fileName.includes('JAS')
+              ? {
+                  fileName,
+                  ok: false,
+                  error: 'USFM_BOOK_EXISTS',
+                  message: '',
+                  bookCode: 'JAS',
+                  bookName: 'James',
+                  milestoneName: null,
+                }
+              : { fileName, ok: true, bookCode: 'JUD', bookName: 'Jude' }
+          ),
+        });
+      })
+    );
+    await user.type(screen.getByLabelText('*milestoneName'), 'Short Letters');
+    await user.click(importButton());
+
+    // The 409 is in and the recheck is on its way: nothing can be imported or changed yet.
+    await waitFor(() => expect(finishRecheck).toBeTypeOf('function'));
+    expect(importButton()).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'removeUsfmFile Kachi-Koli-JAS.usfm' })
+    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'selectFile' })).toBeDisabled();
+    expect(screen.getByTestId('usfm-drop-area')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(importButton());
+
+    finishRecheck();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Kachi-Koli-JAS.usfm: errorBookInProject James'
+    );
+    await waitFor(() => expect(importButton()).toBeEnabled());
+    expect(errorBoxes()).toHaveLength(1);
+    expect(imports).toBe(1);
   });
 
   it('says the import failed when the server errors, and keeps the files', async () => {
