@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 
 import { Check, Loader2, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -88,6 +88,16 @@ export function UsfmMilestoneImportTab({
   // when the dialog closes, and one removed now would be imported anyway.
   const isImporting = importMilestone.isPending;
 
+  // The dialog's own X and Esc still close it during an import, which unmounts this tab. The
+  // import goes on and its result must not close a dialog the user has opened again since.
+  const isMountedRef = useRef(false);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const openFilePicker = () => {
     if (!isImporting) inputRef.current?.click();
   };
@@ -119,8 +129,9 @@ export function UsfmMilestoneImportTab({
     const sent = files;
     try {
       await importMilestone.mutateAsync({ name: name.trim(), files: sent });
+      // The milestone exists either way, so the toast still says so.
       toast.success(t('milestoneCreated'));
-      onImported();
+      if (isMountedRef.current) onImported();
     } catch (error) {
       if (error instanceof UsfmImportRejectedError) {
         if (refuse(sent, error.verdicts) > 0) return;

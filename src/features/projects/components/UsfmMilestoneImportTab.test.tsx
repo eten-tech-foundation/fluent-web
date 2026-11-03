@@ -293,6 +293,32 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     expect(listedFiles()).toEqual(['Kachi-Koli-JAS.usfm', 'Kachi-Koli-JUD.usfm']);
   });
 
+  it('still says the milestone was made, but leaves the dialog alone, after it was closed', async () => {
+    let finish!: () => void;
+    server.use(
+      http.post(USFM_IMPORT_URL, async () => {
+        await new Promise<void>(resolve => {
+          finish = resolve;
+        });
+        return HttpResponse.json({ id: 500, name: 'Short Letters' }, { status: 201 });
+      })
+    );
+    const { user, onImported, unmount } = renderTab();
+
+    drop([bookFile('JUD')]);
+    await settled();
+    await user.type(screen.getByLabelText('*milestoneName'), 'Short Letters');
+    await user.click(importButton());
+    await waitFor(() => expect(importButton()).toBeDisabled());
+
+    // The dialog's X closes it mid-import; the user may already have opened it again.
+    unmount();
+    finish();
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('milestoneCreated'));
+    expect(onImported).not.toHaveBeenCalled();
+  });
+
   it('takes the files the import refused off the list, each with its error', async () => {
     server.use(
       http.post(USFM_IMPORT_URL, async ({ request }) => {
