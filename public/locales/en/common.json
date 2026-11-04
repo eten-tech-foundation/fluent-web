@@ -90,6 +90,7 @@
   "errorFileUnreadable": "Couldn't read this file.",
   "errorUsfmCheckNetwork": "Couldn't check this file. Check your connection and try again.",
   "errorUsfmCheckFailed": "Couldn't check this file. Please try again.",
+  "errorUnsupportedFileType": "Only USFM files (.usfm, .sfm) are supported.",
   "uploadUsfmFiles": "Upload USFM files",
   "usfmOnlyFormat": "USFM is the only supported format. One file per book.",
   "checkingUsfmFiles": "Checking files...",

@@ -14,6 +14,7 @@ import { useBibleBooks } from '@/features/projects/hooks/useBibleBooks';
 import { useCreateMilestone, useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { config } from '@/lib/config';
 
+import { MILESTONE_TAB, MILESTONE_TAB_BODY } from './milestone-dialog-layout';
 import { type UsfmImportDestination, UsfmMilestoneImportTab } from './UsfmMilestoneImportTab';
 
 const LARGE_MILESTONE_BOOK_THRESHOLD = 5;
@@ -80,21 +81,29 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
     }
   };
 
+  const withImport = config.features.usfmImport;
+
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
       <DialogContent
-        // The Import tab is taller and wider than New, so only it needs the wider, scrolling box.
+        // The Import tab is taller and wider than New. With it, the dialog is a column that
+        // never scrolls as a whole: only the open tab's body does, between the title and tabs
+        // above and the tab's buttons below (#418 QA).
         className={
-          config.features.usfmImport
-            ? 'max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-[540px]'
+          withImport
+            ? 'flex max-h-[90vh] flex-col overflow-hidden sm:max-w-[540px]'
             : 'sm:max-w-[425px]'
         }
       >
         <DialogHeader>
           <DialogTitle>{t('addMilestone')}</DialogTitle>
         </DialogHeader>
-        <Tabs value={tab} onValueChange={setTab}>
-          {config.features.usfmImport && (
+        <Tabs
+          className={withImport ? 'min-h-0 flex-1' : undefined}
+          value={tab}
+          onValueChange={setTab}
+        >
+          {withImport && (
             // Underlined tabs in the primary color, as the #418 mockup draws them.
             <TabsList className='w-full justify-start border-b' variant='line'>
               <TabsTrigger className={TAB_TRIGGER} value='new'>
@@ -105,49 +114,51 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
               </TabsTrigger>
             </TabsList>
           )}
-          <TabsContent value='new'>
-            <div className='grid gap-4 py-4'>
-              <div className='grid gap-2'>
-                <Label>
-                  <span className='text-destructive'>*</span>
-                  {t('milestoneName')}
-                </Label>
-                <Input
-                  placeholder={t('milestoneNamePlaceholder')}
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                />
-              </div>
-              <div className='grid gap-2'>
-                <Label>
-                  <span className='text-destructive'>*</span>
-                  {t('selectBooks')}
-                </Label>
-                {booksLoading ? (
-                  <div className='flex items-center gap-2 rounded-md border p-3'>
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                    <span>{t('loadingBooks')}</span>
-                  </div>
-                ) : (
-                  <BibleBookMultiSelectPopover
-                    bookMilestoneMap={bookMilestoneMap}
-                    books={availableBooks ?? []}
-                    disabled={!sourceBible}
-                    value={books}
-                    onChange={setBooks}
+          <TabsContent className={withImport ? MILESTONE_TAB : undefined} value='new'>
+            <div className={withImport ? MILESTONE_TAB_BODY : undefined}>
+              <div className='grid gap-4 py-4'>
+                <div className='grid gap-2'>
+                  <Label>
+                    <span className='text-destructive'>*</span>
+                    {t('milestoneName')}
+                  </Label>
+                  <Input
+                    placeholder={t('milestoneNamePlaceholder')}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
                   />
-                )}
-                {books.length > LARGE_MILESTONE_BOOK_THRESHOLD && (
-                  <p
-                    className='rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
-                    role='status'
-                  >
-                    {t('largeMilestoneWarning')}
-                  </p>
-                )}
+                </div>
+                <div className='grid gap-2'>
+                  <Label>
+                    <span className='text-destructive'>*</span>
+                    {t('selectBooks')}
+                  </Label>
+                  {booksLoading ? (
+                    <div className='flex items-center gap-2 rounded-md border p-3'>
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                      <span>{t('loadingBooks')}</span>
+                    </div>
+                  ) : (
+                    <BibleBookMultiSelectPopover
+                      bookMilestoneMap={bookMilestoneMap}
+                      books={availableBooks ?? []}
+                      disabled={!sourceBible}
+                      value={books}
+                      onChange={setBooks}
+                    />
+                  )}
+                  {books.length > LARGE_MILESTONE_BOOK_THRESHOLD && (
+                    <p
+                      className='rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
+                      role='status'
+                    >
+                      {t('largeMilestoneWarning')}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-            <div className='flex justify-end gap-3'>
+            <div className='flex shrink-0 justify-end gap-3'>
               <Button disabled={createMilestone.isPending} variant='outline' onClick={handleClose}>
                 {t('cancel')}
               </Button>
@@ -160,10 +171,15 @@ export const AddMilestoneDialog: React.FC<AddMilestoneDialogProps> = ({
               </Button>
             </div>
           </TabsContent>
-          {config.features.usfmImport && (
+          {withImport && (
             // Kept mounted, and only hidden, while New is showing, so a look at the New tab doesn't
             // drop the files. Closing the dialog unmounts it and starts the import over.
-            <TabsContent forceMount hidden={tab !== 'import'} value='import'>
+            <TabsContent
+              forceMount
+              className={MILESTONE_TAB}
+              hidden={tab !== 'import'}
+              value='import'
+            >
               <UsfmMilestoneImportTab
                 project={project}
                 projectId={projectId}

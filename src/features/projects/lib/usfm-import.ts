@@ -35,12 +35,24 @@ export interface UsfmFileUpload {
 export const toUploads = (files: UsfmFileUpload[]): UsfmFileUpload[] =>
   files.map(({ fileName, usfm }) => ({ fileName, usfm }));
 
+/** The only files the Import tab takes; the file picker offers just these. */
+export const USFM_FILE_EXTENSIONS = ['.usfm', '.sfm'];
+
+/**
+ * Whether a file is a USFM file by its name, in any letter case. Anything else (a PDF, a Word
+ * document, a .txt) is refused before it is read, so it never reaches the API (Chad on #418).
+ */
+export function isUsfmFileName(fileName: string): boolean {
+  const name = fileName.toLowerCase();
+  return USFM_FILE_EXTENSIONS.some(extension => name.endsWith(extension));
+}
+
 /** Any USFM marker: a backslash and a marker name, such as `\id`, `\c` or `\mt1`. */
 const MARKER = /\\[a-zA-Z]+\d*/;
 
 /**
- * A first look at a file before it goes to the API: text without a single USFM marker (a PDF, a
- * Word document, plain notes) is refused here, so a stray binary is never sent. Everything else,
+ * A first look at a .usfm or .sfm file before it goes to the API: text without a single USFM
+ * marker (an empty file, notes saved under the wrong name) is refused here. Everything else,
  * which book it is and whether it parses, is the API's call, so the upload check and the import
  * cannot disagree (#418, #419).
  */
@@ -62,7 +74,8 @@ export function compareBibleOrder(a: string, b: string): number {
  * Runs the import's own book detection and checks over files without creating anything (#418):
  * the parse, the books the project already holds and the project's Source Bible.
  * `listedBookCodes` are the books already in the dialog's list, so a second file for one of them
- * comes back as a duplicate. The answer has one verdict per file, in the order sent.
+ * comes back as a duplicate. The answer has one verdict per file, in the order sent. The Import
+ * tab sends one file per request, so a request that fails takes only its own file with it.
  */
 export async function checkMilestoneUsfmFiles(
   projectId: number,

@@ -117,7 +117,7 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     renderTab();
 
     drop([
-      usfmFile('notes.txt', 'just a note'),
+      usfmFile('notes.usfm', 'just a note'),
       usfmFile('nobook.usfm', '\\c 1\n\\p\n\\v 1 text'),
       bookFile('MAT'),
       bookFile('ACT'),
@@ -128,7 +128,7 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     await settled();
 
     expect(errorBoxes()).toEqual([
-      'notes.txt: errorNotValidUsfm',
+      'notes.usfm: errorNotValidUsfm',
       'nobook.usfm: errorMissingBookData',
       'Kachi-Koli-MAT.usfm: errorBookInMilestone Matthew|Gospels',
       'Kachi-Koli-ACT.usfm: errorBookInProject Acts',
@@ -137,6 +137,110 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
     ]);
     expect(listedFiles()).toEqual(['Kachi-Koli-GEN.usfm']);
     expect(booksField()).toHaveValue('Genesis');
+  });
+
+  it('refuses anything but .usfm and .sfm files before reading or sending them', async () => {
+    const sent: string[] = [];
+    server.use(
+      http.post(USFM_CHECK_URL, async ({ request }) => {
+        const body = (await request.json()) as {
+          files: UsfmFileUpload[];
+          listedBookCodes: string[];
+        };
+        sent.push(...body.files.map(file => file.fileName));
+        return HttpResponse.json({ files: verdictsFor(body.files, body.listedBookCodes) });
+      })
+    );
+    let pdfReads = 0;
+    const pdf = new File(['%PDF-1.7'], 'Slides.pdf', { type: 'application/pdf' });
+    Object.defineProperty(pdf, 'text', {
+      value: () => {
+        pdfReads += 1;
+        return Promise.resolve('%PDF-1.7 \\Type /Page');
+      },
+    });
+    renderTab();
+
+    expect(screen.getByTestId('usfm-file-input')).toHaveAttribute('accept', '.usfm,.sfm');
+    drop([
+      pdf,
+      usfmFile('draft.txt', '\\id JUD\n\\c 1\n\\p\n\\v 1 text'),
+      bookFile('JUD'),
+      usfmFile('KK-JAS.SFM', '\\id JAS\n\\c 1\n\\p\n\\v 1 text'),
+    ]);
+    await settled();
+
+    expect(errorBoxes()).toEqual([
+      'Slides.pdf: errorUnsupportedFileType',
+      'draft.txt: errorUnsupportedFileType',
+    ]);
+    expect(listedFiles()).toEqual(['Kachi-Koli-JUD.usfm', 'KK-JAS.SFM']);
+    expect([...sent].sort()).toEqual(['KK-JAS.SFM', 'Kachi-Koli-JUD.usfm']);
+    expect(pdfReads).toBe(0);
+  });
+
+  it('checks each file in its own request, so a failed check refuses only that file', async () => {
+    const filesPerRequest: number[] = [];
+    server.use(
+      http.post(USFM_CHECK_URL, async ({ request }) => {
+        const body = (await request.json()) as {
+          files: UsfmFileUpload[];
+          listedBookCodes: string[];
+        };
+        filesPerRequest.push(body.files.length);
+        if (body.files.some(file => file.fileName.includes('GEN'))) {
+          return HttpResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+        }
+        return HttpResponse.json({ files: verdictsFor(body.files, body.listedBookCodes) });
+      })
+    );
+    renderTab();
+
+    drop([bookFile('JAS'), bookFile('GEN'), bookFile('JUD')]);
+    await settled();
+
+    expect(filesPerRequest).toEqual([1, 1, 1]);
+    expect(errorBoxes()).toEqual(['Kachi-Koli-GEN.usfm: errorUsfmCheckFailed']);
+    expect(listedFiles()).toEqual(['Kachi-Koli-JAS.usfm', 'Kachi-Koli-JUD.usfm']);
+  });
+
+  it('checks at most four files at a time', async () => {
+    let inFlight = 0;
+    let most = 0;
+    const held: Array<() => void> = [];
+    server.use(
+      http.post(USFM_CHECK_URL, async ({ request }) => {
+        const body = (await request.json()) as {
+          files: UsfmFileUpload[];
+          listedBookCodes: string[];
+        };
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise<void>(resolve => held.push(resolve));
+        inFlight -= 1;
+        return HttpResponse.json({ files: verdictsFor(body.files, body.listedBookCodes) });
+      })
+    );
+    renderTab();
+
+    drop(['GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS'].map(bookFile));
+    for (let answered = 0; answered < 6; answered += 1) {
+      await waitFor(() => expect(held.length).toBeGreaterThan(0));
+      held.shift()?.();
+    }
+    await settled();
+
+    expect(most).toBe(4);
+    expect(listedFiles()).toHaveLength(6);
+  });
+
+  it('keeps Cancel and Import out of the part that scrolls', () => {
+    renderTab();
+
+    const body = screen.getByTestId('usfm-import-body');
+    expect(body).toContainElement(screen.getByTestId('usfm-drop-area'));
+    expect(body).not.toContainElement(importButton());
+    expect(body).not.toContainElement(screen.getByRole('button', { name: 'cancel' }));
   });
 
   it('keeps an error when more files are added, until its X is clicked', async () => {
@@ -480,15 +584,16 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
 
   it('refuses a file that cannot be read on its own, and still checks the rest', async () => {
     renderTab();
-    const folder = new File([''], 'Letters');
-    Object.defineProperty(folder, 'text', {
-      value: () => Promise.reject(new DOMException('A folder', 'NotReadableError')),
+    // Picked, then moved or deleted before it could be read.
+    const gone = new File([''], 'Kachi-Koli-JAS.usfm');
+    Object.defineProperty(gone, 'text', {
+      value: () => Promise.reject(new DOMException('Moved', 'NotFoundError')),
     });
 
-    drop([folder, bookFile('JUD')]);
+    drop([gone, bookFile('JUD')]);
     await settled();
 
-    expect(errorBoxes()).toEqual(['Letters: errorFileUnreadable']);
+    expect(errorBoxes()).toEqual(['Kachi-Koli-JAS.usfm: errorFileUnreadable']);
     expect(listedFiles()).toEqual(['Kachi-Koli-JUD.usfm']);
   });
 
