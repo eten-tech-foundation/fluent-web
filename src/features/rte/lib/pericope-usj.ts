@@ -18,14 +18,22 @@ const USJ_TYPE = 'USJ';
 const USJ_VERSION = '3.1';
 
 /**
- * The paragraph a verse opens for its text: its offset-0 marker, or a `p` after its headings.
- * Without either, the verse continues the paragraph before it.
+ * The paragraphs a verse opens at its start: its offset-0 markers, or a `p` after its headings.
+ * Usually one; two for an empty `p` before the verse's own line, as in `\p` then `\q1 \v 3` (a
+ * paragraph that starts with a Poetry line, #530). Without any, the verse continues the
+ * paragraph before it.
  */
-function ownParagraph(verse: PericopeVerseText): string | undefined {
-  const opening = verse.markers?.paragraphs?.find(paragraph => paragraph.offset === 0);
-  if (opening) return opening.marker;
-  return verse.markers?.headings?.length ? PARAGRAPH_MARKER : undefined;
+function openingParagraphs(verse: PericopeVerseText): string[] {
+  const openings = (verse.markers?.paragraphs ?? [])
+    .filter(paragraph => paragraph.offset === 0)
+    .map(paragraph => paragraph.marker);
+  if (openings.length > 0) return openings;
+  return verse.markers?.headings?.length ? [PARAGRAPH_MARKER] : [];
 }
+
+/** The paragraph a verse's text starts in, when the verse opens one. */
+const ownParagraph = (verse: PericopeVerseText): string | undefined =>
+  openingParagraphs(verse).at(-1);
 
 /**
  * Builds the USJ document the editor renders for one pericope.
@@ -59,11 +67,11 @@ export function pericopeVersesToUsj(
       content.push({ type: 'para', marker: heading.marker, content: [heading.text] });
     }
     const paragraphs = verse.markers?.paragraphs ?? [];
-    const own = ownParagraph(verse);
-    if (own) openPara(own);
+    const openings = openingParagraphs(verse);
+    openings.forEach(openPara);
     // The chapter's first verse carries no marker of its own: the classic default paragraph. A
     // later pericope's first verse continues the paragraph the chapter has open there.
-    else if (!para) openPara(continuedParagraph ?? PARAGRAPH_MARKER);
+    if (openings.length === 0 && !para) openPara(continuedParagraph ?? PARAGRAPH_MARKER);
 
     const sid = bookCode ? `${bookCode} ${chapterNumber}:${verse.verseNumber}` : undefined;
     para?.content?.push({
@@ -164,6 +172,8 @@ interface VerseSegment {
   text: string;
   paraMarker: string;
   openedByVerse: boolean;
+  /** The verse's number starts this line, right after an empty `p`. */
+  afterEmptyParagraph: boolean;
   /** Which of the document's paragraphs it is in, counting from 0. */
   paraIndex: number;
 }
@@ -177,8 +187,10 @@ interface VerseSegment {
  * A verse whose marker is the first thing in its paragraph owns the paragraph: entry at offset 0.
  * Segments are trimmed (canonical USJ carries a structural space before the next verse marker
  * that is not part of the verse's own text), so offsets are positions in the exact string that is
- * saved. A paragraph holding no text is not persisted — there is no character to anchor it to.
- * Words in a paragraph that no verse owns yet (under a heading, or above the chapter's first
+ * saved. A paragraph holding no text is not persisted — there is no character to anchor it to —
+ * except an empty `p` right before a line that starts with a verse number, which that verse keeps
+ * as a `p` at offset 0 ahead of its line's marker: `\p` then `\q1 \v 3`, a paragraph that starts
+ * with a Poetry line (#530). Words in a paragraph that no verse owns yet (under a heading, or above the chapter's first
  * verse) open the verse that follows, rather than being dropped.
  *
  * With `continuedParagraph` (`continuedParagraphOf` the document's verses), the document's first
@@ -194,14 +206,21 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
   let pendingSegments: VerseSegment[] = [];
   let currentVerse: number | undefined;
   let paraIndex = -1;
+  // The paragraph just read was a `p` with no verse number and no words.
+  let emptyParagraphBefore = false;
 
   for (const node of usj.content) {
     if (typeof node === 'string') continue;
     const marker = node as MarkerObject;
+    const afterEmptyParagraph = emptyParagraphBefore;
+    emptyParagraphBefore = false;
     if (marker.type !== 'para') continue;
     paraIndex += 1;
-    if (!marker.content) continue;
     let paraMarker = marker.marker ?? PARAGRAPH_MARKER;
+    if (!marker.content) {
+      emptyParagraphBefore = paraMarker === PARAGRAPH_MARKER;
+      continue;
+    }
     let body = marker.content;
     if (isHeadingMarker(paraMarker)) {
       // Some imported documents omit the body paragraph and nest a verse in the heading.
@@ -221,6 +240,7 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
     // A verse continuing from the previous paragraph never owns this one; only a verse marker
     // seen at the paragraph's start (below) flips this on.
     let currentOpenedPara = false;
+    let currentAfterEmptyPara = false;
 
     const flush = (): void => {
       if (currentVerse === undefined) return;
@@ -228,6 +248,7 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
         text: buffer.trim(),
         paraMarker,
         openedByVerse: currentOpenedPara,
+        afterEmptyParagraph: currentAfterEmptyPara,
         paraIndex,
       });
       buffer = '';
@@ -246,9 +267,13 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
         // verse still starts the paragraph, so it keeps its offset-zero marker.
         const opensPara =
           !paraHasPriorContent && (currentVerse === undefined || buffer.trim() === '');
+        // Only a line that starts with its number keeps an empty `p` right before it.
+        const startsLine = !paraHasPriorContent && buffer.trim() === '';
         flush();
         paraHasPriorContent = true;
         currentOpenedPara = opensPara;
+        currentAfterEmptyPara =
+          startsLine && afterEmptyParagraph && paraMarker !== PARAGRAPH_MARKER;
         currentVerse = Number.parseInt(item.number ?? '0', 10);
         if (pendingHeadings.length > 0) {
           headings.set(currentVerse, pendingHeadings);
@@ -265,11 +290,19 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
       // Character-level markers (\nd, \add …) contribute their text to the verse.
       if (!NON_TEXT_MARKER_TYPES.has(item.type)) buffer += markerText(item);
     }
+    const isEmpty = !paraHasPriorContent && buffer.trim() === '';
     // Words with no verse yet wait for the next one, which they open.
     if (currentVerse === undefined && buffer.trim() !== '') {
-      pendingSegments.push({ text: buffer.trim(), paraMarker, openedByVerse: true, paraIndex });
+      pendingSegments.push({
+        text: buffer.trim(),
+        paraMarker,
+        openedByVerse: true,
+        afterEmptyParagraph: false,
+        paraIndex,
+      });
     }
     flush();
+    emptyParagraphBefore = isEmpty && paraMarker === PARAGRAPH_MARKER;
   }
 
   return order.map((verseNumber, verseIndex) => {
@@ -295,6 +328,7 @@ export function usjToPericopeVerses(usj: Usj, continuedParagraph?: string): Peri
       opener.paraIndex === 0 &&
       opener.paraMarker === continuedParagraph;
     if (opensParagraph && !continuesChapter) {
+      if (opener.afterEmptyParagraph) paragraphs.push({ marker: PARAGRAPH_MARKER, offset: 0 });
       paragraphs.push({ marker: opener.paraMarker, offset: 0 });
     }
     let offset = 0;

@@ -16,29 +16,24 @@ const props = {
   onSave: vi.fn(async () => {}),
 };
 
-describe('CreateProjectModal tabs (#418)', () => {
+describe('CreateProjectModal (#418)', () => {
   afterEach(() => {
     config.features.usfmImport = false;
   });
 
-  it('shows no tab strip while the import flag is off', () => {
-    config.features.usfmImport = false;
+  // USFM import moved to Add Milestone, so Create Project has no tabs even with the flag on.
+  it.each([false, true])('shows no tab strip with the import flag %s', flag => {
+    config.features.usfmImport = flag;
     renderWithProviders(<CreateProjectModal {...props} />);
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'importTab' })).not.toBeInTheDocument();
   });
 
-  it('offers the Import tab once the flag is on', () => {
-    config.features.usfmImport = true;
-    renderWithProviders(<CreateProjectModal {...props} />);
-    expect(screen.getByRole('tab', { name: 'importTab' })).toBeInTheDocument();
-  });
-
-  // The blank-project flow moved into the New tab untouched; this is the guard that the move
-  // did not drop it.
-  it('still renders the existing project fields, flag on or off', () => {
+  it('shows the blank-project form directly', () => {
     config.features.usfmImport = true;
     renderWithProviders(<CreateProjectModal {...props} />);
     expect(screen.getByText('projectTitle')).toBeInTheDocument();
     expect(screen.getByText('sourceLanguageBible')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'createProject' })).toBeInTheDocument();
   });
 });

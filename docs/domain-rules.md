@@ -70,6 +70,15 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   is saved, so a change to trimming or joining moves breaks around on reload and in the USFM
   export. Tests: `src/features/rte/lib/pericope-usj.test.ts` › "round-trips text and markers
   through the editor shape unchanged".
+- Offsets increase through a verse's paragraphs, except one pair: a `p` at offset 0 right before
+  the verse's own line at offset 0, an empty `\p` then `\q1 \v 3` (a paragraph that starts with a
+  Poetry line, #530). Paragraph on a Poetry line of any level writes it
+  (`paragraphBeforePoetryLine` in `src/features/rte/lib/structural-edits.ts`), and the save path
+  (`usjToPericopeVerses`) keeps an empty `p` right before a line that starts with a verse number
+  as that pair. fluent-api#473 accepts it, exports it and imports it, and has to ship first. Tests:
+  `src/features/rte/lib/pericope-usj.test.ts` › "saves the empty p ahead of the line, and reloads
+  the same"; `src/features/rte/lib/structural-edits.test.tsx` › "puts an empty p before a verse
+  that starts its Poetry line, in one undo step".
 - Trim only the space USJ keeps before the next verse marker. Don't normalize text inside a verse.
   Tests: `src/features/rte/lib/pericope-usj.test.ts` › "drops the structural space USJ carries
   before the next verse marker".
@@ -138,13 +147,17 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   `src/features/rte/lib/format-heading.test.tsx`,
   `src/features/rte/lib/scoped-block-format.test.ts` and
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx`.
-- A project created from USFM sends the files as `usfmFiles` and `bookId: []`, and [fluent-api](https://github.com/eten-tech-foundation/fluent-api)
-  takes the books from the files. The import tab (`src/features/projects/lib/usfm-validate.ts`) is
-  all or nothing: one file that isn't USFM, has no book code or repeats a book clears the whole
-  batch. Tests: `src/features/projects/components/CreateProjectModal.submit.test.tsx` › "drops a
-  manual book selection when the submit carries usfm files";
-  `src/features/projects/components/UsfmImportTab.test.tsx` › "imports nothing when one file of
-  several is not USFM".
+- USFM import creates one milestone in an existing project, from the Import tab of Add Milestone.
+  [fluent-api](https://github.com/eten-tech-foundation/fluent-api) decides which book each file
+  is and whether it can be imported, so the upload check and the import can't disagree. Each file
+  is checked when it is added and refused on its own: not USFM, no book, a book already listed, a
+  book the project holds in any milestone (removed ones too, since an import never merges) or a
+  book its Source Bible lacks. The web side is `src/features/projects/hooks/useUsfmMilestoneFiles.ts`
+  (the list, one error per refused file, two adds of one book at once) and
+  `src/features/projects/lib/usfm-import.ts` (the check request and Bible order). Tests:
+  `src/features/projects/components/UsfmMilestoneImportTab.test.tsx` › "refuses each bad file in
+  its own box and keeps the good ones" and "refuses the later of two files for one book added at
+  the same time".
 - Speech is synthesized only for a Bible whose `ttsLicenseStatus` is `allowed`. `forbidden`,
   `unknown` and a missing status all bar it, and `licenceBar` in
   `src/features/tts/resolver/licenceFence.ts` is the one place that reads the status. A barred
