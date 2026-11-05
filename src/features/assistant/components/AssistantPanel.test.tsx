@@ -1165,6 +1165,35 @@ describe('AssistantPanel', () => {
     await waitFor(() => expect(requested.filter(verse => verse === 21)).toHaveLength(1));
     expect(requested).not.toContain(17);
   });
+  it('offers context reload on a failed passage lookup', async () => {
+    const reload = vi.fn();
+    render(
+      <AssistantPanel
+        {...panelProps}
+        contextError
+        contextReady={false}
+        localForceOn={false}
+        nextContext={null}
+        reference={null}
+        onRetryContext={reload}
+      />,
+      { wrapper: wrapper() }
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Reload passage context' }));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+  it('explains permanent briefing errors without a futile Retry button', async () => {
+    server.use(
+      http.post(`${api}/projects/7/assistant/briefing`, () =>
+        HttpResponse.json({ code: 'unsupported_language', retryable: false }, { status: 400 })
+      )
+    );
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Select another output language');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
 });
 
 afterEach(() => vi.restoreAllMocks());

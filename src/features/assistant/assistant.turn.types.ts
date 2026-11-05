@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { assistantActionsSchema } from './assistant.actions';
+
 export const TURN_PROTOCOL = 'fluent-turn-v1';
 export const TURN_LIMITS = {
   bodyBytes: 524_288,
@@ -77,6 +79,7 @@ const turn = z
 export const assistantTurnRequestSchema = z
   .object({
     protocol: z.literal(TURN_PROTOCOL),
+    actions: assistantActionsSchema,
     bookCode: z.string().min(3).max(50),
     chapter: integer.min(1),
     activeVerse: integer.min(1),
@@ -122,7 +125,7 @@ export const assistantTurnRequestSchema = z
     if (bytes(value.turns) > TURN_LIMITS.transcriptBytes || bytes(value) > TURN_LIMITS.bodyBytes)
       ctx.addIssue({ code: 'custom', message: 'Transcript or request exceeds byte budget' });
   });
-export type AssistantTurnRequest = z.infer<typeof assistantTurnRequestSchema>;
+export type AssistantTurnRequest = z.input<typeof assistantTurnRequestSchema>;
 
 const eventBinding = {
   protocol: z.literal(TURN_PROTOCOL),
@@ -142,6 +145,7 @@ export const assistantTurnEventSchema = z.discriminatedUnion('type', [
     .object({
       ...eventBinding,
       type: z.literal('turn_started'),
+      outputContractVersion: z.string().min(1).max(64).optional(),
       contextReceipt: receipt,
       projection: omissions,
     })
@@ -168,6 +172,7 @@ export const assistantTurnEventSchema = z.discriminatedUnion('type', [
         'unsupported_language',
         'context_too_large',
         'rate_limited',
+        'generation_busy',
         'timed_out',
         'temporarily_unavailable',
         'malformed_upstream_response',

@@ -1437,6 +1437,9 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
                 localForceOn={assistantForceOn}
                 nextContext={nextAssistantContext}
                 reference={assistantSelection?.reference ?? null}
+                onRetryContext={() => {
+                  void refetchPericopes();
+                }}
               />
             }
             checksContent={

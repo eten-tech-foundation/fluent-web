@@ -11,11 +11,13 @@ import { AssistantMarkdown } from './AssistantMarkdown';
 
 const failureCopy: Record<AssistantFailureCode, string> = {
   invalid_configuration:
-    'Assistant language configuration is invalid. Contact your administrator to correct it.',
-  invalid_request: 'Enter a question before sending.',
-  unsupported_language: 'This output language is unavailable.',
+    'Assistant configuration is invalid. Contact your administrator to check its language and service settings.',
+  invalid_request:
+    'The request could not be accepted. Check your question, then reload the passage if the problem continues.',
+  unsupported_language: 'This output language is unavailable. Select another output language.',
   context_too_large:
     'This question or conversation is too long to send. Shorten your question or start a fresh conversation.',
+  generation_busy: 'Another Assistant request is still running. Please try again shortly.',
   rate_limited: 'The Assistant is busy. Please try again later.',
   timed_out: 'The answer timed out.',
   temporarily_unavailable: 'The Assistant is temporarily unavailable.',
@@ -28,7 +30,12 @@ export function AssistantFailure({ error }: { error: AssistantBriefingError }) {
   const { t } = useTranslation();
   return (
     <p className='text-destructive text-sm'>
-      {t(`assistant.failure.${error.code}`, failureCopy[error.code])}
+      {!error.retryable && error.code === 'temporarily_unavailable'
+        ? t(
+            'assistant.continuationUnavailable',
+            'Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration.'
+          )
+        : t(`assistant.failure.${error.code}`, failureCopy[error.code])}
     </p>
   );
 }
@@ -130,8 +137,13 @@ export function AssistantConversationView({
                 </h3>
                 {attempt.prefix?.markdown && (
                   <AssistantMarkdown
-                    outputContractVersion={null}
+                    outputContractVersion={attempt.outputContractVersion ?? null}
                     source={attempt.prefix.markdown}
+                    onSuggestedQuestion={
+                      available
+                        ? (text, event) => submit(text, 'suggested_question', event)
+                        : undefined
+                    }
                   />
                 )}
                 {pending && (

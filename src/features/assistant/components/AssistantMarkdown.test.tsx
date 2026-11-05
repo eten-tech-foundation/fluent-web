@@ -202,4 +202,27 @@ ${macro('Standalone question?')}`);
       cleanup();
     }
   });
+  it('restores directives inertly in image and link metadata, including references', () => {
+    const directive = macro('Metadata?');
+    renderMarkdown(`![${directive}](https://example.com/image)
+
+[link](https://example.com/ "${directive}")
+
+[reference][${directive}]
+
+[${directive}]: https://example.com/reference "${directive}"`);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('blocked-assistant-image')).toHaveTextContent(directive);
+    expect(screen.getByRole('link', { name: 'link' })).toHaveAttribute('title', directive);
+    expect(screen.getByRole('link', { name: 'reference' })).toHaveAttribute('title', directive);
+    expect(document.body.innerHTML).not.toContain('FLUENTASSISTANTWIDGETTOKEN');
+  });
+  it('restores URL directives before safety filtering without activating them', () => {
+    renderMarkdown(
+      `[safe](https://example.com/${macro('URL')}) [unsafe](javascript:${macro('URL')})`
+    );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain('FLUENTASSISTANTWIDGETTOKEN');
+    expect(screen.getByText('unsafe').closest('a')).toBeNull();
+  });
 });

@@ -227,4 +227,68 @@ describe('drafting conversation lifecycle', () => {
     expect(owner.getSnapshot().draft).toBe('preserve');
     expect(transport).not.toHaveBeenCalled();
   });
+  it('restores full failed suggestions on validation and terminal failure, replacing drafts', async () => {
+    const { owner, deliveries, transport } = setup();
+    owner.setDraft('replace me');
+    const long = 'x'.repeat(4001);
+    expect(owner.submit(long, 'suggested_question')?.code).toBe('context_too_large');
+    expect(owner.getSnapshot().draft).toBe(long);
+    expect(transport).not.toHaveBeenCalled();
+    owner.submit('Original suggested question', 'suggested_question');
+    owner.setDraft('another draft');
+    deliveries[0].reject(new AssistantBriefingError('generation_busy', true));
+    await Promise.resolve();
+    expect(owner.getSnapshot().draft).toBe('Original suggested question');
+  });
+  it('does not restore a stale suggested failure after another submission or reset', async () => {
+    const { owner, deliveries } = setup();
+    owner.submit('Old suggestion', 'suggested_question');
+    owner.submit('New question', 'typed');
+    owner.setDraft('Keep this');
+    deliveries[0].reject(new AssistantBriefingError('timed_out', true));
+    await Promise.resolve();
+    expect(owner.getSnapshot().draft).toBe('Keep this');
+    owner.reset();
+    deliveries[1].reject(new AssistantBriefingError('timed_out', true));
+    await Promise.resolve();
+    expect(owner.getSnapshot().draft).toBe('');
+  });
+  it('retains widget provenance locally and sends the Web catalog without local attempt metadata', () => {
+    const { owner, transport, deliveries } = setup();
+    owner.submit('First', 'typed');
+    deliveries[0].publish({
+      type: 'turn_started',
+      protocol: 'fluent-turn-v1',
+      operationId: 'op',
+      turnId: transport.mock.calls[0][1].submission.turnId,
+      attemptId: transport.mock.calls[0][1].submission.attemptId,
+      contextReceipt: briefing.integrity!.contextReceipt,
+      outputContractVersion: 'fluent-widgets-v1',
+      projection: { omittedTurnIds: [], emptyTurnIds: [], historyWindow: 5 },
+    });
+    expect(owner.getSnapshot().turns[0].attempts[0].outputContractVersion).toBe(
+      'fluent-widgets-v1'
+    );
+    owner.submit('Next', 'typed');
+    expect(transport.mock.calls[1][1].actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'suggested_question',
+          template: '{{fluent:v1:suggested_question|QUESTION}}',
+        }),
+      ])
+    );
+    expect(transport.mock.calls[1][1].turns[0].attempts[0]).not.toHaveProperty(
+      'outputContractVersion'
+    );
+  });
+  it('keeps a newer rejected suggestion when older admitted work fails later', async () => {
+    const { owner, deliveries } = setup();
+    owner.submit('Old suggestion', 'suggested_question');
+    const replacement = 'x'.repeat(4001);
+    owner.submit(replacement, 'suggested_question');
+    deliveries[0].reject(new AssistantBriefingError('timed_out', true));
+    await Promise.resolve();
+    expect(owner.getSnapshot().draft).toBe(replacement);
+  });
 });

@@ -58,6 +58,7 @@ interface AssistantPanelProps {
   context: PassageBriefingContext;
   contextReady: boolean;
   contextError: boolean;
+  onRetryContext?: () => void;
   nextContext: PassageBriefingContext | null;
   localForceOn: boolean;
   reference: string | null;
@@ -67,6 +68,7 @@ export function AssistantPanel({
   context,
   contextReady,
   contextError,
+  onRetryContext,
   nextContext,
   localForceOn,
   reference,
@@ -285,6 +287,16 @@ export function AssistantPanel({
       >
         {(submit, questionsEnabled) => (
           <>
+            {contextError && onRetryContext && (
+              <button
+                className='text-destructive border-destructive rounded-md border px-2 py-1 text-sm'
+                type='button'
+                onClick={onRetryContext}
+              >
+                <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
+                {t('assistant.retryContext', 'Reload passage context')}
+              </button>
+            )}
             {languages.isError && (
               <div className='flex flex-wrap items-center gap-2' role='alert'>
                 <FailureMessage
@@ -293,7 +305,7 @@ export function AssistantPanel({
                     languages.error.code === 'invalid_configuration'
                       ? t(
                           'assistant.failure.invalid_configuration',
-                          'Assistant language configuration is invalid. Contact your administrator to correct it.'
+                          'Assistant configuration is invalid. Contact your administrator to check its language and service settings.'
                         )
                       : t(
                           'assistant.languagesUnavailable',
@@ -352,14 +364,17 @@ export function AssistantPanel({
                         : new AssistantBriefingError('stream_incomplete', true)
                     }
                   />
-                  <button
-                    className='text-destructive border-destructive shrink-0 rounded-md border px-2 py-1 text-sm'
-                    type='button'
-                    onClick={() => startAttempt(false)}
-                  >
-                    <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
-                    {t('assistant.retry', 'Retry')}
-                  </button>
+                  {(!(briefing.error instanceof AssistantBriefingError) ||
+                    briefing.error.retryable) && (
+                    <button
+                      className='text-destructive border-destructive shrink-0 rounded-md border px-2 py-1 text-sm'
+                      type='button'
+                      onClick={() => startAttempt(false)}
+                    >
+                      <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
+                      {t('assistant.retry', 'Retry')}
+                    </button>
+                  )}
                 </div>
               )}
           </>

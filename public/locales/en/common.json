@@ -218,16 +218,17 @@
     "outputLanguageLabel": "Assistant output language",
     "loading": "Loading…",
     "failure": {
-      "invalid_configuration": "Assistant language configuration is invalid. Contact your administrator to correct it.",
-      "invalid_request": "Enter a question before sending.",
-      "unsupported_language": "This output language is unavailable.",
+      "invalid_configuration": "Assistant configuration is invalid. Contact your administrator to check its language and service settings.",
+      "invalid_request": "The request could not be accepted. Check your question, then reload the passage if the problem continues.",
+      "unsupported_language": "This output language is unavailable. Select another output language.",
       "context_too_large": "This question or conversation is too long to send. Shorten your question or start a fresh conversation.",
       "rate_limited": "The Assistant is busy. Please try again later.",
       "timed_out": "The answer timed out.",
       "temporarily_unavailable": "The Assistant is temporarily unavailable.",
       "malformed_upstream_response": "The answer could not be read.",
       "stream_incomplete": "The answer did not finish.",
-      "network_error": "The connection was interrupted."
+      "network_error": "The connection was interrupted.",
+      "generation_busy": "Another Assistant request is still running. Please try again shortly."
     },
     "languagesUnavailable": "Assistant languages are unavailable right now.",
     "retryLanguages": "Retry languages",
@@ -255,6 +256,8 @@
     "question": "Question about this passage",
     "send": "Send question",
     "inputLimit": "Questions can contain at most {{count}} characters.",
-    "tab": "AI Assistant"
+    "tab": "AI Assistant",
+    "retryContext": "Reload passage context",
+    "continuationUnavailable": "Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration."
   }
 }

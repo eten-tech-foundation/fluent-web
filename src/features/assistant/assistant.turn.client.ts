@@ -1,5 +1,6 @@
 import { config } from '@/lib/config';
 
+import { fetchWithAssistantAdmission } from './assistant.admission';
 import {
   assistantDelivery,
   assistantFrames,
@@ -36,13 +37,17 @@ export async function streamAssistantTurn(
   const delivery = assistantDelivery(signal);
   try {
     const response = await delivery.wait(
-      fetch(`${config.api.url}/projects/${projectId}/assistant/turns`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(admitted.data),
-        signal: delivery.signal,
-      })
+      fetchWithAssistantAdmission(
+        `${config.api.url}/projects/${projectId}/assistant/turns`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(admitted.data),
+          signal: delivery.signal,
+        },
+        delivery
+      )
     );
     delivery.activity();
     if (!response.ok) {

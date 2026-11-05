@@ -249,4 +249,29 @@ describe('conversation controls with the real workspace owner', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(screen.getByText(/conversation is too long/)).toBeVisible();
   });
+  it('activates suggested questions in follow-up answers only with supported provenance', () => {
+    mount();
+    write('First question');
+    enter();
+    const state = test.owner!.getSnapshot();
+    const turn = state.turns[0];
+    act(() =>
+      test.deliveries[0].publish({
+        type: 'turn_started',
+        protocol: 'fluent-turn-v1',
+        operationId: 'operation',
+        turnId: turn.turnId,
+        attemptId: turn.selectedAttemptId,
+        contextReceipt: briefing.integrity!.contextReceipt,
+        outputContractVersion: 'fluent-widgets-v1',
+        projection: { omittedTurnIds: [], emptyTurnIds: [], historyWindow: 5 },
+      })
+    );
+    delta(0, 'More context. {{fluent:v1:suggested_question|Go deeper?}}', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Go deeper?' }));
+    expect(test.owner!.getSnapshot().turns.at(-1)?.input).toEqual({
+      text: 'Go deeper?',
+      origin: 'suggested_question',
+    });
+  });
 });

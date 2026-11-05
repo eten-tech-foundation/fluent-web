@@ -65,6 +65,7 @@ export type AssistantFailureCode =
   | 'invalid_request'
   | 'unsupported_language'
   | 'context_too_large'
+  | 'generation_busy'
   | 'rate_limited'
   | 'timed_out'
   | 'temporarily_unavailable'

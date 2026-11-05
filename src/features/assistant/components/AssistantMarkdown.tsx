@@ -4,14 +4,24 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components, type UrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import {
+  parseAssistantAction,
+  assistantActionAvailable,
+  executeAssistantAction,
+  type AssistantAction,
+} from '../assistant.actions';
 import { ASSISTANT_OUTPUT_CONTRACT_VERSION } from '../assistant.types';
 
 const FLUENT_DIRECTIVE_PATTERN = /\{\{fluent:[^\r\n]*?(?:\}\}|(?=\r?$))/gm;
-const SUGGESTED_QUESTION_PATTERN = /^\{\{fluent:v1:suggested_question\|([^{}\r\n]+)\}\}$/;
 
 interface MarkdownNode {
   type: string;
   value?: string;
+  url?: string;
+  title?: string | null;
+  alt?: string | null;
+  identifier?: string;
+  label?: string;
   children?: MarkdownNode[];
   position?: { start: { offset?: number }; end: { offset?: number } };
   data?: { hName?: string; hProperties?: Record<string, string> };
@@ -20,7 +30,7 @@ interface MarkdownNode {
 interface PreparedSource {
   markdown: string;
   prefix: string;
-  directives: Array<{ source: string; question: string | null }>;
+  directives: Array<{ source: string; action: AssistantAction | null }>;
 }
 
 function prepareSource(source: string, supportsWidgets: boolean): PreparedSource {
@@ -31,11 +41,17 @@ function prepareSource(source: string, supportsWidgets: boolean): PreparedSource
     let slashCount = 0;
     for (let cursor = offset - 1; cursor >= 0 && source[cursor] === '\\'; cursor -= 1)
       slashCount += 1;
-    const question = complete.match(SUGGESTED_QUESTION_PATTERN)?.[1] ?? null;
-    const activates =
-      supportsWidgets && slashCount % 2 === 0 && question !== null && question.trim() !== '';
-    const token = `${prefix}${String(directives.length)}END`;
-    directives.push({ source: complete, question: activates ? question : null });
+    const action = supportsWidgets && slashCount % 2 === 0 ? parseAssistantAction(complete) : null;
+    // Repeated source must retain the same token so Markdown reference definitions
+    // still match their uses before the AST restoration pass.
+    let index = directives.findIndex(
+      item => item.source === complete && !!item.action === !!action
+    );
+    if (index < 0) {
+      index = directives.length;
+      directives.push({ source: complete, action });
+    }
+    const token = `${prefix}${String(index)}END`;
     return token;
   });
   return { markdown, prefix, directives };
@@ -54,14 +70,17 @@ function macroNodes(
     const directive = prepared.directives[Number(match[1])];
     const index = match.index;
     if (index > cursor) nodes.push({ type: 'text', value: value.slice(cursor, index) });
-    if (allowActivation && directive.question !== null) {
+    if (allowActivation && directive.action !== null) {
       nodes.push({
         type: 'suggestedQuestion',
         data: {
           hName: 'button',
-          hProperties: { 'data-fluent-suggested-question': directive.question },
+          hProperties: {
+            'data-fluent-action': directive.action.type,
+            'data-fluent-payload': directive.action.payload,
+          },
         },
-        children: [{ type: 'text', value: directive.question }],
+        children: [{ type: 'text', value: directive.action.label }],
       });
     } else {
       nodes.push({ type: 'text', value: directive.source });
@@ -78,6 +97,16 @@ function macroNodes(
 function createSuggestedQuestionsPlugin(prepared: PreparedSource) {
   return () => (tree: MarkdownNode) => {
     const visit = (parent: MarkdownNode, blocked: boolean) => {
+      // Metadata is never an activation surface. Restore before URL safety filtering and
+      // restore reference identifiers consistently on definitions and references.
+      for (const field of ['url', 'title', 'alt', 'identifier', 'label'] as const) {
+        const value = parent[field];
+        if (typeof value !== 'string') continue;
+        parent[field] = value.replace(
+          new RegExp(`${prepared.prefix}(\\d+)END`, 'gi'),
+          (token, index: string) => prepared.directives[Number(index)]?.source ?? token
+        );
+      }
       const nextChildren: MarkdownNode[] = [];
       // Inline HTML is split across siblings; keep its entire paragraph inert.
       const containsInlineHtml =
@@ -124,7 +153,8 @@ const safeUrlTransform: UrlTransform = url => {
 
 type ButtonProps = ComponentPropsWithoutRef<'button'> & {
   node?: unknown;
-  'data-fluent-suggested-question'?: string;
+  'data-fluent-action'?: string;
+  'data-fluent-payload'?: string;
 };
 
 const SuggestedQuestionContext = createContext<
@@ -133,16 +163,18 @@ const SuggestedQuestionContext = createContext<
 
 function SuggestedQuestionButton({ node: _node, children, ...props }: ButtonProps) {
   const onSuggestedQuestion = useContext(SuggestedQuestionContext);
+  const handlers = { suggestedQuestion: onSuggestedQuestion };
+  const type = props['data-fluent-action'] ?? '';
+  const payload = props['data-fluent-payload'] ?? '';
   return (
     <button
       {...props}
       className='border-border text-primary hover:bg-muted my-1 block w-full rounded-md border bg-white px-3 py-2 text-left text-sm font-normal disabled:opacity-50'
       data-testid='suggested-question'
-      disabled={!onSuggestedQuestion}
+      disabled={!assistantActionAvailable(type, handlers)}
       type='button'
       onClick={event => {
-        const question = props['data-fluent-suggested-question'];
-        if (question) onSuggestedQuestion?.(question, event.nativeEvent);
+        executeAssistantAction(type, payload, event.nativeEvent, handlers);
       }}
     >
       {children}

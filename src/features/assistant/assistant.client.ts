@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { config } from '@/lib/config';
 
+import { ASSISTANT_ACTIONS } from './assistant.actions';
+import { fetchWithAssistantAdmission } from './assistant.admission';
 import {
   assistantDelivery,
   assistantFrames,
@@ -75,6 +77,7 @@ const FAILURE_CODES = new Set<AssistantFailureCode>([
   'unsupported_language',
   'context_too_large',
   'rate_limited',
+  'generation_busy',
   'timed_out',
   'temporarily_unavailable',
   'malformed_upstream_response',
@@ -88,6 +91,7 @@ function normalizedFailure(code: string): AssistantFailureCode {
 
 export function buildPassageBriefingBody(request: PassageBriefingRequest): Record<string, unknown> {
   return {
+    actions: ASSISTANT_ACTIONS,
     bookCode: request.bookCode,
     chapter: request.chapter,
     activeVerse: request.activeVerse,
@@ -241,13 +245,17 @@ export async function streamPassageBriefing(
     let response: Response;
     try {
       response = await delivery.wait(
-        fetch(`${config.api.url}/projects/${String(request.projectId)}/assistant/briefing`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildPassageBriefingBody(request)),
-          signal: delivery.signal,
-        })
+        fetchWithAssistantAdmission(
+          `${config.api.url}/projects/${String(request.projectId)}/assistant/briefing`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildPassageBriefingBody(request)),
+            signal: delivery.signal,
+          },
+          delivery
+        )
       );
       delivery.activity();
     } catch (error) {

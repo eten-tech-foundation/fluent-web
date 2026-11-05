@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ASSISTANT_ACTIONS } from './assistant.actions';
 import {
   buildPassageBriefingBody,
   parseAssistantEventStream,
@@ -74,6 +75,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('Assistant API client', () => {
   it('builds selector-only requests and sends bounded diagnostics only when active', () => {
     expect(buildPassageBriefingBody(request)).toEqual({
+      actions: ASSISTANT_ACTIONS,
       bookCode: 'JHN',
       chapter: 3,
       activeVerse: 16,
@@ -85,6 +87,7 @@ describe('Assistant API client', () => {
       ignoreCache: true,
     });
     expect(diagnostic).toEqual({
+      actions: ASSISTANT_ACTIONS,
       bookCode: 'JHN',
       chapter: 3,
       activeVerse: 16,

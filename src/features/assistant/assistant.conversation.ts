@@ -1,3 +1,4 @@
+import { ASSISTANT_ACTIONS } from './assistant.actions';
 import { streamAssistantTurn, type TurnUpdate } from './assistant.turn.client';
 import {
   assistantTurnRequestSchema,
@@ -23,6 +24,7 @@ export interface ConversationAttempt {
   state: 'waiting' | 'streaming' | 'complete' | 'failed' | 'interrupted';
   prefix: AssistantTurn['attempts'][number]['prefix'];
   failure?: AssistantBriefingError;
+  outputContractVersion?: string;
 }
 export interface ConversationTurn extends Omit<AssistantTurn, 'attempts'> {
   attempts: ConversationAttempt[];
@@ -72,6 +74,7 @@ export class AssistantConversation {
   private consumedRefresh = 0;
   private typedInteraction = false;
   private admissionEvents = new WeakSet<object>();
+  private recoverySequence = 0;
   constructor(private readonly transport: Transport = streamAssistantTurn) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -194,6 +197,11 @@ export class AssistantConversation {
   ): AssistantBriefingError | null {
     if (this.admissionEvents.has(event))
       return new AssistantBriefingError('invalid_request', false);
+    const recoverySequence = ++this.recoverySequence;
+    const reject = (error: AssistantBriefingError) => {
+      if (origin === 'suggested_question') this.update({ draft: text });
+      return error;
+    };
     const snapshot = this.state;
     const briefing = snapshot.pinned ?? snapshot.briefing;
     if (
@@ -203,11 +211,13 @@ export class AssistantConversation {
       !briefing?.integrity ||
       (origin === 'typed' && !snapshot.pinned && briefing.phase !== 'complete')
     )
-      return new AssistantBriefingError(
-        briefing?.continuationUnavailable ?? 'temporarily_unavailable',
-        false
+      return reject(
+        new AssistantBriefingError(
+          briefing?.continuationUnavailable ?? 'temporarily_unavailable',
+          false
+        )
       );
-    if (!text.trim()) return new AssistantBriefingError('invalid_request', false);
+    if (!text.trim()) return reject(new AssistantBriefingError('invalid_request', false));
     const previous = snapshot.turns.at(-1);
     const selected = previous?.attempts.find(
       attempt => attempt.attemptId === previous.selectedAttemptId
@@ -237,6 +247,7 @@ export class AssistantConversation {
     }));
     const request: AssistantTurnRequest = {
       protocol: 'fluent-turn-v1',
+      actions: ASSISTANT_ACTIONS,
       bookCode: snapshot.context.bookCode,
       chapter: snapshot.context.chapter,
       activeVerse: snapshot.context.activeVerse,
@@ -254,7 +265,7 @@ export class AssistantConversation {
         !briefing.integrity.prefix.complete,
     };
     if (!assistantTurnRequestSchema.safeParse(request).success)
-      return new AssistantBriefingError('context_too_large', false);
+      return reject(new AssistantBriefingError('context_too_large', false));
     this.admissionEvents.add(event);
     this.active?.abort();
     const controller = new AbortController();
@@ -307,6 +318,7 @@ export class AssistantConversation {
       } else if (update.type === 'turn_started') {
         this.replaceAttempt(turnId, attemptId, {
           operationId: update.operationId,
+          outputContractVersion: update.outputContractVersion,
           state: 'streaming',
         });
         this.update({ omittedTurnIds: update.projection.omittedTurnIds });
@@ -320,6 +332,8 @@ export class AssistantConversation {
     void this.transport(snapshot.context.projectId, request, publish, controller.signal)
       .catch((error: unknown) => {
         if (!current()) return;
+        if (input.origin === 'suggested_question' && recoverySequence === this.recoverySequence)
+          this.update({ draft: input.text });
         this.replaceAttempt(turnId, attemptId, {
           state: 'failed',
           failure:

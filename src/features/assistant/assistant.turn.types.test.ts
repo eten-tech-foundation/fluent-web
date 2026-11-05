@@ -22,7 +22,7 @@ const completeTurn = (index: number, markdown = 'Answer') => ({
 describe('browser admission mirrors portable turn contract', () => {
   it('accepts exact new, partial, empty and retry fixtures without rewriting text', () => {
     for (const input of [request, ...fixture.scenarios.map(scenario => scenario.request)]) {
-      expect(assistantTurnRequestSchema.parse(input)).toEqual(input);
+      expect(assistantTurnRequestSchema.parse(input)).toEqual({ ...input, actions: [] });
     }
   });
   it('limits logical turns including submission to fifty without pruning', () => {
