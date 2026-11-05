@@ -76,6 +76,37 @@ const importButton = () => screen.getByRole('button', { name: 'importMilestone' 
 const settled = () =>
   waitFor(() => expect(screen.queryByText('checkingUsfmFiles')).not.toBeInTheDocument());
 
+/** Holds every check request until the test answers it, and counts how many were open at once. */
+function holdChecks() {
+  const held: Array<() => void> = [];
+  let open = 0;
+  let most = 0;
+  server.use(
+    http.post(USFM_CHECK_URL, async ({ request }) => {
+      const body = (await request.json()) as {
+        files: UsfmFileUpload[];
+        listedBookCodes: string[];
+      };
+      open += 1;
+      most = Math.max(most, open);
+      await new Promise<void>(resolve => held.push(resolve));
+      open -= 1;
+      return HttpResponse.json({ files: verdictsFor(body.files, body.listedBookCodes) });
+    })
+  );
+  return {
+    held,
+    most: () => most,
+    /** Answers `count` checks one at a time, each once it has been sent. */
+    answer: async (count: number) => {
+      for (let answered = 0; answered < count; answered += 1) {
+        await waitFor(() => expect(held.length).toBeGreaterThan(0));
+        held.shift()?.();
+      }
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   server.use(usfmCheckHandler(), usfmImportHandler());
@@ -205,32 +236,28 @@ describe('UsfmMilestoneImportTab (#418, #420)', () => {
   });
 
   it('checks at most four files at a time', async () => {
-    let inFlight = 0;
-    let most = 0;
-    const held: Array<() => void> = [];
-    server.use(
-      http.post(USFM_CHECK_URL, async ({ request }) => {
-        const body = (await request.json()) as {
-          files: UsfmFileUpload[];
-          listedBookCodes: string[];
-        };
-        inFlight += 1;
-        most = Math.max(most, inFlight);
-        await new Promise<void>(resolve => held.push(resolve));
-        inFlight -= 1;
-        return HttpResponse.json({ files: verdictsFor(body.files, body.listedBookCodes) });
-      })
-    );
+    const checks = holdChecks();
     renderTab();
 
     drop(['GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS'].map(bookFile));
-    for (let answered = 0; answered < 6; answered += 1) {
-      await waitFor(() => expect(held.length).toBeGreaterThan(0));
-      held.shift()?.();
-    }
+    await checks.answer(6);
     await settled();
 
-    expect(most).toBe(4);
+    expect(checks.most()).toBe(4);
+    expect(listedFiles()).toHaveLength(6);
+  });
+
+  it('keeps to four checks at a time when more files come before the first ones are checked', async () => {
+    const checks = holdChecks();
+    renderTab();
+
+    drop(['GEN', 'EXO', 'LEV'].map(bookFile));
+    await waitFor(() => expect(checks.held).toHaveLength(3));
+    drop(['NUM', 'DEU', 'JOS'].map(bookFile));
+    await checks.answer(6);
+    await settled();
+
+    expect(checks.most()).toBe(4);
     expect(listedFiles()).toHaveLength(6);
   });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { NetworkError } from '@/lib/api-utils';
 import { Logger } from '@/lib/services/logger';
@@ -57,28 +57,30 @@ type CheckOutcome =
     };
 
 /**
- * How many files are checked at once. Each file has a request of its own, so a drop of a whole
- * Testament still doesn't send every file to the API at the same moment.
+ * How many check requests are open at once, across every add. Each file has a request of its own,
+ * so a drop of a whole Testament, or a second drop right after the first, still doesn't send every
+ * file to the API at the same moment.
  */
 const CHECKS_AT_ONCE = 4;
 
-/** Runs `task` on every item, at most `limit` at a time, and returns the results in item order. */
-async function mapWithLimit<T, R>(
-  items: readonly T[],
-  limit: number,
-  task: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    const index = next;
-    if (index >= items.length) return;
-    next += 1;
-    results[index] = await task(items[index], index);
-    return worker();
+/**
+ * Runs tasks at most `limit` at a time, for every caller together; the rest wait their turn in
+ * order. A finished task hands its place straight to the next one, so the limit holds in between.
+ */
+function createLimiter(limit: number) {
+  let running = 0;
+  const waiting: Array<() => void> = [];
+  return async function limited<T>(task: () => Promise<T>): Promise<T> {
+    if (running < limit) running += 1;
+    else await new Promise<void>(resolve => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running -= 1;
+    }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-  return results;
 }
 
 interface State {
@@ -178,6 +180,9 @@ export function useUsfmMilestoneFiles(projectId: number) {
     listedRef.current = state.files.map(file => file.bookCode);
   }, [state.files]);
 
+  // One limit for every add, so files added before the earlier ones are checked wait their turn.
+  const [limitChecks] = useState(() => createLimiter(CHECKS_AT_ONCE));
+
   /** What became of one added file; never throws, since every failure is that file's error. */
   const checkFile = useCallback(
     async (id: string, file: File): Promise<CheckOutcome> => {
@@ -199,10 +204,9 @@ export function useUsfmMilestoneFiles(projectId: number) {
       if (!looksLikeUsfm(usfm)) return refused('USFM_INVALID');
 
       try {
-        const [verdict] = await checkMilestoneUsfmFiles(
-          projectId,
-          [{ fileName: file.name, usfm }],
-          listedRef.current
+        // The listed books are read when the request goes out, after any wait for its turn.
+        const [verdict] = await limitChecks(() =>
+          checkMilestoneUsfmFiles(projectId, [{ fileName: file.name, usfm }], listedRef.current)
         );
         return { id, fileName: file.name, usfm, verdict };
       } catch (error) {
@@ -212,7 +216,7 @@ export function useUsfmMilestoneFiles(projectId: number) {
         return refused(error instanceof NetworkError ? 'CHECK_NETWORK' : 'CHECK_FAILED');
       }
     },
-    [projectId]
+    [projectId, limitChecks]
   );
 
   const addFiles = useCallback(
@@ -223,9 +227,7 @@ export function useUsfmMilestoneFiles(projectId: number) {
       // A request per file, so one the API can't check (a server error, a file over its size
       // limit) refuses only that file instead of every file dropped with it (#418 QA). The
       // results still land together, in the order the files came.
-      const outcomes = await mapWithLimit(files, CHECKS_AT_ONCE, (file, index) =>
-        checkFile(ids[index], file)
-      );
+      const outcomes = await Promise.all(files.map((file, index) => checkFile(ids[index], file)));
       dispatch({ type: 'checked', outcomes });
     },
     [checkFile, nextId]
