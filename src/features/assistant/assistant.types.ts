@@ -1,5 +1,7 @@
 import type { AssistantPrefix } from './assistant.turn.types';
 
+export const BRIEFING_LIMITS = { sourceBytes: 96_000 } as const;
+
 export const ASSISTANT_OUTPUT_CONTRACT_VERSION = 'fluent-widgets-v1';
 export const ASSISTANT_WEB_REQUEST_VERSION = 'passage-briefing-web-v1';
 

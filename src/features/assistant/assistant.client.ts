@@ -13,6 +13,7 @@ import {
 import { briefingIntegrityMetadataSchema, TURN_LIMITS } from './assistant.turn.types';
 import {
   AssistantBriefingError,
+  BRIEFING_LIMITS,
   type AssistantFailureCode,
   type AssistantLanguagesResponse,
   type PassageBriefingData,
@@ -286,7 +287,7 @@ export async function streamPassageBriefing(
       } else if (event.type === 'briefing_delta') {
         if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
         current = { ...current, source: current.source + event.delta };
-        if (utf8Bytes(current.source) > 96_000) throw malformedStream();
+        if (utf8Bytes(current.source) > BRIEFING_LIMITS.sourceBytes) throw malformedStream();
       } else if (event.type === 'briefing_error') {
         if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
         commitIntegrity(current, event);

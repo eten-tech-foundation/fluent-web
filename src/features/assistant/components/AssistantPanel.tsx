@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { LoaderCircle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { useFeatureFlag } from '@/features/flags';
+
 import {
   passageBriefingQueryKey,
   prefetchPassageBriefing,
@@ -74,9 +76,17 @@ export function AssistantPanel({
   const { owner, state: conversation } = useAssistantConversation();
   useLayoutEffect(() => {
     owner.navigate({ context, ready: contextReady, intent: owner.getSnapshot().intent });
-  }, [owner, context, contextReady]);
-  const persistedLanguage = useRef(readAssistantOutputLanguage()).current;
-  const languages = useAssistantLanguages(context.projectId, persistedLanguage, true);
+  }, [owner, context, contextReady, conversation.intent]);
+  const assistantEnabled = useFeatureFlag('assistant');
+  const persistedLanguage = useMemo(
+    () => ({
+      projectId: context.projectId,
+      language: readAssistantOutputLanguage(),
+    }),
+    [context.projectId]
+  ).language;
+  const [languageProject, setLanguageProject] = useState<number | null>(null);
+  const languages = useAssistantLanguages(context.projectId, persistedLanguage, assistantEnabled);
   const outputLanguage = conversation.outputLanguage;
   const setOutputLanguage = (language: string) => owner.configure(language);
   const [ignoreCache, setIgnoreCache] = useState(readAssistantIgnoreCache);
@@ -90,11 +100,11 @@ export function AssistantPanel({
     const response = languages.data;
     if (!response) return;
     const supported = response.languages.some(language => language.code === outputLanguage);
-    if (!supported) {
+    if (languageProject !== context.projectId || !supported) {
       owner.configure(response.defaultLanguage);
-      writeAssistantOutputLanguage(response.defaultLanguage);
+      setLanguageProject(context.projectId);
     }
-  }, [languages.data, outputLanguage, owner]);
+  }, [languages.data, outputLanguage, owner, languageProject, context.projectId]);
 
   useEffect(() => {
     if (!localForceOn && grounding !== 'configured') owner.configure(outputLanguage, 'configured');
@@ -125,7 +135,9 @@ export function AssistantPanel({
   const briefing = usePassageBriefing(
     queryClient,
     request,
-    contextReady &&
+    assistantEnabled &&
+      languageProject === context.projectId &&
+      contextReady &&
       contextIsCurrent &&
       !!languages.data &&
       !languages.isError &&
@@ -165,6 +177,7 @@ export function AssistantPanel({
 
   useEffect(() => {
     if (
+      !assistantEnabled ||
       conversation.pinned ||
       briefing.data?.phase !== 'complete' ||
       !contextIsCurrent ||
@@ -186,8 +199,9 @@ export function AssistantPanel({
     );
     if (successor.ignoreCache) return;
     if (queryClient.getQueryState(passageBriefingQueryKey(successor))?.status === 'error') return;
-    void prefetchPassageBriefing(queryClient, successor);
+    void prefetchPassageBriefing(queryClient, successor, assistantEnabled);
   }, [
+    assistantEnabled,
     conversation.pinned,
     briefing.data?.phase,
     contextIsCurrent,
@@ -201,6 +215,7 @@ export function AssistantPanel({
   ]);
 
   const startAttempt = (forceFresh: boolean) => {
+    if (!assistantEnabled) return;
     if (forceFresh) {
       owner.reset();
       owner.consumeRefresh();
@@ -261,6 +276,7 @@ export function AssistantPanel({
 
       <AssistantConversationView
         enabled={
+          assistantEnabled &&
           contextReady &&
           contextIsCurrent &&
           (!!languages.data || !!conversation.pinned) &&
@@ -293,9 +309,10 @@ export function AssistantPanel({
                     className='text-destructive border-destructive shrink-0 rounded-md border px-2 py-1 text-sm'
                     type='button'
                     onClick={() => {
-                      void languages.refetch();
+                      if (assistantEnabled) void languages.refetch();
                     }}
                   >
+                    <RefreshCw aria-hidden='true' className='mr-1 inline size-4' />
                     {t('assistant.retryLanguages', 'Retry languages')}
                   </button>
                 )}

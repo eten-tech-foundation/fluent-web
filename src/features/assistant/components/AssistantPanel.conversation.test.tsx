@@ -18,6 +18,9 @@ import type { AssistantMarkdown as MarkdownRenderer } from './AssistantMarkdown'
 import type { AssistantConversation } from '../assistant.conversation';
 import type { TurnUpdate, streamAssistantTurn } from '../assistant.turn.client';
 
+const assistantFlag = vi.hoisted(() => ({ enabled: true }));
+vi.mock('@/features/flags', () => ({ useFeatureFlag: () => assistantFlag.enabled }));
+
 const test = vi.hoisted(() => ({
   clickNewMacro: false,
   publish: null as ((update: TurnUpdate) => void) | null,

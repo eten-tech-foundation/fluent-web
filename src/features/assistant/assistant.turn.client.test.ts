@@ -38,6 +38,15 @@ afterEach(() => {
 });
 
 describe('bounded signed turn delivery', () => {
+  it('preserves a non-retryable invalid configuration HTTP failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ code: 'invalid_configuration', retryable: false }, { status: 503 })
+    );
+    await expect(
+      streamAssistantTurn(1, request, vi.fn(), new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'invalid_configuration', retryable: false });
+  });
+
   it('accepts portable wire fixtures and commits exact text with opaque receipts only', async () => {
     const updates = await run(events);
     expect(updates).toEqual([

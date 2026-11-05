@@ -5,6 +5,8 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 
+import { useFeatureFlag } from '@/features/flags';
+
 import { fetchAssistantLanguages, streamPassageBriefing } from './assistant.client';
 import {
   ASSISTANT_WEB_REQUEST_VERSION,
@@ -34,10 +36,11 @@ export function useAssistantLanguages(
   persisted: string | null,
   enabled: boolean
 ): UseQueryResult<AssistantLanguagesResponse> {
+  const assistantEnabled = useFeatureFlag('assistant');
   return useQuery({
     queryKey: assistantLanguagesQueryKey(projectId, persisted),
     queryFn: ({ signal }) => fetchAssistantLanguages(projectId, persisted, signal),
-    enabled,
+    enabled: enabled && assistantEnabled,
     staleTime: LANGUAGE_STALE_TIME,
     gcTime: ASSISTANT_QUERY_DEFAULTS.gcTime,
     retry: false,
@@ -202,6 +205,7 @@ export function usePassageBriefing(
   enabled: boolean,
   subscribed = true
 ): UseQueryResult<PassageBriefingData> {
+  const assistantEnabled = useFeatureFlag('assistant');
   const queryKey = passageBriefingQueryKey(request);
   const selectedAttemptFailed = queryClient.getQueryState(queryKey)?.status === 'error';
   return useQuery({
@@ -209,13 +213,15 @@ export function usePassageBriefing(
     subscribed,
     // A failed selected attempt is terminal until the user selects a new attempt with Retry.
     // This also blocks stale-data and persistent-bypass refetchOnMount behavior.
-    enabled: enabled && !selectedAttemptFailed,
+    enabled: assistantEnabled && enabled && !selectedAttemptFailed,
   });
 }
 
 export async function prefetchPassageBriefing(
   queryClient: QueryClient,
-  request: PassageBriefingRequest
+  request: PassageBriefingRequest,
+  enabled: boolean
 ): Promise<void> {
+  if (!enabled) return;
   await queryClient.prefetchQuery(passageBriefingQueryOptions(queryClient, request));
 }

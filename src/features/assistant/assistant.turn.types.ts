@@ -164,6 +164,7 @@ export const assistantTurnEventSchema = z.discriminatedUnion('type', [
       type: z.literal('turn_error'),
       code: z.enum([
         'invalid_request',
+        'invalid_configuration',
         'unsupported_language',
         'context_too_large',
         'rate_limited',

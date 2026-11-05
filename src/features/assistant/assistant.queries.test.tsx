@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { streamPassageBriefing } from './assistant.client';
+import { fetchAssistantLanguages, streamPassageBriefing } from './assistant.client';
 import {
   ASSISTANT_QUERY_DEFAULTS,
   passageBriefingQueryKey,
@@ -13,6 +13,7 @@ import {
   selectedPassageBriefingRequest,
   startPassageBriefingAttempt,
   usePassageBriefing,
+  useAssistantLanguages,
 } from './assistant.queries';
 
 import type {
@@ -20,6 +21,9 @@ import type {
   PassageBriefingData,
   PassageBriefingRequest,
 } from './assistant.types';
+
+const assistantFlag = vi.hoisted(() => ({ enabled: true }));
+vi.mock('@/features/flags', () => ({ useFeatureFlag: () => assistantFlag.enabled }));
 
 vi.mock('./assistant.client', () => ({
   fetchAssistantLanguages: vi.fn(),
@@ -69,9 +73,28 @@ function harness() {
   return { client, wrapper };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  assistantFlag.enabled = true;
+});
 
 describe('passage briefing query ownership', () => {
+  it('blocks language, briefing and prefetch requests when the merged flag is off', async () => {
+    assistantFlag.enabled = false;
+    const { client, wrapper } = harness();
+    renderHook(
+      () => {
+        useAssistantLanguages(1, null, true);
+        usePassageBriefing(client, baseRequest, true);
+      },
+      { wrapper }
+    );
+    await prefetchPassageBriefing(client, baseRequest, false);
+    await act(async () => Promise.resolve());
+    expect(fetchAssistantLanguages).not.toHaveBeenCalled();
+    expect(streamPassageBriefing).not.toHaveBeenCalled();
+  });
+
   it('pins expensive-query defaults and carries every bounded choice in the key', () => {
     const client = new QueryClient();
     const options = passageBriefingQueryOptions(client, baseRequest);
@@ -157,7 +180,8 @@ describe('passage briefing query ownership', () => {
 
     await prefetchPassageBriefing(
       client,
-      selectedPassageBriefingRequest(client, baseRequestIdentity)
+      selectedPassageBriefingRequest(client, baseRequestIdentity),
+      true
     );
 
     expect(streamPassageBriefing).not.toHaveBeenCalled();
@@ -191,7 +215,8 @@ describe('passage briefing query ownership', () => {
 
     const successorTouch = prefetchPassageBriefing(
       client,
-      selectedPassageBriefingRequest(client, baseRequestIdentity)
+      selectedPassageBriefingRequest(client, baseRequestIdentity),
+      true
     );
     expect(streamPassageBriefing).toHaveBeenCalledTimes(1);
     finish?.(completeData('joined retry'));

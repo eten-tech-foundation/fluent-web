@@ -18,6 +18,9 @@ import { ASSISTANT_STORAGE_KEYS } from '../assistant.storage';
 import { AssistantConversationProvider } from './AssistantConversationProvider';
 import { AssistantPanel } from './AssistantPanel';
 
+const assistantFlag = vi.hoisted(() => ({ enabled: true }));
+vi.mock('@/features/flags', () => ({ useFeatureFlag: () => assistantFlag.enabled }));
+
 const api = config.api.url;
 const context = { projectId: 7, bookCode: 'JHN', chapter: 3, activeVerse: 16 };
 const panelProps = {
@@ -111,11 +114,87 @@ function languages() {
 }
 
 beforeEach(() => {
+  assistantFlag.enabled = true;
   localStorage.clear();
   languages();
 });
 
 describe('AssistantPanel', () => {
+  it('selects each project default without carrying an automatic selection across projects', async () => {
+    const requests: Array<{ project: string; language: unknown }> = [];
+    server.use(
+      http.get(`${api}/projects/:projectId/assistant/languages`, ({ params, request }) => {
+        expect(new URL(request.url).searchParams.get('selected')).toBeNull();
+        return HttpResponse.json({
+          languages: [
+            { code: 'en', displayName: 'English' },
+            { code: 'hi', displayName: 'Hindi' },
+          ],
+          defaultLanguage: params.projectId === '7' ? 'hi' : 'en',
+          englishFallback: 'en',
+        });
+      }),
+      http.post(`${api}/projects/:projectId/assistant/briefing`, async ({ params, request }) => {
+        const body = (await request.json()) as { outputLanguage: string };
+        requests.push({ project: String(params.projectId), language: body.outputLanguage });
+        return new HttpResponse(
+          completedStream(`${String(params.projectId)} briefing`, false, body.outputLanguage),
+          {
+            headers: { 'Content-Type': 'text/event-stream' },
+          }
+        );
+      })
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const pane = (projectId: number) => (
+      <QueryClientProvider client={client}>
+        <AssistantConversationProvider
+          actorId={1}
+          intent={`${String(projectId)}:1`}
+          projectId={projectId}
+        >
+          <AssistantPanel
+            {...panelProps}
+            context={{ ...context, projectId }}
+            localForceOn={false}
+            nextContext={null}
+          />
+        </AssistantConversationProvider>
+      </QueryClientProvider>
+    );
+    const view = render(pane(7));
+    expect(await screen.findByText('7 briefing')).toBeVisible();
+    view.rerender(pane(8));
+    expect(await screen.findByText('8 briefing')).toBeVisible();
+    expect(requests).toEqual([
+      { project: '7', language: 'hi' },
+      { project: '8', language: 'en' },
+    ]);
+    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBeNull();
+  });
+
+  it('does not discover languages or request a briefing while the merged flag is off', async () => {
+    assistantFlag.enabled = false;
+    const requests = vi.fn();
+    server.use(
+      http.get(`${api}/projects/7/assistant/languages`, () => {
+        requests();
+        return HttpResponse.error();
+      })
+    );
+    render(
+      <AssistantPanel
+        {...panelProps}
+        localForceOn={false}
+        nextContext={{ ...context, activeVerse: 17 }}
+      />,
+      { wrapper: wrapper() }
+    );
+    await act(async () => Promise.resolve());
+    expect(requests).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send question' })).toBeDisabled();
+  });
+
   it('keeps language discovery failure visible and retries explicitly without assuming English', async () => {
     let discoveries = 0;
     const briefings = vi.fn();
@@ -228,7 +307,7 @@ describe('AssistantPanel', () => {
     expect(bodies).not.toContainEqual(expect.objectContaining({ activeVerse: 17 }));
   });
 
-  it('uses the server-selected project-source default, persists it, and keeps stored diagnostics inert', async () => {
+  it('uses the server-selected project-source default without persisting it, and keeps stored diagnostics inert', async () => {
     localStorage.setItem(ASSISTANT_STORAGE_KEYS.ignoreCache, 'true');
     const bodies: Array<Record<string, unknown>> = [];
     server.use(
@@ -247,7 +326,7 @@ describe('AssistantPanel', () => {
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(screen.getByRole('heading', { name: 'JHN 3:16-18' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('hi');
-    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBe('hi');
+    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBeNull();
     expect(bodies[0]).toMatchObject({ outputLanguage: 'hi' });
     expect(bodies[0]).not.toHaveProperty('grounding');
     expect(bodies[0]).not.toHaveProperty('ignore_cache');
@@ -354,7 +433,7 @@ describe('AssistantPanel', () => {
     expect(bodies.map(body => body.outputLanguage)).toEqual(['en']);
     expect(screen.getByRole('combobox', { name: 'Assistant output language' })).toHaveValue('en');
     expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['English']);
-    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBe('en');
+    expect(localStorage.getItem(ASSISTANT_STORAGE_KEYS.outputLanguage)).toBe('removed');
   });
 
   it('sends only force-on debug choices and makes force fresh a one-attempt cache bypass', async () => {
