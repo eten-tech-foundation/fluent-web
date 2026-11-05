@@ -26,18 +26,32 @@ const failureCopy: Record<AssistantFailureCode, string> = {
   network_error: 'The connection was interrupted.',
 };
 
-export function AssistantFailure({ error }: { error: AssistantBriefingError }) {
+export function AssistantFailure({
+  error,
+  operation = 'conversation',
+}: {
+  error: AssistantBriefingError;
+  operation?: 'briefing' | 'conversation';
+}) {
   const { t } = useTranslation();
-  return (
-    <p className='text-destructive text-sm'>
-      {!error.retryable && error.code === 'temporarily_unavailable'
-        ? t(
-            'assistant.continuationUnavailable',
-            'Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration.'
-          )
-        : t(`assistant.failure.${error.code}`, failureCopy[error.code])}
-    </p>
-  );
+  let message = t(`assistant.failure.${error.code}`, failureCopy[error.code]);
+  if (operation === 'briefing' && error.code === 'context_too_large') {
+    message = t(
+      'assistant.briefingTooLarge',
+      'The passage context or briefing exceeds the Assistant’s size limit. Try another passage, or ask your administrator to check the passage context and response size.'
+    );
+  } else if (!error.retryable && error.code === 'malformed_upstream_response') {
+    message = t(
+      'assistant.unreadableAnswer',
+      'The Assistant returned an unreadable answer. Ask your administrator to check the Assistant service response.'
+    );
+  } else if (!error.retryable && error.code === 'temporarily_unavailable') {
+    message = t(
+      'assistant.continuationUnavailable',
+      'Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration.'
+    );
+  }
+  return <p className='text-destructive text-sm'>{message}</p>;
 }
 
 export function AssistantConversationView({
@@ -214,6 +228,7 @@ export function AssistantConversationView({
                   false
                 )
               }
+              operation='briefing'
             />
           </div>
         )}

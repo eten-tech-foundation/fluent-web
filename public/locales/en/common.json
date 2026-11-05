@@ -258,6 +258,8 @@
     "inputLimit": "Questions can contain at most {{count}} characters.",
     "tab": "AI Assistant",
     "retryContext": "Reload passage context",
-    "continuationUnavailable": "Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration."
+    "continuationUnavailable": "Conversation is unavailable for this briefing. Reload the passage; if it continues, ask your administrator to check Assistant configuration.",
+    "briefingTooLarge": "The passage context or briefing exceeds the Assistant’s size limit. Try another passage, or ask your administrator to check the passage context and response size.",
+    "unreadableAnswer": "The Assistant returned an unreadable answer. Ask your administrator to check the Assistant service response."
   }
 }

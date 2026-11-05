@@ -10,7 +10,7 @@ import {
   AssistantConversationProvider,
   useAssistantConversation,
 } from './AssistantConversationProvider';
-import { AssistantConversationView } from './AssistantConversationView';
+import { AssistantConversationView, AssistantFailure } from './AssistantConversationView';
 import { AssistantMarkdown } from './AssistantMarkdown';
 
 import type { AssistantConversation } from '../assistant.conversation';
@@ -273,5 +273,29 @@ describe('conversation controls with the real workspace owner', () => {
       text: 'Go deeper?',
       origin: 'suggested_question',
     });
+  });
+  it('retains question-specific size recovery for conversation failures', () => {
+    render(<AssistantFailure error={new AssistantBriefingError('context_too_large', false)} />);
+    expect(screen.getByText(/Shorten your question or start a fresh conversation/)).toBeVisible();
+    expect(screen.queryByText(/The passage context or briefing exceeds/)).not.toBeInTheDocument();
+  });
+  it('explains how to escalate nonretryable unreadable conversation answers', () => {
+    render(
+      <AssistantFailure error={new AssistantBriefingError('malformed_upstream_response', false)} />
+    );
+    expect(
+      screen.getByText(/Ask your administrator to check the Assistant service response/)
+    ).toBeVisible();
+  });
+  it('uses passage-size guidance when the initial briefing cannot support continuation', () => {
+    mount();
+    act(() =>
+      test.owner!.observeBriefing(
+        { ...briefing, integrity: undefined, continuationUnavailable: 'context_too_large' },
+        test.owner!.getSnapshot().generation
+      )
+    );
+    expect(screen.getByText(/The passage context or briefing exceeds/)).toBeVisible();
+    expect(screen.queryByText(/Shorten your question/)).not.toBeInTheDocument();
   });
 });

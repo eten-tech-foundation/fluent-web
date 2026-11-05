@@ -1194,6 +1194,29 @@ describe('AssistantPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Select another output language');
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
+  it.each([
+    [
+      'malformed_upstream_response',
+      'Ask your administrator to check the Assistant service response.',
+    ],
+    [
+      'context_too_large',
+      'The passage context or briefing exceeds the Assistant’s size limit. Try another passage',
+    ],
+  ])('gives an actionable initial briefing explanation for %s', async (code, guidance) => {
+    server.use(
+      http.post(`${api}/projects/7/assistant/briefing`, () =>
+        HttpResponse.json({ code, retryable: false }, { status: 400 })
+      )
+    );
+    render(<AssistantPanel {...panelProps} localForceOn={false} nextContext={null} />, {
+      wrapper: wrapper(),
+    });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(guidance);
+    expect(alert).not.toHaveTextContent('Shorten your question');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
 });
 
 afterEach(() => vi.restoreAllMocks());

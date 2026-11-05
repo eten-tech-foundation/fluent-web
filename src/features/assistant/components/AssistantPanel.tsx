@@ -363,6 +363,7 @@ export function AssistantPanel({
                         ? briefing.error
                         : new AssistantBriefingError('stream_incomplete', true)
                     }
+                    operation='briefing'
                   />
                   {(!(briefing.error instanceof AssistantBriefingError) ||
                     briefing.error.retryable) && (
