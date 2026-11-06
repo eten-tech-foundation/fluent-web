@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { NetworkError } from '@/lib/api-utils';
 import { Logger } from '@/lib/services/logger';
 
 import {
   checkMilestoneUsfmFiles,
+  isUsfmFileName,
   looksLikeUsfm,
   type UsfmFileProblem,
   type UsfmFileVerdict,
@@ -24,6 +25,7 @@ export interface ListedUsfmFile {
 /** A problem with the file itself, or the check itself failing (no answer, or an error). */
 export type UsfmFileErrorReason =
   | UsfmFileProblem
+  | 'UNSUPPORTED_FILE_TYPE'
   | 'FILE_UNREADABLE'
   | 'CHECK_NETWORK'
   | 'CHECK_FAILED';
@@ -46,8 +48,40 @@ type CheckOutcome =
   | {
       id: string;
       fileName: string;
-      reason: 'USFM_INVALID' | 'FILE_UNREADABLE' | 'CHECK_NETWORK' | 'CHECK_FAILED';
+      reason:
+        | 'USFM_INVALID'
+        | 'UNSUPPORTED_FILE_TYPE'
+        | 'FILE_UNREADABLE'
+        | 'CHECK_NETWORK'
+        | 'CHECK_FAILED';
     };
+
+/**
+ * How many check requests are open at once, across every add. Each file has a request of its own,
+ * so a drop of a whole Testament, or a second drop right after the first, still doesn't send every
+ * file to the API at the same moment.
+ */
+const CHECKS_AT_ONCE = 4;
+
+/**
+ * Runs tasks at most `limit` at a time, for every caller together; the rest wait their turn in
+ * order. A finished task hands its place straight to the next one, so the limit holds in between.
+ */
+function createLimiter(limit: number) {
+  let running = 0;
+  const waiting: Array<() => void> = [];
+  return async function limited<T>(task: () => Promise<T>): Promise<T> {
+    if (running < limit) running += 1;
+    else await new Promise<void>(resolve => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running -= 1;
+    }
+  };
+}
 
 interface State {
   files: ListedUsfmFile[];
@@ -129,9 +163,10 @@ function reducer(state: State, action: Action): State {
 const INITIAL_STATE: State = { files: [], errors: [], checking: 0 };
 
 /**
- * The Add Milestone Import tab's files (#418). Files can be added any number of times; each is
- * checked by the API as soon as it is added, against the project's books, its Source Bible and the
- * files already listed. A refused file gets its own error and never affects the others.
+ * The Add Milestone Import tab's files (#418). Files can be added any number of times. A file that
+ * isn't .usfm or .sfm is refused at once; every other one is checked by the API as soon as it is
+ * added, in a request of its own, against the project's books, its Source Bible and the files
+ * already listed. A refused file gets its own error and never affects the others.
  */
 export function useUsfmMilestoneFiles(projectId: number) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
@@ -145,54 +180,57 @@ export function useUsfmMilestoneFiles(projectId: number) {
     listedRef.current = state.files.map(file => file.bookCode);
   }, [state.files]);
 
+  // One limit for every add, so files added before the earlier ones are checked wait their turn.
+  const [limitChecks] = useState(() => createLimiter(CHECKS_AT_ONCE));
+
+  /** What became of one added file; never throws, since every failure is that file's error. */
+  const checkFile = useCallback(
+    async (id: string, file: File): Promise<CheckOutcome> => {
+      const refused = (reason: Extract<CheckOutcome, { reason: string }>['reason']) => ({
+        id,
+        fileName: file.name,
+        reason,
+      });
+      if (!isUsfmFileName(file.name)) return refused('UNSUPPORTED_FILE_TYPE');
+
+      let usfm: string;
+      try {
+        usfm = await file.text();
+      } catch {
+        // A file moved or deleted since it was picked.
+        return refused('FILE_UNREADABLE');
+      }
+      // Text without a single marker never goes to the API.
+      if (!looksLikeUsfm(usfm)) return refused('USFM_INVALID');
+
+      try {
+        // The listed books are read when the request goes out, after any wait for its turn.
+        const [verdict] = await limitChecks(() =>
+          checkMilestoneUsfmFiles(projectId, [{ fileName: file.name, usfm }], listedRef.current)
+        );
+        return { id, fileName: file.name, usfm, verdict };
+      } catch (error) {
+        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
+          source: 'usfm milestone import check',
+        });
+        return refused(error instanceof NetworkError ? 'CHECK_NETWORK' : 'CHECK_FAILED');
+      }
+    },
+    [projectId, limitChecks]
+  );
+
   const addFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
       const ids = files.map(() => nextId());
       dispatch({ type: 'checking', count: files.length });
-
-      let outcomes: CheckOutcome[];
-      try {
-        // A file that can't be read (a dropped folder, a file removed since it was picked) is
-        // refused on its own; the rest of the drop is still checked.
-        const reads = await Promise.allSettled(files.map(file => file.text()));
-        const texts = reads.map(read => (read.status === 'fulfilled' ? read.value : null));
-        // Text without a single marker never goes to the API. The rest go in one request, so
-        // every file's problem shows at once.
-        const toCheck = texts.flatMap((text, index) =>
-          text !== null && looksLikeUsfm(text) ? [index] : []
-        );
-        const verdicts =
-          toCheck.length > 0
-            ? await checkMilestoneUsfmFiles(
-                projectId,
-                toCheck.map(index => ({ fileName: files[index].name, usfm: texts[index] ?? '' })),
-                listedRef.current
-              )
-            : [];
-        const verdictByIndex = new Map(toCheck.map((index, i) => [index, verdicts[i]]));
-        outcomes = files.map((file, index) => {
-          const verdict = verdictByIndex.get(index);
-          const text = texts[index];
-          if (verdict && text !== null) {
-            return { id: ids[index], fileName: file.name, usfm: text, verdict };
-          }
-          return {
-            id: ids[index],
-            fileName: file.name,
-            reason: text === null ? 'FILE_UNREADABLE' : 'USFM_INVALID',
-          };
-        });
-      } catch (error) {
-        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
-          source: 'usfm milestone import check',
-        });
-        const reason = error instanceof NetworkError ? 'CHECK_NETWORK' : 'CHECK_FAILED';
-        outcomes = files.map((file, index) => ({ id: ids[index], fileName: file.name, reason }));
-      }
+      // A request per file, so one the API can't check (a server error, a file over its size
+      // limit) refuses only that file instead of every file dropped with it (#418 QA). The
+      // results still land together, in the order the files came.
+      const outcomes = await Promise.all(files.map((file, index) => checkFile(ids[index], file)));
       dispatch({ type: 'checked', outcomes });
     },
-    [projectId, nextId]
+    [checkFile, nextId]
   );
 
   /** Takes the files the import refused off the list, each with its error (`verdicts` in `sent` order). */

@@ -149,15 +149,19 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   `src/features/rte/hooks/useVerseNumberKeys.test.tsx`.
 - USFM import creates one milestone in an existing project, from the Import tab of Add Milestone.
   [fluent-api](https://github.com/eten-tech-foundation/fluent-api) decides which book each file
-  is and whether it can be imported, so the upload check and the import can't disagree. Each file
-  is checked when it is added and refused on its own: not USFM, no book, a book already listed, a
-  book the project holds in any milestone (removed ones too, since an import never merges) or a
-  book its Source Bible lacks. The web side is `src/features/projects/hooks/useUsfmMilestoneFiles.ts`
-  (the list, one error per refused file, two adds of one book at once) and
-  `src/features/projects/lib/usfm-import.ts` (the check request and Bible order). Tests:
+  is and whether it can be imported, so the upload check and the import can't disagree. Only
+  `.usfm` and `.sfm` files are taken: anything else is refused before it is read, so it never
+  reaches the API. Each file is checked when it is added, in a request of its own, and refused on
+  its own: not USFM, no book, a book already listed, a book the project holds in any milestone
+  (removed ones too, since an import never merges) or a book its Source Bible lacks. A check that
+  fails refuses only its own file. The web side is
+  `src/features/projects/hooks/useUsfmMilestoneFiles.ts` (the list, one error per refused file,
+  two adds of one book at once) and `src/features/projects/lib/usfm-import.ts` (file types, the
+  check request and Bible order). Tests:
   `src/features/projects/components/UsfmMilestoneImportTab.test.tsx` › "refuses each bad file in
-  its own box and keeps the good ones" and "refuses the later of two files for one book added at
-  the same time".
+  its own box and keeps the good ones", "refuses anything but .usfm and .sfm files before reading
+  or sending them", "checks each file in its own request, so a failed check refuses only that
+  file" and "refuses the later of two files for one book added at the same time".
 - Speech is synthesized only for a Bible whose `ttsLicenseStatus` is `allowed`. `forbidden`,
   `unknown` and a missing status all bar it, and `licenceBar` in
   `src/features/tts/resolver/licenceFence.ts` is the one place that reads the status. A barred

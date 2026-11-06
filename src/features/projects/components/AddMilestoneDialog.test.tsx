@@ -101,6 +101,19 @@ describe('AddMilestoneDialog tabs (#418)', () => {
     expect(screen.queryByText('largeMilestoneWarning')).not.toBeInTheDocument();
   });
 
+  it('scrolls only the Import tab body, so the title, tabs and buttons stay put', async () => {
+    config.features.usfmImport = true;
+    const { user } = renderDialog();
+
+    await user.click(screen.getByRole('tab', { name: 'importTab' }));
+
+    expect(screen.getByRole('dialog')).not.toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('usfm-import-body')).toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('usfm-import-body')).not.toContainElement(
+      screen.getByRole('tablist')
+    );
+  });
+
   it('keeps the listed files when the user looks at New and comes back', async () => {
     config.features.usfmImport = true;
     const { user } = renderDialog();
