@@ -177,8 +177,28 @@ describe('useStitchedAudio', () => {
     );
 
     expect(result.current.hasOnlyPerVerseRecordings).toBe(false);
+    expect(result.current.hasVerseRecordings).toBe(true);
     expect(result.current.hasActivePericopeTake).toBe(true);
     expect(result.current.activePericopeTake?.id).toBe(600);
+  });
+
+  it('detects hasVerseRecordings as false when only pericope recordings are present', () => {
+    const pericopeRecording: VerseAudioRecording = {
+      ...makeRecording(6, [{ id: 600, durationSeconds: 25 }], 600),
+      isPericope: true,
+      pericopeRange: [6, 9],
+    };
+
+    const { result } = renderHook(() =>
+      useStitchedAudio({
+        verseNumbers: [6, 7, 8, 9],
+        recordings: [pericopeRecording],
+      })
+    );
+
+    expect(result.current.hasOnlyPerVerseRecordings).toBe(false);
+    expect(result.current.hasVerseRecordings).toBe(false);
+    expect(result.current.hasActivePericopeTake).toBe(true);
   });
 
   it('skips pericope recordings that have no range instead of falling back to single verse', () => {

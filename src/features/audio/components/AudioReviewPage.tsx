@@ -555,8 +555,16 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
       return [...verseTakes, ...pericopeTakes];
     }
 
-    // Pericope mode
-    return selectedPassage.recordings.flatMap(r => r.takes);
+    // Pericope mode: only show pericope-level takes as TakeCards;
+    // verse-level recordings are played via the StitchedAudioPlayer.
+    const pericopeRecs = selectedPassage.recordings.filter(isPericopeRecording);
+    return pericopeRecs.flatMap(r =>
+      r.takes.map(t => ({
+        ...t,
+        bibleTextId: r.bibleTextId,
+        isCoveringPericope: false,
+      }))
+    );
   }, [selectedPassage, displayMode, audioData, projectItem.chapterNumber, t]);
 
   // Show contributor names only when the passage has takes from more than one contributor (spec #383)
@@ -856,27 +864,8 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
             className='min-h-0 flex-1 overflow-y-auto px-6 pb-6'
             style={{ scrollbarGutter: 'stable' }}
           >
-            {displayMode === 'pericope' && stitchedAudio.hasOnlyPerVerseRecordings ? (
-              <StitchedAudioPlayer
-                label={t(
-                  'stitchedFromVerseRecordings',
-                  'Stitched from verse recordings, vv. {{range}}{{continuation}}',
-                  {
-                    range:
-                      effectivePassage.verseNumbers[0] ===
-                      effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]
-                        ? `${effectivePassage.verseNumbers[0]}`
-                        : `${effectivePassage.verseNumbers[0]}-${effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]}`,
-                    continuation: effectivePassage.continuationNote
-                      ? ` ${effectivePassage.continuationNote}`
-                      : '',
-                  }
-                )}
-                skippedVerses={stitchedAudio.skippedVerses}
-                totalDuration={stitchedAudio.totalDuration}
-                tracks={stitchedAudio.tracks}
-              />
-            ) : selectedTakes.length === 0 ? (
+            {selectedTakes.length === 0 &&
+            !(displayMode === 'pericope' && stitchedAudio.hasVerseRecordings) ? (
               <p className='text-muted-foreground text-sm'>
                 {t('noAudioDraftsAvailable', 'No audio drafts available.')}
               </p>
@@ -921,6 +910,28 @@ const AudioReviewPage: React.FC<AudioReviewPageProps> = ({ projectItem: propItem
                     />
                   );
                 })}
+
+                {displayMode === 'pericope' && stitchedAudio.hasVerseRecordings && (
+                  <StitchedAudioPlayer
+                    label={t(
+                      'stitchedFromVerseRecordings',
+                      'Stitched from verse recordings, vv. {{range}}{{continuation}}',
+                      {
+                        range:
+                          effectivePassage.verseNumbers[0] ===
+                          effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]
+                            ? `${effectivePassage.verseNumbers[0]}`
+                            : `${effectivePassage.verseNumbers[0]}-${effectivePassage.verseNumbers[effectivePassage.verseNumbers.length - 1]}`,
+                        continuation: effectivePassage.continuationNote
+                          ? ` ${effectivePassage.continuationNote}`
+                          : '',
+                      }
+                    )}
+                    skippedVerses={stitchedAudio.skippedVerses}
+                    totalDuration={stitchedAudio.totalDuration}
+                    tracks={stitchedAudio.tracks}
+                  />
+                )}
               </div>
             )}
           </div>
