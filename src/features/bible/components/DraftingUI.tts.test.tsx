@@ -2092,3 +2092,7 @@ describe('DraftingUI — full cross-chapter audio scope', () => {
     }
   );
 });
+
+vi.mock('@/features/assistant/components/AssistantConversationProvider', () => ({
+  AssistantNavigationBridge: () => null,
+}));

@@ -171,10 +171,12 @@ describe('helpers', () => {
     expect(applyFlagOverrides(published, {})).toEqual({
       repeatedWordCheck: true,
       sourceAudio: false,
+      assistant: false,
     });
     expect(applyFlagOverrides(published, { repeatedWordCheck: false })).toEqual({
       repeatedWordCheck: false,
       sourceAudio: false,
+      assistant: false,
     });
     // Does not mutate its input.
     expect(published.repeatedWordCheck).toBe(true);
