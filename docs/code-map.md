@@ -8,7 +8,8 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
 
 - [fluent-api](https://github.com/eten-tech-foundation/fluent-api) is the only backend. Calls go to `${config.api.url}/<path>` with
   `credentials: 'include'`. There is no shared API client: each feature keeps its fetch functions
-  and React Query hooks in its own `hooks/` folder. Sign-in goes through better-auth at
+  and React Query hooks within the feature, usually in its `hooks/` folder. The Assistant keeps
+  its clients and queries at the feature root. Sign-in goes through better-auth at
   `config.api.auth_url` (`src/lib/auth-client.ts`).
 - The shared editor `@eten-tech-foundation/platform-editor` is only imported in
   `src/features/rte/`. `package.json` pins its exact version.
@@ -37,6 +38,8 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   `/organizations`, managers to `/projects`, observers and translators to their dashboards.
 
 ## Features
+
+- `src/features/assistant/`: passage briefings, suggested questions and temporary follow-up conversations in the drafting sidebar. `components/AssistantPanel.tsx` renders the pane; `assistant.conversation.ts` owns the in-memory thread across panel remounts; `assistant.navigation.ts` maps passage changes. Feature-root `assistant.client.ts`, `assistant.queries.ts` and `assistant.turn.client.ts` handle language discovery, briefings and turns. Web owns declarative action templates and local rendering/handlers; requests send the bounded catalog to API. Calls `GET /projects/:id/assistant/languages`, `POST /projects/:id/assistant/briefing` and `POST /projects/:id/assistant/turns`. The merged `assistant` flag gates queries and prefetch. The coordinated API [Working Passage Assistant proposal](https://github.com/eten-tech-foundation/fluent-api/blob/jel-working-passage-assistant-api/docs/features/ai-assistant-passage-briefing/proposal.md) describes the cross-layer behavior.
 
 - `src/features/projects/`: the project list, project creation
   (`components/CreateProjectModal.tsx`), the project page and the milestone page. The project

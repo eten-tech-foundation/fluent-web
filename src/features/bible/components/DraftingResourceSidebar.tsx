@@ -32,10 +32,14 @@ interface DraftingResourceSidebarProps {
   activeFindingsCount: number;
   /** Body for the Checks tab (the `ChecksPanel`, composed by the parent). */
   checksContent: ReactNode;
+  /** Body for the Assistant tab. */
+  assistantContent?: ReactNode;
   /** Whether the Checks tab is shown at all. When the Repeated Word Check
    *  feature is disabled (feature-flags proposal D6/D7) the tab is hidden so it
    *  looks unimplemented; forwarded straight to `LeftPanel`. Defaults to true. */
   showChecksTab?: boolean;
+  /** Whether the Assistant tab is shown. */
+  showAssistantTab?: boolean;
 }
 
 export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = ({
@@ -57,7 +61,9 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
   onTabChange,
   activeFindingsCount,
   checksContent,
+  assistantContent,
   showChecksTab = true,
+  showAssistantTab = false,
 }) => {
   const [resourcePanelWidth, setResourcePanelWidth] = useState(25); // percentage
   const isDraggingRef = useRef(false);
@@ -124,6 +130,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
         <LeftPanel
           activeFindingsCount={activeFindingsCount}
           activeTab={activeLeftTab}
+          assistantContent={assistantContent}
           checksContent={checksContent}
           resourcesContent={
             <ResourcePanel
@@ -144,6 +151,7 @@ export const DraftingResourceSidebar: React.FC<DraftingResourceSidebarProps> = (
               onResourceChange={setCurrentResource}
             />
           }
+          showAssistantTab={showAssistantTab}
           showChecksTab={showChecksTab}
           onTabChange={onTabChange}
         />

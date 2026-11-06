@@ -321,3 +321,7 @@ vi.mock('@/features/tts/resolver/providerFacts', () => ({ useProviderFacts: () =
 vi.mock('@/features/resources/hooks/useReferenceChapterTexts', () => ({
   useReferenceChapterTexts: () => new Map(),
 }));
+
+vi.mock('@/features/assistant/components/AssistantConversationProvider', () => ({
+  AssistantNavigationBridge: () => null,
+}));

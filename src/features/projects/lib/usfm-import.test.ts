@@ -5,7 +5,26 @@ import { NetworkError } from '@/lib/api-utils';
 import { server } from '@/test/msw/server';
 import { PROJECT_ID, USFM_CHECK_URL, usfmCheckHandler } from '@/test/msw/usfm-milestone-import';
 
-import { checkMilestoneUsfmFiles, compareBibleOrder, looksLikeUsfm } from './usfm-import';
+import {
+  checkMilestoneUsfmFiles,
+  compareBibleOrder,
+  isUsfmFileName,
+  looksLikeUsfm,
+} from './usfm-import';
+
+describe('isUsfmFileName (#418)', () => {
+  it.each([
+    ['41MAT.usfm', true],
+    ['41MATXYZ.SFM', true],
+    ['Kachi-Koli-JUD.Usfm', true],
+    ['ETEN Summit Opening Slide Options.pdf', false],
+    ['draft.txt', false],
+    ['GEN.usfm.txt', false],
+    ['usfm', false],
+  ])('%j → %s', (fileName, expected) => {
+    expect(isUsfmFileName(fileName)).toBe(expected);
+  });
+});
 
 describe('looksLikeUsfm', () => {
   it.each([

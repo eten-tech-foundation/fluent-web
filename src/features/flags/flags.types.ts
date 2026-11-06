@@ -14,13 +14,16 @@
 /**
  * Known feature-flag wire keys (camelCase), mirroring the API's `FLAGS`
  * registry. Kept as a string-literal union (not an open `string`) so a typo in
- * `useFeatureFlag('...')` / `<FeatureGate feature="...">` is a compile error and
- * so the diagnostics page can enumerate the known flags.
+ * `useFeatureFlag('...')` / `<FeatureGate feature="...">` is a compile error
+ * and so the diagnostics page can enumerate the known flags.
  *
  * ── ⚠️ KNOWN, DELIBERATE GAP: `aiSuggestions` is missing here ───────────────
- * fluent-api publishes THREE flags (`repeatedWordCheck`, `aiSuggestions`,
- * `sourceAudio` once its Phase-04 change lands); this union lists only two. The
- * omission is real, not an oversight of the API contract:
+ * fluent-api publishes `repeatedWordCheck`, `aiSuggestions`, `sourceAudio`, and
+ * the coordinated default-off `assistant` key. This union omits only the unread
+ * `aiSuggestions` key. Older API responses that omit `assistant` remain safely
+ * off through the fail-closed defaults; an explicit browser-local override is
+ * still authoritative for dark-ship review. The `aiSuggestions` omission is
+ * real, not an oversight of the API contract:
  *
  *   • `EN_FEATURE_AI_SUGGESTIONS` → wire key `aiSuggestions` exists in
  *     `fluent-api/src/lib/features.ts` (same `aiIsWired` derived default as
@@ -41,7 +44,7 @@
  * block once `aiSuggestions` is present and actually gating something.
  * *(gap found 2026-08-06 while implementing source-TTS.)*
  */
-export type FeatureName = 'repeatedWordCheck' | 'sourceAudio';
+export type FeatureName = 'repeatedWordCheck' | 'sourceAudio' | 'assistant';
 
 /** The published feature map: every known flag, always present as a boolean. */
 export type Features = Record<FeatureName, boolean>;
@@ -69,4 +72,6 @@ export const failClosedFeatures = (): Features => ({
   // Off by default like every flag here: the controls must not appear before the
   // API confirms the feature.
   sourceAudio: false,
+  // Passage Assistant — coordinated API flag, published off by default for dark shipping.
+  assistant: false,
 });

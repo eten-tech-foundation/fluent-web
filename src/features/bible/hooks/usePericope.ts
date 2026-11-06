@@ -13,6 +13,7 @@ interface UsePericopeProps {
   revealedVerses: Set<number>;
   lastRevealedVerseHasContent: boolean;
   displayMode: string;
+  includeFullPericopes?: boolean;
   getSaveStatus: (verseNumber: number) => { hasUnsavedChanges: boolean };
   saveImmediately: (
     verseNumber: number,
@@ -30,6 +31,7 @@ export const usePericope = ({
   revealedVerses,
   lastRevealedVerseHasContent,
   displayMode,
+  includeFullPericopes = displayMode === 'pericope',
   getSaveStatus,
   saveImmediately,
   handleActiveVerseChange,
@@ -44,7 +46,7 @@ export const usePericope = ({
     projectItem.projectId,
     projectItem.bookCode,
     projectItem.chapterNumber,
-    displayMode === 'pericope'
+    includeFullPericopes
   );
 
   // Full references belong to display. Drafting, saving and progress still belong to the

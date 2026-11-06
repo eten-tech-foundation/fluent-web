@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LeftPanel } from './LeftPanel';
@@ -9,6 +10,7 @@ const baseProps = {
   activeFindingsCount: 0,
   resourcesContent: <div>resources-body</div>,
   checksContent: <div>checks-body</div>,
+  assistantContent: <div>assistant-body</div>,
 };
 
 describe('LeftPanel', () => {
@@ -19,13 +21,17 @@ describe('LeftPanel', () => {
   });
 
   it('shows the active tab body and hides the inactive one', () => {
-    const { rerender } = render(<LeftPanel {...baseProps} activeTab='resources' />);
+    const { rerender } = render(
+      <LeftPanel {...baseProps} showAssistantTab activeTab='resources' />
+    );
     expect(screen.getByText('resources-body')).toBeInTheDocument();
     expect(screen.queryByText('checks-body')).not.toBeInTheDocument();
+    expect(screen.queryByText('assistant-body')).not.toBeInTheDocument();
 
-    rerender(<LeftPanel {...baseProps} activeTab='checks' />);
+    rerender(<LeftPanel {...baseProps} showAssistantTab activeTab='checks' />);
     expect(screen.getByText('checks-body')).toBeInTheDocument();
     expect(screen.queryByText('resources-body')).not.toBeInTheDocument();
+    expect(screen.queryByText('assistant-body')).not.toBeInTheDocument();
   });
 
   it('marks the active tab via aria-selected', () => {
@@ -112,6 +118,85 @@ describe('LeftPanel', () => {
       const resourcesTabId = screen.getByRole('tab', { name: /Resources/ }).getAttribute('id');
       expect(resourcesTabId).toBeTruthy();
       expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', resourcesTabId);
+    });
+  });
+
+  describe('Assistant tab', () => {
+    it('is hidden by default and falls back to Resources if a saved Assistant tab is unavailable', () => {
+      render(<LeftPanel {...baseProps} activeTab='assistant' />);
+      expect(screen.queryByRole('tab', { name: 'AI Assistant' })).not.toBeInTheDocument();
+      expect(screen.getByText('resources-body')).toBeInTheDocument();
+    });
+
+    it('renders an icon-only AI Assistant immediately before Resources with a tooltip', async () => {
+      const user = userEvent.setup();
+      render(<LeftPanel {...baseProps} showAssistantTab activeTab='assistant' />);
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs).toEqual([
+        screen.getByRole('tab', { name: 'AI Assistant' }),
+        screen.getByRole('tab', { name: 'Resources' }),
+        screen.getByRole('tab', { name: /Checks/ }),
+      ]);
+      const assistant = screen.getByRole('tab', { name: 'AI Assistant' });
+      expect(assistant).toHaveTextContent('');
+      expect(assistant).toHaveAttribute('aria-selected', 'true');
+      expect(assistant).toHaveAttribute('aria-controls', screen.getByRole('tabpanel').id);
+      expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', assistant.id);
+      expect(screen.getByText('assistant-body')).toBeInTheDocument();
+      await user.hover(assistant);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('AI Assistant');
+    });
+
+    it('does not mount Assistant content until its tab is open', () => {
+      const AssistantProbe = vi.fn(() => <div>assistant-probe</div>);
+      const view = render(
+        <LeftPanel
+          {...baseProps}
+          showAssistantTab
+          activeTab='resources'
+          assistantContent={<AssistantProbe />}
+        />
+      );
+      expect(AssistantProbe).not.toHaveBeenCalled();
+
+      view.rerender(
+        <LeftPanel
+          {...baseProps}
+          showAssistantTab
+          activeTab='assistant'
+          assistantContent={<AssistantProbe />}
+        />
+      );
+      expect(AssistantProbe).toHaveBeenCalledTimes(1);
+    });
+
+    it('moves across only visible tabs with Arrow, Home, and End keys', () => {
+      const onTabChange = vi.fn();
+      render(
+        <LeftPanel
+          {...baseProps}
+          showAssistantTab
+          activeTab='resources'
+          showChecksTab={false}
+          onTabChange={onTabChange}
+        />
+      );
+      const resources = screen.getByRole('tab', { name: 'Resources' });
+      fireEvent.keyDown(resources, { key: 'ArrowRight' });
+      expect(onTabChange).toHaveBeenLastCalledWith('assistant');
+      expect(screen.getByRole('tab', { name: 'AI Assistant' })).toHaveFocus();
+      fireEvent.keyDown(screen.getByRole('tab', { name: 'AI Assistant' }), { key: 'Home' });
+      expect(onTabChange).toHaveBeenLastCalledWith('assistant');
+      fireEvent.keyDown(screen.getByRole('tab', { name: 'AI Assistant' }), { key: 'End' });
+      expect(onTabChange).toHaveBeenLastCalledWith('resources');
+    });
+
+    it('does not disturb the Checks notification dot', () => {
+      render(<LeftPanel {...baseProps} showAssistantTab activeFindingsCount={2} />);
+      expect(screen.getByTestId('checks-notification-dot')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'AI Assistant' })).not.toContainElement(
+        screen.getByTestId('checks-notification-dot')
+      );
     });
   });
 });
