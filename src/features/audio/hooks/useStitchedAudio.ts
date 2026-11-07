@@ -43,6 +43,8 @@ export interface StitchedAudioResult {
   pericopeTakes: VerseAudioTake[];
   /** Whether the pericope has only per-verse recordings */
   hasOnlyPerVerseRecordings: boolean;
+  /** Whether the pericope has any verse recordings */
+  hasVerseRecordings: boolean;
   /** Ordered active verse tracks to stitch together */
   tracks: StitchedTrack[];
   /** Verses skipped from stitching, with reason */
@@ -216,6 +218,11 @@ export function useStitchedAudio({
       }
     }
 
+    const hasVerseRecordings = sortedVerseNums.some(v => {
+      const rec = verseRecordingMap.get(v);
+      return (rec?.takes.length ?? 0) > 0;
+    });
+
     const tracks: StitchedTrack[] = [];
     const skippedVerses: SkippedVerse[] = [];
 
@@ -252,6 +259,7 @@ export function useStitchedAudio({
       activePericopeTake,
       pericopeTakes,
       hasOnlyPerVerseRecordings,
+      hasVerseRecordings,
       tracks,
       skippedVerses,
       totalDuration,

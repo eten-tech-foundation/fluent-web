@@ -365,6 +365,153 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
     expect(screen.getByText('Verse 2 not included: no recording')).toBeInTheDocument();
   });
 
+  it('renders both pericope take cards and stitched audio player (below takes) when both types are recorded in pericope view', () => {
+    currentRecordings = [
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+      mockRecordings[0], // verse 1 (5s)
+      mockRecordings[1], // verse 2 (7s)
+    ];
+
+    renderPage();
+
+    // 1. Pericope TakeCard should be rendered
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+    expect(screen.getByText('Current Draft')).toBeInTheDocument();
+
+    // 2. Stitched card should also be rendered
+    const stitchedCard = screen.getByTestId('stitched-audio-card');
+    expect(stitchedCard).toBeInTheDocument();
+    expect(screen.getByText('Stitched from verse recordings, vv. 1-2')).toBeInTheDocument();
+
+    // 3. Stitched player must appear BELOW the pericope take card in the DOM
+    const takeCard = screen.getByText('Take 1').closest('.rounded-xl');
+    expect(takeCard).toBeInTheDocument();
+    expect(
+      Boolean(
+        takeCard &&
+        takeCard.compareDocumentPosition(stitchedCard) & Node.DOCUMENT_POSITION_FOLLOWING
+      )
+    ).toBe(true);
+  });
+
+  it('renders both pericope take cards and stitched audio player with skipped verse note when only some verses are recorded', () => {
+    currentRecordings = [
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+      mockRecordings[0], // verse 1 recorded, verse 2 missing
+    ];
+
+    renderPage();
+
+    // Pericope TakeCard is rendered
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+
+    // Stitched card is rendered with skipped verse note for verse 2
+    expect(screen.getByTestId('stitched-audio-card')).toBeInTheDocument();
+    expect(screen.getByText('Verse 2 not included: no recording')).toBeInTheDocument();
+  });
+
+  it('renders only pericope take cards and no stitched player when pericope is recorded with zero verse recordings', () => {
+    currentRecordings = [
+      {
+        id: 99,
+        projectUnitId: 1,
+        bibleTextId: 1,
+        uploadedBy: 1,
+        contentType: 'audio/webm',
+        sizeBytes: 1000,
+        durationSeconds: 15,
+        versionToken: 1,
+        downloadUrl: 'https://example.com/p.webm',
+        verseNumber: 1,
+        isPericope: true,
+        pericopeRange: [1, 2],
+        conflictStatus: 'clean',
+        activeTakeId: 991,
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+        takes: [
+          {
+            id: 991,
+            uploadedBy: 1,
+            contentType: 'audio/webm',
+            sizeBytes: 1000,
+            durationSeconds: 15,
+            contentHash: 'hash-991',
+            downloadUrl: 'https://example.com/991.webm',
+            createdAt: '2026-03-01T00:00:00Z',
+            updatedAt: '2026-03-01T00:00:00Z',
+          },
+        ],
+      } as unknown as VerseAudioRecording,
+      // No verse recordings
+    ];
+
+    renderPage();
+
+    expect(screen.getByText('Take 1')).toBeInTheDocument();
+    expect(screen.queryByTestId('stitched-audio-card')).not.toBeInTheDocument();
+  });
+
   it('displays cross-view warning indicator and banner in pericope view when verse has conflict', () => {
     currentRecordings = [
       {
