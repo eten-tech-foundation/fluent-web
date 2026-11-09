@@ -2760,6 +2760,27 @@ describe('DraftingUI', () => {
         false
       );
     });
+
+    it('does not activate presence for unresolved numeric stage IDs before workflow loads', () => {
+      const numericProjectItem = {
+        ...mockProjectItem,
+        chapterStatus: '2',
+      };
+
+      render(
+        <DraftingUI
+          projectItem={numericProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+
+      expect(mockUseChapterPresence).toHaveBeenCalledWith(
+        numericProjectItem.chapterAssignmentId,
+        false
+      );
+    });
   });
 });
 

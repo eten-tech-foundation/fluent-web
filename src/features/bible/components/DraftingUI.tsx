@@ -205,22 +205,28 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const { workflowConfig, getStageLabel } = useProjectWorkflow(projectItem.projectId);
 
   const isPostPeer = useMemo(() => {
+    if (!projectItem.chapterStatus) return false;
+    const statusStr = String(projectItem.chapterStatus);
     if (workflowConfig.length > 0) {
       const peerIdx = workflowConfig.findIndex(s => s.id === ChapterAssignmentStatus.PEER_CHECK);
       const completeIdx = workflowConfig.findIndex(s => s.id === ChapterAssignmentStatus.COMPLETE);
       const currentIdx = workflowConfig.findIndex(
-        s =>
-          s.id === projectItem.chapterStatus || s.stageId?.toString() === projectItem.chapterStatus
+        s => s.id === statusStr || s.stageId?.toString() === statusStr
       );
       if (peerIdx !== -1 && completeIdx !== -1 && currentIdx !== -1) {
         return currentIdx > peerIdx && currentIdx < completeIdx;
       }
     }
+    // If the status is a numeric stage ID that hasn't been resolved yet in workflowConfig,
+    // do not enable presence prematurely (avoids false warnings for draft / peer check).
+    if (/^\d+$/.test(statusStr)) {
+      return false;
+    }
     return (
-      projectItem.chapterStatus !== ChapterAssignmentStatus.NOT_STARTED &&
-      projectItem.chapterStatus !== ChapterAssignmentStatus.DRAFT &&
-      projectItem.chapterStatus !== ChapterAssignmentStatus.PEER_CHECK &&
-      projectItem.chapterStatus !== ChapterAssignmentStatus.COMPLETE
+      statusStr !== ChapterAssignmentStatus.NOT_STARTED &&
+      statusStr !== ChapterAssignmentStatus.DRAFT &&
+      statusStr !== ChapterAssignmentStatus.PEER_CHECK &&
+      statusStr !== ChapterAssignmentStatus.COMPLETE
     );
   }, [workflowConfig, projectItem.chapterStatus]);
 
