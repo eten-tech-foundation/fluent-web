@@ -80,10 +80,7 @@ vi.mock('react-i18next', async importOriginal => {
         maybeOptions?: Record<string, unknown>
       ) => {
         if (key === 'noContentAvailable') return enCommon.noContentAvailable;
-        const opts =
-          (typeof defaultOrOptions === 'object' && defaultOrOptions !== null
-            ? defaultOrOptions
-            : maybeOptions) ?? {};
+        const opts = (typeof defaultOrOptions === 'object' ? defaultOrOptions : maybeOptions) ?? {};
         const template =
           typeof defaultOrOptions === 'string'
             ? defaultOrOptions
@@ -113,7 +110,7 @@ const mockUseChapterAudio = vi.fn().mockReturnValue({
 });
 
 vi.mock('@/features/audio/hooks/useChapterAudio', () => ({
-  useChapterAudio: (...args: unknown[]) => mockUseChapterAudio(...args),
+  useChapterAudio: (...args: unknown[]) => mockUseChapterAudio(...args) as unknown,
 }));
 
 vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
@@ -122,7 +119,7 @@ vi.mock('@/features/bible/hooks/useBibleTarget', () => ({
 }));
 
 vi.mock('@/features/bible/hooks/useChapterPresence', () => ({
-  useChapterPresence: () => mockUseChapterPresence() as unknown,
+  useChapterPresence: (...args: unknown[]) => mockUseChapterPresence(...args) as unknown,
 }));
 
 vi.mock('@/features/bible/hooks/useResourceStatePersistence', () => ({
@@ -2696,6 +2693,72 @@ describe('DraftingUI', () => {
       );
       expect(screen.queryByTestId('chapter-view')).not.toBeInTheDocument();
       expect(screen.getByLabelText('Translation for verse 1')).toHaveValue('Local translation');
+    });
+  });
+
+  describe('chapter presence with dynamic workflow stages', () => {
+    it('activates presence for custom post-peer workflow stages', () => {
+      const customProjectItem = {
+        ...mockProjectItem,
+        chapterStatus: 'custom_audio_check',
+      };
+
+      render(
+        <DraftingUI
+          projectItem={customProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+
+      expect(mockUseChapterPresence).toHaveBeenCalledWith(
+        customProjectItem.chapterAssignmentId,
+        true
+      );
+    });
+
+    it('does not activate presence for draft or complete stages', () => {
+      const draftProjectItem = {
+        ...mockProjectItem,
+        chapterStatus: ChapterAssignmentStatus.DRAFT,
+      };
+
+      render(
+        <DraftingUI
+          projectItem={draftProjectItem}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+
+      expect(mockUseChapterPresence).toHaveBeenCalledWith(
+        draftProjectItem.chapterAssignmentId,
+        false
+      );
+    });
+
+    it('does not activate presence when readOnly is true', () => {
+      const customProjectItem = {
+        ...mockProjectItem,
+        chapterStatus: 'custom_audio_check',
+      };
+
+      render(
+        <DraftingUI
+          projectItem={customProjectItem}
+          readOnly={true}
+          sourceVerses={mockSourceVerses}
+          targetVerses={mockTargetVerses}
+          userdetail={{ id: 1 } as User}
+        />
+      );
+
+      expect(mockUseChapterPresence).toHaveBeenCalledWith(
+        customProjectItem.chapterAssignmentId,
+        false
+      );
     });
   });
 });

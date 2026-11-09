@@ -200,12 +200,29 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
   const setPresenceWarning = useAppStore(state => state.setPresenceWarning);
 
   const isDraft = projectItem.chapterStatus === ChapterAssignmentStatus.DRAFT;
-  const isCommunityReview = projectItem.chapterStatus === ChapterAssignmentStatus.COMMUNITY_REVIEW;
-  const isLinguistCheck = projectItem.chapterStatus === ChapterAssignmentStatus.LINGUIST_CHECK;
-  const isTheologicalCheck =
-    projectItem.chapterStatus === ChapterAssignmentStatus.THEOLOGICAL_CHECK;
-  const isConsultantCheck = projectItem.chapterStatus === ChapterAssignmentStatus.CONSULTANT_CHECK;
   const isComplete = projectItem.chapterStatus === ChapterAssignmentStatus.COMPLETE;
+
+  const { workflowConfig, getStageLabel } = useProjectWorkflow(projectItem.projectId);
+
+  const isPostPeer = useMemo(() => {
+    if (workflowConfig.length > 0) {
+      const peerIdx = workflowConfig.findIndex(s => s.id === ChapterAssignmentStatus.PEER_CHECK);
+      const completeIdx = workflowConfig.findIndex(s => s.id === ChapterAssignmentStatus.COMPLETE);
+      const currentIdx = workflowConfig.findIndex(
+        s =>
+          s.id === projectItem.chapterStatus || s.stageId?.toString() === projectItem.chapterStatus
+      );
+      if (peerIdx !== -1 && completeIdx !== -1 && currentIdx !== -1) {
+        return currentIdx > peerIdx && currentIdx < completeIdx;
+      }
+    }
+    return (
+      projectItem.chapterStatus !== ChapterAssignmentStatus.NOT_STARTED &&
+      projectItem.chapterStatus !== ChapterAssignmentStatus.DRAFT &&
+      projectItem.chapterStatus !== ChapterAssignmentStatus.PEER_CHECK &&
+      projectItem.chapterStatus !== ChapterAssignmentStatus.COMPLETE
+    );
+  }, [workflowConfig, projectItem.chapterStatus]);
 
   // Fetch chapter audio to know whether to show the "View Audio" button.
   // The hook auto-refetches every 10 min so R2 pre-signed URLs stay fresh.
@@ -221,7 +238,7 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const { editorName } = useChapterPresence(
     projectItem.chapterAssignmentId,
-    isCommunityReview || isLinguistCheck || isTheologicalCheck || isConsultantCheck
+    isPostPeer && !readOnly
   );
 
   useEffect(() => {
@@ -721,8 +738,6 @@ export const DraftingUI: React.FC<DraftingUIProps> = ({
 
   const isAnythingSaving = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).showLoader);
   const hasAnyError = !readOnly && verses.some(v => getSaveStatus(v.verseNumber).hasRetryScheduled);
-
-  const { workflowConfig, getStageLabel } = useProjectWorkflow(projectItem.projectId);
 
   let buttonText =
     ChapterAssignmentStatusNextAction[projectItem.chapterStatus as ChapterAssignmentStatus];
