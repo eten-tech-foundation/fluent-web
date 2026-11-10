@@ -40,6 +40,28 @@ Because nothing reloads, text typed right after a level change stays in the head
 level. `applyUpdate` is marked EXPERIMENTAL in platform-editor 0.8.15. Whoever upgrades the editor
 should recheck this call and the immediate-typing tests listed below.
 
+## Removing a heading
+
+A heading put in the wrong place couldn't be removed (Chad, November 9, 2026): Paragraph is off
+inside a heading, and Backspace at its start or Delete at its end is blocked, because each would
+fold the heading's words into scripture. So with the cursor in a heading, Chapter View's bar shows
+Remove heading after Insert paragraph, the way the indent controls show up in poetry. It takes the
+heading's words and its line out in one undo step and leaves the paragraph under it as it is. The
+caret goes to the start of that line's text, so typing goes on in the verse.
+
+Deleting all of a heading's words leaves its line empty, as an editor keeps an emptied title for
+new words. That empty line isn't saved, and Backspace or Delete takes it away. Right under the
+chapter number Backspace used to do nothing, since the merge would reach the chapter number and
+the marker guard blocks it; `useEmptyHeadingBackspace` now does what Delete does there, in Chapter
+View and in a pericope box. Remove heading on an empty heading takes the line the same way.
+
+Editorial 0.8.15 can't remove an empty paragraph by delta: deleting its line break leaves a line
+with no marker, and words typed there are never saved. So a heading with words goes by delta
+(`removeHeadingAt`), and an empty one through the editor's own Delete (`removeEmptyHeadingLine`),
+both in `src/features/rte/lib/format-heading.ts`. With the caret placed on the paragraph after a
+verse number, Editorial also lands the next typed letters but leaves them out of onUsjChange, so
+the caret goes on the verse's text instead.
+
 ## API dependency
 
 Heading persistence requires the work from [API #320](https://github.com/eten-tech-foundation/fluent-api/pull/320),
@@ -58,4 +80,9 @@ They also type immediately after switching a heading to `s2`, `s3` or `s4` and c
 text keeps the new level, and they pick H3/H4 from the level menu in ChapterEditor, type right
 away, and check that the other headings and scripture are unchanged. A stylesheet test checks that
 all four levels render differently in both editing surfaces.
+Removal is covered in `format-heading.test.tsx` (words and line go, scripture stays, typing right
+after is saved, adjacent titles, refusals, the empty-line hand-off), `StructuralHistory.test.tsx`
+(Remove heading in one undo step, every state saved), `FormatBar.test.tsx` (only inside a heading)
+and `useEmptyHeadingBackspace.test.tsx`. jsdom can't run Lexical's own Delete, so the browser checks
+cover the empty line going away under the chapter number in both views.
 Browser verification uses the production ChapterEditor and PericopeEditor with local save fixtures.

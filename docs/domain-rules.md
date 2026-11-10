@@ -125,6 +125,14 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   invalid the editor shows an error and doesn't save. Tests:
   `src/features/rte/components/ChapterEditor.test.tsx` › "keeps invalid heading edits visible and
   resumes saving after correction".
+- A heading's words never fold into scripture, so a heading comes out whole: Remove heading in
+  Chapter View's bar takes its words and line in one undo step, and once its words are deleted,
+  Backspace or Delete takes the empty line, right under the chapter number too. Backspace at a
+  heading's start and Delete at its end stay blocked, and Paragraph stays off in a heading. Tests:
+  `src/features/rte/components/StructuralHistory.test.tsx` › "removes a heading from the bar in
+  one undo step and saves every state"; `src/features/rte/lib/format-heading.test.tsx` ›
+  "removes the heading %s is in, words and line, and leaves scripture alone";
+  `src/features/rte/hooks/useEmptyHeadingBackspace.test.tsx`.
 - The editor is uncontrolled. Don't feed new verses into it on every render. `ChapterEditor` and
   `PericopeEditor` reload it through `loadIntoEditor` only when the chapter or pericope changes,
   when an AI suggestion fills a verse the editor holds empty, after a structural rewrite, or when
@@ -136,7 +144,8 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   you upgrade `@eten-tech-foundation/platform-editor`: undo and redo shortcuts
   (`src/features/rte/lib/history-shortcuts.ts`), copy and paste
   (`src/features/rte/lib/editor-shortcuts.ts`, `src/features/rte/lib/editor-clipboard.ts`),
-  heading level changes (`src/features/rte/lib/format-heading.ts`), formatting a single verse
+  heading level changes and removal, since a delta can't remove an empty paragraph
+  (`src/features/rte/lib/format-heading.ts`), formatting a single verse
   inside a longer block (`src/features/rte/lib/scoped-block-format.ts`), the space a new
   paragraph would start with, which Editorial drops so a later merge glues two words together
   (`afterWordSpace` in `src/features/rte/lib/verse-numbers.ts`), and the invisible caret host

@@ -64,6 +64,7 @@
   "blockPoetryLine": "Poetry Line",
   "blockOther": "Other",
   "headingLevel": "Level",
+  "removeHeading": "Remove heading",
   "decreaseIndent": "Decrease indent",
   "increaseIndent": "Increase indent",
   "display": "Display",
