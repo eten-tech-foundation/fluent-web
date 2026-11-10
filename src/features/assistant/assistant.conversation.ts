@@ -202,7 +202,10 @@ export class AssistantConversation {
     const recoverySequence = ++this.recoverySequence;
     const submissionDraftRevision = this.draftRevision;
     const reject = (error: AssistantBriefingError) => {
-      if (origin === 'suggested_question') this.update({ draft: text });
+      if (origin === 'suggested_question') {
+        this.draftRevision++;
+        this.update({ draft: text });
+      }
       return error;
     };
     const snapshot = this.state;
