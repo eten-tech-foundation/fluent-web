@@ -214,6 +214,23 @@ describe('drafting conversation lifecycle', () => {
     expect(owner.getSnapshot().turns).toHaveLength(1);
     expect(transport).toHaveBeenCalledTimes(1);
   });
+  it('preserves a newer rejected suggestion when an older request reports context changed', () => {
+    const { owner, deliveries, transport } = setup();
+    owner.submit('Old suggestion', 'suggested_question');
+    const newerSuggestion = 'x'.repeat(4001);
+    expect(owner.submit(newerSuggestion, 'suggested_question')?.code).toBe('context_too_large');
+    expect(owner.getSnapshot().draft).toBe(newerSuggestion);
+    expect(deliveries[0].signal.aborted).toBe(false);
+
+    deliveries[0].publish({ type: 'context_changed', protocol: 'fluent-turn-v1' });
+
+    expect(owner.getSnapshot()).toMatchObject({
+      draft: newerSuggestion,
+      notice: 'context_changed',
+      turns: [],
+    });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
   it('rejects whitespace, oversized input and unsigned/oversized briefing without losing draft or requesting', () => {
     const { owner, transport } = setup();
     owner.setDraft('preserve');
