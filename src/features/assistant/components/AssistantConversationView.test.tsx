@@ -159,6 +159,17 @@ describe('conversation controls with the real workspace owner', () => {
     enter();
     expect(test.deliveries).toHaveLength(2);
   });
+  it('preserves composer edits made after a suggested question starts and then fails', async () => {
+    mount();
+    write('Earlier draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Suggested question?' }));
+    write('Newer text typed while waiting');
+    await act(async () =>
+      test.deliveries[0].reject(new AssistantBriefingError('network_error', true))
+    );
+    expect(input()).toHaveValue('Newer text typed while waiting');
+    expect(screen.getByText('The connection was interrupted.')).toBeVisible();
+  });
   it('shows partial output, retains old failure context, and retries only the newest question without duplicating it', async () => {
     mount();
     write('First question');

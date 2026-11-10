@@ -227,7 +227,7 @@ describe('drafting conversation lifecycle', () => {
     expect(owner.getSnapshot().draft).toBe('preserve');
     expect(transport).not.toHaveBeenCalled();
   });
-  it('restores full failed suggestions on validation and terminal failure, replacing drafts', async () => {
+  it('restores full failed suggestions on validation and terminal failure', async () => {
     const { owner, deliveries, transport } = setup();
     owner.setDraft('replace me');
     const long = 'x'.repeat(4001);
@@ -235,7 +235,6 @@ describe('drafting conversation lifecycle', () => {
     expect(owner.getSnapshot().draft).toBe(long);
     expect(transport).not.toHaveBeenCalled();
     owner.submit('Original suggested question', 'suggested_question');
-    owner.setDraft('another draft');
     deliveries[0].reject(new AssistantBriefingError('generation_busy', true));
     await Promise.resolve();
     expect(owner.getSnapshot().draft).toBe('Original suggested question');

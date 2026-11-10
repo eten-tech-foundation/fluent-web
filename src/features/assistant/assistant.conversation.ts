@@ -75,6 +75,7 @@ export class AssistantConversation {
   private typedInteraction = false;
   private admissionEvents = new WeakSet<object>();
   private recoverySequence = 0;
+  private draftRevision = 0;
   constructor(private readonly transport: Transport = streamAssistantTurn) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -140,6 +141,7 @@ export class AssistantConversation {
     else this.update({ context, ready, intent });
   }
   setDraft = (draft: string) => {
+    this.draftRevision++;
     if (draft.length) this.typedInteraction = true;
     this.update({ draft });
   };
@@ -198,6 +200,7 @@ export class AssistantConversation {
     if (this.admissionEvents.has(event))
       return new AssistantBriefingError('invalid_request', false);
     const recoverySequence = ++this.recoverySequence;
+    const submissionDraftRevision = this.draftRevision;
     const reject = (error: AssistantBriefingError) => {
       if (origin === 'suggested_question') this.update({ draft: text });
       return error;
@@ -312,7 +315,7 @@ export class AssistantConversation {
           ready: this.state.ready,
           intent: this.state.intent,
           refresh: this.state.refresh + 1,
-          draft: input.text,
+          draft: this.draftRevision === submissionDraftRevision ? input.text : this.state.draft,
           notice: 'context_changed',
         });
       } else if (update.type === 'turn_started') {
@@ -332,7 +335,11 @@ export class AssistantConversation {
     void this.transport(snapshot.context.projectId, request, publish, controller.signal)
       .catch((error: unknown) => {
         if (!current()) return;
-        if (input.origin === 'suggested_question' && recoverySequence === this.recoverySequence)
+        if (
+          input.origin === 'suggested_question' &&
+          recoverySequence === this.recoverySequence &&
+          this.draftRevision === submissionDraftRevision
+        )
           this.update({ draft: input.text });
         this.replaceAttempt(turnId, attemptId, {
           state: 'failed',
