@@ -251,6 +251,10 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     const row = removeButton.closest('tr');
     expect(row).not.toBeNull();
     expect(row?.className).toContain('group');
+
+    // Keyboard users can focus the opacity-0 button directly
+    removeButton.focus();
+    expect(removeButton).toHaveFocus();
   });
 
   it('removes dedicated width of the remove column so data columns use freed space', async () => {
@@ -265,5 +269,10 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     expect(removeHeader.className).toContain('w-0');
     expect(removeHeader.className).toContain('p-0');
     expect(removeHeader.className).not.toContain('w-10');
+
+    // Role cell reserves right padding clear of the absolute remove button (right-2.5 + w-7 = 38px < pr-11 = 44px)
+    const roleButton = screen.getByRole('button', { name: /Translator/i });
+    const roleCell = roleButton.closest('td');
+    expect(roleCell?.className).toContain('pr-11');
   });
 });

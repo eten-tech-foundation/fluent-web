@@ -427,7 +427,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
           className={`group hover:bg-muted/50 relative ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
         >
           <TableCell className='text-foreground py-2.5 pl-4 text-sm'>{pu.displayName}</TableCell>
-          <TableCell className='text-foreground relative py-2.5 pr-8 text-sm'>
+          <TableCell className='text-foreground relative py-2.5 pr-11 text-sm'>
             {isOwnRow ? (
               <span>{getDisplayRole(pu.roleName)}</span>
             ) : updatingRoleUserIds.has(pu.userId) ? (
