@@ -7,7 +7,7 @@ import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
+import { getActiveGrants, isManager, isProjectManager } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
@@ -33,10 +33,10 @@ export const MilestoneDetailWrapper: React.FC = () => {
   const location = useLocation();
   const { userdetail } = useAppStore();
 
-  const isManager = isProjectManager(
-    getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId),
-    project?.id
-  );
+  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const isManagerUser = isManager(activeRoleGrants);
+  const isProjectMgr = isManagerUser && isProjectManager(activeRoleGrants, project?.id);
 
   const { data: milestones } = useGetMilestones(projectId);
   const currentMilestone = useMemo(
@@ -150,6 +150,7 @@ export const MilestoneDetailWrapper: React.FC = () => {
   return (
     <>
       <MilestoneDetailPage
+        isManager={isProjectMgr}
         milestoneId={Number(milestoneId)}
         milestoneName={currentMilestone?.name}
         milestoneUpdatedAt={currentMilestone?.updatedAt}
@@ -172,7 +173,7 @@ export const MilestoneDetailWrapper: React.FC = () => {
         onClose={handleCloseExport}
       />
       <EditProjectMetadataDialog
-        isOpen={isManager && modal === 'metadata'}
+        isOpen={isProjectMgr && modal === 'metadata'}
         projectUnitId={projectUnitId}
         onClose={handleCloseMetadata}
       />

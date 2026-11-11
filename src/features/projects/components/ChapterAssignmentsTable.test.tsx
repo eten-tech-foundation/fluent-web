@@ -127,6 +127,26 @@ describe('ChapterAssignmentsTable', () => {
     expect(screen.queryByLabelText('Audio conflict')).not.toBeInTheDocument();
   });
 
+  it('hides row selection checkboxes and select column when isManager is false, and keeps drafter/checker text', () => {
+    renderWithProviders(
+      <ChapterAssignmentsTable {...defaultProps} assignments={[mockAssignment]} isManager={false} />
+    );
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Select')).not.toBeInTheDocument();
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+  });
+
+  it('renders row selection checkboxes and select column when isManager is true', () => {
+    renderWithProviders(
+      <ChapterAssignmentsTable {...defaultProps} assignments={[mockAssignment]} isManager={true} />
+    );
+
+    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+    expect(screen.getByText('Select')).toBeInTheDocument();
+  });
+
   it('renders long workflow stage names in headers with truncation classes and shrink-0 on sort icon', async () => {
     const longDrafterName = 'Extremely Long Custom Workflow Drafter Role Name That Should Truncate';
     const longCheckerName =

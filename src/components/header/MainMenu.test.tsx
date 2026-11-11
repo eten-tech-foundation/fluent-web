@@ -73,6 +73,32 @@ describe('MainMenu visibility (#489 regression)', () => {
     expect(screen.getByText('projects')).toBeInTheDocument();
   });
 
+  it('shows Projects item for a Project Translator', async () => {
+    withUser({
+      role: ROLES.PROJECT_TRANSLATOR,
+      lastActiveOrgId: 1,
+      grants: [grant(1, null, ROLES.ORG_MEMBER), grant(1, 10, ROLES.PROJECT_TRANSLATOR)],
+    });
+
+    await openMenu();
+
+    expect(screen.queryByText('users')).not.toBeInTheDocument();
+    expect(screen.getByText('projects')).toBeInTheDocument();
+  });
+
+  it('shows Projects item for a Project Observer', async () => {
+    withUser({
+      role: ROLES.PROJECT_OBSERVER,
+      lastActiveOrgId: 1,
+      grants: [grant(1, null, ROLES.ORG_MEMBER), grant(1, 10, ROLES.PROJECT_OBSERVER)],
+    });
+
+    await openMenu();
+
+    expect(screen.queryByText('users')).not.toBeInTheDocument();
+    expect(screen.getByText('projects')).toBeInTheDocument();
+  });
+
   it('hides Projects and Users for an anchor-only Org Member', async () => {
     withUser({
       role: ROLES.ORG_MEMBER,

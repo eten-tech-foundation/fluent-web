@@ -7,7 +7,13 @@ import { ProjectsPage } from '@/features/projects/components/ProjectPage';
 import { useCreateProject, useProjectsByRole } from '@/features/projects/hooks/useProjects';
 import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
-import { canCreateProject, getActiveGrants, isManager } from '@/lib/grant-utils';
+import {
+  canCreateProject,
+  getActiveGrants,
+  isManager,
+  isObserver,
+  isTranslator,
+} from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { type CreateProject } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -33,13 +39,15 @@ export const ProjectsWrapper: React.FC = () => {
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
   const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
 
-  // Ticket #410: only project managers and org managers can view this page at all.
-  const canViewProjectsList = isManager(activeRoleGrants);
+  const isUserManager = isManager(activeRoleGrants);
+  const isUserTranslator = isTranslator(activeRoleGrants);
+  const isUserObserver = isObserver(activeRoleGrants);
+  const canViewProjectsList = isUserManager || isUserTranslator || isUserObserver;
 
   // Per #410: org managers only, target state. Project Managers keep access
   // temporarily until the Org Manager dashboard ships — see
   // ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT in grant-utils.ts.
-  const canCreate = canCreateProject(activeRoleGrants);
+  const canCreate = isUserManager && canCreateProject(activeRoleGrants);
 
   const handleOpenCreate = () => {
     void navigate({
@@ -97,7 +105,7 @@ export const ProjectsWrapper: React.FC = () => {
     }
   };
 
-  // Route non-manager roles away from the Projects list entirely (#410).
+  // Route roles without access away from the Projects list entirely.
   // The `userdetail &&` guard matters: without it, every user briefly gets
   // redirected on page refresh, before userdetail finishes loading — including
   // real managers. Waiting for userdetail avoids that flicker/bug.
@@ -108,14 +116,14 @@ export const ProjectsWrapper: React.FC = () => {
   return (
     <>
       <ProjectsPage
-        isManager={canCreate}
+        isManager={isUserManager}
         loading={isLoading}
         projects={projects}
         onCreateProject={handleOpenCreate}
         onProjectSelect={handleProjectSelect}
       />
 
-      {canCreate && (
+      {isUserManager && canCreate && (
         <CreateProjectModal
           error={createProjectMutation.error?.message}
           isLoading={createProjectMutation.isPending}

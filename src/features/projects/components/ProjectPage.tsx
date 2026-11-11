@@ -223,7 +223,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             </div>
           ) : sortedAndFilteredProjects.length === 0 ? (
             <div className='flex items-center justify-center py-8'>
-              <span className='text-gray-500'>{t('noProjectsContactAdmin')}</span>
+              <span className='text-gray-500'>
+                {isManager
+                  ? t('noProjectsContactAdmin')
+                  : t('noProjectsContactManager', 'No projects yet. Contact your project manager.')}
+              </span>
             </div>
           ) : (
             <TooltipProvider delayDuration={300}>

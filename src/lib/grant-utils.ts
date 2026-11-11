@@ -194,6 +194,11 @@ export function isObserver(activeGrants: UserGrant[]): boolean {
   return activeGrants.some(g => g.roleName === ROLES.PROJECT_OBSERVER);
 }
 
+/** True if the user's currently-selected role is Project Translator. */
+export function isTranslator(activeGrants: UserGrant[]): boolean {
+  return activeGrants.some(g => g.roleName === ROLES.PROJECT_TRANSLATOR);
+}
+
 const ROLES_WITH_USER_VIEW: readonly string[] = [
   ROLES.ORG_MANAGER,
   ROLES.ORG_OWNER,

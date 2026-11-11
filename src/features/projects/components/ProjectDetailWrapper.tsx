@@ -12,10 +12,10 @@ import { useUsers } from '@/hooks/useUsers';
 import {
   getActiveGrants,
   hasGrantForProject,
+  isManager,
   isProjectManager,
   isProjectManagerOnly,
 } from '@/lib/grant-utils';
-import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { ProjectDetailPage } from './ProjectDetailPage';
@@ -54,12 +54,14 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   // Same check the page uses to show the button, repeated here so `?modal=metadata`
   // typed straight into the URL cannot open the editor for a non-manager.
-  const isManager = isProjectManager(activeGrants, project?.id);
-  const isPMOnly = isProjectManagerOnly(activeGrants, project?.id);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const isManagerUser = isManager(activeRoleGrants);
+  const isProjectMgr = isManagerUser && isProjectManager(activeRoleGrants, project?.id);
+  const isPMOnly = isManagerUser && isProjectManagerOnly(activeRoleGrants, project?.id);
 
   const { data: chapterAssignments } = useChapterAssignments(projectId);
   const { data: books } = useProjectBooks(projectId);
-  const { data: users, isLoading: usersLoading } = useUsers(isManager);
+  const { data: users, isLoading: usersLoading } = useUsers(isProjectMgr);
 
   const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
 
@@ -70,11 +72,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       return;
     }
 
-    if (userdetail?.role === ROLES.PROJECT_OBSERVER) {
-      void navigate({ to: '/' });
-    } else {
-      void navigate({ to: '/projects' });
-    }
+    void navigate({ to: '/projects' });
   };
 
   const handleOpenAddUser = () => {
@@ -120,7 +118,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         books={books}
         chapterAssignments={chapterAssignments}
         isAddUserOpen={modal === 'add'}
-        isManager={isManager}
+        isManager={isProjectMgr}
         isProjectManagerOnly={isPMOnly}
         milestones={milestones}
         milestonesLoading={milestonesLoading}
