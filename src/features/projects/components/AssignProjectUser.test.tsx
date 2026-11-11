@@ -223,3 +223,47 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
     expect(await screen.findByText('bob_org_manager')).toBeInTheDocument();
   });
 });
+
+describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () => {
+  it('hides remove icon by default and reveals it on hover, focus, and touch devices', async () => {
+    renderWithProviders(
+      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+    );
+
+    const trashButtons = await screen.findAllByRole('button', {
+      name: /Remove user from project/i,
+    });
+    expect(trashButtons).toHaveLength(1);
+    const removeButton = trashButtons[0];
+
+    // Hidden by default
+    expect(removeButton.className).toContain('opacity-0');
+    // Hover on row reveals icon
+    expect(removeButton.className).toContain('group-hover:opacity-100');
+    // Keyboard focus reveals icon
+    expect(removeButton.className).toContain('focus-visible:opacity-100');
+    // Touch devices without hover keep icon visible
+    expect(removeButton.className).toContain('[@media(hover:none)]:opacity-100');
+    // Hover on the icon itself turns it red
+    expect(removeButton.className).toContain('hover:text-red-500');
+
+    // Row has group class to enable row hover triggers
+    const row = removeButton.closest('tr');
+    expect(row).not.toBeNull();
+    expect(row?.className).toContain('group');
+  });
+
+  it('removes dedicated width of the remove column so data columns use freed space', async () => {
+    renderWithProviders(
+      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+    );
+
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers).toHaveLength(3);
+
+    const removeHeader = headers[2];
+    expect(removeHeader.className).toContain('w-0');
+    expect(removeHeader.className).toContain('p-0');
+    expect(removeHeader.className).not.toContain('w-10');
+  });
+});
