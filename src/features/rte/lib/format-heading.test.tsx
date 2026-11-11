@@ -49,13 +49,13 @@ const rows = [
   },
 ];
 
-async function setup(selection: SelectionRange) {
+async function setup(selection: SelectionRange, verses = rows) {
   const ref = createRef<EditorRef>();
   const onChange = vi.fn();
   const { container } = render(
     <Editorial
       ref={ref}
-      defaultUsj={pericopeVersesToUsj(rows, 1, 'GEN')}
+      defaultUsj={pericopeVersesToUsj(verses, 1, 'GEN')}
       options={{ isReadonly: false, hasExternalUI: true, hasSpellCheck: false }}
       onUsjChange={usj => {
         onChange(usjToPericopeVerses(usj));
@@ -229,6 +229,42 @@ describe('removing a heading in the real editor', () => {
     );
   });
 
+  // A verse with no words yet is only its number, so the caret can't go on its text.
+  it.each([
+    ['at once', false],
+    ['after the removal has settled', true],
+  ])('saves words typed %s under a heading removed above an empty verse', async (_, settle) => {
+    const { ref, container, onChange } = await setup(
+      { start: { jsonPath: '$.content[2].content[0]', offset: 3 } },
+      [rows[0], { ...rows[1], text: '' }]
+    );
+    onChange.mockClear();
+    const type = () => {
+      fireEvent(
+        editable(container),
+        new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertReplacementText',
+          data: 'New',
+        })
+      );
+    };
+    await act(async () => {
+      removeHeading(ref.current!, editable(container));
+      if (!settle) type();
+    });
+    if (settle) {
+      await waitFor(() => expect(container.querySelector('[data-marker="s1"]')).toBeNull());
+      await act(async () => {
+        type();
+      });
+    }
+    await waitFor(() =>
+      expect(onChange).toHaveBeenLastCalledWith([rows[0], { ...withoutHeading, text: 'New' }])
+    );
+  });
+
   it('removes only that heading when titles are adjacent', async () => {
     const titled = [
       rows[0],
@@ -250,7 +286,9 @@ describe('removing a heading in the real editor', () => {
         ref={ref}
         defaultUsj={pericopeVersesToUsj(titled, 1, 'GEN')}
         options={{ isReadonly: false, hasExternalUI: true, hasSpellCheck: false }}
-        onUsjChange={usj => onChange(usjToPericopeVerses(usj))}
+        onUsjChange={usj => {
+          onChange(usjToPericopeVerses(usj));
+        }}
       />
     );
     await waitFor(() => expect(ref.current?.getUsj()).toBeTruthy());

@@ -53,6 +53,7 @@ export const isEmptyHeading = (node: Usj['content'][number] | undefined): boolea
  * Where typing continues once the block before `line` is gone: at the start of its text, in the
  * text itself. With the caret on the paragraph after a verse number instead, Editorial lands the
  * next typed letters in the right place but leaves them out of onUsjChange, so they aren't saved.
+ * A verse with no words yet has no text to hold the caret; words typed after its number are saved.
  */
 function startOfText(index: number, line: MarkerObject): CaretLocation {
   const [first, second] = line.content ?? [];

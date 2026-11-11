@@ -106,7 +106,8 @@ describe('useDrafting with markers', () => {
       result.current.handleTextChange(1, 'Starts here and continues here.', SPLIT);
       result.current.handleActiveVerseChange(2);
     });
-    await act(() => vi.advanceTimersByTimeAsync(2500));
+    // Well before the debounce: the verse change itself has to save the edit.
+    await act(() => vi.advanceTimersByTimeAsync(100));
 
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave).toHaveBeenCalledWith(1, {
@@ -114,6 +115,10 @@ describe('useDrafting with markers', () => {
       markers: SPLIT,
     });
     expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+
+    // And the debounce it replaced doesn't save the verse a second time.
+    await act(() => vi.advanceTimersByTimeAsync(2500));
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   it('leaves markers undefined for a textarea edit that never derived any', async () => {
