@@ -49,6 +49,16 @@ Remove heading after Insert paragraph, the way the indent controls show up in po
 heading's words and its line out in one undo step and leaves the paragraph under it as it is. The
 caret goes to the start of that line's text, so typing goes on in the verse.
 
+A heading added in the middle of a paragraph splits it, and the split stays when the heading goes.
+Backspace joins the two lines again, right where the caret lands. The caret sits after the verse
+number there, and the marker guard used to block the key because it can't delete the number, so
+`useVerseNumberKeys` hands the editor its caret at the line start and lets its own Backspace join
+the lines. The join changes that verse and moves the cursor to the verse above in one editor
+update, which showed a save bug: on a verse change the page saved the verse from React state that
+hadn't rendered the edit yet, over the pending save, so the lines joined on screen and came apart
+on reload (Firefox did this on main with the caret in front of the number). The verse change now
+saves the queue's own payload (`flushSave` in `src/features/bible/hooks/useBibleTextDebounce.ts`).
+
 Deleting all of a heading's words leaves its line empty, as an editor keeps an emptied title for
 new words. That empty line isn't saved, and Backspace or Delete takes it away. Right under the
 chapter number Backspace used to do nothing, since the merge would reach the chapter number and
@@ -84,5 +94,8 @@ Removal is covered in `format-heading.test.tsx` (words and line go, scripture st
 after is saved, adjacent titles, refusals, the empty-line hand-off), `StructuralHistory.test.tsx`
 (Remove heading in one undo step, every state saved), `FormatBar.test.tsx` (only inside a heading)
 and `useEmptyHeadingBackspace.test.tsx`. jsdom can't run Lexical's own Delete, so the browser checks
-cover the empty line going away under the chapter number in both views.
+cover the empty line going away under the chapter number in both views. The join after a removal
+is covered in `useVerseNumberKeys.test.tsx` (the caret the editor gets, and where the key is left
+alone) and `useDrafting.test.ts` (an edit made in the same update that moves the active verse is
+saved); the browser checks cover the lines joining and staying joined after a reload.
 Browser verification uses the production ChapterEditor and PericopeEditor with local save fixtures.

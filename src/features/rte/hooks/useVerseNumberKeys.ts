@@ -11,6 +11,7 @@ import { hasStructuralPayload } from '../lib/editor-clipboard';
 import {
   BLOCK_SELECTOR,
   EDITOR_SELECTOR,
+  SCRIPTURE_MARKER_SELECTOR,
   VERSE_MARKER_SELECTOR,
   elementAt,
   hasWords,
@@ -63,6 +64,28 @@ function mayBeLoneVerse(block: Element | null | undefined): boolean {
   const verses = block.querySelectorAll(VERSE_MARKER_SELECTOR);
   return (
     verses.length === 1 && visibleText(block.textContent) === visibleText(verses[0].textContent)
+  );
+}
+
+/** A line of scripture, as opposed to a heading or the chapter number. */
+const isBodyLine = (block: Element | null): boolean =>
+  !!block &&
+  block.matches(BLOCK_SELECTOR) &&
+  !block.matches(SCRIPTURE_MARKER_SELECTOR) &&
+  !isHeadingMarker(block.getAttribute('data-marker') ?? undefined);
+
+/** The caret is right after the verse number its line begins with, no words on either side. */
+function afterLeadingVerseNumber(block: Element): boolean {
+  const selection = window.getSelection();
+  const number = block.querySelector(VERSE_MARKER_SELECTOR);
+  if (!selection?.isCollapsed || !selection.anchorNode || !number) return false;
+  if (!block.contains(selection.anchorNode) || number.contains(selection.anchorNode)) return false;
+  const beforeCaret = document.createRange();
+  beforeCaret.selectNodeContents(block);
+  beforeCaret.setEnd(selection.anchorNode, selection.anchorOffset);
+  return (
+    beforeCaret.cloneContents().querySelectorAll(VERSE_MARKER_SELECTOR).length === 1 &&
+    visibleText(beforeCaret.toString()) === visibleText(number.textContent)
   );
 }
 
@@ -147,6 +170,25 @@ export function useVerseNumberKeys(editorRef: RefObject<EditorRef | null>, readO
       if (event.key === 'Backspace' || event.key === 'Delete') {
         if (event.altKey || event.shiftKey) return false;
         const forward = event.key === 'Delete';
+        // Right after the number a line begins with, Backspace joins the line to the one above,
+        // as it does in front of the number. The key can't delete the number, so the marker guard
+        // would block it and nothing would happen. The editor gets its caret at the line start
+        // instead and its own Backspace does the join. Under a heading or the chapter number
+        // there is no line of scripture to join, and the key stays blocked.
+        if (
+          !forward &&
+          block &&
+          isBodyLine(block) &&
+          isBodyLine(block.previousElementSibling) &&
+          afterLeadingVerseNumber(block)
+        ) {
+          // The editor root renders one element per top-level USJ block.
+          const index = Array.prototype.indexOf.call(root.children, block);
+          editor.setSelection({ start: { jsonPath: `$.content[${index}]`, offset: 0 } });
+          // Reading the selection commits it before the key reaches the guard and the editor.
+          editor.getSelection();
+          return false;
+        }
         const lone = forward ? block : block?.previousElementSibling;
         if (block && !(lone && mayBeLoneVerse(lone))) return false;
         const caret = caretInBlock(editor);

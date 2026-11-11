@@ -96,6 +96,26 @@ describe('useDrafting with markers', () => {
     });
   });
 
+  it('flushes an edit made in the same update that moves the active verse', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = draft(onSave);
+
+    // Joining two lines in the editor changes a verse's markers and moves the cursor to another
+    // verse in one editor update, before React has rendered the edit.
+    act(() => {
+      result.current.handleTextChange(1, 'Starts here and continues here.', SPLIT);
+      result.current.handleActiveVerseChange(2);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2500));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(1, {
+      content: 'Starts here and continues here.',
+      markers: SPLIT,
+    });
+    expect(result.current.getSaveStatus(1).hasUnsavedChanges).toBe(false);
+  });
+
   it('leaves markers undefined for a textarea edit that never derived any', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result } = draft(onSave);
