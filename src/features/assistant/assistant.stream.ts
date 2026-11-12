@@ -2,6 +2,26 @@ import { TURN_LIMITS } from './assistant.turn.types';
 import { AssistantBriefingError } from './assistant.types';
 
 export const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
+/** Count only appended text; repair UTF-8 replacement-byte accounting for split surrogates. */
+export class AssistantUtf8Size {
+  bytes = 0;
+  private trailingHighSurrogate = false;
+  append(text: string): number {
+    if (!text) return this.bytes;
+    const first = text.charCodeAt(0);
+    this.bytes +=
+      utf8Bytes(text) - (this.trailingHighSurrogate && first >= 0xdc00 && first <= 0xdfff ? 2 : 0);
+    const last = text.charCodeAt(text.length - 1);
+    this.trailingHighSurrogate = last >= 0xd800 && last <= 0xdbff;
+    return this.bytes;
+  }
+  replace(text: string): number {
+    this.bytes = 0;
+    this.trailingHighSurrogate = false;
+    return this.append(text);
+  }
+}
+
 export const malformedStream = () =>
   new AssistantBriefingError('malformed_upstream_response', true);
 
@@ -61,7 +81,10 @@ export async function* assistantFrames(
 ): AsyncGenerator<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  let buffer = '';
+  let tail = '';
+  let pending = '';
+  let parts: string[] = [];
+  let bufferBytes = 0;
   let retainedBytes = 0;
   let lastId = 0;
   let hasIds: boolean | undefined;
@@ -70,12 +93,19 @@ export async function* assistantFrames(
       const next = reader.read();
       const { done, value } = delivery ? await delivery.wait(next) : await next;
       if (!done) delivery?.activity();
-      buffer += decoder.decode(value, { stream: !done });
-      let boundary = /\r?\n\r?\n/.exec(buffer);
+      const decoded = decoder.decode(value, { stream: !done });
+      let buffer = tail + decoded;
+      bufferBytes += utf8Bytes(decoded);
+      const separator = /\r?\n\r?\n/g;
+      let boundary = separator.exec(buffer);
       while (boundary) {
-        const block = buffer.slice(0, boundary.index);
+        const block = parts.join('') + pending + buffer.slice(0, boundary.index);
+        parts = [];
+        pending = '';
         buffer = buffer.slice(boundary.index + boundary[0].length);
-        if (utf8Bytes(block) > TURN_LIMITS.frameBytes) throw malformedStream();
+        const frameBytes = utf8Bytes(block) + boundary[0].length;
+        bufferBytes -= frameBytes;
+        if (frameBytes > TURN_LIMITS.frameBytes) throw malformedStream();
         const data: string[] = [];
         let event: string | undefined;
         let id: string | undefined;
@@ -138,12 +168,20 @@ export async function* assistantFrames(
             throw new AssistantBriefingError('response_safety_limit', false);
           yield json;
         }
-        boundary = /\r?\n\r?\n/.exec(buffer);
+        separator.lastIndex = 0;
+        boundary = separator.exec(buffer);
       }
-      if (utf8Bytes(buffer) > TURN_LIMITS.frameBytes) throw malformedStream();
+      pending += buffer.slice(0, Math.max(0, buffer.length - 3));
+      tail = buffer.slice(-3);
+      if (pending.length >= 16384) {
+        parts.push(pending);
+        pending = '';
+      }
+      if (bufferBytes > TURN_LIMITS.frameBytes) throw malformedStream();
       if (done) break;
     }
-    if (buffer.trim()) throw new AssistantBriefingError('stream_incomplete', true);
+    if ((parts.join('') + pending + tail).trim())
+      throw new AssistantBriefingError('stream_incomplete', true);
   } catch (error) {
     if (error instanceof AssistantBriefingError) throw error;
     throw malformedStream();
@@ -169,7 +207,7 @@ export async function assistantResponseJson(
       const { done, value } = delivery ? await delivery.wait(pending) : await pending;
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > TURN_LIMITS.frameBytes) throw malformedStream();
+      if (bytes > TURN_LIMITS.responseBytes) throw malformedStream();
       body += decoder.decode(value, { stream: true });
       delivery?.activity();
     }
