@@ -103,28 +103,62 @@ describe('drafting conversation lifecycle', () => {
       expect(deliveries[0].signal.aborted).toBe(true);
     }
   );
-  it('pins early signed briefing exactly, preserves draft, and never observes later cache completion', () => {
-    const { owner, transport } = setup();
-    const partial = {
-      ...briefing,
-      phase: 'streaming' as const,
-      integrity: {
-        ...briefing.integrity!,
-        prefix: { ...briefing.integrity!.prefix, complete: false },
-      },
-    };
-    owner.observeBriefing(partial, owner.getSnapshot().generation);
-    owner.setDraft('typed draft');
-    expect(owner.submit('typed draft', 'typed')).not.toBeNull();
-    expect(owner.submit('Macro?', 'suggested_question')).toBeNull();
-    owner.observeBriefing({ ...briefing, source: 'late complete' }, owner.getSnapshot().generation);
-    expect(owner.getSnapshot()).toMatchObject({ pinned: partial, draft: 'typed draft' });
-    expect(transport.mock.calls[0][1]).toMatchObject({
-      briefing: partial.integrity!.prefix,
-      dont_cache: true,
-    });
-    expect(owner.submit('typed draft', 'typed')).toBeNull();
-  });
+  it.each(['typed', 'suggested_question'] as const)(
+    'pins the exact initial streaming snapshot for %s and fences late replacements and completion',
+    origin => {
+      const { owner, transport } = setup();
+      const partial: PassageBriefingData = {
+        ...briefing,
+        source: 'Visible partial briefing',
+        phase: 'streaming',
+        integrity: {
+          ...briefing.integrity!,
+          prefix: {
+            markdown: 'Visible partial briefing',
+            sequence: 2,
+            complete: false,
+            receipt: 'signed-partial-receipt',
+          },
+        },
+      };
+      const generation = owner.getSnapshot().generation;
+      owner.observeBriefing(partial, generation);
+      owner.setDraft('typed draft');
+      expect(owner.submit('Exact question?', origin)).toBeNull();
+      expect(transport.mock.calls[0][1]).toMatchObject({
+        briefing: partial.integrity!.prefix,
+        submission: { input: { text: 'Exact question?', origin } },
+        dont_cache: true,
+      });
+      for (const source of ['', 'Late replacement', 'Late complete'])
+        owner.observeBriefing({ ...briefing, source }, generation);
+      expect(owner.getSnapshot()).toMatchObject({
+        pinned: partial,
+        briefing: partial,
+        draft: origin === 'typed' ? '' : 'typed draft',
+      });
+      expect(owner.submit('Next question', 'typed')).toBeNull();
+      expect(transport.mock.calls[1][1].briefing).toEqual(partial.integrity!.prefix);
+    }
+  );
+  it.each(['typed', 'suggested_question'] as const)(
+    'rejects an unsigned initial streaming snapshot for %s without pinning it',
+    origin => {
+      const { owner, transport } = setup();
+      owner.observeBriefing(
+        { ...briefing, phase: 'streaming', integrity: undefined },
+        owner.getSnapshot().generation
+      );
+      owner.setDraft('Draft question');
+      expect(owner.submit('Draft question', origin)).not.toBeNull();
+      expect(transport).not.toHaveBeenCalled();
+      expect(owner.getSnapshot()).toMatchObject({
+        pinned: null,
+        turns: [],
+        draft: 'Draft question',
+      });
+    }
+  );
   it.each(['typed', 'suggested_question'] as const)(
     'interrupts with the exact visible receipt for %s and only pristine first suggested requests may write cache',
     origin => {
