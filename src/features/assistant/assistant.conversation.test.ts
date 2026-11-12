@@ -125,32 +125,35 @@ describe('drafting conversation lifecycle', () => {
     });
     expect(owner.submit('typed draft', 'typed')).toBeNull();
   });
-  it('interrupts with the exact visible receipt and only pristine first suggested requests may write cache', () => {
-    const { owner, transport, deliveries } = setup();
-    const event = {};
-    owner.submit('Macro?', 'suggested_question', event);
-    expect(transport.mock.calls[0][1].dont_cache).toBe(false);
-    expect(owner.submit('Macro?', 'suggested_question', event)).not.toBeNull();
-    delta(deliveries[0]);
-    owner.submit('Next', 'typed');
-    expect(deliveries[0].signal.aborted).toBe(true);
-    expect(transport.mock.calls[1][1]).toMatchObject({
-      dont_cache: true,
-      turns: [
-        {
-          input: { text: 'Macro?' },
-          attempts: [
-            {
-              state: 'interrupted',
-              prefix: { markdown: 'Visible prefix', receipt: 'opaque-receipt', complete: false },
-            },
-          ],
-        },
-      ],
-    });
-    delta(deliveries[0], 'late replacement', true);
-    expect(owner.getSnapshot().turns[0].attempts[0].prefix?.markdown).toBe('Visible prefix');
-  });
+  it.each(['typed', 'suggested_question'] as const)(
+    'interrupts with the exact visible receipt for %s and only pristine first suggested requests may write cache',
+    origin => {
+      const { owner, transport, deliveries } = setup();
+      const event = {};
+      owner.submit('Macro?', 'suggested_question', event);
+      expect(transport.mock.calls[0][1].dont_cache).toBe(false);
+      expect(owner.submit('Macro?', 'suggested_question', event)).not.toBeNull();
+      delta(deliveries[0]);
+      owner.submit('Next', origin);
+      expect(deliveries[0].signal.aborted).toBe(true);
+      expect(transport.mock.calls[1][1]).toMatchObject({
+        dont_cache: true,
+        turns: [
+          {
+            input: { text: 'Macro?' },
+            attempts: [
+              {
+                state: 'interrupted',
+                prefix: { markdown: 'Visible prefix', receipt: 'opaque-receipt', complete: false },
+              },
+            ],
+          },
+        ],
+      });
+      delta(deliveries[0], 'late replacement', true);
+      expect(owner.getSnapshot().turns[0].attempts[0].prefix?.markdown).toBe('Visible prefix');
+    }
+  );
   it('retries only latest failed question with retained attempts and one logical user turn', async () => {
     const { owner, deliveries, transport } = setup();
     owner.submit(' Exact question \n', 'typed');
@@ -306,5 +309,30 @@ describe('drafting conversation lifecycle', () => {
     deliveries[0].reject(new AssistantBriefingError('timed_out', true));
     await Promise.resolve();
     expect(owner.getSnapshot().draft).toBe(replacement);
+  });
+});
+
+it('applies retraction only to the active answer, retaining the briefing, earlier turn, question and draft', () => {
+  const { owner, deliveries } = setup();
+  owner.submit('First question', 'typed');
+  delta(deliveries[0], 'Earlier answer', true);
+  owner.submit('Current question', 'typed');
+  delta(deliveries[1], 'Provisional');
+  owner.setDraft('Unsent draft');
+  deliveries[1].publish({
+    type: 'prefix',
+    operationId: 'operation',
+    prefix: { markdown: '', sequence: 2, complete: false, receipt: 'replacement-receipt' },
+  });
+  expect(owner.getSnapshot()).toMatchObject({
+    draft: 'Unsent draft',
+    pinned: briefing,
+    turns: [
+      { input: { text: 'First question' }, attempts: [{ prefix: { markdown: 'Earlier answer' } }] },
+      {
+        input: { text: 'Current question' },
+        attempts: [{ prefix: { markdown: '', sequence: 2, receipt: 'replacement-receipt' } }],
+      },
+    ],
   });
 });

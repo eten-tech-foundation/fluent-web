@@ -17,6 +17,8 @@ const failureCopy: Record<AssistantFailureCode, string> = {
   unsupported_language: 'This output language is unavailable. Select another output language.',
   context_too_large:
     'This question or conversation is too long to send. Shorten your question or start a fresh conversation.',
+  response_safety_limit:
+    'The response stopped because it exceeded the safety size limit and may be incomplete. If this happens repeatedly, contact your deployment administrator.',
   generation_busy: 'Another Assistant request is still running. Please try again shortly.',
   rate_limited: 'The Assistant is busy. Please try again later.',
   timed_out: 'The answer timed out.',

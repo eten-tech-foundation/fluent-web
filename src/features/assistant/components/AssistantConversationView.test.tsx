@@ -310,3 +310,17 @@ describe('conversation controls with the real workspace owner', () => {
     expect(screen.queryByText(/Shorten your question/)).not.toBeInTheDocument();
   });
 });
+
+it('preserves the visible partial answer beside actionable safety-size guidance', async () => {
+  mount();
+  write('Question');
+  enter();
+  delta(0, 'Visible partial answer');
+  await act(async () =>
+    test.deliveries[0].reject(new AssistantBriefingError('response_safety_limit', false))
+  );
+  expect(screen.getByText('Visible partial answer')).toBeVisible();
+  expect(screen.getByText(/safety size limit and may be incomplete/)).toBeVisible();
+  expect(screen.getByText(/contact your deployment administrator/)).toBeVisible();
+  expect(screen.queryByText(/Shorten your question/)).not.toBeInTheDocument();
+});

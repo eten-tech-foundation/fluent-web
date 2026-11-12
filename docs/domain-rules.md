@@ -341,3 +341,19 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   `config.features` in `src/lib/config.ts`. Vite inlines them, so each deploy is its own build
   (`.github/workflows/deploy.yml`). Tests pin them off in `vite.config.ts`, and a suite that needs
   one turns it on through `config.features`, not through the env.
+
+## Retractable Assistant answers
+
+`briefing_replace` and `turn_replace` atomically replace only the current assistant answer
+with full `markdown` and its next signed sequence/receipt. An empty replacement retracts
+provisional output. Earlier exchanges, the question and the composer draft remain unchanged.
+Operation/attempt fencing and interruption preserve the exact visible signed snapshot.
+Tests: `assistant.integrity.test.ts`, `assistant.turn.client.test.ts` and
+`assistant.conversation.test.ts`.
+
+The browser accepts answers up to the API's configurable emergency maximum of 32 MiB, with
+a 256 MiB normalized content-stream safeguard (excluding actor receipts and transport envelopes); there is no answer character cap. The API defaults to
+8 MiB current answer and 64 MiB retained normalized stream, including discarded text. Frame
+and duration limits remain independent. `response_safety_limit` preserves partial output and
+shows localized incomplete-answer and deployment-administrator guidance, separate from input
+or context-size errors.
