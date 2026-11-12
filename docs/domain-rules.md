@@ -92,8 +92,12 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   dropping them. A typed letter (with Alt or AltGr too, which Windows reports as Ctrl+Alt, and
   one outside the BMP such as an Adlam letter) or a pasted line comes in with the number in one
   undo step. For an IME composition or a paste of several lines, the spaces that hold the caret
-  after the number until words arrive are replaced by them, never left inside the verse. Tests:
-  `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
+  after the number until words arrive are replaced by them, never left inside the verse.
+  Backspace right after the number a line begins with can't delete the number, so it joins the
+  line to the one above, as it does in front of the number; under a heading or the chapter number
+  it stays blocked. Tests:
+  `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "reaches the editor with the caret at
+  the line start", "brings the verse number in with the
   first letter", "brings the number in with a letter typed with %s, in one undo step", "brings
   the number in with a letter outside the BMP typed %s, in one undo step", "brings the number in
   with a pasted line, in one undo step", "leaves no caret host behind once a paste of several
@@ -125,6 +129,14 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   invalid the editor shows an error and doesn't save. Tests:
   `src/features/rte/components/ChapterEditor.test.tsx` › "keeps invalid heading edits visible and
   resumes saving after correction".
+- A heading's words never fold into scripture, so a heading comes out whole: Remove heading in
+  Chapter View's bar takes its words and line in one undo step, and once its words are deleted,
+  Backspace or Delete takes the empty line, right under the chapter number too. Backspace at a
+  heading's start and Delete at its end stay blocked, and Paragraph stays off in a heading. Tests:
+  `src/features/rte/components/StructuralHistory.test.tsx` › "removes a heading from the bar in
+  one undo step and saves every state"; `src/features/rte/lib/format-heading.test.tsx` ›
+  "removes the heading %s is in, words and line, and leaves scripture alone";
+  `src/features/rte/hooks/useEmptyHeadingBackspace.test.tsx`.
 - The editor is uncontrolled. Don't feed new verses into it on every render. `ChapterEditor` and
   `PericopeEditor` reload it through `loadIntoEditor` only when the chapter or pericope changes,
   when an AI suggestion fills a verse the editor holds empty, after a structural rewrite, or when
@@ -136,7 +148,8 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   you upgrade `@eten-tech-foundation/platform-editor`: undo and redo shortcuts
   (`src/features/rte/lib/history-shortcuts.ts`), copy and paste
   (`src/features/rte/lib/editor-shortcuts.ts`, `src/features/rte/lib/editor-clipboard.ts`),
-  heading level changes (`src/features/rte/lib/format-heading.ts`), formatting a single verse
+  heading level changes and removal, since a delta can't remove an empty paragraph
+  (`src/features/rte/lib/format-heading.ts`), formatting a single verse
   inside a longer block (`src/features/rte/lib/scoped-block-format.ts`), the space a new
   paragraph would start with, which Editorial drops so a later merge glues two words together
   (`afterWordSpace` in `src/features/rte/lib/verse-numbers.ts`), and the invisible caret host
@@ -179,10 +192,15 @@ The drafting page saves one verse at a time with `POST /translated-verses`
 - A verse saves 2 seconds after the last change. Changing verse, Next, Next Pericope and Submit
   save right away through `saveImmediately`, and Submit stops if a save fails. Leaving the page
   doesn't save: unmount clears the timers and there is no `beforeunload` handler. A new way out of
-  the page has to save pending verses first. Tests: `src/features/bible/hooks/usePericope.test.ts`
+  the page has to save pending verses first. Changing verse saves the payload the queue already
+  holds (`flushSave`), never one rebuilt from React state: joining two lines in the editor changes
+  a verse and moves the cursor out of it in one update, before the edit has rendered, and the
+  state from before it would overwrite the edit. Tests:
+  `src/features/bible/hooks/usePericope.test.ts`
   › "flushes a verse edited earlier in the pericope, not only the active one";
   `src/features/bible/hooks/useDrafting.test.ts` › "flushes the stored markers when the active
-  verse changes, not a wipe".
+  verse changes, not a wipe" and "flushes an edit made in the same update that moves the active
+  verse".
 - A failed save retries after 10 seconds with the latest text, and keeps retrying while the page
   is open. A 401, 403 or 404 sets `roleChangeWarning` instead: queued debounce and retry saves are
   cancelled (a save already in flight still completes), new ones are skipped and the header shows

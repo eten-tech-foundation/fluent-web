@@ -408,4 +408,45 @@ describe('structural edits in Editorial history', () => {
     );
     for (const row of rows) expect(body(row.verseNumber).textContent?.trim()).toBe(row.text);
   });
+
+  // Chad, 2026-11-09: a heading put in the wrong place couldn't be removed.
+  it('removes a heading from the bar in one undo step and saves every state', async () => {
+    const titled: PericopeVerseText = {
+      ...rows[1],
+      markers: {
+        headings: [{ marker: 's1', text: 'A title' }],
+        paragraphs: [{ marker: 'p', offset: 0 }],
+      },
+    };
+    const removed = { ...titled, markers: { paragraphs: [{ marker: 'p', offset: 0 }] } };
+    const { input, verse, body, onVersesChange, history, user } = await setup([
+      rows[0],
+      titled,
+      rows[2],
+    ]);
+    const heading = () => input.querySelector<HTMLElement>('[data-marker="s1"]');
+    await select(input, heading()!.firstChild!.firstChild!, 3);
+    await user.click(await screen.findByRole('button', { name: 'Remove heading' }));
+
+    await waitFor(() => expect(heading()).toBeNull());
+    expect(onVersesChange).toHaveBeenLastCalledWith([removed]);
+    // The paragraph under the heading stays as it was; the caret goes to its verse.
+    expect(verse(2).parentElement).not.toBe(verse(1).parentElement);
+    expect(document.activeElement).toBe(input);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Paragraph' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+    );
+    expect(screen.queryByRole('button', { name: 'Remove heading' })).not.toBeInTheDocument();
+
+    await history();
+    await waitFor(() => expect(heading()).toHaveTextContent('A title'));
+    expect(onVersesChange).toHaveBeenLastCalledWith([titled]);
+    await history(true);
+    await waitFor(() => expect(heading()).toBeNull());
+    expect(onVersesChange).toHaveBeenLastCalledWith([removed]);
+    for (const row of rows) expect(body(row.verseNumber).textContent?.trim()).toBe(row.text);
+  });
 });
