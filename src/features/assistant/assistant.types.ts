@@ -1,6 +1,6 @@
-import type { AssistantPrefix } from './assistant.turn.types';
+import { TURN_LIMITS, type AssistantPrefix } from './assistant.turn.types';
 
-export const BRIEFING_LIMITS = { sourceBytes: 96_000 } as const;
+export const BRIEFING_LIMITS = { sourceBytes: TURN_LIMITS.outputBytes } as const;
 
 export const ASSISTANT_OUTPUT_CONTRACT_VERSION = 'fluent-widgets-v1';
 export const ASSISTANT_WEB_REQUEST_VERSION = 'passage-briefing-web-v1';
@@ -65,6 +65,7 @@ export type AssistantFailureCode =
   | 'invalid_request'
   | 'unsupported_language'
   | 'context_too_large'
+  | 'response_safety_limit'
   | 'generation_busy'
   | 'rate_limited'
   | 'timed_out'

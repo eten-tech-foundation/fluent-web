@@ -126,14 +126,20 @@ describe('bounded signed turn delivery', () => {
     expect(await run([fixture.events[4]])).toEqual([fixture.events[4]]);
   });
   it('bounds output and individual frames without exposing oversized content', async () => {
-    await expect(
-      run([
-        events[0],
-        { ...events[1], delta: 'x'.repeat(15000) },
-        { ...events[1], sequence: 2, delta: 'x' },
-        { ...events[2], sequence: 2 },
-      ])
-    ).rejects.toMatchObject({ code: 'context_too_large' });
+    const previous = TURN_LIMITS.outputBytes;
+    Object.assign(TURN_LIMITS, { outputBytes: 15000 });
+    try {
+      await expect(
+        run([
+          events[0],
+          { ...events[1], delta: 'x'.repeat(15000) },
+          { ...events[1], sequence: 2, delta: 'x' },
+          { ...events[2], sequence: 2 },
+        ])
+      ).rejects.toMatchObject({ code: 'response_safety_limit' });
+    } finally {
+      Object.assign(TURN_LIMITS, { outputBytes: previous });
+    }
     await expect(run([], [], ':'.repeat(TURN_LIMITS.frameBytes + 1))).rejects.toMatchObject({
       code: 'malformed_upstream_response',
     });
@@ -217,4 +223,67 @@ describe('bounded signed turn delivery', () => {
     await expect(promise).rejects.toMatchObject({ code: 'network_error' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+it('replaces the current answer immediately and preserves signed state on a safety terminal', async () => {
+  const { delta: _delta, ...binding } = events[1];
+  const updates: TurnUpdate[] = [];
+  await expect(
+    run(
+      [
+        events[0],
+        events[1],
+        { ...binding, type: 'turn_replace', markdown: '', sequence: 2 },
+        { ...events[1], delta: 'corrected', sequence: 3 },
+        { ...fixture.events[3], code: 'response_safety_limit', retryable: false },
+      ],
+      updates
+    )
+  ).rejects.toMatchObject({ code: 'response_safety_limit', retryable: false });
+  expect(
+    updates.filter(update => update.type === 'prefix').map(update => update.prefix.markdown)
+  ).toEqual(['The Word', '', 'corrected']);
+});
+
+it.each([{ sequence: 1 }, { operationId: 'stale' }, { attemptId: 'stale' }])(
+  'fences stale replacement %j',
+  async stale => {
+    const { delta: _delta, ...binding } = events[1];
+    const updates: TurnUpdate[] = [];
+    await expect(
+      run(
+        [
+          events[0],
+          events[1],
+          { ...binding, type: 'turn_replace', markdown: '', sequence: 2, ...stale },
+        ],
+        updates
+      )
+    ).rejects.toMatchObject({ code: 'malformed_upstream_response' });
+    expect(updates.at(-1)).toMatchObject({ prefix: { markdown: 'The Word' } });
+  }
+);
+
+it('counts discarded content toward the retained safety limit while preserving the last visible prefix', async () => {
+  const previous = TURN_LIMITS.retainedBytes;
+  Object.assign(TURN_LIMITS, { retainedBytes: 140 });
+  const updates: TurnUpdate[] = [];
+  const { delta: _delta, ...binding } = events[1];
+  try {
+    await expect(
+      run(
+        [
+          events[0],
+          events[1],
+          { ...binding, type: 'turn_replace', markdown: '', sequence: 2 },
+          { ...events[1], delta: 'corrected', sequence: 3 },
+          { ...binding, type: 'turn_replace', markdown: '', sequence: 4 },
+        ],
+        updates
+      )
+    ).rejects.toMatchObject({ code: 'response_safety_limit' });
+    expect(updates.at(-1)).toMatchObject({ prefix: { markdown: 'corrected' } });
+  } finally {
+    Object.assign(TURN_LIMITS, { retainedBytes: previous });
+  }
 });

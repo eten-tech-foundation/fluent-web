@@ -62,6 +62,7 @@ export async function* assistantFrames(
   const reader = body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let buffer = '';
+  let retainedBytes = 0;
   let lastId = 0;
   let hasIds: boolean | undefined;
   try {
@@ -120,6 +121,21 @@ export async function* assistantFrames(
             throw malformedStream();
           if ('protocol' in json && json.protocol === 'fluent-turn-v1' && id === undefined)
             throw malformedStream();
+          // Count normalized content only. Actor receipts/transport envelopes must not make
+          // Web stricter than the API's retained-event ceiling. Coalescing only lowers this count.
+          let retained: unknown;
+          if ((json.type === 'briefing_delta' || json.type === 'turn_delta') && 'delta' in json)
+            retained = { type: 'briefing_delta', delta: json.delta };
+          if (
+            (json.type === 'briefing_replace' || json.type === 'turn_replace') &&
+            'markdown' in json
+          )
+            retained = { type: 'briefing_replace', markdown: json.markdown };
+          if (json.type === 'briefing_complete' && 'markdown' in json)
+            retained = { type: 'briefing_complete', markdown: json.markdown };
+          if (retained) retainedBytes += utf8Bytes(JSON.stringify(retained));
+          if (retainedBytes > TURN_LIMITS.retainedBytes)
+            throw new AssistantBriefingError('response_safety_limit', false);
           yield json;
         }
         boundary = /\r?\n\r?\n/.exec(buffer);

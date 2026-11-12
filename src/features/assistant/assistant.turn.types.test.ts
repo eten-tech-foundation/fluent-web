@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assistantTurnRequestSchema } from './assistant.turn.types';
+import { assistantTurnRequestSchema, TURN_LIMITS } from './assistant.turn.types';
 import fixture from './fixtures/turn-v1.json';
 
 const request = fixture.request;
@@ -70,7 +70,7 @@ describe('browser admission mirrors portable turn contract', () => {
     expect(
       assistantTurnRequestSchema.safeParse({
         ...request,
-        briefing: { ...request.briefing, markdown: 'x'.repeat(15001) },
+        briefing: { ...request.briefing, markdown: 'x'.repeat(TURN_LIMITS.bodyBytes + 1) },
       }).success
     ).toBe(false);
     const turn = completeTurn(5);

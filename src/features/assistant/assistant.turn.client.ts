@@ -108,11 +108,12 @@ export async function streamAssistantTurn(
         publish(event);
       } else {
         if (!operationId || operationId !== event.operationId) throw malformedStream();
-        if (event.type === 'turn_delta') {
-          if (!event.delta || event.sequence !== sequence + 1) throw malformedStream();
-          const next = markdown + event.delta;
-          if (next.length > TURN_LIMITS.outputChars || utf8Bytes(next) > TURN_LIMITS.outputBytes)
-            throw new AssistantBriefingError('context_too_large', false);
+        if (event.type === 'turn_delta' || event.type === 'turn_replace') {
+          if ((event.type === 'turn_delta' && !event.delta) || event.sequence !== sequence + 1)
+            throw malformedStream();
+          const next = event.type === 'turn_replace' ? event.markdown : markdown + event.delta;
+          if (utf8Bytes(next) > TURN_LIMITS.outputBytes)
+            throw new AssistantBriefingError('response_safety_limit', false);
           markdown = next;
           sequence = event.sequence;
           publish({

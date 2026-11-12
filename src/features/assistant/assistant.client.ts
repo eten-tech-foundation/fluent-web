@@ -47,6 +47,7 @@ const startedSchema = z.object({
   references: z.array(z.string().min(1).max(100)).max(1000),
 });
 const deltaSchema = z.object({ type: z.literal('briefing_delta'), delta: z.string() });
+const replaceSchema = z.object({ type: z.literal('briefing_replace'), markdown: z.string() });
 const completeSchema = z.object({
   type: z.literal('briefing_complete'),
   markdown: z.string(),
@@ -65,6 +66,7 @@ const errorSchema = z.object({
 const streamEventSchema = z.discriminatedUnion('type', [
   startedSchema,
   deltaSchema,
+  replaceSchema,
   completeSchema,
   errorSchema,
 ]);
@@ -76,6 +78,7 @@ const FAILURE_CODES = new Set<AssistantFailureCode>([
   'invalid_configuration',
   'unsupported_language',
   'context_too_large',
+  'response_safety_limit',
   'rate_limited',
   'generation_busy',
   'timed_out',
@@ -215,13 +218,13 @@ function commitIntegrity(
   const expected =
     event.type === 'briefing_started'
       ? 0
-      : (previous?.prefix.sequence ?? 0) + (event.type === 'briefing_delta' ? 1 : 0);
+      : (previous?.prefix.sequence ?? 0) +
+        (event.type === 'briefing_delta' || event.type === 'briefing_replace' ? 1 : 0);
   if (
     metadata.operationId !== current.metadata?.attemptId ||
     (previous && metadata.contextReceipt !== previous.contextReceipt) ||
     prefix.sequence !== expected ||
     prefix.complete !== complete ||
-    current.source.length > TURN_LIMITS.outputChars ||
     utf8Bytes(current.source) > TURN_LIMITS.outputBytes
   )
     throw malformedStream();
@@ -292,10 +295,14 @@ export async function streamPassageBriefing(
             references: event.references,
           },
         };
-      } else if (event.type === 'briefing_delta') {
+      } else if (event.type === 'briefing_delta' || event.type === 'briefing_replace') {
         if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
-        current = { ...current, source: current.source + event.delta };
-        if (utf8Bytes(current.source) > BRIEFING_LIMITS.sourceBytes) throw malformedStream();
+        current = {
+          ...current,
+          source: event.type === 'briefing_replace' ? event.markdown : current.source + event.delta,
+        };
+        if (utf8Bytes(current.source) > BRIEFING_LIMITS.sourceBytes)
+          throw new AssistantBriefingError('response_safety_limit', false);
       } else if (event.type === 'briefing_error') {
         if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);
         commitIntegrity(current, event);
