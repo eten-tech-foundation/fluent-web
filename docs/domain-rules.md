@@ -347,7 +347,11 @@ The drafting page saves one verse at a time with `POST /translated-verses`
 `briefing_replace` and `turn_replace` atomically replace only the current assistant answer
 with full `markdown` and its next signed sequence/receipt. An empty replacement retracts
 provisional output. Earlier exchanges, the question and the composer draft remain unchanged.
-Operation/attempt fencing and interruption preserve the exact visible signed snapshot.
+Operation/attempt fencing and interruption preserve the exact visible signed snapshot. Typed
+questions and suggested actions may both interrupt the initial briefing as soon as an authorized
+signed snapshot exists, including while it streams. Submission pins that snapshot and fences later
+briefing replacements/completion; typed admission clears its draft, while suggested admission
+preserves the composer draft. Unsigned briefings cannot authorize either submission origin.
 Tests: `assistant.integrity.test.ts`, `assistant.turn.client.test.ts` and
 `assistant.conversation.test.ts`.
 

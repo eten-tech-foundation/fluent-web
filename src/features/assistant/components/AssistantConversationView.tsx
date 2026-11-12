@@ -95,7 +95,6 @@ export function AssistantConversationView({
   const handled = useRef(new WeakSet<object>());
   const briefing = state.pinned ?? state.briefing;
   const available = enabled && state.ready && !!briefing?.integrity;
-  const typedAvailable = available && (!!state.pinned || briefing.phase === 'complete');
   const lastTurn = state.turns.at(-1);
   const latest = lastTurn?.attempts.find(
     attempt => attempt.attemptId === lastTurn.selectedAttemptId
@@ -234,17 +233,12 @@ export function AssistantConversationView({
             />
           </div>
         )}
-        {!typedAvailable && (
+        {!available && (
           <p className='text-muted-foreground mb-2 text-xs' id='assistant-composer-help'>
-            {available
-              ? t(
-                  'assistant.waitBriefing',
-                  'You can write now. Send your question when the briefing finishes, or choose a suggested question.'
-                )
-              : t(
-                  'assistant.waitAvailable',
-                  'You can write now. Sending will be available when passage context is ready.'
-                )}
+            {t(
+              'assistant.waitAvailable',
+              'You can write now. Sending will be available when passage context is ready.'
+            )}
           </p>
         )}
         {admission?.generation === state.generation && (
@@ -256,13 +250,13 @@ export function AssistantConversationView({
           className='relative flex items-end'
           onSubmit={event => {
             event.preventDefault();
-            if (!composing.current && typedAvailable)
+            if (!composing.current && available)
               submit(owner.getSnapshot().draft, 'typed', event.nativeEvent);
           }}
         >
           <textarea
             ref={composer}
-            aria-describedby={!typedAvailable ? 'assistant-composer-help' : undefined}
+            aria-describedby={!available ? 'assistant-composer-help' : undefined}
             aria-label={t('assistant.question', 'Question about this passage')}
             className='border-input bg-background max-h-32 min-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-md border py-2 pr-12 pl-3 text-sm'
             placeholder={placeholder}
@@ -288,14 +282,14 @@ export function AssistantConversationView({
               )
                 return;
               event.preventDefault();
-              if (!event.repeat && typedAvailable)
+              if (!event.repeat && available)
                 submit(owner.getSnapshot().draft, 'typed', event.nativeEvent);
             }}
           />
           <button
             aria-label={t('assistant.send', 'Send question')}
             className='bg-primary text-primary-foreground absolute right-1 bottom-1 flex size-8 items-center justify-center rounded-md disabled:opacity-50'
-            disabled={!typedAvailable || !state.draft.trim()}
+            disabled={!available || !state.draft.trim()}
             type='submit'
           >
             <Send aria-hidden='true' className='size-4' />

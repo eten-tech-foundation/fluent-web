@@ -210,13 +210,7 @@ export class AssistantConversation {
     };
     const snapshot = this.state;
     const briefing = snapshot.pinned ?? snapshot.briefing;
-    if (
-      !snapshot.ready ||
-      !snapshot.context ||
-      !snapshot.outputLanguage ||
-      !briefing?.integrity ||
-      (origin === 'typed' && !snapshot.pinned && briefing.phase !== 'complete')
-    )
+    if (!snapshot.ready || !snapshot.context || !snapshot.outputLanguage || !briefing?.integrity)
       return reject(
         new AssistantBriefingError(
           briefing?.continuationUnavailable ?? 'temporarily_unavailable',

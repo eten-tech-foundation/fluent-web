@@ -58,7 +58,14 @@ function Harness({ complete }: { complete: boolean }) {
     });
     owner.configure('en');
     owner.observeBriefing(
-      { ...briefing, phase: complete ? 'complete' : 'streaming' },
+      {
+        ...briefing,
+        phase: complete ? 'complete' : 'streaming',
+        integrity: {
+          ...briefing.integrity!,
+          prefix: { ...briefing.integrity!.prefix, markdown: briefing.source, complete },
+        },
+      },
       owner.getSnapshot().generation
     );
   }, [owner, complete]);
@@ -146,18 +153,53 @@ describe('conversation controls with the real workspace owner', () => {
     expect(input()).toHaveValue('x'.repeat(4001));
     expect(test.deliveries[0].signal.aborted).toBe(false);
   });
-  it('keeps a draft editable while waiting, then enables it after an early suggested click', () => {
+  it.each(['typed', 'suggested_question'] as const)(
+    'allows %s to interrupt a signed streaming briefing with correct draft and focus semantics',
+    origin => {
+      mount(false);
+      input().focus();
+      write('Unsent draft');
+      expect(screen.getByRole('button', { name: 'Send question' })).toBeEnabled();
+      if (origin === 'typed') enter();
+      else fireEvent.click(screen.getByRole('button', { name: 'Suggested question?' }));
+      const pinned = test.owner!.getSnapshot().pinned;
+      expect(pinned?.integrity?.prefix).toMatchObject({
+        markdown: briefing.source,
+        complete: false,
+      });
+      expect(test.owner!.getSnapshot().turns[0].input).toEqual({
+        text: origin === 'typed' ? 'Unsent draft' : '  Suggested question?  ',
+        origin,
+      });
+      expect(input()).toHaveValue(origin === 'typed' ? '' : 'Unsent draft');
+      expect(input()).toHaveFocus();
+      act(() =>
+        test.owner!.observeBriefing(
+          { ...briefing, source: 'Late replacement' },
+          test.owner!.getSnapshot().generation
+        )
+      );
+      expect(test.owner!.getSnapshot().pinned).toBe(pinned);
+      write('Next draft');
+      fireEvent.click(screen.getByRole('button', { name: 'Send question' }));
+      expect(test.deliveries).toHaveLength(2);
+      expect(test.deliveries[0].signal.aborted).toBe(true);
+      expect(input()).toHaveValue('');
+    }
+  );
+  it('keeps an unsigned streaming composer editable but refuses submission', () => {
     mount(false);
+    act(() =>
+      test.owner!.observeBriefing(
+        { ...briefing, phase: 'streaming', integrity: undefined },
+        test.owner!.getSnapshot().generation
+      )
+    );
     write('Unsent draft');
+    expect(screen.getByRole('button', { name: 'Send question' })).toBeDisabled();
     enter();
     expect(test.deliveries).toHaveLength(0);
-    expect(screen.getByRole('button', { name: 'Send question' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Suggested question?' }));
-    expect(test.owner!.getSnapshot().turns[0].input.text).toBe('  Suggested question?  ');
     expect(input()).toHaveValue('Unsent draft');
-    expect(screen.getByRole('button', { name: 'Send question' })).toBeEnabled();
-    enter();
-    expect(test.deliveries).toHaveLength(2);
   });
   it('preserves composer edits made after a suggested question starts and then fails', async () => {
     mount();
