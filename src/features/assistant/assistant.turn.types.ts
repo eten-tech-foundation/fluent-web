@@ -18,7 +18,9 @@ export const TURN_LIMITS = {
   messageBytes: 48_000,
   historyFieldChars: 16_000,
   historyBytes: 524_288,
-  frameBytes: 1_048_576,
+  responseBytes: 1_048_576,
+  // Complete emitted SSE frame: worst-case JSON expansion plus bounded metadata/envelope.
+  frameBytes: 6 * 32 * 1024 * 1024 + 1_048_576,
   connectMs: 10_000,
   idleMs: 45_000,
   totalMs: 180_000,

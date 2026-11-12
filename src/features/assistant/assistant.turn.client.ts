@@ -6,7 +6,7 @@ import {
   assistantFrames,
   assistantResponseJson,
   malformedStream,
-  utf8Bytes,
+  AssistantUtf8Size,
 } from './assistant.stream';
 import {
   assistantTurnEventSchema,
@@ -83,6 +83,7 @@ export async function streamAssistantTurn(
     let operationId: string | null = null;
     let terminal: AssistantTurnEvent | null = null;
     let markdown = '';
+    const size = new AssistantUtf8Size();
     let sequence = 0;
     for await (const raw of assistantFrames(response.body, delivery, true)) {
       const parsed = assistantTurnEventSchema.safeParse(raw);
@@ -112,7 +113,9 @@ export async function streamAssistantTurn(
           if ((event.type === 'turn_delta' && !event.delta) || event.sequence !== sequence + 1)
             throw malformedStream();
           const next = event.type === 'turn_replace' ? event.markdown : markdown + event.delta;
-          if (utf8Bytes(next) > TURN_LIMITS.outputBytes)
+          const answerBytes =
+            event.type === 'turn_replace' ? size.replace(event.markdown) : size.append(event.delta);
+          if (answerBytes > TURN_LIMITS.outputBytes)
             throw new AssistantBriefingError('response_safety_limit', false);
           markdown = next;
           sequence = event.sequence;

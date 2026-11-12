@@ -140,9 +140,15 @@ describe('bounded signed turn delivery', () => {
     } finally {
       Object.assign(TURN_LIMITS, { outputBytes: previous });
     }
-    await expect(run([], [], ':'.repeat(TURN_LIMITS.frameBytes + 1))).rejects.toMatchObject({
-      code: 'malformed_upstream_response',
-    });
+    const frameLimit = TURN_LIMITS.frameBytes;
+    Object.assign(TURN_LIMITS, { frameBytes: 1024 });
+    try {
+      await expect(run([], [], ':'.repeat(1025))).rejects.toMatchObject({
+        code: 'malformed_upstream_response',
+      });
+    } finally {
+      Object.assign(TURN_LIMITS, { frameBytes: frameLimit });
+    }
   });
   it.each(['connect', 'idle', 'total'])(
     'enforces %s deadline even when fetch/reader does not settle',

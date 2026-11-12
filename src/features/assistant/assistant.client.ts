@@ -9,10 +9,10 @@ import {
   assistantFrames,
   assistantResponseJson,
   malformedStream,
-  utf8Bytes,
+  AssistantUtf8Size,
   type AssistantDelivery,
 } from './assistant.stream';
-import { briefingIntegrityMetadataSchema, TURN_LIMITS } from './assistant.turn.types';
+import { briefingIntegrityMetadataSchema } from './assistant.turn.types';
 import {
   AssistantBriefingError,
   BRIEFING_LIMITS,
@@ -224,8 +224,7 @@ function commitIntegrity(
     metadata.operationId !== current.metadata?.attemptId ||
     (previous && metadata.contextReceipt !== previous.contextReceipt) ||
     prefix.sequence !== expected ||
-    prefix.complete !== complete ||
-    utf8Bytes(current.source) > TURN_LIMITS.outputBytes
+    prefix.complete !== complete
   )
     throw malformedStream();
   return {
@@ -278,6 +277,7 @@ export async function streamPassageBriefing(
       cacheHit: false,
     };
     publish(current);
+    const size = new AssistantUtf8Size();
     let started = false;
     let completed = false;
     for await (const event of parseAssistantEventStream(response.body, delivery)) {
@@ -301,7 +301,11 @@ export async function streamPassageBriefing(
           ...current,
           source: event.type === 'briefing_replace' ? event.markdown : current.source + event.delta,
         };
-        if (utf8Bytes(current.source) > BRIEFING_LIMITS.sourceBytes)
+        const answerBytes =
+          event.type === 'briefing_replace'
+            ? size.replace(event.markdown)
+            : size.append(event.delta);
+        if (answerBytes > BRIEFING_LIMITS.sourceBytes)
           throw new AssistantBriefingError('response_safety_limit', false);
       } else if (event.type === 'briefing_error') {
         if (!started) throw new AssistantBriefingError('malformed_upstream_response', true);

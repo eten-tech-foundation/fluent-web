@@ -357,3 +357,13 @@ a 256 MiB normalized content-stream safeguard (excluding actor receipts and tran
 and duration limits remain independent. `response_safety_limit` preserves partial output and
 shows localized incomplete-answer and deployment-administrator guidance, separate from input
 or context-size errors.
+
+Assistant append byte accounting scans only deltas, correcting split surrogate pairs; replacement
+recomputes size once. Receipts are opaque in Web; API accepts legacy digests alongside new
+incremental signed snapshots. The shared emitted SSE-frame ceiling is 202,375,168 bytes:
+6 × the 32 MiB answer maximum for worst-case JSON escaping, plus 1 MiB for bounded metadata,
+receipts and the SSE envelope. It includes the terminating separator. The upstream BT frame
+ceiling (up to 8 MiB) is independent. HTTP JSON remains capped at 1 MiB. Fragment parsing scans
+only new chunks and assembles each complete frame once. Portable fixture `frame-v1.json` and
+`assistant.frame.test.ts` pin the contract; `assistant.work.test.ts` measures linear scanning for
+8 MiB briefing and follow-up streams without retaining all snapshots.
