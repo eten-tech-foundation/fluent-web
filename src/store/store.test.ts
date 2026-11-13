@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { config } from '@/lib/config';
-import type { ProjectItem } from '@/lib/types';
+import { ROLES, type ProjectItem } from '@/lib/types';
 
 import { useAppStore } from './store';
 
@@ -17,7 +17,7 @@ describe('app store rehydration', () => {
   afterEach(() => {
     config.features.rtePericope = originalRteFlag;
     localStorage.removeItem('app-store');
-    useAppStore.setState({ displayMode: 'verse' });
+    useAppStore.setState({ displayMode: 'verse', userdetail: null });
   });
 
   it('keeps a stored chapter mode when the RTE flag is on', async () => {
@@ -36,6 +36,55 @@ describe('app store rehydration', () => {
     await useAppStore.persist.rehydrate();
 
     expect(useAppStore.getState().displayMode).toBe('verse');
+  });
+
+  it('migrates legacy persisted userdetail.role into activeRoleName and drops role', async () => {
+    localStorage.setItem(
+      'app-store',
+      JSON.stringify({
+        state: {
+          userdetail: {
+            id: 1,
+            email: 'user@example.com',
+            username: 'user',
+            role: ROLES.PROJECT_TRANSLATOR,
+            lastActiveOrgId: 1,
+          },
+        },
+        version: 0,
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+
+    const userdetail = useAppStore.getState().userdetail as Record<string, unknown> | null;
+    expect(userdetail?.activeRoleName).toBe(ROLES.PROJECT_TRANSLATOR);
+    expect(userdetail).not.toHaveProperty('role');
+  });
+
+  it('preserves activeRoleName: null during rehydration without overwriting from legacy role', async () => {
+    localStorage.setItem(
+      'app-store',
+      JSON.stringify({
+        state: {
+          userdetail: {
+            id: 1,
+            email: 'user@example.com',
+            username: 'user',
+            activeRoleName: null,
+            role: ROLES.PROJECT_TRANSLATOR,
+            lastActiveOrgId: 1,
+          },
+        },
+        version: 0,
+      })
+    );
+
+    await useAppStore.persist.rehydrate();
+
+    const userdetail = useAppStore.getState().userdetail as Record<string, unknown> | null;
+    expect(userdetail?.activeRoleName).toBeNull();
+    expect(userdetail).not.toHaveProperty('role');
   });
 });
 

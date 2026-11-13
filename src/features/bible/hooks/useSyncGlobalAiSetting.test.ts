@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { config } from '@/lib/config';
-import type { ProjectItem, User } from '@/lib/types';
+import type { ProjectItem, UserDetail } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { createTestQueryClient, renderHook, waitFor } from '@/test/render';
@@ -17,11 +17,11 @@ const makeWrapper = () => {
     createElement(QueryClientProvider, { client: queryClient }, children);
 };
 
-const mockUser: User = {
+const mockUser: UserDetail = {
   id: 42,
   email: 'test@example.com',
   username: 'Test User',
-  role: 'Project Translator',
+  activeRoleName: 'Project Translator',
   organization: 1,
 };
 

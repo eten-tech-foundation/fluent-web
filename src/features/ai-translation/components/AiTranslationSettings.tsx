@@ -84,7 +84,7 @@ export const AiTranslationSettings: React.FC = () => {
   const isTranslationView = location.pathname.startsWith('/translation');
   const { openAiInfo } = useSearch({ from: '__root__' });
 
-  const isTranslator = userdetail?.role === ROLES.PROJECT_TRANSLATOR;
+  const isTranslator = userdetail?.activeRoleName === ROLES.PROJECT_TRANSLATOR;
   const isDraftingStage = currentProjectItem?.chapterStatus === ChapterAssignmentStatus.DRAFT;
 
   const renderContent = () => {

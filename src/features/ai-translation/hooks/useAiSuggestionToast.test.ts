@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { showAiSuggestionToast } from '@/features/ai-translation/components/AiSuggestionToast';
 import { useAiSuggestionToast } from '@/features/ai-translation/hooks/useAiSuggestionToast';
-import type { User } from '@/lib/types';
+import type { UserDetail } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 vi.mock('@/features/ai-translation/components/AiSuggestionToast', () => ({
@@ -15,18 +15,18 @@ vi.mock('@tanstack/react-router', () => ({
   useLocation: () => ({ pathname: '/test' }),
 }));
 
-const mockUser1: User = {
+const mockUser1: UserDetail = {
   id: 1,
   email: 'u1@test.com',
   username: 'User 1',
-  role: 'Project Translator',
+  activeRoleName: 'Project Translator',
   organization: 1,
 };
-const mockUser2: User = {
+const mockUser2: UserDetail = {
   id: 2,
   email: 'u2@test.com',
   username: 'User 2',
-  role: 'Project Translator',
+  activeRoleName: 'Project Translator',
   organization: 1,
 };
 

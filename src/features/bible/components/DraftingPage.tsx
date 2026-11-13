@@ -59,7 +59,7 @@ const DraftingPage: React.FC = () => {
 
   const isObserverForProject = useMemo(() => {
     if (!targetProjectId) {
-      return userdetail?.role === ROLES.PROJECT_OBSERVER;
+      return userdetail?.activeRoleName === ROLES.PROJECT_OBSERVER;
     }
 
     // 1. Org-level managers are never restricted to observer read-only
@@ -78,8 +78,8 @@ const DraftingPage: React.FC = () => {
     }
 
     // 3. Fallback to active role
-    return userdetail?.role === ROLES.PROJECT_OBSERVER;
-  }, [activeGrants, targetProjectId, userdetail?.role]);
+    return userdetail?.activeRoleName === ROLES.PROJECT_OBSERVER;
+  }, [activeGrants, targetProjectId, userdetail?.activeRoleName]);
 
   const hasProjectGrant = useMemo(() => {
     if (!targetProjectId || !userdetail) return true;

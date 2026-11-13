@@ -60,7 +60,7 @@ describe('OrgSwitcher - Abort & Timeout handling', () => {
         id: 1,
         email: 'user@example.com',
         username: 'testuser',
-        role: ROLES.PROJECT_MANAGER,
+        activeRoleName: ROLES.PROJECT_MANAGER,
         lastActiveOrgId: 1,
         grants: [
           {
