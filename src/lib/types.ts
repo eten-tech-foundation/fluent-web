@@ -16,12 +16,16 @@ export interface User {
   email: string;
   grants?: UserGrant[];
   orgGrants?: UserGrant[];
-  role: string;
   status?: string;
   organization?: number;
   lastActiveOrgId?: number | null;
   createdBy?: number;
   isActive?: boolean;
+}
+
+/** Client-augmented user stored in Zustand — tracks the role selected in the active org. */
+export interface UserDetail extends User {
+  activeRoleName: string | null;
 }
 
 export interface Organization {

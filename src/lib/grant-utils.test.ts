@@ -111,7 +111,7 @@ describe('isTranslator and isObserver', () => {
 describe('getActiveRoleGrants', () => {
   it('returns only active-org grants matching the selected role', () => {
     const user = {
-      role: ROLES.PROJECT_TRANSLATOR,
+      activeRoleName: ROLES.PROJECT_TRANSLATOR,
       lastActiveOrgId: 1,
       grants: [
         grant(1, 10, ROLES.PROJECT_TRANSLATOR),
@@ -120,6 +120,15 @@ describe('getActiveRoleGrants', () => {
       ],
     };
     expect(getActiveRoleGrants(user)).toEqual([grant(1, 10, ROLES.PROJECT_TRANSLATOR)]);
+  });
+
+  it('returns empty array when activeRoleName is null', () => {
+    const user = {
+      activeRoleName: null,
+      lastActiveOrgId: 1,
+      grants: [grant(1, 10, ROLES.PROJECT_TRANSLATOR)],
+    };
+    expect(getActiveRoleGrants(user)).toEqual([]);
   });
 
   it('handles null or undefined user', () => {

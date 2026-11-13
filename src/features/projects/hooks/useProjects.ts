@@ -5,7 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { config } from '@/lib/config';
 import { getActiveRoleGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
-import { type CreateProject, type Project, type ProjectItem, type User } from '@/lib/types';
+import {
+  type CreateProject,
+  type Project,
+  type ProjectItem,
+  type User,
+  type UserDetail,
+} from '@/lib/types';
 
 const fetchProjects = async (): Promise<Project[]> => {
   const res = await fetch(`${config.api.url}/projects`, {
@@ -80,7 +86,7 @@ export const useUserProjects = (user: User | null | undefined, role?: string) =>
  * - Translator / Observer → GET /users/{id}/projects
  *   (only their assigned projects)
  */
-export const useProjectsByRole = (user: User | null | undefined) => {
+export const useProjectsByRole = (user: UserDetail | null | undefined) => {
   const activeRoleGrants = getActiveRoleGrants(user);
   const isAnyManager = isManager(activeRoleGrants);
 

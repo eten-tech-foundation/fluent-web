@@ -3,11 +3,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { UserModal } from '@/components/UserModal';
+import { UserModal, type UserFormData } from '@/components/UserModal';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 interface EditProfileProps {
@@ -31,11 +30,19 @@ export function EditProfile({ isOpen, onClose }: EditProfileProps) {
     (onClose ?? (() => window.history.back()))();
   };
 
-  const handleSaveUser = async (userData: User | Omit<User, 'id'>): Promise<void> => {
+  const handleSaveUser = async (userData: UserFormData): Promise<void> => {
+    if (!userdetail) return;
     setSaveError(null);
     try {
       await updateUserMutation.mutateAsync({
-        userData: userData as User,
+        userData: {
+          id: userdetail.id,
+          username: userData.username,
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          status: userData.status,
+        },
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('profileUpdateFailed'));

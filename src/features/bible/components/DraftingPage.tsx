@@ -8,8 +8,13 @@ import { AssistantConversationProvider } from '@/features/assistant/components/A
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { type translationLoader } from '@/features/bible/TranslationLoader';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
-import { getActiveGrants, hasGrantForProject, ORG_LEVEL_ROLES } from '@/lib/grant-utils';
-import { ROLES } from '@/lib/types';
+import {
+  getActiveGrants,
+  getActiveRoleGrants,
+  hasGrantForProject,
+  isObserver,
+  ORG_LEVEL_ROLES,
+} from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import { DraftingAudioPageBoundary } from './DraftingAudioPageBoundary';
@@ -55,11 +60,12 @@ const DraftingPage: React.FC = () => {
       : undefined;
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const targetProjectId = projectItem?.projectId;
 
   const isObserverForProject = useMemo(() => {
     if (!targetProjectId) {
-      return userdetail?.role === ROLES.PROJECT_OBSERVER;
+      return isObserver(activeRoleGrants);
     }
 
     // 1. Org-level managers are never restricted to observer read-only
@@ -74,12 +80,12 @@ const DraftingPage: React.FC = () => {
       g => g.projectId === targetProjectId || g.projectId === Number(targetProjectId)
     );
     if (projectGrant) {
-      return projectGrant.roleName === ROLES.PROJECT_OBSERVER;
+      return isObserver([projectGrant]);
     }
 
     // 3. Fallback to active role
-    return userdetail?.role === ROLES.PROJECT_OBSERVER;
-  }, [activeGrants, targetProjectId, userdetail?.role]);
+    return isObserver(activeRoleGrants);
+  }, [activeGrants, activeRoleGrants, targetProjectId]);
 
   const hasProjectGrant = useMemo(() => {
     if (!targetProjectId || !userdetail) return true;

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type SavePayload } from '@/features/bible/hooks/useBibleTextDebounce';
 import { useDrafting } from '@/features/bible/hooks/useDrafting';
-import { type DraftingUIProps, type ProjectItem, type User } from '@/lib/types';
+import { type DraftingUIProps, type ProjectItem, type UserDetail } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import DraftingPage from './DraftingPage';
@@ -94,7 +94,11 @@ describe('DraftingPage chapter identity', () => {
     useAppStore.setState({
       roleChangeWarning: false,
       currentProjectItem: null,
-      userdetail: { id: 1, role: 'Project Translator', grants: [] } as unknown as User,
+      userdetail: {
+        id: 1,
+        activeRoleName: 'Project Translator',
+        grants: [],
+      } as unknown as UserDetail,
     });
     match.loaderData = chapter();
   });
