@@ -219,8 +219,14 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   new write has to check `readOnly`. Tests: `src/features/bible/hooks/useSyncGlobalAiSetting.test.ts`
   › "AI does not auto-enable on read-only /view/...".
 - Saves carry no version, so when two people edit the same chapter the last save wins.
-  `useChapterPresence` only warns the second editor, and only in the community review, linguist,
-  theological and consultant check stages. No test covers the warning.
+  `useChapterPresence` only warns the second editor, and only while the chapter is in a stage
+  after peer check and before complete in the project's workflow, custom stages included
+  (`isPostPeer` in `src/features/bible/components/DraftingUI.tsx`). Presence is off in read-only
+  views (`/view` route, project Observer), so those users neither register as an editor nor see
+  the warning. Tests: `src/features/bible/components/DraftingUI.test.tsx` › "chapter presence with
+  dynamic workflow stages" › "activates presence for custom post-peer workflow stages",
+  "does not activate presence for draft or complete stages", "does not activate presence when
+  readOnly is true", "does not activate presence for unresolved numeric stage IDs before workflow loads".
 - Status changes happen in [fluent-api](https://github.com/eten-tech-foundation/fluent-api). The page only calls `PATCH /chapter-assignments/:id/submit`.
   Tests: `src/features/bible/components/DraftingUI.test.tsx` › "triggers submit workflow when
   translation is complete and submit button is clicked".
