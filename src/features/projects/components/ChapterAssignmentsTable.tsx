@@ -187,9 +187,11 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
             <Table className='w-full table-fixed'>
               <TableHeader className='sticky top-0 z-10'>
                 <TableRow className='hover:bg-transparent'>
-                  <TableHead className='w-12 px-3 py-2 md:px-4 md:py-2.5 lg:px-6 lg:py-3'>
-                    <span className='sr-only'>Select</span>
-                  </TableHead>
+                  {isManager && (
+                    <TableHead className='w-12 px-3 py-2 md:px-4 md:py-2.5 lg:px-6 lg:py-3'>
+                      <span className='sr-only'>Select</span>
+                    </TableHead>
+                  )}
                   <TableHead className={headerCellClass}>Book</TableHead>
                   <TableHead className={headerCellClass}>Chapter</TableHead>
                   <SortableHeader
@@ -223,25 +225,25 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                     className='align-center cursor-pointer border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
                     onClick={() => onRowClick(assignment)}
                   >
-                    <TableCell
-                      className={`w-12 px-3 py-3 md:px-4 md:py-3.5 lg:px-6 lg:py-4 ${isManager ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : ''}`}
-                      onClick={e => {
-                        e.stopPropagation();
-                        if (!isRowActionsDisabled && isManager) {
-                          onCheckboxChange(
-                            assignment.assignmentId,
-                            !selectedAssignments.includes(assignment.assignmentId)
-                          );
-                        }
-                      }}
-                    >
-                      {isManager && (
+                    {isManager && (
+                      <TableCell
+                        className='w-12 cursor-pointer px-3 py-3 hover:bg-gray-100 md:px-4 md:py-3.5 lg:px-6 lg:py-4 dark:hover:bg-gray-700'
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (!isRowActionsDisabled) {
+                            onCheckboxChange(
+                              assignment.assignmentId,
+                              !selectedAssignments.includes(assignment.assignmentId)
+                            );
+                          }
+                        }}
+                      >
                         <Checkbox
                           checked={selectedAssignments.includes(assignment.assignmentId)}
                           disabled={isRowActionsDisabled}
                         />
-                      )}
-                    </TableCell>
+                      </TableCell>
+                    )}
                     <TableCell className='text-popover-foreground px-3 py-3 text-xs md:px-4 md:py-3.5 md:text-sm lg:px-6 lg:py-4 lg:text-base'>
                       <TruncatedTableText text={assignment.bookNameEng} />
                     </TableCell>
