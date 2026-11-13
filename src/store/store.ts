@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { config } from '@/lib/config';
-import { type ProjectItem, type User } from '@/lib/types';
+import { type ProjectItem, type UserDetail } from '@/lib/types';
 
 /** The drafting views a chapter can be presented in (#396). */
 export type DisplayMode = 'verse' | 'pericope' | 'chapter';
@@ -29,7 +29,7 @@ export const isSameProjectAssignment = (
   left.chapterNumber === right.chapterNumber;
 
 interface AppState {
-  userdetail: User | null;
+  userdetail: UserDetail | null;
   currentProjectItem: ProjectItem | null;
   presenceWarning: string | null;
   roleChangeWarning: boolean;
@@ -41,7 +41,7 @@ interface AppState {
   manualAiEnable: { assignmentId: number; revision: number } | null;
   isOrgSwitching: boolean;
   aiAutoEnablePreferences: Record<number, boolean | undefined>;
-  setUserDetail: (user: User) => void;
+  setUserDetail: (user: UserDetail) => void;
   setCurrentProjectItem: (projectItem: ProjectItem | null) => void;
   clearUserDetail: () => void;
   clearCurrentProjectItem: () => void;
@@ -91,7 +91,7 @@ export const useAppStore = create<AppState>()(
       manualAiEnable: null,
       isOrgSwitching: false,
       aiAutoEnablePreferences: {},
-      setUserDetail: (userdetail: User) => set({ userdetail }),
+      setUserDetail: (userdetail: UserDetail) => set({ userdetail }),
       setCurrentProjectItem: (currentProjectItem: ProjectItem | null) => {
         if (!isSameProjectAssignment(get().currentProjectItem, currentProjectItem)) {
           // Clear assignment-scoped state when the selected context changes, even if IDs were reused.
@@ -160,6 +160,20 @@ export const useAppStore = create<AppState>()(
         aiAutoEnablePreferences: state.aiAutoEnablePreferences,
       }),
       onRehydrateStorage: () => state => {
+        // Migrate persisted sessions from before #550 that stored client role on `userdetail.role`.
+        if (state?.userdetail) {
+          const legacy = state.userdetail as Omit<UserDetail, 'activeRoleName'> & {
+            activeRoleName?: string | null;
+            role?: string;
+          };
+          if (legacy.activeRoleName === undefined || 'role' in legacy) {
+            const { role, activeRoleName, ...rest } = legacy;
+            state.setUserDetail({
+              ...rest,
+              activeRoleName: activeRoleName !== undefined ? activeRoleName : (role ?? null),
+            });
+          }
+        }
         // The chapter surface is RTE-backed; a build without the flag must not revive a
         // stored 'chapter' selection into a mode the toggle cannot offer (#314).
         if (!config.features.rtePericope && state?.displayMode === 'chapter') {

@@ -33,7 +33,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const location = useLocation();
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.activeRoleName);
   const showUsers = canViewUsers(activeRoleGrants);
   const showProjects = isManager(activeRoleGrants);
   const superAdmin = isSuperAdmin(userdetail?.grants);

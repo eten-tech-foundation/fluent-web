@@ -14,7 +14,7 @@ export function AppRouter(): React.JSX.Element {
   const { userdetail } = useAppStore();
 
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.activeRoleName);
   const managerState = isManager(activeRoleGrants);
   const viewUsersState = canViewUsers(activeRoleGrants);
   const manageOrgsState = isSuperAdmin(userdetail?.grants);

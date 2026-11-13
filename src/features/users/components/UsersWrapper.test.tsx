@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { config } from '@/lib/config';
-import { ROLES, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type User, type UserDetail, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { fireEvent, renderWithProviders as render, screen, waitFor } from '@/test/render';
@@ -48,11 +48,11 @@ const grant = (orgId: number | null, projectId: number | null, roleName: string)
   permissions: [],
 });
 
-const caller: User = {
+const caller: UserDetail = {
   id: 1,
   username: 'manager1',
   email: 'manager@example.com',
-  role: ROLES.ORG_MANAGER,
+  activeRoleName: ROLES.ORG_MANAGER,
   status: 'verified',
   lastActiveOrgId: 1,
   grants: [grant(1, null, ROLES.ORG_MEMBER), grant(1, null, ROLES.ORG_MANAGER)],
@@ -62,7 +62,6 @@ const target: User = {
   id: 2,
   username: 'member1',
   email: 'member@example.com',
-  role: ROLES.ORG_MEMBER,
   status: 'verified',
   lastActiveOrgId: 1,
   orgGrants: [grant(1, null, ROLES.ORG_MEMBER)],
@@ -83,7 +82,7 @@ describe('UsersWrapper', () => {
     server.use(
       http.patch(`${config.api.url}/organizations/1/users/2`, async ({ request }) => {
         roleBody = await request.json();
-        return HttpResponse.json({ ...target, role: ROLES.ORG_MANAGER });
+        return HttpResponse.json(target);
       }),
       http.patch(`${config.api.url}/users/2`, () => {
         throw new Error('profile PATCH must not be called for a role-only change');
@@ -149,7 +148,7 @@ describe('UsersWrapper', () => {
     );
     expect(getCalled).toBe(true);
     expect(useAppStore.getState().userdetail?.grants).toEqual(caller.grants);
-    expect(useAppStore.getState().userdetail?.role).toBe(ROLES.ORG_MANAGER);
+    expect(useAppStore.getState().userdetail?.activeRoleName).toBe(ROLES.ORG_MANAGER);
     // The toast names the submitted username, not the stale pre-edit one.
     expect(toast.success).toHaveBeenCalledWith('userUpdated:manager-renamed');
   });
@@ -218,7 +217,6 @@ describe('UsersWrapper', () => {
             id: 3,
             username: 'pm1',
             email: 'pm@example.com',
-            role: ROLES.ORG_MEMBER,
             orgGrants: [
               grant(1, null, ROLES.ORG_MEMBER),
               grant(1, 11, ROLES.PROJECT_OBSERVER),
@@ -229,7 +227,6 @@ describe('UsersWrapper', () => {
             id: 4,
             username: 'om1',
             email: 'om@example.com',
-            role: ROLES.ORG_MANAGER,
             orgGrants: [
               grant(1, null, ROLES.ORG_MEMBER),
               grant(1, 10, ROLES.PROJECT_MANAGER),

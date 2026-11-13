@@ -202,7 +202,7 @@ describe('AudioReviewPage display mode', () => {
         username: 'alice',
         displayName: 'Alice',
         email: 'alice@example.com',
-        role: 'user',
+        activeRoleName: null,
         grants: [
           {
             orgId: 1,
@@ -307,7 +307,7 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
         username: 'alice',
         displayName: 'Alice',
         email: 'alice@example.com',
-        role: 'user',
+        activeRoleName: null,
         grants: [
           {
             orgId: 1,
@@ -688,7 +688,7 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
         username: 'alice',
         displayName: 'Alice',
         email: 'alice@example.com',
-        role: 'user',
+        activeRoleName: null,
         grants: [
           {
             orgId: 1,
@@ -771,7 +771,7 @@ describe('AudioReviewPage pericope stitched audio & cross-view conflicts (Issue 
         username: 'alice',
         displayName: 'Alice',
         email: 'alice@example.com',
-        role: 'user',
+        activeRoleName: null,
         grants: [
           {
             orgId: 1,

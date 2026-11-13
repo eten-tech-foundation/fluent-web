@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { config } from '@/lib/config';
-import { ChapterAssignmentStatus, ROLES, type ProjectItem, type User } from '@/lib/types';
+import { ChapterAssignmentStatus, ROLES, type ProjectItem, type UserDetail } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { createTestQueryClient, renderHook, renderWithProviders as render } from '@/test/render';
@@ -28,7 +28,7 @@ const item = {
   chapterStatus: ChapterAssignmentStatus.DRAFT,
   isAiEnabled: false,
 } as ProjectItem;
-const user = { id: 42, role: ROLES.PROJECT_TRANSLATOR } as User;
+const user = { id: 42, activeRoleName: ROLES.PROJECT_TRANSLATOR } as UserDetail;
 
 function delayPatch(assignmentId = 101) {
   let finish!: (response: Response) => void;

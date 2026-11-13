@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantConversation } from '@/features/assistant/assistant.conversation';
 import type { TurnUpdate, streamAssistantTurn } from '@/features/assistant/assistant.turn.client';
 import { useAssistantConversation } from '@/features/assistant/components/AssistantConversationProvider';
-import type { DraftingUIProps, ProjectItem, User } from '@/lib/types';
+import type { DraftingUIProps, ProjectItem, UserDetail } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import DraftingPage from './DraftingPage';
@@ -84,7 +84,11 @@ function open() {
   test.canonicalVerse = 30;
   test.deliveries = [];
   useAppStore.setState({
-    userdetail: { id: 1, role: 'Project Translator', grants: [] } as unknown as User,
+    userdetail: {
+      id: 1,
+      activeRoleName: 'Project Translator',
+      grants: [],
+    } as unknown as UserDetail,
     currentProjectItem: null,
   });
   test.loaderData = loaded(project(3));

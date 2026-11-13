@@ -19,6 +19,7 @@ import {
   type Source,
   type TargetVerse,
   type User,
+  type UserDetail,
   type VerseMarkers,
 } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -475,7 +476,11 @@ describe('DraftingUI', () => {
     useAppStore.setState({
       displayMode: 'verse',
       manualAiEnable: null,
-      userdetail: { id: 1, username: 'testuser', role: 'Project Translator' } as unknown as User,
+      userdetail: {
+        id: 1,
+        username: 'testuser',
+        activeRoleName: 'Project Translator',
+      } as unknown as UserDetail,
     });
 
     mockUseDrafting.mockReturnValue(defaultDraftingHookResult());

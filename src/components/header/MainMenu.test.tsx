@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ROLES, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type UserDetail, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import MainMenu from './MainMenu';
@@ -27,8 +27,8 @@ const grant = (orgId: number | null, projectId: number | null, roleName: string)
   permissions: [],
 });
 
-const withUser = (userdetail: Partial<User>) =>
-  useAppStore.setState({ userdetail: userdetail as User });
+const withUser = (userdetail: Partial<UserDetail>) =>
+  useAppStore.setState({ userdetail: userdetail as UserDetail });
 
 const openMenu = async () => {
   const user = userEvent.setup();
@@ -48,7 +48,7 @@ const openMenu = async () => {
 describe('MainMenu visibility (#489 regression)', () => {
   it('shows the Users item for an Org Manager', async () => {
     withUser({
-      role: ROLES.ORG_MANAGER,
+      activeRoleName: ROLES.ORG_MANAGER,
       lastActiveOrgId: 1,
       grants: [grant(1, null, ROLES.ORG_MEMBER), grant(1, null, ROLES.ORG_MANAGER)],
     });
@@ -62,7 +62,7 @@ describe('MainMenu visibility (#489 regression)', () => {
 
   it('shows no Users item for a project-scoped Project Manager', async () => {
     withUser({
-      role: ROLES.PROJECT_MANAGER,
+      activeRoleName: ROLES.PROJECT_MANAGER,
       lastActiveOrgId: 1,
       grants: [grant(1, null, ROLES.ORG_MEMBER), grant(1, 10, ROLES.PROJECT_MANAGER)],
     });
@@ -75,7 +75,7 @@ describe('MainMenu visibility (#489 regression)', () => {
 
   it('hides Projects and Users for an anchor-only Org Member', async () => {
     withUser({
-      role: ROLES.ORG_MEMBER,
+      activeRoleName: ROLES.ORG_MEMBER,
       lastActiveOrgId: 1,
       grants: [grant(1, null, ROLES.ORG_MEMBER)],
     });

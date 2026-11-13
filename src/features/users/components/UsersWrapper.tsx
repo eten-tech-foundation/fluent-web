@@ -4,7 +4,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { UserModal } from '@/components/UserModal';
+import { UserModal, type UserFormData } from '@/components/UserModal';
 import { UsersPage } from '@/features/users/components/ListUsers';
 import { RemoveOrgUserDialog } from '@/features/users/components/RemoveOrgUserDialog';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
@@ -117,7 +117,7 @@ export const UsersWrapper: React.FC = () => {
     }
   };
 
-  const handleSaveUser = async (userData: User | Omit<User, 'id'>): Promise<void> => {
+  const handleSaveUser = async (userData: UserFormData): Promise<void> => {
     setUserError(null);
     try {
       if (mode === 'edit' && selectedUser) {
@@ -126,17 +126,26 @@ export const UsersWrapper: React.FC = () => {
         const currentOrgRole =
           getOrgLevelRoleName(selectedUser.orgGrants ?? selectedUser.grants, activeOrgId) ??
           ROLES.ORG_MEMBER;
-        const requestedRole = (userData as User).role as string | undefined;
+        const requestedRole = userData.role;
         const roleChanged = Boolean(requestedRole && requestedRole !== currentOrgRole);
-        const canPatchRole = roleChanged && requestedRole !== undefined && activeOrgId != null;
+        const canPatchRole = roleChanged && activeOrgId != null;
         const profileChanged =
           userData.username !== selectedUser.username ||
-          (userData.firstName ?? '') !== (selectedUser.firstName ?? '') ||
-          (userData.lastName ?? '') !== (selectedUser.lastName ?? '');
+          userData.firstName !== (selectedUser.firstName ?? '') ||
+          userData.lastName !== (selectedUser.lastName ?? '');
 
         let res = selectedUser;
         if (profileChanged) {
-          res = await updateUserMutation.mutateAsync({ userData: userData as User });
+          res = await updateUserMutation.mutateAsync({
+            userData: {
+              id: selectedUser.id,
+              username: userData.username,
+              email: userData.email,
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+              status: userData.status,
+            },
+          });
         }
         if (canPatchRole) {
           res = await updateOrgUserRoleMutation.mutateAsync({
@@ -161,22 +170,15 @@ export const UsersWrapper: React.FC = () => {
               );
             }
           }
-          toast.success(t('userUpdated', { name: (userData as User).username }));
+          toast.success(t('userUpdated', { name: userData.username }));
         }
       } else {
-        const userToInvite = userData as Omit<User, 'id'> & {
-          roleName?: string;
-          role?: string | number;
-        };
-        const inviteRoleName =
-          userToInvite.roleName ??
-          (typeof userToInvite.role === 'string' ? userToInvite.role : String(userToInvite.role));
         const activeGrant = userdetail?.grants?.find(g => g.orgId === activeOrgId);
         const invitePayload: InviteUserPayload = {
-          email: userToInvite.email,
-          username: userToInvite.displayName ?? userToInvite.username,
+          email: userData.email,
+          username: userData.username,
           orgId: activeOrgId ?? 0,
-          roleName: inviteRoleName,
+          roleName: userData.role,
           orgName: activeGrant?.orgName ?? userdetail?.orgGrants?.[0]?.orgName ?? undefined,
           inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
         };

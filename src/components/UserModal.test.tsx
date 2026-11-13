@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ROLES, type User, type UserGrant } from '@/lib/types';
 
-import { UserModal } from './UserModal';
+import { UserModal, type UserFormData } from './UserModal';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -31,7 +31,6 @@ const member = (overrides: Partial<User> = {}): User => ({
   id: 2,
   username: 'member1',
   email: 'member@example.com',
-  role: ROLES.ORG_MEMBER,
   status: 'verified',
   lastActiveOrgId: 1,
   grants: [grant(1, null, ROLES.ORG_MEMBER)],
@@ -40,7 +39,7 @@ const member = (overrides: Partial<User> = {}): User => ({
 });
 
 const setup = (overrides: Partial<React.ComponentProps<typeof UserModal>> = {}) => {
-  const onSave = vi.fn<(u: User | Omit<User, 'id'>) => Promise<void>>(() => Promise.resolve());
+  const onSave = vi.fn<(u: UserFormData) => Promise<void>>(() => Promise.resolve());
   render(
     <UserModal
       isOpen

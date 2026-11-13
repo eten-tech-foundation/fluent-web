@@ -70,7 +70,6 @@ const user: User = {
   id: 17,
   username: 'translator',
   email: 'translator@example.com',
-  role: 'Project Translator',
 };
 const assignment: ProjectItem = {
   chapterAssignmentId: 108,

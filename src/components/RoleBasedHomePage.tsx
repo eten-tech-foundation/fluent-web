@@ -28,8 +28,8 @@ export const RoleBasedHomePage = () => {
 
   const functionalGrant = activeGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
   const effectiveRole =
-    userdetail.role !== ROLES.ORG_MEMBER
-      ? userdetail.role
+    userdetail.activeRoleName && userdetail.activeRoleName !== ROLES.ORG_MEMBER
+      ? userdetail.activeRoleName
       : (functionalGrant?.roleName ?? ROLES.ORG_MEMBER);
 
   const activeRoleGrant = activeGrants.filter(g => g.roleName === effectiveRole);

@@ -31,7 +31,7 @@ export const ProjectsWrapper: React.FC = () => {
 
   const activeOrgId = userdetail?.lastActiveOrgId;
   const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.activeRoleName);
 
   // Ticket #410: only project managers and org managers can view this page at all.
   const canViewProjectsList = isManager(activeRoleGrants);

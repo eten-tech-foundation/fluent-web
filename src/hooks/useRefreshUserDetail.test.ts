@@ -25,7 +25,7 @@ describe('useRefreshUserDetail', () => {
         id: 1,
         email: 'test@example.com',
         username: 'testuser',
-        role: ROLES.PROJECT_OBSERVER,
+        activeRoleName: ROLES.PROJECT_OBSERVER,
         lastActiveOrgId: 100,
         grants: [
           {
@@ -48,7 +48,6 @@ describe('useRefreshUserDetail', () => {
       id: 1,
       email: 'test@example.com',
       username: 'testuser',
-      role: ROLES.PROJECT_TRANSLATOR,
       lastActiveOrgId: 100,
       grants: [
         {
@@ -66,7 +65,28 @@ describe('useRefreshUserDetail', () => {
 
     const updatedUserdetail = useAppStore.getState().userdetail;
     expect(updatedUserdetail).not.toBeNull();
-    expect(updatedUserdetail!.role).toBe(ROLES.PROJECT_TRANSLATOR);
+    expect(updatedUserdetail!.activeRoleName).toBe(ROLES.PROJECT_TRANSLATOR);
     expect(useAppStore.getState().roleChangeWarning).toBe(false);
+  });
+
+  it('sets activeRoleName to null when fresh user has no matching org grants', () => {
+    const { result } = renderHook(() => useRefreshUserDetail());
+
+    const freshUser: User = {
+      id: 1,
+      email: 'test@example.com',
+      username: 'testuser',
+      lastActiveOrgId: 100,
+      grants: [],
+      firstName: 'Test',
+      lastName: 'User',
+      status: 'active',
+    };
+
+    result.current.applyUser(freshUser);
+
+    const updatedUserdetail = useAppStore.getState().userdetail;
+    expect(updatedUserdetail).not.toBeNull();
+    expect(updatedUserdetail!.activeRoleName).toBeNull();
   });
 });

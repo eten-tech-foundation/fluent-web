@@ -70,7 +70,7 @@ export const ProjectDetailWrapper: React.FC = () => {
       return;
     }
 
-    if (userdetail?.role === ROLES.PROJECT_OBSERVER) {
+    if (userdetail?.activeRoleName === ROLES.PROJECT_OBSERVER) {
       void navigate({ to: '/' });
     } else {
       void navigate({ to: '/projects' });
