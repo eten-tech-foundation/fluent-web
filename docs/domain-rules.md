@@ -14,11 +14,34 @@ Two of them look like bugs but are intentional: role checks in the browser only 
 check here never replaces one in the API.
 
 - Role checks compare the names in `ROLES` (`src/lib/types.ts`) through the helpers in
-  `src/lib/grant-utils.ts`, such as `getActiveGrants`, `hasGrantForProject`, `isProjectManager`
-  and `canViewUsers`. Role lists hard-coded there, like `ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT`,
-  have to match what fluent-api allows. Tests: `src/lib/grant-utils.test.ts` › "is false for an
-  org-scoped grant even when the role name is SuperAdmin"; `src/components/header/MainMenu.test.tsx`
-  › "shows no Users item for a project-scoped Project Manager".
+  `src/lib/grant-utils.ts`, such as `getActiveGrants`, `getActiveRoleGrants`, `hasGrantForProject`,
+  `isProjectManager` and `canViewUsers`. Role lists hard-coded there, like
+  `ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT`, have to match what fluent-api allows. Tests:
+  `src/lib/grant-utils.test.ts` › "is false for an org-scoped grant even when the role name is
+  SuperAdmin"; `src/components/header/MainMenu.test.tsx` › "shows no Users item for a project-scoped
+  Project Manager".
+- Role checks look only at the grants for the role the user has selected (`userdetail.role`),
+  through `getActiveRoleGrants` in `src/lib/grant-utils.ts`. A user who is a Project Translator on
+  one project and a Project Manager on another sees manager controls only while Project Manager is
+  selected.
+- The Projects list (`/projects`, `ProjectsWrapper` in `src/features/projects/components/index.tsx`)
+  opens for managers, Project Translators and Project Observers; anyone else is sent to `/`.
+  Managers get `GET /projects`, narrowed to the projects a Project Manager manages; translators and
+  observers get `GET /users/:id/projects` (`useProjectsByRole`). The menu item follows the same
+  rule. Tests: `src/components/header/MainMenu.test.tsx` › "shows Projects item for a Project
+  Translator" and "shows Projects item for a Project Observer". No test covers the redirect.
+- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the overflow menus, Assign
+  and the chapter checkboxes show only for a manager of that project (`isProjectManager`). Export
+  Milestone shows to anyone who can open the page. Tests:
+  `src/features/projects/components/ChapterAssignmentsTable.test.tsx` › "hides row selection
+  checkboxes and select column when isManager is false, and keeps drafter/checker text". No test
+  covers the page-level controls.
+- Opening a chapter from Milestone Detail goes to the editable `/translation` route when the user
+  is its drafter in Draft, its peer checker in Peer Check, or the chapter is past peer check;
+  otherwise it goes to `/view` (`MilestoneDetailPage.tsx`). Past peer check, any project member
+  with `content:update` may edit, as [fluent-api](https://github.com/eten-tech-foundation/fluent-api/blob/2db5db7de52017ae7300895ac9cc1609ab11710a/src/domains/chapter-assignments/chapter-assignments.policy.ts#L53-L85)'s
+  `ChapterAssignmentPolicy.edit` allows. Observers stay read-only on either route (see the
+  `DraftingPage` rule under Saving). No test covers this routing.
 - Three routes have guards: `/users` checks `context.auth.canViewUsers` and `/organizations`
   checks `context.auth.canManageOrgs` (global SuperAdmin), both from
   `src/features/root/AppRouter.tsx`; `/audio/$bookId/$chapterNumber` redirects anyone who isn't a

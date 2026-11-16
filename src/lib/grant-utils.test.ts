@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { getOrgLevelRoleName, getOrgRoleName, isSuperAdmin } from '@/lib/grant-utils';
+import {
+  getActiveRoleGrants,
+  getOrgLevelRoleName,
+  getOrgRoleName,
+  isObserver,
+  isSuperAdmin,
+  isTranslator,
+} from '@/lib/grant-utils';
 import { ROLES, type UserGrant } from '@/lib/types';
 
 const grant = (
@@ -84,5 +91,39 @@ describe('getOrgLevelRoleName', () => {
     expect(getOrgLevelRoleName([grant(2, null, ROLES.ORG_MANAGER)], 1)).toBeUndefined();
     expect(getOrgLevelRoleName(undefined, 1)).toBeUndefined();
     expect(getOrgLevelRoleName([grant(1, null, ROLES.ORG_MEMBER)], null)).toBeUndefined();
+  });
+});
+
+describe('isTranslator and isObserver', () => {
+  it('identifies translator grants', () => {
+    expect(isTranslator([grant(1, 10, ROLES.PROJECT_TRANSLATOR)])).toBe(true);
+    expect(isTranslator([grant(1, 10, ROLES.PROJECT_OBSERVER)])).toBe(false);
+    expect(isTranslator([])).toBe(false);
+  });
+
+  it('identifies observer grants', () => {
+    expect(isObserver([grant(1, 10, ROLES.PROJECT_OBSERVER)])).toBe(true);
+    expect(isObserver([grant(1, 10, ROLES.PROJECT_TRANSLATOR)])).toBe(false);
+    expect(isObserver([])).toBe(false);
+  });
+});
+
+describe('getActiveRoleGrants', () => {
+  it('returns only active-org grants matching the selected role', () => {
+    const user = {
+      role: ROLES.PROJECT_TRANSLATOR,
+      lastActiveOrgId: 1,
+      grants: [
+        grant(1, 10, ROLES.PROJECT_TRANSLATOR),
+        grant(1, 20, ROLES.PROJECT_MANAGER),
+        grant(2, 30, ROLES.PROJECT_TRANSLATOR),
+      ],
+    };
+    expect(getActiveRoleGrants(user)).toEqual([grant(1, 10, ROLES.PROJECT_TRANSLATOR)]);
+  });
+
+  it('handles null or undefined user', () => {
+    expect(getActiveRoleGrants(null)).toEqual([]);
+    expect(getActiveRoleGrants(undefined)).toEqual([]);
   });
 });

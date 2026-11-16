@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 
 import { useAuth } from '@/hooks/useAuth';
-import { canViewUsers, getActiveGrants, isManager, isSuperAdmin } from '@/lib/grant-utils';
+import { canViewUsers, getActiveRoleGrants, isManager, isSuperAdmin } from '@/lib/grant-utils';
 import { router } from '@/lib/router';
 import { useAppStore } from '@/store/store';
 
@@ -13,8 +13,7 @@ export function AppRouter(): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
   const { userdetail } = useAppStore();
 
-  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const managerState = isManager(activeRoleGrants);
   const viewUsersState = canViewUsers(activeRoleGrants);
   const manageOrgsState = isSuperAdmin(userdetail?.grants);

@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
-import { getActiveGrants, isManager } from '@/lib/grant-utils';
+import { getActiveRoleGrants, isManager } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { type CreateProject, type Project, type ProjectItem, type User } from '@/lib/types';
 
@@ -81,8 +81,7 @@ export const useUserProjects = (user: User | null | undefined, role?: string) =>
  *   (only their assigned projects)
  */
 export const useProjectsByRole = (user: User | null | undefined) => {
-  const activeGrants = getActiveGrants(user?.grants, user?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === user?.role);
+  const activeRoleGrants = getActiveRoleGrants(user);
   const isAnyManager = isManager(activeRoleGrants);
 
   const managerQuery = useProjects(isAnyManager, user?.lastActiveOrgId);
