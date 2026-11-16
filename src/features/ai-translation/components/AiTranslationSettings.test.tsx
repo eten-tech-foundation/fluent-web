@@ -7,7 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSyncGlobalAiSetting } from '@/features/bible/hooks/useSyncGlobalAiSetting';
 import { config } from '@/lib/config';
-import { ChapterAssignmentStatus, ROLES, type ProjectItem, type User } from '@/lib/types';
+import {
+  ChapterAssignmentStatus,
+  ROLES,
+  type ProjectItem,
+  type UserDetail,
+  type UserGrant,
+} from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { createTestQueryClient, renderHook, renderWithProviders as render } from '@/test/render';
@@ -28,7 +34,12 @@ const item = {
   chapterStatus: ChapterAssignmentStatus.DRAFT,
   isAiEnabled: false,
 } as ProjectItem;
-const user = { id: 42, role: ROLES.PROJECT_TRANSLATOR } as User;
+const user = {
+  id: 42,
+  activeRoleName: ROLES.PROJECT_TRANSLATOR,
+  lastActiveOrgId: 1,
+  grants: [{ orgId: 1, roleName: ROLES.PROJECT_TRANSLATOR } as UserGrant],
+} as UserDetail;
 
 function delayPatch(assignmentId = 101) {
   let finish!: (response: Response) => void;
@@ -56,6 +67,18 @@ describe('AI translation toggle', () => {
       manualAiEnable: null,
       aiAutoEnablePreferences: { 42: false },
     });
+  });
+
+  it('renders nothing when active role is not Project Translator', () => {
+    useAppStore.setState({
+      userdetail: {
+        ...user,
+        activeRoleName: ROLES.PROJECT_OBSERVER,
+        grants: [{ orgId: 1, roleName: ROLES.PROJECT_OBSERVER } as UserGrant],
+      },
+    });
+    const { container } = render(<AiTranslationSettings />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('waits for server opt-in before the drafting surface can request suggestions', async () => {

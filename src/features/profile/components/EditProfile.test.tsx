@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { config } from '@/lib/config';
-import { ROLES, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type UserDetail, type UserGrant } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 import { server } from '@/test/msw/server';
 import { fireEvent, renderWithProviders as render, screen, waitFor } from '@/test/render';
@@ -40,11 +40,11 @@ const grant = (orgId: number | null, projectId: number | null, roleName: string)
 
 const grants = [grant(1, null, ROLES.ORG_MEMBER), grant(1, null, ROLES.ORG_MANAGER)];
 
-const manager: User = {
+const manager: UserDetail = {
   id: 1,
   username: 'manager1',
   email: 'manager@example.com',
-  role: ROLES.ORG_MANAGER,
+  activeRoleName: ROLES.ORG_MANAGER,
   status: 'verified',
   lastActiveOrgId: 1,
   firstName: 'Old',
@@ -97,7 +97,7 @@ describe('EditProfile', () => {
 
     const saved = useAppStore.getState().userdetail;
     expect(saved?.grants).toEqual(grants);
-    expect(saved?.role).toBe(ROLES.ORG_MANAGER);
+    expect(saved?.activeRoleName).toBe(ROLES.ORG_MANAGER);
     expect(saved?.firstName).toBe('New');
     expect(toast.success).toHaveBeenCalledWith('profileUpdated');
   });

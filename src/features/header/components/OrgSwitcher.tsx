@@ -63,7 +63,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
 
   const activeOrgId = userdetail.lastActiveOrgId ?? Array.from(orgMap.keys())[0];
   const activeOrgName = orgMap.get(activeOrgId) ?? 'Admin';
-  const activeRoleName = userdetail.role;
+  const activeRoleName = userdetail.activeRoleName;
   const organizations = Array.from(orgMap.entries())
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => (a.id === activeOrgId ? -1 : b.id === activeOrgId ? 1 : 0));
@@ -144,7 +144,7 @@ export const OrgSwitcher: React.FC<OrgSwitcherProps> = ({ onAfterSelect }) => {
       setUserDetail({
         ...userdetail,
         lastActiveOrgId: targetOrgId,
-        role: targetRoleName,
+        activeRoleName: targetRoleName,
       });
 
       navigateForRole(targetOrgId, targetRoleName);

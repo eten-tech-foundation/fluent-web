@@ -9,7 +9,7 @@
  * create projects, view users, and see all projects in the org.
  */
 
-import { ROLES, type User, type UserGrant } from '@/lib/types';
+import { ROLES, type UserDetail, type UserGrant } from '@/lib/types';
 
 export const ORG_LEVEL_ROLES = [
   ROLES.ORG_MANAGER,
@@ -102,10 +102,10 @@ export function getActiveGrants(
 
 /** Active-org grants for the role the user currently has selected. */
 export function getActiveRoleGrants(
-  user: Pick<User, 'grants' | 'lastActiveOrgId' | 'role'> | null | undefined
+  user: Pick<UserDetail, 'grants' | 'lastActiveOrgId' | 'activeRoleName'> | null | undefined
 ): UserGrant[] {
   return getActiveGrants(user?.grants, user?.lastActiveOrgId).filter(
-    g => g.roleName === user?.role
+    g => g.roleName === user?.activeRoleName
   );
 }
 
