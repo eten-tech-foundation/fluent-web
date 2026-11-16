@@ -80,6 +80,26 @@ describe('AuthenticatedLayout when user details fail to load', () => {
     expect(requests).toBe(2);
   });
 
+  it('does not refresh on window focus while the error screen is up', async () => {
+    let requests = 0;
+    server.use(
+      http.get(userDetailsUrl, () => {
+        requests++;
+        return requests === 1
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ id: 'u1', email: 'translator@example.org', status: 'verified' });
+      })
+    );
+
+    renderLayout();
+    await screen.findByRole('alert');
+    window.dispatchEvent(new Event('focus'));
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(requests).toBe(1);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
   it('signs the user out from the error screen', async () => {
     server.use(http.get(userDetailsUrl, () => new HttpResponse(null, { status: 404 })));
 

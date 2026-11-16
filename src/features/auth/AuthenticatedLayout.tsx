@@ -28,9 +28,15 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
 
-  // Automatically refresh user details when tab regains focus (e.g., after role change in another browser window)
+  const [userDetailsFetched, setUserDetailsFetched] = useState(false);
+  const [fetchInitiated, setFetchInitiated] = useState(false);
+  const [userDetailsFailed, setUserDetailsFailed] = useState(false);
+
+  // Automatically refresh user details when tab regains focus (e.g., after role change in another browser window).
+  // Only after the first load succeeds: until then the error screen's Try again is the one way to
+  // recover, and a focus refresh would update the store without leaving that screen.
   useEffect(() => {
-    if (!isAuthenticated || !user?.email) return;
+    if (!isAuthenticated || !user?.email || !userDetailsFetched) return;
 
     const handleFocus = () => {
       refreshUserDetail();
@@ -40,7 +46,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isAuthenticated, user?.email, refreshUserDetail]);
+  }, [isAuthenticated, user?.email, userDetailsFetched, refreshUserDetail]);
 
   const handleModalClose = (): void => {
     void navigate({
@@ -50,10 +56,6 @@ export function AuthenticatedLayout(): React.JSX.Element {
       replace: true,
     });
   };
-
-  const [userDetailsFetched, setUserDetailsFetched] = useState(false);
-  const [fetchInitiated, setFetchInitiated] = useState(false);
-  const [userDetailsFailed, setUserDetailsFailed] = useState(false);
 
   // Redirect to login if not authenticated
   useEffect(() => {
