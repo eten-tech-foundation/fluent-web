@@ -32,7 +32,6 @@ import '../styles/pericope-editor.css';
 
 import type { EditorRef } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
-import type { SerializedVerseRef } from '@sillsdev/scripture';
 
 export interface PericopeEditorProps {
   /** The pericope's target verses, in order. */
@@ -52,12 +51,15 @@ export interface PericopeEditorProps {
   continuedParagraph?: string;
   /** Called with only the verses whose text or paragraph markers changed. */
   onVersesChange: (changed: PericopeVerseText[]) => void;
-  /** The verse the cursor is in, for the drafting surface's active-verse tracking. */
+  /**
+   * The verse the caret is in, for the drafting surface's active-verse tracking: called after every
+   * caret move inside this editor that lands in a verse, by keyboard, pointer or code (#624).
+   */
   onActiveVerseChange?: (verseNumber: number) => void;
   /**
    * Called after every click in the editor with the verse the caret is in, or undefined when it
-   * isn't in a verse (a heading, say). `onActiveVerseChange` only reports a move to another verse
-   * inside this editor, so a click back into a pericope box at the same verse says nothing (#479).
+   * isn't in a verse (a heading, say). A click is what makes a pericope box the active one (#479),
+   * so it is reported on its own, apart from the caret moves `onActiveVerseChange` follows.
    */
   onVerseClick?: (verseNumber: number | undefined) => void;
   /**
@@ -224,12 +226,23 @@ export function PericopeEditor({
     [onVersesChange, reservedHeadingSlots]
   );
 
-  const handleScrRefChange = useCallback(
-    (scrRef: SerializedVerseRef) => {
-      if (scrRef.verseNum > 0) onActiveVerseChange?.(scrRef.verseNum);
-    },
-    [onActiveVerseChange]
-  );
+  // The verse is read off the DOM selection, as a click's is. Editorial reports caret moves only
+  // through its scripture reference plugin, which it mounts only when `scrRef` comes with
+  // `onScrRefChange`, so the callback alone was never called (#624). That plugin also moves the
+  // caret to the start of the `scrRef` verse whenever its document is created or replaced, which
+  // this page would do once per pericope box on load and again on every AI fill or rebuild.
+  useEffect(() => {
+    if (!onActiveVerseChange) return;
+    const reportCaretVerse = () => {
+      const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
+      const selection = document.getSelection();
+      if (!root || !selection?.focusNode || !root.contains(selection.focusNode)) return;
+      const verseNumber = verseAtCaret(root, selection);
+      if (verseNumber !== undefined) onActiveVerseChange(verseNumber);
+    };
+    document.addEventListener('selectionchange', reportCaretVerse);
+    return () => document.removeEventListener('selectionchange', reportCaretVerse);
+  }, [onActiveVerseChange]);
 
   // React handles the click after useVerseNumberCaret has moved the caret, so this reads where the
   // translator's click finally put it.
@@ -276,7 +289,6 @@ export function PericopeEditor({
           hasSpellCheck: false,
           textDirection: 'auto',
         }}
-        onScrRefChange={handleScrRefChange}
         onUsjChange={handleUsjChange}
       />
     </div>

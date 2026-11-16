@@ -119,3 +119,72 @@ describe('PericopeEditor clicks (#479)', () => {
     expect(onVerseClick).toHaveBeenCalledWith(10);
   });
 });
+
+describe('PericopeEditor caret moves (#624)', () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+  });
+
+  /** Put the DOM caret somewhere and say so, as the browser does after every caret move. */
+  function moveCaret(node: Node, offset: number) {
+    window.getSelection()!.collapse(node, offset);
+    document.dispatchEvent(new Event('selectionchange'));
+  }
+
+  function wordsOf(root: HTMLElement, needle: string) {
+    const words = [...root.querySelectorAll('span')]
+      .flatMap(span => [...span.childNodes])
+      .find(node => node.textContent?.includes(needle));
+    // A miss would clear the selection, and a test that expects silence would pass on nothing.
+    if (!words) throw new Error(`no editor text contains "${needle}"`);
+    return words;
+  }
+
+  it('reports each verse the caret moves into', async () => {
+    const onActiveVerseChange = vi.fn();
+    const { container } = renderEditor({ onActiveVerseChange });
+    const root = await editorRoot(container);
+
+    moveCaret(wordsOf(root, 'Ninth'), 3);
+    expect(onActiveVerseChange).toHaveBeenLastCalledWith(9);
+
+    const marker = root.querySelector('[data-number="11"]')!;
+    const paragraph = marker.parentElement!;
+    moveCaret(paragraph, Array.prototype.indexOf.call(paragraph.childNodes, marker) + 1);
+    expect(onActiveVerseChange).toHaveBeenLastCalledWith(11);
+  });
+
+  it('says nothing while the caret is in a heading, which belongs to no verse', async () => {
+    const onActiveVerseChange = vi.fn();
+    const { container } = renderEditor({
+      onActiveVerseChange,
+      verses: [
+        verses[0],
+        { ...verses[1], markers: { headings: [{ marker: 's1', text: 'Heading words' }] } },
+        verses[2],
+      ],
+    });
+    const root = await editorRoot(container);
+
+    moveCaret(wordsOf(root, 'Heading words'), 3);
+
+    expect(onActiveVerseChange).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about a caret in another part of the page', async () => {
+    const onActiveVerseChange = vi.fn();
+    const { container } = renderEditor({ onActiveVerseChange });
+    await editorRoot(container);
+    const elsewhere = document.createElement('p');
+    elsewhere.textContent = 'Source words';
+    document.body.append(elsewhere);
+
+    try {
+      moveCaret(elsewhere.firstChild!, 3);
+
+      expect(onActiveVerseChange).not.toHaveBeenCalled();
+    } finally {
+      elsewhere.remove();
+    }
+  });
+});

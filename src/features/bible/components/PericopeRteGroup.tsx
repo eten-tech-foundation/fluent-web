@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import type { ActiveVerseChangeHandler } from '@/features/bible/hooks/useDrafting';
 import {
   canSetPericopeTitle,
   getPericopeTitle,
@@ -31,7 +32,7 @@ interface PericopeRteGroupProps {
   hasNextPericope: boolean;
   isTranslationComplete: boolean;
   handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
-  handleActiveVerseChange: (verseNumber: number) => void;
+  handleActiveVerseChange: ActiveVerseChangeHandler;
   handleNextPericopeClick: () => Promise<void>;
   /** Next Pericope's request for the caret in the first verse it moved to (#479). */
   caretRequest?: VerseCaretRequest | null;
@@ -155,6 +156,18 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
     [readOnly, isGroupActive, groupVerses, handleActiveVerseChange]
   );
 
+  // Inside the active pericope the active verse follows the caret, so the resource panel shows the
+  // verse being drafted (#624), as in Chapter View. The page stays where it is: the caret is
+  // already in view. A caret landing in another box is left to the click above.
+  const handleCaretVerseChange = useCallback(
+    (verseNumber: number) => {
+      if (readOnly || !isGroupActive || verseNumber === activeVerseId) return;
+      if (!groupVerses.some(gv => gv.verseNumber === verseNumber)) return;
+      handleActiveVerseChange(verseNumber, { scroll: false });
+    },
+    [readOnly, isGroupActive, activeVerseId, groupVerses, handleActiveVerseChange]
+  );
+
   const isPericopeDrafted = groupVerses.every(gv =>
     verses.find(tv => tv.verseNumber === gv.verseNumber)?.content.trim()
   );
@@ -195,7 +208,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         readOnly={readOnly}
         reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
-        onActiveVerseChange={handleActiveVerseChange}
+        onActiveVerseChange={handleCaretVerseChange}
         onVerseClick={handleVerseClick}
         onVersesChange={handleVersesChange}
       />
