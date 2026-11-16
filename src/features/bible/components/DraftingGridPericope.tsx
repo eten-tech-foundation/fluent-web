@@ -8,6 +8,7 @@ import { PericopeContextText } from '@/features/bible/components/PericopeContext
 import { PericopeReferenceVerses } from '@/features/bible/components/PericopeReferenceVerses';
 import { PericopeText } from '@/features/bible/components/PericopeText';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import type { ActiveVerseChangeHandler } from '@/features/bible/hooks/useDrafting';
 import type { PericopeContextChapter } from '@/features/bible/hooks/usePericopeContext';
 import {
   chapterGroupSources,
@@ -92,7 +93,7 @@ interface DraftingGridPericopeProps {
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   verseRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>;
   handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
-  handleActiveVerseChange: (verseNumber: number) => void;
+  handleActiveVerseChange: ActiveVerseChangeHandler;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
   handleNextPericopeClick: () => Promise<void>;
@@ -309,7 +310,7 @@ interface PericopeTargetGroupProps {
   projectItem: ProjectItem;
   textareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement | null>>;
   handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
-  handleActiveVerseChange: (verseNumber: number) => void;
+  handleActiveVerseChange: ActiveVerseChangeHandler;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleNextClick: () => Promise<void>;
   handleNextPericopeClick: () => Promise<void>;

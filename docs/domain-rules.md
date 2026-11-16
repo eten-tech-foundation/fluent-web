@@ -167,6 +167,16 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   waits until focus leaves the box, because a reload resets the caret and the undo history.
   Tests: `src/features/rte/components/ChapterEditor.test.tsx` › "does not report the editor mount
   echo as a change" and "does not write an AI suggestion away on the next edit".
+- In Pericope View the active verse follows the caret inside the active pericope, so the resource
+  panel shows the verse being drafted, as it does in Chapter View. `PericopeEditor` reads the
+  verse off the DOM selection: Editorial's scripture reference plugin reports caret moves only
+  when it also gets `scrRef`, and then it moves the caret to that verse whenever a document loads,
+  once per pericope box and again on every AI fill. A caret move doesn't scroll the page, and a
+  click is still what makes another pericope the active one (#479). Tests:
+  `src/features/rte/components/PericopeEditor.caret.test.tsx` › "reports each verse the caret
+  moves into"; `src/features/bible/components/PericopeRteGroup.test.tsx` › "makes that verse the
+  active one without scrolling the page" and "leaves a pericope that is not the active one to the
+  click (#479)".
 - Some code works around bugs in Editorial 0.8.15. Keep it, and check it in a real browser when
   you upgrade `@eten-tech-foundation/platform-editor`: undo and redo shortcuts
   (`src/features/rte/lib/history-shortcuts.ts`), copy and paste
