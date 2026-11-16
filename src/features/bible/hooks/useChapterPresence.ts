@@ -22,6 +22,9 @@ export const useChapterPresence = (chapterAssignmentId: number, isActive: boolea
   const chapterAssignmentIdRef = useRef(chapterAssignmentId);
   chapterAssignmentIdRef.current = chapterAssignmentId;
 
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
       const assignmentId = chapterAssignmentIdRef.current;
@@ -40,6 +43,7 @@ export const useChapterPresence = (chapterAssignmentId: number, isActive: boolea
       return (await res.json()) as PresenceResponse;
     },
     onSuccess: data => {
+      if (!isActiveRef.current) return;
       if (data && !data.isFirstEditor && data.firstEditorName) {
         setEditorName(data.firstEditorName);
       } else {
