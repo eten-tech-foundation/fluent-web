@@ -11,6 +11,7 @@ import {
   IndentDecrease,
   IndentIncrease,
   Pilcrow,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +42,8 @@ export interface FormatBarProps {
   blockMarker: string | undefined;
   onFormat: (marker: string) => void;
   onInsertParagraph?: () => void;
+  /** Removes the heading the cursor is in, words and line. */
+  onRemoveHeading?: () => void;
   /** Puts the caret back in the text once a heading level is picked from the menu. */
   focusEditor?: () => void;
   canAddHeading: boolean;
@@ -164,10 +167,10 @@ function HeadingLevelMenu({
  * The chapter view's structural authoring control (#397): always visible, always reflecting the
  * block the cursor is in.
  *
- * The level control and the indent controls are contextual by design — heading levels only mean
- * something inside a heading, and indenting only means something inside poetry — so they appear
- * with their block rather than sitting there disabled. Inside a heading the levels open from H,
- * which keeps the bar the same width as everywhere else.
+ * The level control, Remove heading and the indent controls are contextual by design — heading
+ * levels and removal only mean something inside a heading, and indenting only means something
+ * inside poetry — so they appear with their block rather than sitting there disabled. Inside a
+ * heading the levels open from H, which keeps the bar no wider than it is inside poetry.
  *
  * A block the bar cannot author — an imported `\ms`, or poetry indented deeper than it writes —
  * says so, because three unpressed buttons on their own read as "this block has no formatting".
@@ -177,6 +180,7 @@ export function FormatBar({
   blockMarker,
   onFormat,
   onInsertParagraph,
+  onRemoveHeading,
   focusEditor,
   canAddHeading,
   disabled = false,
@@ -249,6 +253,18 @@ export function FormatBar({
           onMouseDown={event => event.preventDefault()}
         >
           <CornerDownLeft aria-hidden='true' className='h-4 w-4' />
+        </FormatButton>
+      )}
+
+      {kind === 'heading' && onRemoveHeading && (
+        <FormatButton
+          className={ICON_BUTTON}
+          disabled={disabled}
+          label={t('removeHeading', 'Remove heading')}
+          onClick={onRemoveHeading}
+          onMouseDown={event => event.preventDefault()}
+        >
+          <Trash2 aria-hidden='true' className='h-4 w-4' />
         </FormatButton>
       )}
 

@@ -33,13 +33,12 @@ export const useDrafting = ({
   const initializedRef = useRef(false);
   const pendingInitScrollRef = useRef<number | null>(null);
 
-  const { debouncedSave, saveImmediately, getSaveStatus, setInitialContent } = useBibleTextDebounce(
-    {
+  const { debouncedSave, saveImmediately, flushSave, getSaveStatus, setInitialContent } =
+    useBibleTextDebounce({
       onSave,
       debounceMs: 2000,
       retryDelayMs: 10000,
-    }
-  );
+    });
 
   const lastRevealedVerseNumber = useMemo(
     () => (revealedVerses.size > 0 ? Math.max(...Array.from(revealedVerses)) : 1),
@@ -147,18 +146,11 @@ export const useDrafting = ({
   const handleActiveVerseChange = useCallback(
     (newVerseId: number) => {
       if (readOnly) return;
-      if (activeVerseId !== newVerseId) {
-        const previousVerse = verses.find(v => v.verseNumber === activeVerseId);
-        if (previousVerse) {
-          const status = getSaveStatus(activeVerseId);
-          if (status.hasUnsavedChanges) {
-            void saveImmediately(activeVerseId, {
-              content: previousVerse.content,
-              markers: previousVerse.markers,
-            }).catch(() => {});
-          }
-        }
-      }
+      // The edit being flushed may not have rendered yet: joining two lines in the editor changes
+      // a verse and moves the cursor out of it in one update. `verses` here would still hold the
+      // verse from before the edit, so the pending payload is what gets saved.
+      if (activeVerseId !== newVerseId && getSaveStatus(activeVerseId).hasUnsavedChanges)
+        void flushSave(activeVerseId).catch(() => {});
       const exists = verses.some(v => v.verseNumber === newVerseId);
       if (!exists) {
         setInitialContent(newVerseId, { content: '' });
@@ -167,15 +159,7 @@ export const useDrafting = ({
       setActiveVerseId(newVerseId);
       requestAnimationFrame(() => scrollVerseToTop(newVerseId));
     },
-    [
-      readOnly,
-      verses,
-      activeVerseId,
-      getSaveStatus,
-      saveImmediately,
-      setInitialContent,
-      scrollVerseToTop,
-    ]
+    [readOnly, verses, activeVerseId, getSaveStatus, flushSave, setInitialContent, scrollVerseToTop]
   );
 
   const advanceToVerse = useCallback(

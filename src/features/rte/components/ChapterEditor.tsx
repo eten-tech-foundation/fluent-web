@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
+import { useEmptyHeadingBackspace } from '../hooks/useEmptyHeadingBackspace';
 import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
@@ -10,8 +11,9 @@ import { useVerseNumberCaret } from '../hooks/useVerseNumberCaret';
 import { useVerseNumberKeys } from '../hooks/useVerseNumberKeys';
 import { PARAGRAPH_MARKER } from '../lib/block-types';
 import { handleEditorContextMenu, handleEditorPaste } from '../lib/editor-clipboard';
+import { EDITABLE_EDITOR_SELECTOR } from '../lib/editor-dom';
 import { useEditorShortcuts } from '../lib/editor-shortcuts';
-import { formatHeadingLevel, selectionSpansBlocks } from '../lib/format-heading';
+import { formatHeadingLevel, removeHeading, selectionSpansBlocks } from '../lib/format-heading';
 import {
   headingErrorIn,
   isHeadingMarker,
@@ -324,8 +326,18 @@ export function ChapterEditor({
     editor.getSelection();
   };
 
+  const handleRemoveHeading = () => {
+    const editor = editorRef.current;
+    if (!editor || readOnly || headingError) return;
+    removeHeading(
+      editor,
+      containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR)
+    );
+  };
+
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
+  const handleEmptyHeadingBackspace = useEmptyHeadingBackspace(editorRef, readOnly);
   const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
@@ -344,7 +356,11 @@ export function ChapterEditor({
         data-testid='chapter-editor'
         onContextMenuCapture={handleEditorContextMenu}
         onKeyDownCapture={event => {
-          if (!handleHeadingEnter(event) && !verseKeys.handleKeyDown(event))
+          if (
+            !handleHeadingEnter(event) &&
+            !handleEmptyHeadingBackspace(event) &&
+            !verseKeys.handleKeyDown(event)
+          )
             handleEditorKeys(event);
         }}
         onPasteCapture={event => {
@@ -373,6 +389,7 @@ export function ChapterEditor({
               onInsertParagraph={() => {
                 if (editorRef.current && !headingError) insertParagraph(editorRef.current);
               }}
+              onRemoveHeading={handleRemoveHeading}
             />
           )}
         </div>

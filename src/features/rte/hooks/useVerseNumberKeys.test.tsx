@@ -522,6 +522,70 @@ describe('verse numbers stay with their text in the real editor', () => {
     });
   });
 
+  // The number can't be deleted, so Backspace right after it joins the line to the one above, as
+  // it does in front of the number. Lexical's own Backspace needs Selection.modify, which jsdom
+  // lacks, so these check where the editor's caret is when the key reaches it; the browser E2E
+  // checks the join and the save.
+  describe('Backspace right after the verse number a line begins with', () => {
+    const ownLine = { paragraphs: [{ marker: 'p', offset: 0 }] };
+    const twoLines = pericopeVersesToUsj(withVerseTwo(ownLine), 1, 'GEN');
+    const underHeading = pericopeVersesToUsj(rows, 1, 'GEN');
+
+    /** Presses Backspace and returns the editor's caret as the key reached it, and its spies. */
+    async function backspaceAt(
+      usj: Usj,
+      jsonPath: CaretLocation['jsonPath'],
+      offset: number,
+      event: KeyboardEventInit = {},
+      readOnly = false
+    ) {
+      const { editor, input, select } = await setup(usj, readOnly);
+      act(() => input.focus());
+      await select(jsonPath, offset);
+      const setSelection = vi.spyOn(editor, 'setSelection');
+      const carets: unknown[] = [];
+      // Captured, so the caret is read before the editor acts on the key.
+      input.addEventListener('keydown', () => carets.push(editor.getSelection()?.start), true);
+      const modify = Object.getOwnPropertyDescriptor(Selection.prototype, 'modify');
+      Object.defineProperty(Selection.prototype, 'modify', { configurable: true, value: () => {} });
+      try {
+        fireEvent.keyDown(input, { key: 'Backspace', ...event });
+      } finally {
+        if (modify) Object.defineProperty(Selection.prototype, 'modify', modify);
+        else Reflect.deleteProperty(Selection.prototype, 'modify');
+      }
+      return { carets, setSelection };
+    }
+
+    it('loads a line of its own for verse 2', async () => {
+      const { blocks } = await setup(twoLines);
+      expect(blocks()).toEqual(['c: 1', 'p: [1]First verse.', 'p: [2]Second verse.']);
+    });
+
+    it('reaches the editor with the caret at the line start', async () => {
+      const { carets } = await backspaceAt(twoLines, '$.content[2].content[1]', 0);
+      expect(carets).toEqual([{ jsonPath: '$.content[2]', offset: 0 }]);
+    });
+
+    it.each([
+      ['in front of the number, where it already joins', twoLines, '$.content[2]', 0, {}],
+      ['after words', twoLines, '$.content[2].content[1]', 3, {}],
+      ['on the first line under a heading', underHeading, '$.content[3].content[1]', 0, {}],
+      ['on the first line under the chapter number', twoLines, '$.content[1].content[1]', 0, {}],
+      ['with Shift', twoLines, '$.content[2].content[1]', 0, { shiftKey: true }],
+      ['with Alt', twoLines, '$.content[2].content[1]', 0, { altKey: true }],
+      ['with Ctrl', twoLines, '$.content[2].content[1]', 0, { ctrlKey: true }],
+    ] as const)('is left to the editor %s', async (_, usj, jsonPath, offset, event) => {
+      const { setSelection } = await backspaceAt(usj, jsonPath, offset, event);
+      expect(setSelection).not.toHaveBeenCalled();
+    });
+
+    it('is left alone in a read-only editor', async () => {
+      const { setSelection } = await backspaceAt(twoLines, '$.content[2].content[1]', 0, {}, true);
+      expect(setSelection).not.toHaveBeenCalled();
+    });
+  });
+
   describe('removing the new paragraph under a heading', () => {
     it('Backspace removes it and returns to the end of the heading', async () => {
       const { editor, input, select, blocks } = await setup(pericopeVersesToUsj(rows, 1, 'GEN'));
