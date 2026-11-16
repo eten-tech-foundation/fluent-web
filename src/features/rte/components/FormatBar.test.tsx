@@ -177,3 +177,72 @@ describe('heading level menu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
+
+// Chad, 2026-11-09: a heading put in the wrong place couldn't be removed. Paragraph is off inside
+// a heading and Backspace/Delete at its edges are blocked, so the bar offers the removal itself.
+describe('Remove heading', () => {
+  it('appears inside a heading, named in its tooltip, and removes it without formatting', async () => {
+    const user = userEvent.setup();
+    const onFormat = vi.fn();
+    const onRemoveHeading = vi.fn();
+    render(
+      <FormatBar
+        canAddHeading
+        blockMarker='s2'
+        onFormat={onFormat}
+        onRemoveHeading={onRemoveHeading}
+      />
+    );
+
+    const remove = screen.getByRole('button', { name: 'Remove heading' });
+    expect(remove).toHaveTextContent(/^$/);
+    expect(remove).not.toHaveAttribute('aria-pressed');
+    await user.hover(remove);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/^Remove heading$/);
+    await user.click(remove);
+    expect(onRemoveHeading).toHaveBeenCalledTimes(1);
+    expect(onFormat).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['in a paragraph', 'p'],
+    ['in a Poetry line', 'q1'],
+    ['with no cursor in the editor', undefined],
+  ])('is not in the bar %s', (_where, blockMarker) => {
+    render(
+      <FormatBar
+        canAddHeading
+        blockMarker={blockMarker}
+        onFormat={vi.fn()}
+        onRemoveHeading={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Remove heading' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the caret in the editor when clicked, and is off while the bar is disabled', () => {
+    const onRemoveHeading = vi.fn();
+    const { rerender } = render(
+      <FormatBar
+        canAddHeading
+        blockMarker='s1'
+        onFormat={vi.fn()}
+        onRemoveHeading={onRemoveHeading}
+      />
+    );
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    screen.getByRole('button', { name: 'Remove heading' }).dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+
+    rerender(
+      <FormatBar
+        canAddHeading
+        disabled
+        blockMarker='s1'
+        onFormat={vi.fn()}
+        onRemoveHeading={onRemoveHeading}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Remove heading' })).toBeDisabled();
+  });
+});

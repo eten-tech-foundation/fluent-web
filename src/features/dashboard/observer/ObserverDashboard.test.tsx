@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ObserverDashboard } from '@/features/dashboard/observer/ObserverDashboard';
-import { ROLES, type Project, type User, type WorkflowStep } from '@/lib/types';
+import { ROLES, type Project, type UserDetail, type WorkflowStep } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import type * as ReactRouter from '@tanstack/react-router';
@@ -63,7 +63,7 @@ describe('ObserverDashboard', () => {
         id: 42,
         email: 'observer@example.com',
         username: 'observer',
-        role: ROLES.PROJECT_OBSERVER,
+        activeRoleName: ROLES.PROJECT_OBSERVER,
         grants: [
           {
             orgId: 1,
@@ -73,7 +73,7 @@ describe('ObserverDashboard', () => {
           },
         ],
         lastActiveOrgId: 1,
-      } as unknown as User,
+      } as unknown as UserDetail,
     });
   });
 

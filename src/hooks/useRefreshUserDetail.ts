@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation } from '@/hooks/useUsers';
-import { Logger } from '@/lib/services/logger';
 import type { User } from '@/lib/types';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -35,7 +34,7 @@ export function useRefreshUserDetail() {
         g => g.roleName !== ROLES.ORG_MEMBER && g.roleName !== ROLES.PROJECT_OBSERVER
       );
       const functionalGrant = editingGrant ?? orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
-      const savedRole = userdetail?.role;
+      const savedRole = userdetail?.activeRoleName;
       const isSavedRoleFunctional =
         savedRole &&
         savedRole !== ROLES.ORG_MEMBER &&
@@ -62,7 +61,7 @@ export function useRefreshUserDetail() {
         id: freshUser.id,
         email: freshUser.email,
         username: freshUser.username,
-        role: activeGrant ? activeGrant.roleName : freshUser.role,
+        activeRoleName: activeGrant ? activeGrant.roleName : null,
         lastActiveOrgId: activeOrgId,
         grants,
         firstName: freshUser.firstName,
@@ -70,21 +69,14 @@ export function useRefreshUserDetail() {
         status: freshUser.status,
       });
     },
-    [setUserDetail, setRoleChangeWarning, userdetail?.role]
+    [setUserDetail, setRoleChangeWarning, userdetail?.activeRoleName]
   );
 
   const refresh = useCallback(() => {
     if (!authUser?.email) return;
 
-    fetchUserDetails(authUser.email, {
-      onSuccess: applyUser,
-      onError: error => {
-        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
-          source: 'useRefreshUserDetail',
-          userEmail: authUser.email,
-        });
-      },
-    });
+    // useGetUserDetailsMutation logs a failure; the stored user stays as it was.
+    fetchUserDetails(authUser.email, { onSuccess: applyUser });
   }, [authUser?.email, fetchUserDetails, applyUser]);
 
   /** Awaitable version of refresh — resolves after the user data has been fetched and applied. */

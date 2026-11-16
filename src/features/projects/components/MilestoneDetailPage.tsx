@@ -26,7 +26,11 @@ import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { getLastActivityDisplay } from '@/lib/formatters';
-import { getActiveGrants, isProjectManager } from '@/lib/grant-utils';
+import {
+  getActiveRoleGrants,
+  isProjectManager,
+  isManager as isRoleManager,
+} from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -58,6 +62,7 @@ interface MilestoneDetailPageProps {
   onExport?: () => void;
   onEditMetadata?: () => void;
   milestoneUpdatedAt?: string;
+  isManager?: boolean;
 }
 
 export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
@@ -73,6 +78,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
   onExport,
   onEditMetadata,
   milestoneUpdatedAt,
+  isManager: isManagerProp,
 }) => {
   const { t } = useTranslation();
   const { userdetail } = useAppStore();
@@ -123,13 +129,12 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     return counts as ChapterStatusCounts;
   }, [milestoneFilteredAssignments]);
 
-  const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
 
-  const isManager = useMemo(
-    () => isProjectManager(activeGrants, projectId),
-    [activeGrants, projectId]
-  );
+  const isManager = useMemo(() => {
+    if (isManagerProp !== undefined) return isManagerProp;
+    return isRoleManager(activeRoleGrants) && isProjectManager(activeRoleGrants, projectId);
+  }, [isManagerProp, activeRoleGrants, projectId]);
 
   const { data: projectUsers, isLoading: projectUsersLoading } = useProjectUsers(projectId ?? 0, {
     enabled: isManager && !!projectId,

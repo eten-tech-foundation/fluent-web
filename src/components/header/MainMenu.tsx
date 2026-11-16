@@ -1,12 +1,19 @@
 import React from 'react';
 
 import { useLocation } from '@tanstack/react-router';
-import { Building2, Home, Kanban, Users } from 'lucide-react';
+import { Building2, ChartNoAxesColumn, Home, Kanban, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
-import { canViewUsers, getActiveGrants, isManager, isSuperAdmin } from '@/lib/grant-utils';
+import {
+  canViewUsers,
+  getActiveRoleGrants,
+  isManager,
+  isObserver,
+  isSuperAdmin,
+  isTranslator,
+} from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import MenuItem from './MenuItem';
@@ -32,11 +39,13 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const [open, setOpen] = React.useState(false);
   const location = useLocation();
 
-  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const showUsers = canViewUsers(activeRoleGrants);
-  const showProjects = isManager(activeRoleGrants);
+  const isManagerUser = isManager(activeRoleGrants);
+  const isObserverUser = isObserver(activeRoleGrants);
+  const isTranslatorUser = isTranslator(activeRoleGrants);
   const superAdmin = isSuperAdmin(userdetail?.grants);
+  const showProjects = (isManagerUser || isObserverUser || isTranslatorUser) && !superAdmin;
 
   if (!isAuthenticated || !user) {
     return null;
@@ -66,9 +75,9 @@ const MainMenu: React.FC<MainMenuProps> = ({
               onClick={onDashboardClick}
               onClosePopover={() => setOpen(false)}
             />
-            {showProjects && !superAdmin && (
+            {showProjects && (
               <MenuItem
-                icon={<Kanban size={18} />}
+                icon={isTranslatorUser ? <ChartNoAxesColumn size={18} /> : <Kanban size={18} />}
                 isActive={isProjectsActive}
                 text={t('projects')}
                 onClick={onProjectsClick}

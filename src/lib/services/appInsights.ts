@@ -4,12 +4,21 @@ import { config } from '@/lib/config';
 
 import type { ITelemetryItem } from '@microsoft/applicationinsights-web';
 
-interface TelemetryEnvelope {
-  data?: {
-    baseData?: {
-      properties?: Record<string, string | number | boolean>;
-    };
+/**
+ * Adds Fluent's context to every browser telemetry item: the cloud role, so browser rows are
+ * not blank in `AppRoleName`, and the build's environment, since one App Insights resource
+ * receives every environment's browser telemetry. Custom properties belong in `item.data`; the
+ * SDK copies them into `customDimensions`.
+ */
+export function addAppContext(item: ITelemetryItem, environment: string): boolean {
+  item.tags = { ...item.tags, 'ai.cloud.role': 'fluent-web' };
+  item.data = {
+    ...item.data,
+    environment,
+    browserSize: `${window.innerWidth}x${window.innerHeight}`,
+    screenResolution: `${screen.width}x${screen.height}`,
   };
+  return true;
 }
 
 class AppInsightsService {
@@ -58,25 +67,14 @@ class AppInsightsService {
   private initialize(): void {
     if (!this.appInsights) return;
 
-    this.appInsights.addTelemetryInitializer((envelope: ITelemetryItem): boolean => {
-      const typedEnvelope = envelope as unknown as TelemetryEnvelope;
-      if (typedEnvelope.data?.baseData) {
-        const currentProperties = typedEnvelope.data.baseData.properties ?? {};
-        typedEnvelope.data.baseData.properties = {
-          ...currentProperties,
-          browserSize: `${window.innerWidth}x${window.innerHeight}`,
-          browserName: navigator.userAgent,
-          screenResolution: `${screen.width}x${screen.height}`,
-          environment: config.environment.current,
-        };
-      }
-      return true;
-    });
+    this.appInsights.addTelemetryInitializer(item =>
+      addAppContext(item, config.environment.current)
+    );
 
     this.appInsights.trackPageView();
   }
 
-  setUser(userId: string, accountId?: string, userName?: string): void {
+  setUser(userId: string, accountId?: string): void {
     if (!this.appInsights) {
       if (config.environment.isDevelopment) {
         console.warn('Cannot set user context - Application Insights not initialized');
@@ -84,20 +82,8 @@ class AppInsightsService {
       return;
     }
 
+    // The SDK records the ID as `user_AuthenticatedId`; names and emails stay out of telemetry.
     this.appInsights.setAuthenticatedUserContext(userId, accountId);
-
-    this.appInsights.addTelemetryInitializer((envelope: ITelemetryItem): boolean => {
-      const typedEnvelope = envelope as unknown as TelemetryEnvelope;
-      if (typedEnvelope.data?.baseData) {
-        const currentProperties = typedEnvelope.data.baseData.properties ?? {};
-        typedEnvelope.data.baseData.properties = {
-          ...currentProperties,
-          userId: userId,
-          userName: userName ?? 'Unknown',
-        };
-      }
-      return true;
-    });
   }
 
   getInstance(): ApplicationInsights | undefined {

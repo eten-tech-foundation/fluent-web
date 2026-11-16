@@ -239,6 +239,20 @@ export const useBibleTextDebounce = ({
     [executeSave]
   );
 
+  /**
+   * Saves a verse's latest edit now instead of waiting for the debounce. The payload is the one
+   * the last `debouncedSave` got, not one rebuilt from React state: an edit and the cursor leaving
+   * its verse can come in the same editor update, before the edit has rendered, and saving the
+   * state from before it would drop the edit.
+   */
+  const flushSave = useCallback(
+    async (verseId: number): Promise<void> => {
+      const payload = currentContent.current.get(verseId);
+      if (payload !== undefined) await saveImmediately(verseId, payload);
+    },
+    [saveImmediately]
+  );
+
   useLayoutEffect(() => {
     flushPendingSavesRef.current = () => {
       const pendingVerseIds = new Set([
@@ -284,6 +298,7 @@ export const useBibleTextDebounce = ({
   return {
     debouncedSave,
     saveImmediately,
+    flushSave,
     getSaveStatus,
     setInitialContent,
   };

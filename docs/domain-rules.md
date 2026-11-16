@@ -14,11 +14,34 @@ Two of them look like bugs but are intentional: role checks in the browser only 
 check here never replaces one in the API.
 
 - Role checks compare the names in `ROLES` (`src/lib/types.ts`) through the helpers in
-  `src/lib/grant-utils.ts`, such as `getActiveGrants`, `hasGrantForProject`, `isProjectManager`
-  and `canViewUsers`. Role lists hard-coded there, like `ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT`,
-  have to match what fluent-api allows. Tests: `src/lib/grant-utils.test.ts` › "is false for an
-  org-scoped grant even when the role name is SuperAdmin"; `src/components/header/MainMenu.test.tsx`
-  › "shows no Users item for a project-scoped Project Manager".
+  `src/lib/grant-utils.ts`, such as `getActiveGrants`, `getActiveRoleGrants`, `hasGrantForProject`,
+  `isProjectManager` and `canViewUsers`. Role lists hard-coded there, like
+  `ALLOW_PROJECT_MANAGER_TO_CREATE_PROJECT`, have to match what fluent-api allows. Tests:
+  `src/lib/grant-utils.test.ts` › "is false for an org-scoped grant even when the role name is
+  SuperAdmin"; `src/components/header/MainMenu.test.tsx` › "shows no Users item for a project-scoped
+  Project Manager".
+- Role checks look only at the grants for the role the user has selected (`userdetail.activeRoleName`),
+  through `getActiveRoleGrants` in `src/lib/grant-utils.ts`. A user who is a Project Translator on
+  one project and a Project Manager on another sees manager controls only while Project Manager is
+  selected.
+- The Projects list (`/projects`, `ProjectsWrapper` in `src/features/projects/components/index.tsx`)
+  opens for managers, Project Translators and Project Observers; anyone else is sent to `/`.
+  Managers get `GET /projects`, narrowed to the projects a Project Manager manages; translators and
+  observers get `GET /users/:id/projects` (`useProjectsByRole`). The menu item follows the same
+  rule. Tests: `src/components/header/MainMenu.test.tsx` › "shows Projects item for a Project
+  Translator" and "shows Projects item for a Project Observer". No test covers the redirect.
+- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the overflow menus, Assign
+  and the chapter checkboxes show only for a manager of that project (`isProjectManager`). Export
+  Milestone shows to anyone who can open the page. Tests:
+  `src/features/projects/components/ChapterAssignmentsTable.test.tsx` › "hides row selection
+  checkboxes and select column when isManager is false, and keeps drafter/checker text". No test
+  covers the page-level controls.
+- Opening a chapter from Milestone Detail goes to the editable `/translation` route when the user
+  is its drafter in Draft, its peer checker in Peer Check, or the chapter is past peer check;
+  otherwise it goes to `/view` (`MilestoneDetailPage.tsx`). Past peer check, any project member
+  with `content:update` may edit, as [fluent-api](https://github.com/eten-tech-foundation/fluent-api/blob/2db5db7de52017ae7300895ac9cc1609ab11710a/src/domains/chapter-assignments/chapter-assignments.policy.ts#L53-L85)'s
+  `ChapterAssignmentPolicy.edit` allows. Observers stay read-only on either route (see the
+  `DraftingPage` rule under Saving). No test covers this routing.
 - Three routes have guards: `/users` checks `context.auth.canViewUsers` and `/organizations`
   checks `context.auth.canManageOrgs` (global SuperAdmin), both from
   `src/features/root/AppRouter.tsx`; `/audio/$bookId/$chapterNumber` redirects anyone who isn't a
@@ -92,8 +115,12 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   dropping them. A typed letter (with Alt or AltGr too, which Windows reports as Ctrl+Alt, and
   one outside the BMP such as an Adlam letter) or a pasted line comes in with the number in one
   undo step. For an IME composition or a paste of several lines, the spaces that hold the caret
-  after the number until words arrive are replaced by them, never left inside the verse. Tests:
-  `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "brings the verse number in with the
+  after the number until words arrive are replaced by them, never left inside the verse.
+  Backspace right after the number a line begins with can't delete the number, so it joins the
+  line to the one above, as it does in front of the number; under a heading or the chapter number
+  it stays blocked. Tests:
+  `src/features/rte/hooks/useVerseNumberKeys.test.tsx` › "reaches the editor with the caret at
+  the line start", "brings the verse number in with the
   first letter", "brings the number in with a letter typed with %s, in one undo step", "brings
   the number in with a letter outside the BMP typed %s, in one undo step", "brings the number in
   with a pasted line, in one undo step", "leaves no caret host behind once a paste of several
@@ -125,6 +152,14 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   invalid the editor shows an error and doesn't save. Tests:
   `src/features/rte/components/ChapterEditor.test.tsx` › "keeps invalid heading edits visible and
   resumes saving after correction".
+- A heading's words never fold into scripture, so a heading comes out whole: Remove heading in
+  Chapter View's bar takes its words and line in one undo step, and once its words are deleted,
+  Backspace or Delete takes the empty line, right under the chapter number too. Backspace at a
+  heading's start and Delete at its end stay blocked, and Paragraph stays off in a heading. Tests:
+  `src/features/rte/components/StructuralHistory.test.tsx` › "removes a heading from the bar in
+  one undo step and saves every state"; `src/features/rte/lib/format-heading.test.tsx` ›
+  "removes the heading %s is in, words and line, and leaves scripture alone";
+  `src/features/rte/hooks/useEmptyHeadingBackspace.test.tsx`.
 - The editor is uncontrolled. Don't feed new verses into it on every render. `ChapterEditor` and
   `PericopeEditor` reload it through `loadIntoEditor` only when the chapter or pericope changes,
   when an AI suggestion fills a verse the editor holds empty, after a structural rewrite, or when
@@ -136,7 +171,8 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   you upgrade `@eten-tech-foundation/platform-editor`: undo and redo shortcuts
   (`src/features/rte/lib/history-shortcuts.ts`), copy and paste
   (`src/features/rte/lib/editor-shortcuts.ts`, `src/features/rte/lib/editor-clipboard.ts`),
-  heading level changes (`src/features/rte/lib/format-heading.ts`), formatting a single verse
+  heading level changes and removal, since a delta can't remove an empty paragraph
+  (`src/features/rte/lib/format-heading.ts`), formatting a single verse
   inside a longer block (`src/features/rte/lib/scoped-block-format.ts`), the space a new
   paragraph would start with, which Editorial drops so a later merge glues two words together
   (`afterWordSpace` in `src/features/rte/lib/verse-numbers.ts`), and the invisible caret host
@@ -179,10 +215,15 @@ The drafting page saves one verse at a time with `POST /translated-verses`
 - A verse saves 2 seconds after the last change. Changing verse, Next, Next Pericope and Submit
   save right away through `saveImmediately`, and Submit stops if a save fails. Leaving the page
   doesn't save: unmount clears the timers and there is no `beforeunload` handler. A new way out of
-  the page has to save pending verses first. Tests: `src/features/bible/hooks/usePericope.test.ts`
+  the page has to save pending verses first. Changing verse saves the payload the queue already
+  holds (`flushSave`), never one rebuilt from React state: joining two lines in the editor changes
+  a verse and moves the cursor out of it in one update, before the edit has rendered, and the
+  state from before it would overwrite the edit. Tests:
+  `src/features/bible/hooks/usePericope.test.ts`
   › "flushes a verse edited earlier in the pericope, not only the active one";
   `src/features/bible/hooks/useDrafting.test.ts` › "flushes the stored markers when the active
-  verse changes, not a wipe".
+  verse changes, not a wipe" and "flushes an edit made in the same update that moves the active
+  verse".
 - A failed save retries after 10 seconds with the latest text, and keeps retrying while the page
   is open. A 401, 403 or 404 sets `roleChangeWarning` instead: queued debounce and retry saves are
   cancelled (a save already in flight still completes), new ones are skipped and the header shows
@@ -201,8 +242,16 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   new write has to check `readOnly`. Tests: `src/features/bible/hooks/useSyncGlobalAiSetting.test.ts`
   › "AI does not auto-enable on read-only /view/...".
 - Saves carry no version, so when two people edit the same chapter the last save wins.
-  `useChapterPresence` only warns the second editor, and only in the community review, linguist,
-  theological and consultant check stages. No test covers the warning.
+  `useChapterPresence` only warns the second editor, and only while the chapter is in a stage
+  after peer check and before complete in the project's workflow, custom stages included
+  (`isPostPeer` in `src/features/bible/components/DraftingUI.tsx`). If the workflow config is not
+  yet loaded, unrecognised named statuses fall back to active under the domain rule that all custom
+  stages are post-peer. Presence is off in read-only views (`/view` route, project Observer), so
+  those users neither register as an editor nor see the warning. Tests:
+  `src/features/bible/components/DraftingUI.test.tsx` › "chapter presence with dynamic workflow
+  stages" › "activates presence for custom post-peer workflow stages", "does not activate presence
+  for draft or complete stages", "does not activate presence when readOnly is true", "does not
+  activate presence for unresolved numeric stage IDs before workflow loads".
 - Status changes happen in [fluent-api](https://github.com/eten-tech-foundation/fluent-api). The page only calls `PATCH /chapter-assignments/:id/submit`.
   Tests: `src/features/bible/components/DraftingUI.test.tsx` › "triggers submit workflow when
   translation is complete and submit button is clicked".

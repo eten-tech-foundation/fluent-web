@@ -250,7 +250,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </div>
             ) : milestones?.length === 0 ? (
               <div className='flex h-full items-center justify-center'>
-                <span className='text-gray-500'>{t('noMilestonesFound')}</span>
+                <span className='text-gray-500'>
+                  {t('noMilestonesFound', 'No milestones in this project yet.')}
+                </span>
               </div>
             ) : (
               <div className='flex h-full flex-col overflow-y-auto'>
@@ -293,6 +295,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                                 projectId: project.id.toString(),
                                 milestoneId: milestone.id.toString(),
                               },
+                              state: { from: `/projects/${project.id}` },
                             })
                           }
                         >
