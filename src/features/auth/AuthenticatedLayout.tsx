@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { SettingsModal } from '@/components/SettingsModal';
+import { Button } from '@/components/ui/button';
 import { FlagOverrideChip } from '@/features/flags';
 import Header from '@/features/header/components/index';
 import { EditProfile } from '@/features/profile/components/EditProfile';
@@ -15,7 +16,7 @@ import { Logger } from '@/lib/services/logger';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const { isOrgSwitching } = useAppStore();
   const navigate = useNavigate();
   const { mutate: fetchUserDetails, isPending: isFetchingUserDetails } =
@@ -26,9 +27,15 @@ export function AuthenticatedLayout(): React.JSX.Element {
   const location = useLocation();
   const { modal } = useSearch({ from: '__root__' });
 
-  // Automatically refresh user details when tab regains focus (e.g., after role change in another browser window)
+  const [userDetailsFetched, setUserDetailsFetched] = useState(false);
+  const [fetchInitiated, setFetchInitiated] = useState(false);
+  const [userDetailsFailed, setUserDetailsFailed] = useState(false);
+
+  // Automatically refresh user details when tab regains focus (e.g., after role change in another browser window).
+  // Only after the first load succeeds: until then the error screen's Try again is the one way to
+  // recover, and a focus refresh would update the store without leaving that screen.
   useEffect(() => {
-    if (!isAuthenticated || !user?.email) return;
+    if (!isAuthenticated || !user?.email || !userDetailsFetched) return;
 
     const handleFocus = () => {
       refreshUserDetail();
@@ -38,7 +45,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isAuthenticated, user?.email, refreshUserDetail]);
+  }, [isAuthenticated, user?.email, userDetailsFetched, refreshUserDetail]);
 
   const handleModalClose = (): void => {
     void navigate({
@@ -48,9 +55,6 @@ export function AuthenticatedLayout(): React.JSX.Element {
       replace: true,
     });
   };
-
-  const [userDetailsFetched, setUserDetailsFetched] = useState(false);
-  const [fetchInitiated, setFetchInitiated] = useState(false);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -67,7 +71,6 @@ export function AuthenticatedLayout(): React.JSX.Element {
 
     Logger.logEvent('UserAuthenticated', {
       userId: user.id,
-      userEmail: user.email,
       timestamp: new Date().toISOString(),
     });
 
@@ -85,17 +88,12 @@ export function AuthenticatedLayout(): React.JSX.Element {
           setUserDetailsFetched(true);
         })();
       },
-      onError: error => {
-        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
-          source: 'FetchUserDetails',
-          userEmail: user.email,
-        });
-        setFetchInitiated(false);
+      // useGetUserDetailsMutation already logs the failure. Stay here rather than redirecting
+      // to /login: the session is still valid, so /login sends the user straight back and the
+      // fetch repeats in a loop. fetchInitiated stays true until the user retries.
+      onError: () => {
         setUserDetailsFetched(false);
-        void navigate({
-          to: '/login',
-          search: { returnTo: window.location.pathname + window.location.search },
-        });
+        setUserDetailsFailed(true);
       },
     });
   }, [
@@ -110,6 +108,16 @@ export function AuthenticatedLayout(): React.JSX.Element {
 
   if (isLoading) return <LoadingScreen message='Loading...' />;
   if (!isAuthenticated) return <LoadingScreen message='Redirecting to login...' />;
+  if (userDetailsFailed)
+    return (
+      <UserDetailsErrorScreen
+        onRetry={() => {
+          setUserDetailsFailed(false);
+          setFetchInitiated(false);
+        }}
+        onSignOut={() => void logout()}
+      />
+    );
   if (isFetchingUserDetails || !userDetailsFetched)
     return <LoadingScreen message='Loading user details...' />;
 
@@ -137,6 +145,33 @@ export function AuthenticatedLayout(): React.JSX.Element {
         </main>
       </div>
     </ErrorBoundary>
+  );
+}
+
+function UserDetailsErrorScreen({
+  onRetry,
+  onSignOut,
+}: {
+  onRetry: () => void;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <div className='flex h-screen items-center justify-center p-4'>
+      <div className='max-w-md text-center' role='alert'>
+        <h1 className='text-foreground mb-2 text-xl font-semibold'>
+          We couldn&apos;t load your account
+        </h1>
+        <p className='text-muted-foreground mb-6'>
+          Try again in a moment. If it keeps happening, sign out and sign back in.
+        </p>
+        <div className='flex justify-center gap-3'>
+          <Button onClick={onRetry}>Try again</Button>
+          <Button variant='outline' onClick={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

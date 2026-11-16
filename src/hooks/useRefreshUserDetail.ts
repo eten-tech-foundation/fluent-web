@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useGetUserDetailsMutation } from '@/hooks/useUsers';
-import { Logger } from '@/lib/services/logger';
 import type { User } from '@/lib/types';
 import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
@@ -76,15 +75,8 @@ export function useRefreshUserDetail() {
   const refresh = useCallback(() => {
     if (!authUser?.email) return;
 
-    fetchUserDetails(authUser.email, {
-      onSuccess: applyUser,
-      onError: error => {
-        Logger.logException(error instanceof Error ? error : new Error(String(error)), {
-          source: 'useRefreshUserDetail',
-          userEmail: authUser.email,
-        });
-      },
-    });
+    // useGetUserDetailsMutation logs a failure; the stored user stays as it was.
+    fetchUserDetails(authUser.email, { onSuccess: applyUser });
   }, [authUser?.email, fetchUserDetails, applyUser]);
 
   /** Awaitable version of refresh — resolves after the user data has been fetched and applied. */
