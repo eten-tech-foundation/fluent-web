@@ -9,14 +9,14 @@ type LogMeasurements = Record<string, number>;
 export class Logger {
   private static appInsights = appInsightsService.getInstance();
 
-  static setUser(userId: string, accountId?: string, userName?: string): void {
+  static setUser(userId: string, accountId?: string): void {
     if (!appInsightsService.isReady()) {
       if (config.environment.isDevelopment) {
-        console.warn(`User context would be set: ${userName ?? 'Unknown'} (${userId})`);
+        console.warn(`User context would be set: ${userId}`);
       }
       return;
     }
-    appInsightsService.setUser(userId, accountId, userName);
+    appInsightsService.setUser(userId, accountId);
   }
 
   static logException(
