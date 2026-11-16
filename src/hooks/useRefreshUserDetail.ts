@@ -34,7 +34,7 @@ export function useRefreshUserDetail() {
         g => g.roleName !== ROLES.ORG_MEMBER && g.roleName !== ROLES.PROJECT_OBSERVER
       );
       const functionalGrant = editingGrant ?? orgGrants.find(g => g.roleName !== ROLES.ORG_MEMBER);
-      const savedRole = userdetail?.role;
+      const savedRole = userdetail?.activeRoleName;
       const isSavedRoleFunctional =
         savedRole &&
         savedRole !== ROLES.ORG_MEMBER &&
@@ -61,7 +61,7 @@ export function useRefreshUserDetail() {
         id: freshUser.id,
         email: freshUser.email,
         username: freshUser.username,
-        role: activeGrant ? activeGrant.roleName : freshUser.role,
+        activeRoleName: activeGrant ? activeGrant.roleName : null,
         lastActiveOrgId: activeOrgId,
         grants,
         firstName: freshUser.firstName,
@@ -69,7 +69,7 @@ export function useRefreshUserDetail() {
         status: freshUser.status,
       });
     },
-    [setUserDetail, setRoleChangeWarning, userdetail?.role]
+    [setUserDetail, setRoleChangeWarning, userdetail?.activeRoleName]
   );
 
   const refresh = useCallback(() => {

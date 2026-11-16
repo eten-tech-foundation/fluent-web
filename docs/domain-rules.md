@@ -20,7 +20,7 @@ check here never replaces one in the API.
   `src/lib/grant-utils.test.ts` › "is false for an org-scoped grant even when the role name is
   SuperAdmin"; `src/components/header/MainMenu.test.tsx` › "shows no Users item for a project-scoped
   Project Manager".
-- Role checks look only at the grants for the role the user has selected (`userdetail.role`),
+- Role checks look only at the grants for the role the user has selected (`userdetail.activeRoleName`),
   through `getActiveRoleGrants` in `src/lib/grant-utils.ts`. A user who is a Project Translator on
   one project and a Project Manager on another sees manager controls only while Project Manager is
   selected.

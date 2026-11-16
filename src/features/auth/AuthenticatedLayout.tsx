@@ -13,7 +13,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import { useGetUserDetailsMutation, useUpdateUser } from '@/hooks/useUsers';
 import { Logger } from '@/lib/services/logger';
-import { type User } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 export function AuthenticatedLayout(): React.JSX.Element {
@@ -83,7 +82,7 @@ export function AuthenticatedLayout(): React.JSX.Element {
         void (async () => {
           if (userDetails.status !== 'verified' && user.emailVerified) {
             userDetails.status = 'verified';
-            await updateUserMutation.mutateAsync({ userData: userDetails as User });
+            await updateUserMutation.mutateAsync({ userData: userDetails });
           }
           applyUser(userDetails);
           setUserDetailsFetched(true);

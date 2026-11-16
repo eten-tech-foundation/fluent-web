@@ -27,11 +27,20 @@ import { getOrgLevelRoleName } from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import { ROLES, type User } from '@/lib/types';
 
+export interface UserFormData {
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user?: User | null;
-  onSave: (user: User | Omit<User, 'id'>) => Promise<void>;
+  onSave: (userData: UserFormData) => Promise<void>;
   error?: string | null;
   mode: 'create' | 'edit';
   isLoading?: boolean;
@@ -41,17 +50,6 @@ interface UserModalProps {
   activeOrgId?: number | null;
   /** Lowercased emails of existing org members — blocks duplicate invites. */
   existingEmails?: ReadonlySet<string>;
-}
-
-interface FormData {
-  username: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: string;
-  status: string;
-  disabled?: boolean;
-  required?: boolean;
 }
 
 export const UserModal: React.FC<UserModalProps> = ({
@@ -68,7 +66,7 @@ export const UserModal: React.FC<UserModalProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<UserFormData>({
     username: '',
     firstName: '',
     lastName: '',
@@ -138,11 +136,7 @@ export const UserModal: React.FC<UserModalProps> = ({
 
   const handleSubmit = async (): Promise<void> => {
     try {
-      if (mode === 'edit' && user) {
-        await onSave({ ...user, ...formData } as unknown as User);
-      } else {
-        await onSave(formData as unknown as Omit<User, 'id'>);
-      }
+      await onSave(formData);
     } catch (error) {
       // The dialog stays open; restore the role dropdown to the pre-submit
       // value so a failed role save doesn't appear to have applied.
@@ -155,7 +149,7 @@ export const UserModal: React.FC<UserModalProps> = ({
     }
   };
 
-  const updateFormData = (field: keyof FormData, value: string | number): void => {
+  const updateFormData = (field: keyof UserFormData, value: string): void => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
