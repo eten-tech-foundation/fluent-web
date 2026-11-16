@@ -7,7 +7,7 @@ import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
-import { getActiveGrants, isManager, isProjectManager } from '@/lib/grant-utils';
+import { getActiveRoleGrants, isManager, isProjectManager } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
 import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
@@ -33,8 +33,7 @@ export const MilestoneDetailWrapper: React.FC = () => {
   const location = useLocation();
   const { userdetail } = useAppStore();
 
-  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const isManagerUser = isManager(activeRoleGrants);
   const isProjectMgr = isManagerUser && isProjectManager(activeRoleGrants, project?.id);
 

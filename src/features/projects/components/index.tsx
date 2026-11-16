@@ -9,7 +9,7 @@ import { buildProjectMetadata } from '@/features/projects/lib/projectMetadata';
 import { useRefreshUserDetail } from '@/hooks/useRefreshUserDetail';
 import {
   canCreateProject,
-  getActiveGrants,
+  getActiveRoleGrants,
   isManager,
   isObserver,
   isTranslator,
@@ -36,8 +36,7 @@ export const ProjectsWrapper: React.FC = () => {
   const createProjectMutation = useCreateProject();
 
   const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
 
   const isUserManager = isManager(activeRoleGrants);
   const isUserTranslator = isTranslator(activeRoleGrants);

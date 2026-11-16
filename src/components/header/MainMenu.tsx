@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useAuth } from '@/hooks/useAuth';
 import {
   canViewUsers,
-  getActiveGrants,
+  getActiveRoleGrants,
   isManager,
   isObserver,
   isSuperAdmin,
@@ -39,8 +39,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   const [open, setOpen] = React.useState(false);
   const location = useLocation();
 
-  const activeGrants = getActiveGrants(userdetail?.grants, userdetail?.lastActiveOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const showUsers = canViewUsers(activeRoleGrants);
   const isManagerUser = isManager(activeRoleGrants);
   const isObserverUser = isObserver(activeRoleGrants);

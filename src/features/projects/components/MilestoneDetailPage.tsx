@@ -26,7 +26,11 @@ import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useProjectUsers } from '@/features/projects/hooks/useProjectUsers';
 import { useAssignChapters, useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { getLastActivityDisplay } from '@/lib/formatters';
-import { getActiveGrants, isProjectManager, isManager as isRoleManager } from '@/lib/grant-utils';
+import {
+  getActiveRoleGrants,
+  isProjectManager,
+  isManager as isRoleManager,
+} from '@/lib/grant-utils';
 import { Logger } from '@/lib/services/logger';
 import {
   ChapterAssignmentStatus,
@@ -125,9 +129,7 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     return counts as ChapterStatusCounts;
   }, [milestoneFilteredAssignments]);
 
-  const activeOrgId = userdetail?.lastActiveOrgId;
-  const activeGrants = getActiveGrants(userdetail?.grants, activeOrgId);
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
 
   const isManager = useMemo(() => {
     if (isManagerProp !== undefined) return isManagerProp;

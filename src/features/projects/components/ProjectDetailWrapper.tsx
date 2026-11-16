@@ -11,6 +11,7 @@ import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
 import {
   getActiveGrants,
+  getActiveRoleGrants,
   hasGrantForProject,
   isManager,
   isProjectManager,
@@ -54,7 +55,7 @@ export const ProjectDetailWrapper: React.FC = () => {
 
   // Same check the page uses to show the button, repeated here so `?modal=metadata`
   // typed straight into the URL cannot open the editor for a non-manager.
-  const activeRoleGrants = activeGrants.filter(g => g.roleName === userdetail?.role);
+  const activeRoleGrants = getActiveRoleGrants(userdetail);
   const isManagerUser = isManager(activeRoleGrants);
   const isProjectMgr = isManagerUser && isProjectManager(activeRoleGrants, project?.id);
   const isPMOnly = isManagerUser && isProjectManagerOnly(activeRoleGrants, project?.id);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getActiveRoleGrants,
   getOrgLevelRoleName,
   getOrgRoleName,
   isObserver,
@@ -104,5 +105,25 @@ describe('isTranslator and isObserver', () => {
     expect(isObserver([grant(1, 10, ROLES.PROJECT_OBSERVER)])).toBe(true);
     expect(isObserver([grant(1, 10, ROLES.PROJECT_TRANSLATOR)])).toBe(false);
     expect(isObserver([])).toBe(false);
+  });
+});
+
+describe('getActiveRoleGrants', () => {
+  it('returns only active-org grants matching the selected role', () => {
+    const user = {
+      role: ROLES.PROJECT_TRANSLATOR,
+      lastActiveOrgId: 1,
+      grants: [
+        grant(1, 10, ROLES.PROJECT_TRANSLATOR),
+        grant(1, 20, ROLES.PROJECT_MANAGER),
+        grant(2, 30, ROLES.PROJECT_TRANSLATOR),
+      ],
+    };
+    expect(getActiveRoleGrants(user)).toEqual([grant(1, 10, ROLES.PROJECT_TRANSLATOR)]);
+  });
+
+  it('handles null or undefined user', () => {
+    expect(getActiveRoleGrants(null)).toEqual([]);
+    expect(getActiveRoleGrants(undefined)).toEqual([]);
   });
 });
