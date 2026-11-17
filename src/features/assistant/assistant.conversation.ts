@@ -72,7 +72,6 @@ export class AssistantConversation {
   private pageIntent = '';
   private passageChapters: number[] | null = null;
   private consumedRefresh = 0;
-  private typedInteraction = false;
   private admissionEvents = new WeakSet<object>();
   private recoverySequence = 0;
   private draftRevision = 0;
@@ -89,7 +88,6 @@ export class AssistantConversation {
     this.listeners.forEach(listener => listener());
   }
   private boundary(next: Partial<ConversationState> = {}) {
-    this.typedInteraction = false;
     this.active?.abort();
     this.active = null;
     this.update({
@@ -142,7 +140,6 @@ export class AssistantConversation {
   }
   setDraft = (draft: string) => {
     this.draftRevision++;
-    if (draft.length) this.typedInteraction = true;
     this.update({ draft });
   };
   configure(outputLanguage: string, grounding = this.state.grounding) {
@@ -257,12 +254,9 @@ export class AssistantConversation {
       briefing: briefing.integrity.prefix,
       turns,
       submission: { kind: retry ? 'retry' : 'new', turnId, attemptId, input },
-      dont_cache:
-        retry ||
-        origin !== 'suggested_question' ||
-        turns.length !== 0 ||
-        this.typedInteraction ||
-        !briefing.integrity.prefix.complete,
+      // Each new suggestion opts into sharing, regardless of earlier typing or turn depth.
+      // Typed submissions and retries may reuse completed artifacts but never create shared work.
+      dont_cache: retry || origin !== 'suggested_question',
     };
     if (!assistantTurnRequestSchema.safeParse(request).success)
       return reject(new AssistantBriefingError('context_too_large', false));

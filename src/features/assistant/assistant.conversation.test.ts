@@ -128,7 +128,7 @@ describe('drafting conversation lifecycle', () => {
       expect(transport.mock.calls[0][1]).toMatchObject({
         briefing: partial.integrity!.prefix,
         submission: { input: { text: 'Exact question?', origin } },
-        dont_cache: true,
+        dont_cache: origin !== 'suggested_question',
       });
       for (const source of ['', 'Late replacement', 'Late complete'])
         owner.observeBriefing({ ...briefing, source }, generation);
@@ -160,7 +160,7 @@ describe('drafting conversation lifecycle', () => {
     }
   );
   it.each(['typed', 'suggested_question'] as const)(
-    'interrupts with the exact visible receipt for %s and only pristine first suggested requests may write cache',
+    'interrupts with the exact visible receipt for %s and opts each new suggested request into cache',
     origin => {
       const { owner, transport, deliveries } = setup();
       const event = {};
@@ -171,7 +171,7 @@ describe('drafting conversation lifecycle', () => {
       owner.submit('Next', origin);
       expect(deliveries[0].signal.aborted).toBe(true);
       expect(transport.mock.calls[1][1]).toMatchObject({
-        dont_cache: true,
+        dont_cache: origin !== 'suggested_question',
         turns: [
           {
             input: { text: 'Macro?' },
@@ -188,23 +188,27 @@ describe('drafting conversation lifecycle', () => {
       expect(owner.getSnapshot().turns[0].attempts[0].prefix?.markdown).toBe('Visible prefix');
     }
   );
-  it('retries only latest failed question with retained attempts and one logical user turn', async () => {
-    const { owner, deliveries, transport } = setup();
-    owner.submit(' Exact question \n', 'typed');
-    delta(deliveries[0]);
-    deliveries[0].reject(new AssistantBriefingError('timed_out', true));
-    await Promise.resolve();
-    const turnId = owner.getSnapshot().turns[0].turnId;
-    expect(owner.retry()).toBeNull();
-    expect(owner.getSnapshot().turns).toHaveLength(1);
-    expect(owner.getSnapshot().turns[0].attempts).toHaveLength(2);
-    expect(transport.mock.calls[1][1]).toMatchObject({
-      submission: { kind: 'retry', turnId, input: { text: ' Exact question \n' } },
-      turns: [{ attempts: [{ state: 'failed' }] }],
-    });
-    delta(deliveries[1], 'replacement', true);
-    expect(owner.retry()).not.toBeNull();
-  });
+  it.each(['typed', 'suggested_question'] as const)(
+    'keeps %s retries private with retained attempts and one logical user turn',
+    async origin => {
+      const { owner, deliveries, transport } = setup();
+      owner.submit(' Exact question \n', origin);
+      delta(deliveries[0]);
+      deliveries[0].reject(new AssistantBriefingError('timed_out', true));
+      await Promise.resolve();
+      const turnId = owner.getSnapshot().turns[0].turnId;
+      expect(owner.retry()).toBeNull();
+      expect(owner.getSnapshot().turns).toHaveLength(1);
+      expect(owner.getSnapshot().turns[0].attempts).toHaveLength(2);
+      expect(transport.mock.calls[1][1]).toMatchObject({
+        dont_cache: true,
+        submission: { kind: 'retry', turnId, input: { text: ' Exact question \n' } },
+        turns: [{ attempts: [{ state: 'failed' }] }],
+      });
+      delta(deliveries[1], 'replacement', true);
+      expect(owner.retry()).not.toBeNull();
+    }
+  );
   it('preserves genuine hidden failure and restores pending question on context_changed without resubmitting', async () => {
     const { owner, deliveries, transport } = setup();
     owner.submit('Question', 'typed');
@@ -234,12 +238,24 @@ describe('drafting conversation lifecycle', () => {
     expect(owner.getSnapshot().turns[0].attempts[0].failure?.code).toBe('timed_out');
     expect(transport.mock.calls[1][1].turns[0].attempts[0]).not.toHaveProperty('failure');
   });
-  it('keeps a first suggested turn private after a typed draft was cleared', () => {
+  it('opts a suggested turn into cache after a typed draft was cleared', () => {
     const { owner, transport } = setup();
     owner.setDraft('typed first');
     owner.setDraft('');
     owner.submit('Macro?', 'suggested_question');
+    expect(transport.mock.calls[0][1].dont_cache).toBe(false);
+  });
+  it('opts new suggestions into cache after completed typed and suggested turns', () => {
+    const { owner, transport, deliveries } = setup();
+    owner.submit('Typed question', 'typed');
     expect(transport.mock.calls[0][1].dont_cache).toBe(true);
+    delta(deliveries[0], 'Typed answer', true);
+    owner.submit('Next suggestion', 'suggested_question');
+    expect(transport.mock.calls[1][1].dont_cache).toBe(false);
+    delta(deliveries[1], 'Suggested answer', true);
+    owner.submit('Another suggestion', 'suggested_question');
+    expect(transport.mock.calls[2][1].dont_cache).toBe(false);
+    expect(transport.mock.calls[2][1].turns).toHaveLength(2);
   });
   it('does not interrupt admitted work or clear a draft when a later submission fails admission', () => {
     const { owner, deliveries, transport } = setup();
