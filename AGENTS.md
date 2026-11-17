@@ -11,7 +11,7 @@ Fluent's browser app, React + TypeScript built with Vite. Its only backend is
 - Setup, scripts and what CI runs: the [README](README.md#checks-before-a-pr).
 
 Don't edit `src/routeTree.gen.ts` by hand, since `pnpm dev` and `pnpm build` regenerate it from
-`src/routes/`. Run `pnpm precheck` on Node 24.13.x before you finish.
+`src/routes/`. Run `pnpm precheck` on Node 26.13.x before you finish.
 
 ## Docs
 
