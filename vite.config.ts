@@ -55,6 +55,7 @@ export default defineConfig(({ mode }) => {
 
     test: {
       environment: 'jsdom',
+      execArgv: ['--no-experimental-webstorage'],
       setupFiles: ['./src/test/setup.ts'],
       // Dummy values so src/lib/config.ts env validation passes under vitest. Feature flags are
       // pinned off: vitest also reads the developer's .env, and a flag left on there silently
