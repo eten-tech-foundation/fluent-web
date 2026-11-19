@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
-import { useEmptyHeadingBackspace } from '../hooks/useEmptyHeadingBackspace';
+import { useEmptyHeadingKeys } from '../hooks/useEmptyHeadingKeys';
 import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
@@ -33,6 +33,7 @@ import {
   insertSectionHeading,
   paragraphBeforePoetryLine,
 } from '../lib/structural-edits';
+import { blockIndex } from '../lib/usj-path';
 import { verseAtCaret } from '../lib/verse-numbers';
 
 import { ActiveVerseOutline } from './ActiveVerseOutline';
@@ -247,6 +248,13 @@ export function ChapterEditor({
     setBlockMarker(snapshot.blockMarker);
   }, []);
 
+  // The editor reports no block while its caret sits between two blocks, on the editor root, so
+  // the bar would go on showing the last one: a heading that Delete just took away (#625 QA). No
+  // caret in the editor at all, as while the bar's own buttons are used, leaves the block as is.
+  const handleSelectionChange = useCallback((selection: SelectionRange | undefined) => {
+    if (selection && blockIndex(selection.start.jsonPath) === undefined) setBlockMarker(undefined);
+  }, []);
+
   const handleFormat = useCallback(
     (marker: string) => {
       const editor = editorRef.current;
@@ -337,7 +345,7 @@ export function ChapterEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
-  const handleEmptyHeadingBackspace = useEmptyHeadingBackspace(editorRef, readOnly);
+  const handleEmptyHeadingKeys = useEmptyHeadingKeys(editorRef, readOnly);
   const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
@@ -358,7 +366,7 @@ export function ChapterEditor({
         onKeyDownCapture={event => {
           if (
             !handleHeadingEnter(event) &&
-            !handleEmptyHeadingBackspace(event) &&
+            !handleEmptyHeadingKeys(event) &&
             !verseKeys.handleKeyDown(event)
           )
             handleEditorKeys(event);
@@ -410,6 +418,7 @@ export function ChapterEditor({
               }}
               scrRef={scrRef}
               onScrRefChange={handleScrRefChange}
+              onSelectionChange={handleSelectionChange}
               onStateChange={handleStateChange}
               onUsjChange={handleUsjChange}
             />

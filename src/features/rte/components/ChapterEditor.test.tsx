@@ -9,7 +9,7 @@ import {
   type PericopeVerseText,
 } from '@/features/rte/lib/pericope-usj';
 
-import type { StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
+import type { SelectionRange, StateChangeSnapshot } from '@eten-tech-foundation/platform-editor';
 import type { Usj } from '@eten-tech-foundation/scripture-utilities';
 import type { SerializedVerseRef } from '@sillsdev/scripture';
 
@@ -33,6 +33,7 @@ const editor = vi.hoisted(() => ({
   commit: undefined as ((usj: Usj) => void) | undefined,
   reportState: undefined as ((snapshot: StateChangeSnapshot) => void) | undefined,
   reportScrRef: undefined as ((scrRef: SerializedVerseRef) => void) | undefined,
+  reportSelection: undefined as ((selection: SelectionRange | undefined) => void) | undefined,
   /** Every verse the editor has been asked to put the cursor in, in order. */
   askedForVerses: [] as number[],
 }));
@@ -44,17 +45,22 @@ vi.mock('@eten-tech-foundation/platform-editor', async () => {
     defaultUsj?: Usj;
     scrRef?: SerializedVerseRef;
     onScrRefChange?: (scrRef: SerializedVerseRef) => void;
+    onSelectionChange?: (selection: SelectionRange | undefined) => void;
     onStateChange?: (snapshot: StateChangeSnapshot) => void;
     onUsjChange?: (usj: Usj) => void;
   }
 
   return {
     Editorial: react.forwardRef<unknown, StubProps>(
-      ({ defaultUsj, scrRef, onScrRefChange, onStateChange, onUsjChange }, ref) => {
+      (
+        { defaultUsj, scrRef, onScrRefChange, onSelectionChange, onStateChange, onUsjChange },
+        ref
+      ) => {
         editor.usj ??= defaultUsj;
         editor.commit = onUsjChange;
         editor.reportState = onStateChange;
         editor.reportScrRef = onScrRefChange;
+        editor.reportSelection = onSelectionChange;
 
         // The real plugin places the cursor when the verse it is handed changes, and only then.
         const askedForVerse = scrRef?.verseNum;
@@ -120,6 +126,13 @@ const typeInto = (verseNumber: number, text: string): void => {
 const reportBlock = (blockMarker: string | undefined): void => {
   act(() => {
     editor.reportState?.({ canRedo: false, canUndo: false, blockMarker, contextMarker: undefined });
+  });
+};
+
+/** The editor telling where its caret moved, as it does on every selection change. */
+const reportSelection = (selection: SelectionRange | undefined): void => {
+  act(() => {
+    editor.reportSelection?.(selection);
   });
 };
 
@@ -528,6 +541,38 @@ describe('ChapterEditor', () => {
       expect(paragraph()).toHaveAttribute('aria-pressed', 'true');
       await user.click(poetry());
       expect(editor.formatPara).toHaveBeenCalledWith('q1');
+    });
+
+    it('shows no block while the caret sits between blocks, where the editor reports none', () => {
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+      const heading = () => screen.getByRole('button', { name: 'Section Heading' });
+      reportBlock('s1');
+      expect(heading()).toHaveAttribute('aria-pressed', 'true');
+
+      // Where the editor's own Delete of an empty line leaves its caret: on the root (#625 QA).
+      reportSelection({ start: { jsonPath: '$', offset: 2 } });
+
+      expect(heading()).toHaveAttribute('aria-pressed', 'false');
+      expect(heading()).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Remove heading' })).not.toBeInTheDocument();
+      reportBlock('p');
+      expect(screen.getByRole('button', { name: 'Paragraph' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+
+    it('keeps the block for a caret in it, or for no caret in the editor, as while the bar is used', () => {
+      render(<ChapterEditor {...CHAPTER_PROPS} verses={A_PAIR} onVersesChange={vi.fn()} />);
+      reportBlock('s1');
+
+      reportSelection({ start: { jsonPath: '$.content[1].content[0]', offset: 3 } });
+      reportSelection(undefined);
+
+      expect(screen.getByRole('button', { name: 'Section Heading' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
     });
 
     it('says so when the cursor is in a block it cannot author', () => {

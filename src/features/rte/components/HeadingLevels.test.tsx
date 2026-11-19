@@ -122,4 +122,53 @@ describe('heading toolbar with the real editor', () => {
       expect(container.querySelector('.usfm_p')).toHaveTextContent('Second verse.');
     }
   );
+
+  // #625 QA: after Delete took an emptied heading's line, H stayed pressed and opened the levels,
+  // and Remove heading stayed, because the editor's caret was left between the blocks.
+  it('leaves the heading once Delete takes its emptied line', async () => {
+    const verses = [
+      { verseNumber: 1, text: 'First verse.', markers: null },
+      {
+        verseNumber: 2,
+        text: 'Second verse.',
+        markers: {
+          headings: [{ marker: 's1', text: '' }],
+          paragraphs: [{ marker: 'p', offset: 0 }],
+        },
+      },
+    ];
+    const { container } = render(
+      <ChapterEditor
+        bookCode='GEN'
+        chapterNumber={1}
+        contentKey='empty-heading'
+        targetLanguage='English'
+        verses={verses}
+        onVersesChange={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(container.querySelector('.usfm_s1')).toBeTruthy());
+    const input = container.querySelector('.editor-input') as HTMLElement;
+    const sectionHeading = () => screen.getByRole('button', { name: 'Section Heading' });
+    act(() => {
+      input.focus();
+      window.getSelection()!.collapse(container.querySelector('.usfm_s1')!, 0);
+      fireEvent(document, new Event('selectionchange'));
+    });
+    await waitFor(() => expect(sectionHeading()).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByRole('button', { name: 'Remove heading' })).toBeVisible();
+
+    act(() => {
+      fireEvent.keyDown(input, { key: 'Delete' });
+    });
+
+    await waitFor(() => expect(sectionHeading()).toHaveAttribute('aria-pressed', 'false'));
+    expect(container.querySelector('.usfm_s1')).toBeNull();
+    expect(sectionHeading()).not.toHaveAttribute('aria-haspopup');
+    expect(screen.queryByRole('button', { name: 'Remove heading' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Paragraph' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
 });
