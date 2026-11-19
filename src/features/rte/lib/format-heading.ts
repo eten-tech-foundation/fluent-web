@@ -97,11 +97,29 @@ export function removeHeadingAt(editor: EditorRef, usj: Usj, index: number): boo
   return applyAtCaret(editor, ops, startOfText(index, next));
 }
 
+/** The Delete keys `removeEmptyHeadingLine` sends the editor, which key handlers let through. */
+const ownDeletes = new WeakSet<Event>();
+
+export const isOwnDelete = (event: Event): boolean => ownDeletes.has(event);
+
+/** Runs `edit`, then scrolls everything around `root` that it scrolled back where it was. */
+function keepingScroll(root: HTMLElement, edit: () => void): void {
+  const scrolled: Array<[Element, number]> = [];
+  for (let element: Element | null = root; element; element = element.parentElement)
+    scrolled.push([element, element.scrollTop]);
+  edit();
+  for (const [element, top] of scrolled) if (element.scrollTop !== top) element.scrollTop = top;
+}
+
 /**
  * Takes an empty heading's line away the way Delete does there, through the editor's own key
  * handling, which keeps the next line's format and history (see `removeHeadingAt` for why not a
  * delta). The caret then goes to the start of the next line's text, as after `removeHeadingAt`,
  * rather than in front of its verse number. `root` is the editable element of `editor`.
+ *
+ * Lexical's Delete leaves its caret between the two blocks, on the editor root, and scrolls the
+ * whole next block into view to show it: with a chapter in one paragraph, the pane jumped to the
+ * end of the chapter (#625 QA). That scroll is put back before the caret moves to the text.
  */
 export function removeEmptyHeadingLine(editor: EditorRef, root: HTMLElement, index: number): void {
   // Only from the format bar's button: refocusing a focused editor can move its caret.
@@ -109,11 +127,19 @@ export function removeEmptyHeadingLine(editor: EditorRef, root: HTMLElement, ind
   editor.getSelection();
   editor.setSelection({ start: { jsonPath: `$.content[${index}]`, offset: 0 } });
   editor.getSelection();
-  root.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true, cancelable: true })
-  );
-  // Reading the selection commits the editor's update before the document is read back.
-  editor.getSelection();
+  const deleteKey = new KeyboardEvent('keydown', {
+    key: 'Delete',
+    code: 'Delete',
+    bubbles: true,
+    cancelable: true,
+  });
+  ownDeletes.add(deleteKey);
+  keepingScroll(root, () => {
+    root.dispatchEvent(deleteKey);
+    // Reading the selection commits the editor's update, its scroll included, before the
+    // document is read back.
+    editor.getSelection();
+  });
   const line = editor.getUsj()?.content[index];
   if (typeof line !== 'object' || line.type !== 'para' || isEmptyHeading(line)) return;
   editor.setSelection({ start: startOfText(index, line) });

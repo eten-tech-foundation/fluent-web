@@ -154,12 +154,13 @@ The rich text editor only mounts when `config.features.rtePericope` is on (see
   resumes saving after correction".
 - A heading's words never fold into scripture, so a heading comes out whole: Remove heading in
   Chapter View's bar takes its words and line in one undo step, and once its words are deleted,
-  Backspace or Delete takes the empty line, right under the chapter number too. Backspace at a
-  heading's start and Delete at its end stay blocked, and Paragraph stays off in a heading. Tests:
+  Backspace or Delete takes the empty line, right under the chapter number too, leaving the caret
+  at the start of the verse text below. Backspace at a heading's start and Delete at its end stay
+  blocked, and Paragraph stays off in a heading. Tests:
   `src/features/rte/components/StructuralHistory.test.tsx` › "removes a heading from the bar in
   one undo step and saves every state"; `src/features/rte/lib/format-heading.test.tsx` ›
   "removes the heading %s is in, words and line, and leaves scripture alone";
-  `src/features/rte/hooks/useEmptyHeadingBackspace.test.tsx`.
+  `src/features/rte/hooks/useEmptyHeadingKeys.test.tsx`.
 - The editor is uncontrolled. Don't feed new verses into it on every render. `ChapterEditor` and
   `PericopeEditor` reload it through `loadIntoEditor` only when the chapter or pericope changes,
   when an AI suggestion fills a verse the editor holds empty, after a structural rewrite, or when
