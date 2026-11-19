@@ -72,9 +72,9 @@ export class AssistantConversation {
   private pageIntent = '';
   private passageChapters: number[] | null = null;
   private consumedRefresh = 0;
-  private typedInteraction = false;
   private admissionEvents = new WeakSet<object>();
   private recoverySequence = 0;
+  private draftRevision = 0;
   constructor(private readonly transport: Transport = streamAssistantTurn) {}
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -88,7 +88,6 @@ export class AssistantConversation {
     this.listeners.forEach(listener => listener());
   }
   private boundary(next: Partial<ConversationState> = {}) {
-    this.typedInteraction = false;
     this.active?.abort();
     this.active = null;
     this.update({
@@ -140,7 +139,7 @@ export class AssistantConversation {
     else this.update({ context, ready, intent });
   }
   setDraft = (draft: string) => {
-    if (draft.length) this.typedInteraction = true;
+    this.draftRevision++;
     this.update({ draft });
   };
   configure(outputLanguage: string, grounding = this.state.grounding) {
@@ -198,19 +197,17 @@ export class AssistantConversation {
     if (this.admissionEvents.has(event))
       return new AssistantBriefingError('invalid_request', false);
     const recoverySequence = ++this.recoverySequence;
+    const submissionDraftRevision = this.draftRevision;
     const reject = (error: AssistantBriefingError) => {
-      if (origin === 'suggested_question') this.update({ draft: text });
+      if (origin === 'suggested_question') {
+        this.draftRevision++;
+        this.update({ draft: text });
+      }
       return error;
     };
     const snapshot = this.state;
     const briefing = snapshot.pinned ?? snapshot.briefing;
-    if (
-      !snapshot.ready ||
-      !snapshot.context ||
-      !snapshot.outputLanguage ||
-      !briefing?.integrity ||
-      (origin === 'typed' && !snapshot.pinned && briefing.phase !== 'complete')
-    )
+    if (!snapshot.ready || !snapshot.context || !snapshot.outputLanguage || !briefing?.integrity)
       return reject(
         new AssistantBriefingError(
           briefing?.continuationUnavailable ?? 'temporarily_unavailable',
@@ -257,12 +254,9 @@ export class AssistantConversation {
       briefing: briefing.integrity.prefix,
       turns,
       submission: { kind: retry ? 'retry' : 'new', turnId, attemptId, input },
-      dont_cache:
-        retry ||
-        origin !== 'suggested_question' ||
-        turns.length !== 0 ||
-        this.typedInteraction ||
-        !briefing.integrity.prefix.complete,
+      // Each new suggestion opts into sharing, regardless of earlier typing or turn depth.
+      // Typed submissions and retries may reuse completed artifacts but never create shared work.
+      dont_cache: retry || origin !== 'suggested_question',
     };
     if (!assistantTurnRequestSchema.safeParse(request).success)
       return reject(new AssistantBriefingError('context_too_large', false));
@@ -312,7 +306,7 @@ export class AssistantConversation {
           ready: this.state.ready,
           intent: this.state.intent,
           refresh: this.state.refresh + 1,
-          draft: input.text,
+          draft: this.draftRevision === submissionDraftRevision ? input.text : this.state.draft,
           notice: 'context_changed',
         });
       } else if (update.type === 'turn_started') {
@@ -332,7 +326,11 @@ export class AssistantConversation {
     void this.transport(snapshot.context.projectId, request, publish, controller.signal)
       .catch((error: unknown) => {
         if (!current()) return;
-        if (input.origin === 'suggested_question' && recoverySequence === this.recoverySequence)
+        if (
+          input.origin === 'suggested_question' &&
+          recoverySequence === this.recoverySequence &&
+          this.draftRevision === submissionDraftRevision
+        )
           this.update({ draft: input.text });
         this.replaceAttempt(turnId, attemptId, {
           state: 'failed',

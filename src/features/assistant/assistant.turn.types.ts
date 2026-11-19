@@ -10,14 +10,17 @@ export const TURN_LIMITS = {
   attemptsPerTurn: 4,
   inputChars: 4_000,
   inputBytes: 16_000,
-  outputChars: 15_000,
-  outputBytes: 60_000,
+  // Match the API configuration maxima; deployments may choose lower emergency limits.
+  outputBytes: 32 * 1024 * 1024,
+  retainedBytes: 256 * 1024 * 1024,
   receiptChars: 4_096,
   sourceBytes: 32_000,
   messageBytes: 48_000,
   historyFieldChars: 16_000,
   historyBytes: 524_288,
-  frameBytes: 1_048_576,
+  responseBytes: 1_048_576,
+  // Complete emitted SSE frame: worst-case JSON expansion plus bounded metadata/envelope.
+  frameBytes: 6 * 32 * 1024 * 1024 + 1_048_576,
   connectMs: 10_000,
   idleMs: 45_000,
   totalMs: 180_000,
@@ -40,7 +43,9 @@ const receipt = z
   .min(1)
   .max(TURN_LIMITS.receiptChars)
   .regex(/^[\w.-]+$/);
-const markdown = text(TURN_LIMITS.outputChars, TURN_LIMITS.outputBytes);
+const markdown = z
+  .string()
+  .refine(value => new TextEncoder().encode(value).byteLength <= TURN_LIMITS.outputBytes);
 const input = z
   .object({
     text: text(TURN_LIMITS.inputChars, TURN_LIMITS.inputBytes).refine(
@@ -160,6 +165,15 @@ export const assistantTurnEventSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z
+    .object({
+      ...eventBinding,
+      type: z.literal('turn_replace'),
+      markdown,
+      sequence: integer,
+      receipt,
+    })
+    .strict(),
+  z
     .object({ ...eventBinding, type: z.literal('turn_complete'), sequence: integer, receipt })
     .strict(),
   z
@@ -171,6 +185,7 @@ export const assistantTurnEventSchema = z.discriminatedUnion('type', [
         'invalid_configuration',
         'unsupported_language',
         'context_too_large',
+        'response_safety_limit',
         'rate_limited',
         'generation_busy',
         'timed_out',

@@ -80,13 +80,8 @@ export function AssistantPanel({
     owner.navigate({ context, ready: contextReady, intent: owner.getSnapshot().intent });
   }, [owner, context, contextReady, conversation.intent]);
   const assistantEnabled = useFeatureFlag('assistant');
-  const persistedLanguage = useMemo(
-    () => ({
-      projectId: context.projectId,
-      language: readAssistantOutputLanguage(),
-    }),
-    [context.projectId]
-  ).language;
+  // Storage is intentionally reread once when the active project changes.
+  const persistedLanguage = useMemo(readAssistantOutputLanguage, [context.projectId]);
   const [languageProject, setLanguageProject] = useState<number | null>(null);
   const languages = useAssistantLanguages(context.projectId, persistedLanguage, assistantEnabled);
   const outputLanguage = conversation.outputLanguage;

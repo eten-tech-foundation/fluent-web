@@ -136,3 +136,33 @@ describe('additive signed briefing delivery', () => {
     expect(result.continuationUnavailable).toBe('temporarily_unavailable');
   });
 });
+
+it('commits signed full briefing replacements immediately with their exact receipts', async () => {
+  const updates: PassageBriefingData[] = [];
+  await run(
+    [
+      frames[0],
+      frames[1],
+      { type: 'briefing_replace', markdown: '', ...integrity(2, false) },
+      { type: 'briefing_delta', delta: 'new', ...integrity(3, false) },
+      { type: 'briefing_replace', markdown: 'final', ...integrity(4, false) },
+      { ...frames[2], markdown: 'final', ...integrity(4, true) },
+    ],
+    updates
+  );
+  expect(updates.slice(2).map(data => data.source)).toEqual([source, '', 'new', 'final', 'final']);
+  expect(
+    updates.every(data => !data.integrity || data.integrity.prefix.markdown === data.source)
+  ).toBe(true);
+});
+
+it('rejects stale replacement sequences before changing the visible briefing', async () => {
+  const updates: PassageBriefingData[] = [];
+  await expect(
+    run(
+      [frames[0], frames[1], { type: 'briefing_replace', markdown: '', ...integrity(1, false) }],
+      updates
+    )
+  ).rejects.toMatchObject({ code: 'malformed_upstream_response' });
+  expect(updates.at(-1)?.source).toBe(source);
+});
