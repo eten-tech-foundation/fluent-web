@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Check, ChevronDown, Loader2, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
 import { z } from 'zod';
@@ -75,6 +75,21 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [activeRowUserId, setActiveRowUserId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (activeRowUserId === null) return;
+    const handleOutsideClick = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('tr')) {
+        setActiveRowUserId(null);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick);
+    };
+  }, [activeRowUserId]);
 
   const [activeTab, setActiveTab] = useState<AddUserTab>('existing');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -376,6 +391,7 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     if (!removeTarget) return;
     const target = removeTarget;
     setRemoveTarget(null);
+    setActiveRowUserId(null);
     await handleRemoveProjectUser(target.userId);
   }, [removeTarget, handleRemoveProjectUser]);
 
@@ -419,15 +435,21 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     return projectUsers.map(pu => {
       const isOwnRow = pu.userId === userdetail?.id;
       const isEditingThisRow = editingUserId === pu.userId;
+      const isRowActive = activeRowUserId === pu.userId;
       const isBusy = updatingRoleUserIds.has(pu.userId) || removingUserIds.has(pu.userId);
 
       return (
         <TableRow
           key={pu.userId}
-          className={`group hover:bg-muted/50 relative ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
+          className={`group hover:bg-muted/50 ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
+          onClick={() => {
+            if (!isOwnRow) {
+              setActiveRowUserId(pu.userId);
+            }
+          }}
         >
           <TableCell className='text-foreground py-2.5 pl-4 text-sm'>{pu.displayName}</TableCell>
-          <TableCell className='text-foreground relative py-2.5 pr-11 text-sm'>
+          <TableCell className='text-foreground py-2.5 pr-11 text-sm'>
             {isOwnRow ? (
               <span>{getDisplayRole(pu.roleName)}</span>
             ) : updatingRoleUserIds.has(pu.userId) ? (
@@ -480,19 +502,22 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
           </TableCell>
           <TableCell className='relative w-0 overflow-visible p-0 text-right'>
             {!isOwnRow && (
-              <div className='absolute top-1/2 right-2.5 z-10 -translate-y-1/2'>
+              <div className='absolute top-1/2 right-2.5 -translate-y-1/2'>
                 <TooltipProvider delayDuration={300}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         aria-label='Remove user from project'
-                        className={`h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${
-                          removingUserIds.has(pu.userId) ? '!opacity-100' : ''
+                        className={`h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100 ${
+                          isRowActive || removingUserIds.has(pu.userId) ? '!opacity-100' : ''
                         }`}
                         disabled={isBusy}
                         size='sm'
                         variant='ghost'
-                        onClick={() => handleRequestRemove(pu)}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleRequestRemove(pu);
+                        }}
                       >
                         {removingUserIds.has(pu.userId) ? (
                           <Loader2 className='h-4 w-4 animate-spin' />
@@ -585,7 +610,10 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
                 className='border-border bg-background text-foreground hover:bg-muted h-7 rounded-sm border px-3 text-[13px] font-semibold'
                 size='sm'
                 variant='outline'
-                onClick={() => setRemoveTarget(null)}
+                onClick={() => {
+                  setRemoveTarget(null);
+                  setActiveRowUserId(null);
+                }}
               >
                 Cancel
               </Button>
@@ -653,11 +681,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         >
           <div className='min-h-0 flex-1 overflow-y-auto'>
             <Table>
-              <TableHeader className='sticky top-0 z-10'>
+              <TableHeader className='sticky top-0 z-20'>
                 <TableRow className='hover:bg-transparent'>
-                  <TableHead className='bg-muted py-2.5 pl-4 text-sm font-semibold'>Name</TableHead>
-                  <TableHead className='bg-muted py-2.5 pr-4 text-sm font-semibold'>Role</TableHead>
-                  <TableHead className='bg-muted w-0 p-0' />
+                  <TableHead className='bg-muted sticky top-0 z-20 py-2.5 pl-4 text-sm font-semibold'>
+                    Name
+                  </TableHead>
+                  <TableHead className='bg-muted sticky top-0 z-20 py-2.5 pr-4 text-sm font-semibold'>
+                    Role
+                  </TableHead>
+                  <TableHead className='bg-muted sticky top-0 z-20 w-0 p-0' />
                 </TableRow>
               </TableHeader>
               <TableBody className='bg-background'>{renderTableBody()}</TableBody>
