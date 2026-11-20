@@ -305,4 +305,67 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     const actionWrapper = trashButton.parentElement;
     expect(actionWrapper?.className).not.toContain('z-10');
   });
+
+  it('reveals remove icon on row touch/click without showing across untouched rows, and hides on outside click', async () => {
+    const useProjectUsersModuleActual = await import('@/features/projects/hooks/useProjectUsers');
+    const spy = vi.spyOn(useProjectUsersModuleActual, 'useProjectUsers');
+    spy.mockReturnValue({
+      data: [
+        {
+          projectId: 1,
+          userId: 10,
+          displayName: 'Alice Drafter',
+          roleID: 3,
+          roleName: 'Project Translator',
+        },
+        {
+          projectId: 1,
+          userId: 20,
+          displayName: 'Charlie Reviewer',
+          roleID: 4,
+          roleName: 'Project Reviewer',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+
+    renderWithProviders(
+      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+    );
+
+    const trashButtons = await screen.findAllByRole('button', {
+      name: /Remove user from project/i,
+    });
+    expect(trashButtons).toHaveLength(2);
+    const [aliceTrash, charlieTrash] = trashButtons;
+
+    // Initially both are hidden and untouched
+    expect(aliceTrash.className).not.toContain('!opacity-100');
+    expect(charlieTrash.className).not.toContain('!opacity-100');
+
+    // Tap/click Alice's row
+    const aliceRow = aliceTrash.closest('tr')!;
+    fireEvent.click(aliceRow);
+
+    // Alice's trash button is revealed, but Charlie's remains hidden
+    expect(aliceTrash.className).toContain('!opacity-100');
+    expect(charlieTrash.className).not.toContain('!opacity-100');
+
+    // Tap/click Charlie's row
+    const charlieRow = charlieTrash.closest('tr')!;
+    fireEvent.click(charlieRow);
+
+    // Charlie's trash button is now revealed, and Alice's is hidden
+    expect(charlieTrash.className).toContain('!opacity-100');
+    expect(aliceTrash.className).not.toContain('!opacity-100');
+
+    // Tap/click outside rows
+    fireEvent.pointerDown(document.body);
+
+    // Both return to hidden
+    expect(aliceTrash.className).not.toContain('!opacity-100');
+    expect(charlieTrash.className).not.toContain('!opacity-100');
+  });
 });
