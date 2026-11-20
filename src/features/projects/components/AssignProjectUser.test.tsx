@@ -223,7 +223,7 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
 });
 
 describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () => {
-  it('hides remove icon by default and reveals it on hover, focus, and touch devices', async () => {
+  it('hides remove icon by default and reveals it on hover and focus', async () => {
     renderWithProviders(
       <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
     );
@@ -240,8 +240,8 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     expect(removeButton.className).toContain('group-hover:opacity-100');
     // Keyboard focus reveals icon
     expect(removeButton.className).toContain('focus-visible:opacity-100');
-    // Touch devices without hover keep icon visible
-    expect(removeButton.className).toContain('[@media(hover:none)]:opacity-100');
+    // Responsive view should not force opacity-100 via hover:none media query
+    expect(removeButton.className).not.toContain('[@media(hover:none)]:opacity-100');
     // Hover on the icon itself turns it red
     expect(removeButton.className).toContain('hover:text-red-500');
 
@@ -249,6 +249,8 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     const row = removeButton.closest('tr');
     expect(row).not.toBeNull();
     expect(row?.className).toContain('group');
+    // Row should not have relative positioning to prevent stacking context leaks
+    expect(row?.className).not.toContain('relative');
 
     // Keyboard users can focus the opacity-0 button directly
     removeButton.focus();
@@ -272,5 +274,35 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     const roleButton = screen.getByRole('button', { name: /Translator/i });
     const roleCell = roleButton.closest('td');
     expect(roleCell?.className).toContain('pr-11');
+  });
+
+  it('maintains sticky table header positioning and ensures user rows scroll underneath', async () => {
+    renderWithProviders(
+      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+    );
+
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers).toHaveLength(3);
+
+    // Each header cell has sticky top-0, z-20, and bg-muted for cross-browser sticky support (including Safari)
+    headers.forEach(header => {
+      expect(header.className).toContain('sticky');
+      expect(header.className).toContain('top-0');
+      expect(header.className).toContain('z-20');
+      expect(header.className).toContain('bg-muted');
+    });
+
+    const thead = headers[0].closest('thead');
+    expect(thead).not.toBeNull();
+    expect(thead?.className).toContain('sticky');
+    expect(thead?.className).toContain('top-0');
+    expect(thead?.className).toContain('z-20');
+
+    // Action button wrapper must not have z-10 that collides with or renders above the header
+    const trashButton = await screen.findByRole('button', {
+      name: /Remove user from project/i,
+    });
+    const actionWrapper = trashButton.parentElement;
+    expect(actionWrapper?.className).not.toContain('z-10');
   });
 });

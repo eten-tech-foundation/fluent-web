@@ -424,10 +424,10 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
       return (
         <TableRow
           key={pu.userId}
-          className={`group hover:bg-muted/50 relative ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
+          className={`group hover:bg-muted/50 ${isBusy ? 'pointer-events-none opacity-70' : ''}`}
         >
           <TableCell className='text-foreground py-2.5 pl-4 text-sm'>{pu.displayName}</TableCell>
-          <TableCell className='text-foreground relative py-2.5 pr-11 text-sm'>
+          <TableCell className='text-foreground py-2.5 pr-11 text-sm'>
             {isOwnRow ? (
               <span>{getDisplayRole(pu.roleName)}</span>
             ) : updatingRoleUserIds.has(pu.userId) ? (
@@ -480,13 +480,13 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
           </TableCell>
           <TableCell className='relative w-0 overflow-visible p-0 text-right'>
             {!isOwnRow && (
-              <div className='absolute top-1/2 right-2.5 z-10 -translate-y-1/2'>
+              <div className='absolute top-1/2 right-2.5 -translate-y-1/2'>
                 <TooltipProvider delayDuration={300}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         aria-label='Remove user from project'
-                        className={`h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${
+                        className={`h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100 ${
                           removingUserIds.has(pu.userId) ? '!opacity-100' : ''
                         }`}
                         disabled={isBusy}
@@ -653,11 +653,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
         >
           <div className='min-h-0 flex-1 overflow-y-auto'>
             <Table>
-              <TableHeader className='sticky top-0 z-10'>
+              <TableHeader className='sticky top-0 z-20'>
                 <TableRow className='hover:bg-transparent'>
-                  <TableHead className='bg-muted py-2.5 pl-4 text-sm font-semibold'>Name</TableHead>
-                  <TableHead className='bg-muted py-2.5 pr-4 text-sm font-semibold'>Role</TableHead>
-                  <TableHead className='bg-muted w-0 p-0' />
+                  <TableHead className='bg-muted sticky top-0 z-20 py-2.5 pl-4 text-sm font-semibold'>
+                    Name
+                  </TableHead>
+                  <TableHead className='bg-muted sticky top-0 z-20 py-2.5 pr-4 text-sm font-semibold'>
+                    Role
+                  </TableHead>
+                  <TableHead className='bg-muted sticky top-0 z-20 w-0 p-0' />
                 </TableRow>
               </TableHeader>
               <TableBody className='bg-background'>{renderTableBody()}</TableBody>
