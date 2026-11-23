@@ -30,12 +30,16 @@ check here never replaces one in the API.
   observers get `GET /users/:id/projects` (`useProjectsByRole`). The menu item follows the same
   rule. Tests: `src/components/header/MainMenu.test.tsx` › "shows Projects item for a Project
   Translator" and "shows Projects item for a Project Observer". No test covers the redirect.
-- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the overflow menus, Assign
-  and the chapter checkboxes show only for a manager of that project (`isProjectManager`). Export
-  Milestone shows to anyone who can open the page. Tests:
-  `src/features/projects/components/ChapterAssignmentsTable.test.tsx` › "hides row selection
-  checkboxes and select column when isManager is false, and keeps drafter/checker text". No test
-  covers the page-level controls.
+- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the Project Detail
+  overflow menu, Assign and the chapter checkboxes show only for a manager of that project
+  (`isProjectManager`). The Milestone Detail overflow menu shows to anyone who can open the page:
+  Edit Book Metadata and Manage Books only for a manager of that project, Export Milestone for
+  everyone (#542). Tests: `src/features/projects/components/ChapterAssignmentsTable.test.tsx` ›
+  "hides row selection checkboxes and select column when isManager is false, and keeps
+  drafter/checker text"; `src/features/projects/components/MilestoneDetailWrapper.test.tsx` ›
+  "shows a Project Translator the menu with only Export Milestone" and "shows only Export
+  Milestone to a Project Manager of another project". No test covers the other page-level
+  controls.
 - Opening a chapter from Milestone Detail goes to the editable `/translation` route when the user
   is its drafter in Draft, its peer checker in Peer Check, or the chapter is past peer check;
   otherwise it goes to `/view` (`MilestoneDetailPage.tsx`). Past peer check, any project member
@@ -263,12 +267,12 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   `src/features/bible/TranslationLoader.ts` falls back to the stored `currentProjectItem` and
   otherwise redirects home. Tests: `src/features/bible/TranslationLoader.test.ts` › "redirects to
   the dashboard when no project item can be resolved".
-- The book metadata dialog (`src/features/projects/components/EditProjectMetadataDialog.tsx`)
+- The book metadata dialog (`src/features/projects/components/EditBookMetadataDialog.tsx`)
   saves each changed field on blur, sends an empty value as `null`, waits for the previous save of
   the same book, and saves what's pending when it closes or unmounts. Its inputs show only the
   stored `\toc1`, `\toc2` and `\toc3` values: the running header and book title (`\h`, `\mt`) are
   never shown or used to pre-fill one. Tests:
-  `src/features/projects/components/EditProjectMetadataDialog.test.tsx` › "waits for an in-flight
+  `src/features/projects/components/EditBookMetadataDialog.test.tsx` › "waits for an in-flight
   save before sending the next one for the same field" and "expands several books at once and
   shows the TOC values as stored".
 - Word pairs a translator ignores everywhere in the repeated word check are saved with a
