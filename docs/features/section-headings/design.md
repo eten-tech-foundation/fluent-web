@@ -72,6 +72,11 @@ editor's own Delete, then puts the scroll back and moves the caret to the start 
 below. Remove heading on an empty heading takes the line the same way. In case some other edit
 leaves the caret on the root, Chapter View's bar shows no block while it sits there.
 
+The line below can be another heading, a title over a subtitle. If it has words, the caret goes to
+the start of them. If it is empty too, Lexical doesn't go to the root: it merges the two empty
+lines and keeps its caret in the one that is left, so the caret stays there and the next Delete
+takes that line.
+
 Editorial 0.8.15 can't remove an empty paragraph by delta: deleting its line break leaves a line
 with no marker, and words typed there are never saved. So a heading with words goes by delta
 (`removeHeadingAt`), and an empty one through the editor's own Delete (`removeEmptyHeadingLine`),
@@ -101,10 +106,11 @@ Removal is covered in `format-heading.test.tsx` (words and line go, scripture st
 after is saved, adjacent titles, refusals, the empty-line hand-off), `StructuralHistory.test.tsx`
 (Remove heading in one undo step, every state saved), `FormatBar.test.tsx` (only inside a heading)
 and `useEmptyHeadingKeys.test.tsx`. Lexical's own Delete of an empty line runs in jsdom, so that
-file checks the line going, a single Delete reaching the editor and the caret at the start of the
-verse text; `HeadingLevels.test.tsx` checks that the bar leaves the heading afterwards, and
-`ChapterEditor.test.tsx` that it shows no block while the caret sits on the root. jsdom has no
-layout, so the browser checks cover the pane and the page not jumping, in both views.
+file checks the line going, a single Delete reaching the editor, the caret at the start of the
+verse text, and where it goes above another heading, empty or with words; `HeadingLevels.test.tsx`
+checks that the bar leaves the heading afterwards, and `ChapterEditor.test.tsx` that it shows no
+block while the caret sits on the root. jsdom has no layout, so the browser checks cover the pane
+and the page not jumping, in both views.
 The join after a removal is covered in `useVerseNumberKeys.test.tsx` (the caret the editor gets,
 and where the key is left alone) and `useDrafting.test.ts` (an edit made in the same update that
 moves the active verse is saved); the browser checks cover the lines joining and staying joined

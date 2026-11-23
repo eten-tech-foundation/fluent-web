@@ -120,6 +120,10 @@ function keepingScroll(root: HTMLElement, edit: () => void): void {
  * Lexical's Delete leaves its caret between the two blocks, on the editor root, and scrolls the
  * whole next block into view to show it: with a chapter in one paragraph, the pane jumped to the
  * end of the chapter (#625 QA). That scroll is put back before the caret moves to the text.
+ *
+ * It does that when the next line has content. Above another empty heading (a title and a
+ * subtitle, both emptied) Lexical merges the two empty lines instead and keeps its caret in the
+ * one that is left, so the caret is already on a line and stays there.
  */
 export function removeEmptyHeadingLine(editor: EditorRef, root: HTMLElement, index: number): void {
   // Only from the format bar's button: refocusing a focused editor can move its caret.
@@ -141,6 +145,8 @@ export function removeEmptyHeadingLine(editor: EditorRef, root: HTMLElement, ind
     editor.getSelection();
   });
   const line = editor.getUsj()?.content[index];
+  // An empty heading here has no text to move to, and the editor's caret is already in it: it is
+  // the line left of two empty ones, or this same line when nothing below could be deleted into.
   if (typeof line !== 'object' || line.type !== 'para' || isEmptyHeading(line)) return;
   editor.setSelection({ start: startOfText(index, line) });
   editor.getSelection();

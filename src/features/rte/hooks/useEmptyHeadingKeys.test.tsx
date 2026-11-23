@@ -89,8 +89,26 @@ const savedMidChapter: PericopeVerseText[] = [
   { verseNumber: 2, text: 'Second verse.', markers: { paragraphs: [{ marker: 'p', offset: 0 }] } },
 ];
 
+/** The same rows with a subtitle under the title, its words `subtitle`. */
+const withSubtitle = (verses: PericopeVerseText[], subtitle: string): PericopeVerseText[] =>
+  verses.map(verse =>
+    verse.markers?.headings
+      ? {
+          ...verse,
+          markers: {
+            ...verse.markers,
+            headings: [...verse.markers.headings, { marker: 's2', text: subtitle }],
+          },
+        }
+      : verse
+  );
+
 const hasHeading = (usj: Usj): boolean =>
   usj.content.some(node => typeof node === 'object' && node.marker === 's1');
+
+/** The marker of each line, top to bottom. */
+const lineMarkers = (usj: Usj): Array<string | undefined> =>
+  usj.content.map(node => (typeof node === 'object' ? node.marker : node));
 
 function Harness({
   editorRef,
@@ -226,6 +244,73 @@ describe('Delete in an empty heading', () => {
     });
     expect(hasHeading(editorRef.current!.getUsj()!)).toBe(false);
     expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(savedMidChapter);
+  });
+});
+
+// A title and a subtitle over one verse. The line under the empty heading is then a heading too,
+// and the caret goes by the same rule: the start of that line's text, or the line itself when it
+// has none. It never stays between two blocks, on the editor root.
+describe('An empty heading above another heading', () => {
+  it.each([
+    ['Delete', 'under the chapter number', rowsWith(''), 1, savedWithoutHeading],
+    ['Delete', 'in the middle of the chapter', midChapterWith(''), 2, savedMidChapter],
+    ['Backspace', 'under the chapter number', rowsWith(''), 1, savedWithoutHeading],
+  ])(
+    '%s %s, both empty: one line goes and the caret stays in the other, then that one goes too',
+    async (key, _, verses, line, saved) => {
+      const { editorRef, input, place } = await setup(withSubtitle(verses, ''));
+      await place(`$.content[${line}]`);
+      const before = lineMarkers(editorRef.current!.getUsj()!);
+      expect(before.slice(line, line + 3)).toEqual(['s1', 's2', 'p']);
+
+      fireEvent.keyDown(input, { key });
+
+      // The editor merges the two empty lines and keeps its caret in the one that is left.
+      expect(editorRef.current!.getSelection()?.start).toEqual({
+        jsonPath: `$.content[${line}]`,
+        offset: 0,
+      });
+      expect(lineMarkers(editorRef.current!.getUsj()!)).toEqual([
+        ...before.slice(0, line),
+        's1',
+        ...before.slice(line + 2),
+      ]);
+
+      fireEvent.keyDown(input, { key });
+
+      expect(editorRef.current!.getSelection()?.start).toEqual({
+        jsonPath: `$.content[${line}].content[1]`,
+        offset: 0,
+      });
+      expect(lineMarkers(editorRef.current!.getUsj()!)).toEqual([
+        ...before.slice(0, line),
+        ...before.slice(line + 2),
+      ]);
+      expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual(saved);
+    }
+  );
+
+  it('Delete above a heading with words puts the caret at the start of those words', async () => {
+    const { editorRef, input, place } = await setup(withSubtitle(midChapterWith(''), 'Subtitle'));
+    await place('$.content[2]');
+
+    fireEvent.keyDown(input, { key: 'Delete' });
+
+    expect(editorRef.current!.getSelection()?.start).toEqual({
+      jsonPath: '$.content[2].content[0]',
+      offset: 0,
+    });
+    expect(lineMarkers(editorRef.current!.getUsj()!)).toEqual(['c', 'p', 's2', 'p']);
+    expect(usjToPericopeVerses(editorRef.current!.getUsj()!)).toEqual([
+      savedMidChapter[0],
+      {
+        ...savedMidChapter[1],
+        markers: {
+          headings: [{ marker: 's2', text: 'Subtitle' }],
+          paragraphs: [{ marker: 'p', offset: 0 }],
+        },
+      },
+    ]);
   });
 });
 
