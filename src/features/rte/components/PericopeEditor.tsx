@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
@@ -20,7 +20,12 @@ import {
   usjToPericopeVerses,
   type PericopeVerseText,
 } from '../lib/pericope-usj';
-import { placeCaretAtVerseEnd, verseAtCaret, type VerseCaretRequest } from '../lib/verse-caret';
+import {
+  placeCaretAtVerseEnd,
+  verseAtCaret,
+  verseAtSelectionAnchor,
+  type VerseCaretRequest,
+} from '../lib/verse-caret';
 
 import { HeadingValidationMessage } from './HeadingValidationMessage';
 
@@ -63,6 +68,12 @@ export interface PericopeEditorProps {
    */
   onVerseClick?: (verseNumber: number | undefined) => void;
   /**
+   * Called when focus comes into the editor from the keyboard (Tab or Shift+Tab from outside it),
+   * with the verse the caret lands in. It stands in for the click a keyboard user never makes, so
+   * it can make the box the active one too. Focus from a press or a caret request isn't reported.
+   */
+  onKeyboardFocus?: (verseNumber: number | undefined) => void;
+  /**
    * Focuses the editor with the caret at the end of this verse, when the verse is in this
    * pericope. Next Pericope asks for it (#479).
    */
@@ -93,6 +104,7 @@ export function PericopeEditor({
   onVersesChange,
   onActiveVerseChange,
   onVerseClick,
+  onKeyboardFocus,
   caretRequest,
 }: PericopeEditorProps) {
   const editorRef = useRef<EditorRef | null>(null);
@@ -192,11 +204,19 @@ export function PericopeEditor({
   // A request already there when this editor mounted was for an earlier one, e.g. before a view
   // switch. Every editor gets the request; the one holding the verse takes the caret.
   const answeredCaretRef = useRef(caretRequest);
+  /** True while this editor takes the caret for a request, so that focus isn't the translator's. */
+  const takingCaretRef = useRef(false);
   useEffect(() => {
     if (readOnly || !caretRequest || caretRequest === answeredCaretRef.current) return;
     answeredCaretRef.current = caretRequest;
     const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
-    if (root) placeCaretAtVerseEnd(root, caretRequest.verseNumber);
+    if (!root) return;
+    takingCaretRef.current = true;
+    try {
+      placeCaretAtVerseEnd(root, caretRequest.verseNumber);
+    } finally {
+      takingCaretRef.current = false;
+    }
   }, [caretRequest, readOnly]);
 
   const handleUsjChange = useCallback(
@@ -231,18 +251,28 @@ export function PericopeEditor({
   // `onScrRefChange`, so the callback alone was never called (#624). That plugin also moves the
   // caret to the start of the `scrRef` verse whenever its document is created or replaced, which
   // this page would do once per pericope box on load and again on every AI fill or rebuild.
+  // It is the verse the selection starts in, as in Chapter View, where Editorial reads the anchor:
+  // a drag or Shift+arrow into later verses leaves the active verse where it began, instead of
+  // every verse the drag passes loading its resources. Ctrl+A starts before the first verse, so
+  // it leaves the active verse alone.
+  // The listener is added once and calls the newest callback, which changes with every edit.
+  const onActiveVerseChangeRef = useRef(onActiveVerseChange);
+  useLayoutEffect(() => {
+    onActiveVerseChangeRef.current = onActiveVerseChange;
+  });
+  const reportsCaretVerse = onActiveVerseChange !== undefined;
   useEffect(() => {
-    if (!onActiveVerseChange) return;
+    if (!reportsCaretVerse) return;
     const reportCaretVerse = () => {
       const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
       const selection = document.getSelection();
-      if (!root || !selection?.focusNode || !root.contains(selection.focusNode)) return;
-      const verseNumber = verseAtCaret(root, selection);
-      if (verseNumber !== undefined) onActiveVerseChange(verseNumber);
+      if (!root || !selection?.anchorNode || !root.contains(selection.anchorNode)) return;
+      const verseNumber = verseAtSelectionAnchor(root, selection);
+      if (verseNumber !== undefined) onActiveVerseChangeRef.current?.(verseNumber);
     };
     document.addEventListener('selectionchange', reportCaretVerse);
     return () => document.removeEventListener('selectionchange', reportCaretVerse);
-  }, [onActiveVerseChange]);
+  }, [reportsCaretVerse]);
 
   // React handles the click after useVerseNumberCaret has moved the caret, so this reads where the
   // translator's click finally put it.
@@ -251,6 +281,39 @@ export function PericopeEditor({
     const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
     onVerseClick(root ? verseAtCaret(root, document.getSelection()) : undefined);
   }, [onVerseClick]);
+
+  // The focus a press gives the editor comes before the press is let go. Its click reports itself
+  // afterwards, and a drag may come first, so that focus isn't reported as keyboard focus.
+  const pressingRef = useRef(false);
+  const handlePointerDown = useCallback(() => {
+    pressingRef.current = true;
+  }, []);
+  useEffect(() => {
+    const release = () => {
+      pressingRef.current = false;
+    };
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    return () => {
+      window.removeEventListener('pointerup', release, true);
+      window.removeEventListener('pointercancel', release, true);
+    };
+  }, []);
+
+  // Tab or Shift+Tab from outside the box. The browser places the caret once focus has landed, so
+  // it is read on the next frame.
+  const handleFocus = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      if (!onKeyboardFocus || takingCaretRef.current || pressingRef.current) return;
+      const root = containerRef.current?.querySelector<HTMLElement>(EDITABLE_EDITOR_SELECTOR);
+      if (!root?.contains(event.target)) return;
+      requestAnimationFrame(() => {
+        if (!root.contains(document.activeElement)) return;
+        onKeyboardFocus(verseAtCaret(root, document.getSelection()));
+      });
+    },
+    [onKeyboardFocus]
+  );
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
@@ -265,6 +328,7 @@ export function PericopeEditor({
       onBlurCapture={handleBlur}
       onClick={handleClick}
       onContextMenuCapture={handleEditorContextMenu}
+      onFocus={handleFocus}
       onKeyDownCapture={event => {
         if (
           !handleHeadingEnter(event) &&
@@ -276,6 +340,7 @@ export function PericopeEditor({
       onPasteCapture={event => {
         if (!verseKeys.handlePaste(event)) handleEditorPaste(event);
       }}
+      onPointerDownCapture={handlePointerDown}
     >
       <HeadingValidationMessage error={headingError} />
       <Editorial

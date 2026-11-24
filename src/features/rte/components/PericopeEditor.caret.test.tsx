@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PericopeEditor, type PericopeEditorProps } from './PericopeEditor';
@@ -154,6 +154,60 @@ describe('PericopeEditor caret moves (#624)', () => {
     expect(onActiveVerseChange).toHaveBeenLastCalledWith(11);
   });
 
+  /** Select from one point to another, as a drag or Shift+arrow does, and say so. */
+  function select(anchor: Node, anchorOffset: number, focus: Node, focusOffset: number) {
+    window.getSelection()!.setBaseAndExtent(anchor, anchorOffset, focus, focusOffset);
+    document.dispatchEvent(new Event('selectionchange'));
+  }
+
+  function afterNumber(root: HTMLElement, verseNumber: number) {
+    const marker = root.querySelector(`[data-number="${verseNumber}"]`)!;
+    const paragraph = marker.parentElement!;
+    return [paragraph, Array.prototype.indexOf.call(paragraph.childNodes, marker) + 1] as const;
+  }
+
+  it('reports the verse a selection starts in, as Chapter View does', async () => {
+    const onActiveVerseChange = vi.fn();
+    const { container } = renderEditor({ onActiveVerseChange });
+    const root = await editorRoot(container);
+
+    // A drag down from verse 9 into verse 11 leaves verse 9 the active one.
+    select(wordsOf(root, 'Ninth'), 3, ...afterNumber(root, 11));
+    expect(onActiveVerseChange).toHaveBeenLastCalledWith(9);
+    expect(onActiveVerseChange).not.toHaveBeenCalledWith(11);
+
+    // And a drag up from verse 11 leaves verse 11.
+    select(...afterNumber(root, 11), wordsOf(root, 'Ninth'), 3);
+    expect(onActiveVerseChange).toHaveBeenLastCalledWith(11);
+  });
+
+  it('keeps one selection listener and calls the newest callback', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const selectionListeners = (spy: typeof added) =>
+      spy.mock.calls.filter(([type]) => type === 'selectionchange').length;
+    try {
+      const { container, request } = renderEditor({ onActiveVerseChange: first });
+      const root = await editorRoot(container);
+      const [addedBefore, removedBefore] = [selectionListeners(added), selectionListeners(removed)];
+
+      // A new callback comes with every edit that changes the verses.
+      request(null, { onActiveVerseChange: second });
+      first.mockClear();
+
+      expect(selectionListeners(added)).toBe(addedBefore);
+      expect(selectionListeners(removed)).toBe(removedBefore);
+      moveCaret(wordsOf(root, 'Ninth'), 3);
+      expect(second).toHaveBeenLastCalledWith(9);
+      expect(first).not.toHaveBeenCalled();
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
+  });
+
   it('says nothing while the caret is in a heading, which belongs to no verse', async () => {
     const onActiveVerseChange = vi.fn();
     const { container } = renderEditor({
@@ -186,5 +240,72 @@ describe('PericopeEditor caret moves (#624)', () => {
     } finally {
       elsewhere.remove();
     }
+  });
+});
+
+describe('PericopeEditor keyboard focus (#624)', () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+
+  const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+  function wordsOf(root: HTMLElement, needle: string) {
+    const words = [...root.querySelectorAll('span')]
+      .flatMap(span => [...span.childNodes])
+      .find(node => node.textContent?.includes(needle));
+    if (!words) throw new Error(`no editor text contains "${needle}"`);
+    return words;
+  }
+
+  it('reports the verse the caret lands in when Tab brings focus in', async () => {
+    const onKeyboardFocus = vi.fn();
+    const { container } = renderEditor({ onKeyboardFocus });
+    const root = await editorRoot(container);
+
+    act(() => root.focus());
+    // The browser puts the caret in once focus has landed.
+    window.getSelection()!.collapse(wordsOf(root, 'Ninth'), 3);
+
+    await waitFor(() => expect(onKeyboardFocus).toHaveBeenCalledWith(9));
+  });
+
+  it('reports Tab focus that comes right after a click somewhere else', async () => {
+    // A fast keyboard user can Tab in moments after clicking; only a press still held is a click.
+    const onKeyboardFocus = vi.fn();
+    const { container } = renderEditor({ onKeyboardFocus });
+    const root = await editorRoot(container);
+
+    fireEvent.pointerDown(root);
+    fireEvent.pointerUp(window);
+    act(() => root.focus());
+    window.getSelection()!.collapse(wordsOf(root, 'Ninth'), 3);
+
+    await waitFor(() => expect(onKeyboardFocus).toHaveBeenCalledWith(9));
+  });
+
+  it('leaves the focus that comes with a press to the click', async () => {
+    const onKeyboardFocus = vi.fn();
+    const { container } = renderEditor({ onKeyboardFocus });
+    const root = await editorRoot(container);
+
+    fireEvent.pointerDown(root);
+    act(() => root.focus());
+    await nextFrame();
+
+    expect(onKeyboardFocus).not.toHaveBeenCalled();
+  });
+
+  it('leaves the focus of a Next Pericope caret request alone', async () => {
+    const onKeyboardFocus = vi.fn();
+    const { container, request } = renderEditor({ onKeyboardFocus });
+    const root = await editorRoot(container);
+
+    request({ verseNumber: 10 });
+    await nextFrame();
+
+    expect(document.activeElement).toBe(root);
+    expect(onKeyboardFocus).not.toHaveBeenCalled();
   });
 });

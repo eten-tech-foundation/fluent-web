@@ -150,6 +150,32 @@ describe('PericopeRteGroup', () => {
     });
   });
 
+  describe('focus brought in with Tab (#624)', () => {
+    const tabInto = (verseNumber: number | undefined) =>
+      act(() =>
+        (editorProps.current as { onKeyboardFocus: (n?: number) => void }).onKeyboardFocus(
+          verseNumber
+        )
+      );
+
+    it('makes the pericope active, as a click does', () => {
+      // A keyboard user never clicks, so without this the resources stay on the pericope before.
+      renderGroup({ activeVerseId: 9 });
+
+      tabInto(2);
+
+      expect(handleActiveVerseChange).toHaveBeenCalledWith(2);
+    });
+
+    it('leaves the active pericope as it is', () => {
+      renderGroup({ activeVerseId: 1 });
+
+      tabInto(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the caret moving to another verse (#624)', () => {
     const moveCaret = (verseNumber: number) =>
       act(() =>

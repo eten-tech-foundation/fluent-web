@@ -145,8 +145,9 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   // A click in the text of a pericope that isn't the active one makes it active, as a click on its
   // source does (#479). It waits for the click rather than the focus: making a pericope active
-  // scrolls the page, which would move the words under a drag that is selecting them. Inside the
-  // active pericope a click changes nothing, so the page doesn't jump with every click.
+  // scrolls the page, which would move the words under a drag that is selecting them. Focus from
+  // the keyboard has no drag under it, so Tab into a pericope makes it active the same way (#624).
+  // Inside the active pericope a click changes nothing, so the page doesn't jump with every click.
   const handleVerseClick = useCallback(
     (verseNumber: number | undefined) => {
       if (readOnly || isGroupActive) return;
@@ -209,6 +210,7 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
         onActiveVerseChange={handleCaretVerseChange}
+        onKeyboardFocus={handleVerseClick}
         onVerseClick={handleVerseClick}
         onVersesChange={handleVersesChange}
       />
