@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Editorial } from '@eten-tech-foundation/platform-editor';
 
-import { useEmptyHeadingBackspace } from '../hooks/useEmptyHeadingBackspace';
+import { useEmptyHeadingKeys } from '../hooks/useEmptyHeadingKeys';
 import { useForwardTextDeletion } from '../hooks/useForwardTextDeletion';
 import { useHeadingEnter } from '../hooks/useHeadingEnter';
 import { useNativeRtlSelection } from '../hooks/useNativeRtlSelection';
@@ -254,7 +254,7 @@ export function PericopeEditor({
 
   const handleEditorKeys = useEditorShortcuts(editorRef);
   const handleHeadingEnter = useHeadingEnter(editorRef, readOnly);
-  const handleEmptyHeadingBackspace = useEmptyHeadingBackspace(editorRef, readOnly);
+  const handleEmptyHeadingKeys = useEmptyHeadingKeys(editorRef, readOnly);
   const verseKeys = useVerseNumberKeys(editorRef, readOnly);
 
   return (
@@ -268,7 +268,7 @@ export function PericopeEditor({
       onKeyDownCapture={event => {
         if (
           !handleHeadingEnter(event) &&
-          !handleEmptyHeadingBackspace(event) &&
+          !handleEmptyHeadingKeys(event) &&
           !verseKeys.handleKeyDown(event)
         )
           handleEditorKeys(event);
