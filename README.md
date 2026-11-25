@@ -44,7 +44,7 @@ Authentication is powered by [better-auth](https://www.better-auth.com/). The br
 
 ### Prerequisites
 
-- Node.js 24.13.x
+- Node.js 26.13.x
 - pnpm
 
 ### Installation
@@ -103,9 +103,9 @@ calls.
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js**: This project requires Node.js version 24.13.x
+- **Node.js**: This project requires Node.js version 26.13.x
   - We recommend using [nvm (Node Version Manager)](https://github.com/nvm-sh/nvm) to manage Node.js versions
-- **pnpm**: This project uses pnpm as the package manager
+- **pnpm**: This project uses pnpm as the package manager. Note that Node 26 no longer bundles Corepack; install pnpm directly via `npm install -g pnpm@10.33.0`.
 
 ## Getting Started
 
@@ -120,7 +120,7 @@ cd fluent-web
 
 ### 2. Set up Node.js version
 
-The project uses Node.js 24.13.0 as specified in the `.nvmrc` file. If you're using nvm, run:
+The project uses Node.js 26.13.0 as specified in the `.nvmrc` file. If you're using nvm, run:
 
 ```bash
 nvm install  # This will read the .nvmrc file and install the specified version
@@ -274,7 +274,7 @@ See [Environment Configuration](docs/environment-config.md) for detailed documen
 ### Checks before a PR
 
 `pnpm precheck` runs ESLint, the Prettier check on `src/`, the type check and the tests. `.npmrc`
-sets `engine-strict`, so pnpm scripts refuse to run on a Node version other than 24.13.x.
+sets `engine-strict`, so pnpm scripts refuse to run on a Node version other than 26.13.x.
 
 CI also runs `pnpm build` and `./scripts/check-docs-structure.sh`. Run the build when you change
 dependencies or build config, and the docs check when you add files under `docs/`. The Pre-merge

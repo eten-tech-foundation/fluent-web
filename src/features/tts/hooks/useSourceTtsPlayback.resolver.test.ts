@@ -18,10 +18,10 @@ import {
 
 import { useSourceTtsPlayback, type UseSourceTtsPlaybackOptions } from './useSourceTtsPlayback';
 
+import type * as queueModule from './useTtsPlaybackQueue';
 import type * as audioModule from '../lib/audioElement';
 import type * as clientModule from '../resolver/sourceAudioClient';
 import type { TtsEngine } from '../tts.types';
-import type * as queueModule from './useTtsPlaybackQueue';
 
 const elements: FakeClipElement[] = [];
 let queue: queueModule.TtsPlaybackQueueApi;
