@@ -84,17 +84,15 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.13.0'
+          cache: pnpm
 
-      - name: Deploy to Azure
-        id: deploy
-        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          app_location: /
-          output_location: dist
-          app_build_command: npm install -g pnpm@10.33.0 && pnpm install --frozen-lockfile && pnpm build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm build
+          cp staticwebapp.config.json dist/
         env:
           # Vite inlines every VITE_* var into the bundle at build time, so each
           # environment is a separate build -- there is no artifact to promote.
@@ -105,3 +103,14 @@ jobs:
           VITE_RTE_PERICOPE: ${{ inputs.rte_pericope }}
           VITE_USFM_IMPORT: ${{ inputs.usfm_import }}
           VITE_BETTER_AUTH_URL: ${{ secrets.VITE_BETTER_AUTH_URL }}
+
+      - name: Deploy to Azure
+        id: deploy
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: dist
+          output_location: ''
+          skip_app_build: true

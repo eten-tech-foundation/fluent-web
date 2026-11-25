@@ -97,10 +97,12 @@ in Node 25/26.
 - **Docs updates.** README (three places) and AGENTS.md move from "24.13.x" to
   "26.13.x"; README guidance for pnpm setup notes that Corepack is no longer
   bundled with Node and pnpm should be installed directly.
-- **Azure SWA build requires no config change.** The
-  `Azure/static-web-apps-deploy` action resolves the build's Node version from
-  `engines` in `package.json` via Oryx, which added Node 26 support in 2026.
-  The first dev deploy after merge is the verification point.
+- **Azure SWA build moved to runner with `skip_app_build: true`.** The
+  `Azure/static-web-apps-deploy` action's embedded Oryx build engine only supports
+  Node up to 24.13.0 and lacks Node 26. `deploy.yml` compiles the app directly
+  on the runner using Node 26.13.0 and pnpm, copies `staticwebapp.config.json`
+  into `dist/`, and passes `skip_app_build: true` with `app_location: dist` to
+  the SWA deploy action. The first dev deploy after merge is the verification point.
 - **Sequencing: fluent-web upgrades before fluent-api.** This repo's upgrade is
   fully self-contained (no runtime infra change) and proves the toolchain on
   26 first.
@@ -125,9 +127,9 @@ each environment rather than by new unit tests.
 - **CI seam: the `pre-merge.yml` run on the upgrade PR itself.** The PR that
   changes the pin is self-verifying — it runs install, lint, typecheck, and
   tests on the new version.
-- **Deploy seam: post-merge dev deploy.** `deploy.yml` builds via Oryx inside
-  the SWA action; the build log shows which Node version Oryx resolved, and the
-  app booting on the dev Static Web App is the end-to-end check. This is the
+- **Deploy seam: post-merge dev deploy.** `deploy.yml` builds on the runner
+  under Node 26.13.0 and deploys the pre-built artifact with `skip_app_build: true`;
+  the app booting on the dev Static Web App is the end-to-end check. This is the
   one step that exercises infra config the repo can't test locally.
 - **Prior art:** none needed in-repo — the precedent is the Node 24 bump that
   originally set these pins; this change follows the same shape.
