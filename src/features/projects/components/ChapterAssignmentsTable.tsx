@@ -34,8 +34,24 @@ interface ChapterAssignmentsTableProps {
   onCheckboxChange: (assignmentId: number, checked: boolean) => void;
 }
 
-type SortableColumn = 'drafter' | 'peerChecker' | 'status';
+type SortableColumn = 'book' | 'drafter' | 'peerChecker' | 'status';
 type SortDirection = 'asc' | 'desc';
+
+/**
+ * The table's default order: books in Bible order, then chapters by number. Book ids follow the
+ * API's books table (Genesis first), the same order the Book filter lists them in. With
+ * `bookDirection` 'desc' the books run from Revelation back, but chapters stay ascending.
+ */
+const compareBookThenChapter = (
+  a: ChapterAssignmentProgress,
+  b: ChapterAssignmentProgress,
+  bookDirection: SortDirection = 'asc'
+): number => {
+  if (a.bookId !== b.bookId) {
+    return bookDirection === 'asc' ? a.bookId - b.bookId : b.bookId - a.bookId;
+  }
+  return a.chapterNumber - b.chapterNumber;
+};
 
 const headerCellClass =
   'text-accent-foreground overflow-hidden px-3 py-2 text-left text-xs font-semibold tracking-wider md:px-4 md:py-2.5 md:text-sm lg:px-6 lg:py-3 lg:text-base';
@@ -48,6 +64,8 @@ interface SortableHeaderProps {
   sortColumn: SortableColumn | null;
   sortDirection: SortDirection | null;
   onSort: (column: SortableColumn) => void;
+  /** The column the rows follow, ascending, while no column is sorted. */
+  isDefaultSort?: boolean;
 }
 
 const SortableHeader: React.FC<SortableHeaderProps> = ({
@@ -56,17 +74,16 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({
   sortColumn,
   sortDirection,
   onSort,
+  isDefaultSort = false,
 }) => {
   const { ref, isTruncated } = useTruncation<HTMLSpanElement>(label);
 
+  // In the default order the default column still tells screen readers the rows are ascending,
+  // while its icon stays at rest like the other columns.
+  const activeDirection =
+    sortColumn === column ? sortDirection : sortColumn === null && isDefaultSort ? 'asc' : null;
   const ariaSort =
-    sortColumn === column
-      ? sortDirection === 'asc'
-        ? 'ascending'
-        : sortDirection === 'desc'
-          ? 'descending'
-          : undefined
-      : undefined;
+    activeDirection === 'asc' ? 'ascending' : activeDirection === 'desc' ? 'descending' : undefined;
 
   const sortIcon =
     sortColumn !== column ? (
@@ -127,6 +144,14 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   const [sortDirection, setSortDirection] = useState<SortDirection | null>(null);
 
   const handleSort = (column: SortableColumn) => {
+    if (column === 'book') {
+      // The default order already goes by book. A Book click from it reverses the books, and a
+      // click from any other sort, the reversed books included, goes back to the default.
+      const isDefaultOrder = sortColumn === null;
+      setSortColumn(isDefaultOrder ? 'book' : null);
+      setSortDirection(isDefaultOrder ? 'desc' : null);
+      return;
+    }
     if (sortColumn !== column) {
       setSortColumn(column);
       setSortDirection('asc');
@@ -139,8 +164,9 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
   };
 
   const sortedAssignments = useMemo(() => {
-    if (!sortColumn || !sortDirection) {
-      return assignments;
+    if (!sortColumn || !sortDirection || sortColumn === 'book') {
+      const bookDirection = sortColumn === 'book' && sortDirection ? sortDirection : 'asc';
+      return [...assignments].sort((a, b) => compareBookThenChapter(a, b, bookDirection));
     }
     return [...assignments].sort((a, b) => {
       let valA = '';
@@ -159,9 +185,12 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
           valB = b.status;
           break;
       }
+      // Empty values go last, and rows that tie keep the default Bible order.
+      if (!valA && !valB) return compareBookThenChapter(a, b);
       if (!valA) return 1;
       if (!valB) return -1;
       const cmp = valA.localeCompare(valB);
+      if (cmp === 0) return compareBookThenChapter(a, b);
       return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [assignments, sortColumn, sortDirection]);
@@ -192,7 +221,14 @@ export const ChapterAssignmentsTable: React.FC<ChapterAssignmentsTableProps> = (
                       <span className='sr-only'>Select</span>
                     </TableHead>
                   )}
-                  <TableHead className={headerCellClass}>Book</TableHead>
+                  <SortableHeader
+                    isDefaultSort
+                    column='book'
+                    label='Book'
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
                   <TableHead className={headerCellClass}>Chapter</TableHead>
                   <SortableHeader
                     column='drafter'
