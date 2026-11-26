@@ -4,18 +4,24 @@ import { isHeadingMarker } from './heading-markers';
 /** The focus end follows both keyboard navigation and backwards selections. */
 export function activeVerseRange(editor: HTMLElement, selection: Selection | null) {
   const focus = selection?.focusNode;
-  if (!focus || !editor.contains(focus)) return null;
-  const element = elementAt(focus);
+  return focus ? activeVerseRangeAt(editor, focus, selection.focusOffset) : null;
+}
+
+/** The verse around one point of the editor, or null in a heading or before the first verse. */
+export function activeVerseRangeAt(editor: HTMLElement, node: Node, offset: number) {
+  if (!editor.contains(node)) return null;
+  const element = elementAt(node);
   if (isHeadingMarker(element?.closest<HTMLElement>('[data-marker]')?.dataset.marker)) return null;
 
   const boundaries = [...editor.querySelectorAll<HTMLElement>('[data-marker]')].filter(
-    node => node.matches(SCRIPTURE_MARKER_SELECTOR) || isHeadingMarker(node.dataset.marker)
+    candidate =>
+      candidate.matches(SCRIPTURE_MARKER_SELECTOR) || isHeadingMarker(candidate.dataset.marker)
   );
   let start: HTMLElement | undefined;
   for (const boundary of boundaries) {
     const range = document.createRange();
     range.selectNode(boundary);
-    if (range.comparePoint(focus, selection.focusOffset) < 0) break;
+    if (range.comparePoint(node, offset) < 0) break;
     start = boundary.matches(VERSE_MARKER_SELECTOR) ? boundary : undefined;
   }
   if (!start) return null;

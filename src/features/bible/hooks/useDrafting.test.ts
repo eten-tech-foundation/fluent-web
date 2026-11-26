@@ -220,3 +220,96 @@ describe('useDrafting navigation retries', () => {
     }
   );
 });
+
+describe('useDrafting active verse scrolling', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      callback(0);
+      return 0;
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Give the hook a scroll container and verse rows, and return the container's scrollTo. */
+  function withRows(result: { current: ReturnType<typeof useDrafting> }) {
+    const container = document.createElement('div');
+    const scrollTo = vi.fn();
+    container.scrollTo = scrollTo;
+    (result.current.targetScrollRef as { current: HTMLDivElement | null }).current = container;
+    result.current.verseRefs.current[1] = document.createElement('div');
+    result.current.verseRefs.current[2] = document.createElement('div');
+    return scrollTo;
+  }
+
+  it('scrolls the verse it moves to into place', () => {
+    const { result } = draft(vi.fn().mockResolvedValue(undefined));
+    const scrollTo = withRows(result);
+
+    act(() => result.current.handleActiveVerseChange(2));
+
+    expect(result.current.activeVerseId).toBe(2);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
+  it('leaves the page where it is when asked not to scroll (#624)', () => {
+    // The pericope editor moves the active verse with the caret, which is already in view.
+    const { result } = draft(vi.fn().mockResolvedValue(undefined));
+    const scrollTo = withRows(result);
+
+    act(() => result.current.handleActiveVerseChange(2, { scroll: false }));
+
+    expect(result.current.activeVerseId).toBe(2);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDrafting active verse changes a render behind (#624)', () => {
+  // The pericope editor reports caret moves from a document listener. One can come before an
+  // update made elsewhere has rendered, an AI fill of an empty verse say, so the callback it
+  // calls still holds the verses from before that update.
+  const THREE_SOURCES: Source[] = [...SOURCES, { id: 3, verseNumber: 3, text: 'Source 3' }];
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const draftThree = (onSave: (verse: number, payload: SavePayload) => Promise<void>) =>
+    renderHook(() =>
+      useDrafting({
+        sourceVerses: THREE_SOURCES,
+        targetVerses: TARGETS,
+        readOnly: false,
+        displayMode: 'pericope',
+        onSave,
+      })
+    );
+
+  it('adds one row for a verse made active twice before it renders', () => {
+    const { result } = draftThree(vi.fn().mockResolvedValue(undefined));
+
+    act(() => {
+      const { handleActiveVerseChange } = result.current;
+      handleActiveVerseChange(3, { scroll: false });
+      handleActiveVerseChange(3, { scroll: false });
+    });
+
+    expect(result.current.verses.filter(verse => verse.verseNumber === 3)).toHaveLength(1);
+  });
+
+  it('keeps an edit that has not rendered yet when its verse becomes active', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = draftThree(onSave);
+
+    act(() => {
+      const { handleTextChange, handleActiveVerseChange } = result.current;
+      handleTextChange(3, 'Filled by AI');
+      handleActiveVerseChange(3, { scroll: false });
+    });
+
+    expect(result.current.verses.filter(verse => verse.verseNumber === 3)).toEqual([
+      { verseNumber: 3, content: 'Filled by AI' },
+    ]);
+    await act(() => vi.advanceTimersByTimeAsync(2500));
+    expect(onSave).toHaveBeenLastCalledWith(3, { content: 'Filled by AI' });
+    expect(result.current.getSaveStatus(3).hasUnsavedChanges).toBe(false);
+  });
+});
