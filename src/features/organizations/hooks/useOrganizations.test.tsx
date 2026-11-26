@@ -10,6 +10,7 @@ import { createTestQueryClient } from '@/test/render';
 import {
   ORG_NAME_CONFLICT_MESSAGE,
   useCreateOrganization,
+  useOrganizationProjects,
   useOrganizations,
 } from './useOrganizations';
 
@@ -35,6 +36,44 @@ describe('useOrganizations', () => {
     expect(result.current.data).toEqual([
       { id: 1, name: 'Alpha', createdAt: '2026-01-01T00:00:00.000Z', orgManagerCount: 2 },
     ]);
+  });
+});
+
+describe('useOrganizationProjects', () => {
+  const project = (id: number, name: string, organization: number) => ({
+    id,
+    name,
+    organization,
+    sourceName: 'IRV Gujarati',
+    status: 'active',
+    createdBy: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    metadata: {},
+    sourceLanguageName: 'Gujarati',
+    targetLanguageName: 'Kukna',
+    lastChapterActivity: '2026-01-01T00:00:00.000Z',
+    chapterStatusCounts: {},
+    workflowConfig: [],
+    milestoneCount: 1,
+  });
+
+  it('keeps only the projects of the organization out of GET /projects', async () => {
+    // A global Super Admin gets every organization's projects from GET /projects.
+    server.use(
+      http.get(`${config.api.url}/projects`, () =>
+        HttpResponse.json([
+          project(11, 'Kukna NT', 3),
+          project(12, 'Another org project', 4),
+          project(13, 'Varli NT', 3),
+        ])
+      )
+    );
+
+    const { result } = renderHook(() => useOrganizationProjects(3), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map(p => p.id)).toEqual([11, 13]);
   });
 });
 

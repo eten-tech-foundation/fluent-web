@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canManageProject,
   getActiveRoleGrants,
   getOrgLevelRoleName,
   getOrgRoleName,
@@ -134,5 +135,50 @@ describe('getActiveRoleGrants', () => {
   it('handles null or undefined user', () => {
     expect(getActiveRoleGrants(null)).toEqual([]);
     expect(getActiveRoleGrants(undefined)).toEqual([]);
+  });
+});
+
+describe('canManageProject', () => {
+  const withRole = (
+    grants: UserGrant[],
+    activeRoleName: string | null,
+    lastActiveOrgId: number | null = null
+  ) => ({ grants, activeRoleName, lastActiveOrgId });
+
+  it('gives a global Super Admin the controls on any project with no role selected (#566)', () => {
+    expect(canManageProject(withRole([grant(null, null, ROLES.SUPER_ADMIN)], null), 7)).toBe(true);
+  });
+
+  it('gives a Super Admin the controls while another role of theirs is selected', () => {
+    const user = withRole(
+      [grant(null, null, ROLES.SUPER_ADMIN), grant(1, 3, ROLES.PROJECT_TRANSLATOR)],
+      ROLES.PROJECT_TRANSLATOR,
+      1
+    );
+    expect(canManageProject(user, 3)).toBe(true);
+  });
+
+  it('does not count an org-scoped grant named SuperAdmin', () => {
+    expect(canManageProject(withRole([grant(3, null, ROLES.SUPER_ADMIN)], null, 3), 7)).toBe(false);
+  });
+
+  it('gives an Org Manager the controls, and a Project Manager only on their own projects', () => {
+    const orgManager = withRole([grant(1, null, ROLES.ORG_MANAGER)], ROLES.ORG_MANAGER, 1);
+    const projectManager = withRole([grant(1, 3, ROLES.PROJECT_MANAGER)], ROLES.PROJECT_MANAGER, 1);
+    expect(canManageProject(orgManager, 3)).toBe(true);
+    expect(canManageProject(projectManager, 3)).toBe(true);
+    expect(canManageProject(projectManager, 4)).toBe(false);
+  });
+
+  it('gives a Project Translator no controls, and nobody controls without a project', () => {
+    const translator = withRole(
+      [grant(1, 3, ROLES.PROJECT_TRANSLATOR)],
+      ROLES.PROJECT_TRANSLATOR,
+      1
+    );
+    expect(canManageProject(translator, 3)).toBe(false);
+    expect(
+      canManageProject(withRole([grant(null, null, ROLES.SUPER_ADMIN)], null), undefined)
+    ).toBe(false);
   });
 });

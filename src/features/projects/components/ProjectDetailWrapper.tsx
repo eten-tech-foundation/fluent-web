@@ -4,18 +4,20 @@ import { getRouteApi, useLocation, useNavigate } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { useOrganization } from '@/features/organizations/hooks/useOrganizations';
 import { useGetMilestones } from '@/features/projects/hooks/useMilestones';
 import { useProjectDetails } from '@/features/projects/hooks/useProjectDetails';
 import { useProjectBooks } from '@/features/projects/hooks/useProjectUnitBooks';
 import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { useUsers } from '@/hooks/useUsers';
 import {
+  canManageProject,
   getActiveGrants,
   getActiveRoleGrants,
   hasGrantForProject,
   isManager,
-  isProjectManager,
   isProjectManagerOnly,
+  isSuperAdmin,
 } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
@@ -57,12 +59,20 @@ export const ProjectDetailWrapper: React.FC = () => {
   // typed straight into the URL cannot open the editor for a non-manager.
   const activeRoleGrants = getActiveRoleGrants(userdetail);
   const isManagerUser = isManager(activeRoleGrants);
-  const isProjectMgr = isManagerUser && isProjectManager(activeRoleGrants, project?.id);
+  // A Super Admin gets the controls an Org Manager of the project's organization has (#566).
+  // Manage Workflow stays with Project Managers, as for an Org Manager.
+  const isProjectMgr = canManageProject(userdetail, project?.id);
   const isPMOnly = isManagerUser && isProjectManagerOnly(activeRoleGrants, project?.id);
+  const superAdmin = isSuperAdmin(userdetail?.grants);
 
   const { data: chapterAssignments } = useChapterAssignments(projectId);
   const { data: books } = useProjectBooks(projectId);
   const { data: users, isLoading: usersLoading } = useUsers(isProjectMgr);
+  // A Super Admin holds no grant naming the project's organization, so its name for the
+  // invitation email comes from the organization itself.
+  const { data: projectOrganization } = useOrganization(
+    superAdmin ? project?.organization : undefined
+  );
 
   const { data: milestones, isLoading: milestonesLoading } = useGetMilestones(projectId);
 
@@ -70,6 +80,18 @@ export const ProjectDetailWrapper: React.FC = () => {
     const from = (location.state as { from?: string } | undefined)?.from;
     if (from) {
       void navigate({ to: from, replace: true });
+      return;
+    }
+
+    if (superAdmin && project) {
+      // Super Admins open projects from an organization's Projects tab, so Back returns there,
+      // also after a milestone page, which comes back here without the original state.
+      void navigate({
+        to: '/organizations/$orgId',
+        params: { orgId: project.organization.toString() },
+        search: { tab: 'projects' },
+        replace: true,
+      });
       return;
     }
 
@@ -123,6 +145,7 @@ export const ProjectDetailWrapper: React.FC = () => {
         isProjectManagerOnly={isPMOnly}
         milestones={milestones}
         milestonesLoading={milestonesLoading}
+        organizationName={projectOrganization?.name}
         project={project}
         users={users}
         usersLoading={usersLoading}

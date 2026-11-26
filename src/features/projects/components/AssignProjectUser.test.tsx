@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type * as useProjectUsersModule from '@/features/projects/hooks/useProjectUsers';
+import { config } from '@/lib/config';
 import { ROLES, type ChapterAssignmentProgress, type User } from '@/lib/types';
-import { fireEvent, renderWithProviders, screen } from '@/test/render';
+import { server } from '@/test/msw/server';
+import { fireEvent, renderWithProviders, screen, waitFor } from '@/test/render';
 
 import { AssignProjectUsers } from './AssignProjectUsers';
 
@@ -67,7 +70,13 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
 
   it('renders standard confirmation copy when member has 0 active assignments', async () => {
     renderWithProviders(
-      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        organizationId={1}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
     );
 
     const trashButtons = await screen.findAllByRole('button', { name: /Remove user/i });
@@ -83,6 +92,7 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     renderWithProviders(
       <AssignProjectUsers
         chapterAssignments={mockAssignmentsWithWork}
+        organizationId={1}
         projectId={1}
         users={[]}
         usersLoading={false}
@@ -100,6 +110,7 @@ describe('AssignProjectUsers - PR 1 Issue #462 Removal Banner', () => {
     renderWithProviders(
       <AssignProjectUsers
         chapterAssignments={mockAssignmentsWithWork}
+        organizationId={1}
         projectId={1}
         users={[]}
         usersLoading={false}
@@ -138,6 +149,7 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
     renderWithProviders(
       <AssignProjectUsers
         chapterAssignments={[]}
+        organizationId={1}
         projectId={1}
         users={orgUsers}
         usersLoading={false}
@@ -155,6 +167,7 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
       <AssignProjectUsers
         isAddUserOpen
         chapterAssignments={[]}
+        organizationId={1}
         projectId={1}
         users={orgUsers}
         usersLoading={false}
@@ -202,6 +215,7 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
       <AssignProjectUsers
         isAddUserOpen
         chapterAssignments={[]}
+        organizationId={1}
         projectId={1}
         users={orgUsers}
         usersLoading={false}
@@ -225,7 +239,13 @@ describe('AssignProjectUsers - Issue #559 Org Manager project user visibility', 
 describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () => {
   it('hides remove icon by default and reveals it on hover and focus', async () => {
     renderWithProviders(
-      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        organizationId={1}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
     );
 
     const trashButtons = await screen.findAllByRole('button', {
@@ -259,7 +279,13 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
 
   it('removes dedicated width of the remove column so data columns use freed space', async () => {
     renderWithProviders(
-      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        organizationId={1}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
     );
 
     const headers = screen.getAllByRole('columnheader');
@@ -278,7 +304,13 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
 
   it('maintains sticky table header positioning and ensures user rows scroll underneath', async () => {
     renderWithProviders(
-      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        organizationId={1}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
     );
 
     const headers = screen.getAllByRole('columnheader');
@@ -332,7 +364,13 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     } as any);
 
     renderWithProviders(
-      <AssignProjectUsers chapterAssignments={[]} projectId={1} users={[]} usersLoading={false} />
+      <AssignProjectUsers
+        chapterAssignments={[]}
+        organizationId={1}
+        projectId={1}
+        users={[]}
+        usersLoading={false}
+      />
     );
 
     const trashButtons = await screen.findAllByRole('button', {
@@ -367,5 +405,96 @@ describe('AssignProjectUsers - Issue #580 Remove Icon Hover & Column Width', () 
     // Both return to hidden
     expect(aliceTrash.className).not.toContain('!opacity-100');
     expect(charlieTrash.className).not.toContain('!opacity-100');
+  });
+});
+
+describe('AssignProjectUsers - #566 works in the project organization', () => {
+  beforeAll(() => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+    window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+  });
+
+  // The signed-in user's active org is 1 and the project is in org 2, the way a Super Admin opens
+  // another organization's project (a Super Admin has no active org at all).
+  const users: User[] = [
+    {
+      id: 31,
+      username: 'org2_translator',
+      displayName: 'Org Two Translator',
+      email: 'two@example.com',
+      orgGrants: [{ orgId: 2, roleId: 3, roleName: 'Project Translator', permissions: [] }],
+    },
+    {
+      id: 32,
+      username: 'org1_translator',
+      displayName: 'Org One Translator',
+      email: 'one@example.com',
+      orgGrants: [{ orgId: 1, roleId: 3, roleName: 'Project Translator', permissions: [] }],
+    },
+  ];
+
+  it('offers only users of the project organization', async () => {
+    renderWithProviders(
+      <AssignProjectUsers
+        isAddUserOpen
+        chapterAssignments={[]}
+        organizationId={2}
+        projectId={1}
+        users={users}
+        usersLoading={false}
+      />
+    );
+
+    const selectTriggerSpan = screen.getByText('Select user(s)');
+    const selectTriggerBtn = selectTriggerSpan.closest('button') ?? selectTriggerSpan;
+    fireEvent.pointerDown(selectTriggerBtn);
+    fireEvent.click(selectTriggerBtn);
+
+    expect(await screen.findByText('org2_translator')).toBeInTheDocument();
+    expect(screen.queryByText('org1_translator')).not.toBeInTheDocument();
+  });
+
+  it('invites into the project organization and names it in the invitation', async () => {
+    let invite: unknown;
+    server.use(
+      http.post(`${config.api.url}/users/invite`, async ({ request }) => {
+        invite = await request.json();
+        return HttpResponse.json(
+          { user: { id: 50, username: 'New Person', email: 'new@example.com' } },
+          { status: 201 }
+        );
+      })
+    );
+    const { user } = renderWithProviders(
+      <AssignProjectUsers
+        isAddUserOpen
+        chapterAssignments={[]}
+        organizationId={2}
+        organizationName='Highland'
+        projectId={1}
+        users={users}
+        usersLoading={false}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Invite by Email' }));
+    await user.type(screen.getByLabelText(/Email Address/), 'new@example.com');
+    await user.type(screen.getByLabelText(/Display Name/), 'New Person');
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Translator' }));
+    await user.click(screen.getByRole('button', { name: 'Invite User' }));
+
+    await waitFor(() =>
+      expect(invite).toEqual({
+        email: 'new@example.com',
+        username: 'New Person',
+        orgId: 2,
+        projectId: 1,
+        roleName: 'Project Translator',
+        orgName: 'Highland',
+        inviterName: 'admin',
+      })
+    );
   });
 });

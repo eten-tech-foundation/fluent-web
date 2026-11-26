@@ -54,6 +54,8 @@ interface ProjectDetailPageProps {
   milestonesLoading: boolean;
   books?: Book[];
   chapterAssignments: ChapterAssignmentProgress[] | undefined;
+  /** The project organization's name, for invitations sent by a user with no grant in it. */
+  organizationName?: string;
 }
 
 interface DisplayStatus {
@@ -120,6 +122,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   milestonesLoading,
   books,
   chapterAssignments,
+  organizationName,
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -225,6 +228,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               <AssignProjectUsers
                 chapterAssignments={chapterAssignments}
                 isAddUserOpen={isAddUserOpen}
+                organizationId={project.organization}
+                organizationName={organizationName}
                 projectId={project.id}
                 referenceHeight={undefined}
                 users={users}

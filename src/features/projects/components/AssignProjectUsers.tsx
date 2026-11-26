@@ -45,6 +45,10 @@ import { useAppStore } from '@/store/store';
 
 interface AssignProjectUsersProps {
   projectId: number;
+  /** The project's organization: only its users can join, and invitations go to it. */
+  organizationId: number;
+  /** Its name for the invitation email, when the user holds no grant in it (a Super Admin). */
+  organizationName?: string;
   users: User[] | undefined;
   usersLoading: boolean;
   chapterAssignments: ChapterAssignmentProgress[] | undefined;
@@ -61,6 +65,8 @@ type AddUserTab = 'existing' | 'invite';
 
 export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   projectId,
+  organizationId,
+  organizationName,
   users,
   usersLoading,
   chapterAssignments,
@@ -208,17 +214,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     }
   }, [roleChangeTarget, updateRoleMutation]);
 
-  const activeOrgId = userdetail?.lastActiveOrgId ?? userdetail?.organization;
-
-  // Filter users to only those who possess an actual grant in the active organization
+  // Only users with a grant in the project's organization can join the project (the API checks
+  // the same), whichever organization is active. A Super Admin has none active (#566).
   const orgUsers = useMemo(() => {
     if (!users) return [];
-    if (!activeOrgId) return users;
     return users.filter((u: User) => {
       const grants = u.orgGrants ?? u.grants ?? [];
-      return grants.some(g => g.orgId === activeOrgId);
+      return grants.some(g => g.orgId === organizationId);
     });
-  }, [users, activeOrgId]);
+  }, [users, organizationId]);
 
   const availableUsersToAdd = useMemo(() => {
     if (!projectUsers) return orgUsers;
@@ -298,20 +302,15 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
     if (!isInviteFormValid || inviteRole === null) return;
     setInviteError(null);
 
-    if (!activeOrgId) {
-      setInviteError('No active organization selected.');
-      return;
-    }
-
-    const activeOrgName =
-      userdetail?.grants?.find(g => g.orgId === activeOrgId)?.orgName ?? undefined;
+    const orgName =
+      userdetail?.grants?.find(g => g.orgId === organizationId)?.orgName ?? organizationName;
     const invitePayload = {
       email: inviteEmail.trim().toLowerCase(),
       username: inviteDisplayName.trim(),
-      orgId: activeOrgId,
+      orgId: organizationId,
       projectId,
       roleName: inviteRole,
-      orgName: activeOrgName,
+      orgName,
       inviterName: userdetail?.displayName ?? userdetail?.username ?? undefined,
     };
 
@@ -330,7 +329,8 @@ export const AssignProjectUsers: React.FC<AssignProjectUsersProps> = ({
   }, [
     isInviteFormValid,
     inviteRole,
-    activeOrgId,
+    organizationId,
+    organizationName,
     userdetail,
     inviteEmail,
     inviteDisplayName,
