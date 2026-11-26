@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as useTruncationModule from '@/features/projects/hooks/useTruncation';
 import { type ChapterAssignmentProgress } from '@/lib/types';
-import { renderWithProviders, screen } from '@/test/render';
+import { renderWithProviders, screen, within } from '@/test/render';
 
 import { ChapterAssignmentsTable } from './ChapterAssignmentsTable';
 
@@ -192,5 +192,163 @@ describe('ChapterAssignmentsTable', () => {
     drafterButton.focus();
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Drafter');
+  });
+
+  describe('row order', () => {
+    const row = (
+      assignmentId: number,
+      bookId: number,
+      bookCode: string,
+      bookNameEng: string,
+      chapterNumber: number
+    ): ChapterAssignmentProgress => ({
+      ...mockAssignment,
+      assignmentId,
+      bookId,
+      bookCode,
+      bookNameEng,
+      chapterNumber,
+      assignedUser: null,
+      peerChecker: null,
+      status: 'not_started',
+    });
+
+    // Book ids are the API's book ids (Genesis 1 to Revelation 66). The API sends the rows sorted
+    // by book name, so this list starts with 1 Chronicles; the chapters are out of order on purpose.
+    const apiRows = [
+      row(101, 13, '1CH', '1 Chronicles', 10),
+      row(102, 13, '1CH', '1 Chronicles', 4),
+      row(103, 62, '1JN', '1 John', 1),
+      row(104, 9, '1SA', '1 Samuel', 1),
+      row(105, 12, '2KI', '2 Kings', 3),
+      row(106, 1, 'GEN', 'Genesis', 10),
+      row(107, 1, 'GEN', 'Genesis', 2),
+      row(108, 66, 'REV', 'Revelation', 1),
+    ];
+
+    const bibleOrder = [
+      'Genesis 2',
+      'Genesis 10',
+      '1 Samuel 1',
+      '2 Kings 3',
+      '1 Chronicles 4',
+      '1 Chronicles 10',
+      '1 John 1',
+      'Revelation 1',
+    ];
+
+    const reversedBooks = [
+      'Revelation 1',
+      '1 John 1',
+      '1 Chronicles 4',
+      '1 Chronicles 10',
+      '2 Kings 3',
+      '1 Samuel 1',
+      'Genesis 2',
+      'Genesis 10',
+    ];
+
+    const renderRows = (assignments: ChapterAssignmentProgress[] = apiRows) =>
+      renderWithProviders(
+        <ChapterAssignmentsTable {...defaultProps} assignments={assignments} isManager={false} />
+      );
+
+    /** "Book Chapter" for each body row, top to bottom. */
+    const visibleOrder = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map(tableRow => {
+          const [book, chapter] = within(tableRow).getAllByRole('cell');
+          return `${book.textContent} ${chapter.textContent}`;
+        });
+
+    const headerButton = (name: string) => screen.getByRole('button', { name });
+    const headerCell = (name: string) => headerButton(name).closest('th');
+
+    it('lists books in Bible order and chapters in numeric order by default', () => {
+      renderRows();
+
+      expect(visibleOrder()).toEqual(bibleOrder);
+    });
+
+    it('keeps the arrow-up-down icon on the Book header at rest and reports the default sort as ascending', () => {
+      renderRows();
+
+      expect(headerButton('Book').querySelector('svg')).toHaveClass('lucide-arrow-up-down');
+      expect(headerCell('Book')).toHaveAttribute('aria-sort', 'ascending');
+    });
+
+    it('reverses the books on a Book click and keeps chapters ascending inside each book', async () => {
+      const { user } = renderRows();
+
+      await user.click(headerButton('Book'));
+
+      expect(visibleOrder()).toEqual(reversedBooks);
+      expect(headerCell('Book')).toHaveAttribute('aria-sort', 'descending');
+    });
+
+    it('goes back to Bible order on the next Book click', async () => {
+      const { user } = renderRows();
+
+      await user.click(headerButton('Book'));
+      await user.click(headerButton('Book'));
+
+      expect(visibleOrder()).toEqual(bibleOrder);
+      expect(headerCell('Book')).toHaveAttribute('aria-sort', 'ascending');
+    });
+
+    it('clears another column sort on a Book click, then reverses the books on the next one', async () => {
+      const statuses: Record<number, string> = { 103: 'draft', 108: 'complete' };
+      const { user } = renderRows(
+        apiRows.map(r => ({ ...r, status: statuses[r.assignmentId] ?? 'not_started' }))
+      );
+
+      await user.click(headerButton('Status'));
+      expect(visibleOrder()).toEqual([
+        'Revelation 1',
+        '1 John 1',
+        'Genesis 2',
+        'Genesis 10',
+        '1 Samuel 1',
+        '2 Kings 3',
+        '1 Chronicles 4',
+        '1 Chronicles 10',
+      ]);
+      expect(headerCell('Book')).not.toHaveAttribute('aria-sort');
+
+      await user.click(headerButton('Book'));
+      expect(visibleOrder()).toEqual(bibleOrder);
+      expect(headerCell('Status')).not.toHaveAttribute('aria-sort');
+      expect(headerCell('Book')).toHaveAttribute('aria-sort', 'ascending');
+
+      await user.click(headerButton('Book'));
+      expect(visibleOrder()).toEqual(reversedBooks);
+    });
+
+    it('keeps ties on a sorted column in Bible order, with unassigned rows last', async () => {
+      const ana = { id: 7, displayName: 'Ana' };
+      const bruno = { id: 8, displayName: 'Bruno' };
+      const drafters: Record<number, typeof ana> = { 104: ana, 106: ana, 108: bruno };
+      const { user } = renderRows(
+        apiRows.map(r => ({ ...r, assignedUser: drafters[r.assignmentId] ?? null }))
+      );
+      const unassigned = [
+        'Genesis 2',
+        '2 Kings 3',
+        '1 Chronicles 4',
+        '1 Chronicles 10',
+        '1 John 1',
+      ];
+
+      await user.click(headerButton('Drafter'));
+      expect(visibleOrder()).toEqual(['Genesis 10', '1 Samuel 1', 'Revelation 1', ...unassigned]);
+
+      await user.click(headerButton('Drafter'));
+      expect(visibleOrder()).toEqual(['Revelation 1', 'Genesis 10', '1 Samuel 1', ...unassigned]);
+
+      await user.click(headerButton('Drafter'));
+      expect(visibleOrder()).toEqual(bibleOrder);
+    });
   });
 });
