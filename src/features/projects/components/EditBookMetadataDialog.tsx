@@ -33,7 +33,7 @@ import {
 } from '@/features/projects/hooks/useBookDetails';
 import { Logger } from '@/lib/services/logger';
 
-interface EditProjectMetadataDialogProps {
+interface EditBookMetadataDialogProps {
   isOpen: boolean;
   projectUnitId: number | null;
   onClose: () => void;
@@ -79,11 +79,11 @@ const inFlightKey = (bookId: number, field: TocField) => `${bookId}:${field}`;
 
 // A new project gets its own drafts, save queue and callbacks. An old PATCH can finish
 // without settling a matching draft in the newly selected project.
-export const EditProjectMetadataDialog: React.FC<EditProjectMetadataDialogProps> = props => (
-  <ProjectMetadataSession key={props.projectUnitId} {...props} />
+export const EditBookMetadataDialog: React.FC<EditBookMetadataDialogProps> = props => (
+  <BookMetadataSession key={props.projectUnitId} {...props} />
 );
 
-const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
+const BookMetadataSession: React.FC<EditBookMetadataDialogProps> = ({
   isOpen,
   projectUnitId,
   onClose,
@@ -269,8 +269,8 @@ const ProjectMetadataSession: React.FC<EditProjectMetadataDialogProps> = ({
         onWheel={scrollListFromOutside}
       >
         <DialogHeader className='px-6 pt-6 pb-4'>
-          <DialogTitle>{t('editProjectMetadata')}</DialogTitle>
-          <DialogDescription>{t('editProjectMetadataDescription')}</DialogDescription>
+          <DialogTitle>{t('editBookMetadata')}</DialogTitle>
+          <DialogDescription>{t('editBookMetadataDescription')}</DialogDescription>
         </DialogHeader>
 
         {/* Relative, so the fields' sr-only markers (absolutely positioned) belong to the list:

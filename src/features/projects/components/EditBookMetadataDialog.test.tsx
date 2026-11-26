@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EditProjectMetadataDialog } from '@/features/projects/components/EditProjectMetadataDialog';
+import { EditBookMetadataDialog } from '@/features/projects/components/EditBookMetadataDialog';
 import { type BookDetails } from '@/features/projects/hooks/useBookDetails';
 import { config } from '@/lib/config';
 import { server } from '@/test/msw/server';
@@ -77,7 +77,7 @@ function mockApi(options: { patchStatus?: number; patchMessage?: string } = {}):
 
 function renderDialog(onClose = vi.fn()) {
   const queryClient = createTestQueryClient();
-  const utils = render(<EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />, {
+  const utils = render(<EditBookMetadataDialog isOpen projectUnitId={7} onClose={onClose} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
@@ -87,7 +87,7 @@ function renderDialog(onClose = vi.fn()) {
 
 const bookTrigger = (name: string) => screen.findByRole('button', { name: new RegExp(name) });
 
-describe('EditProjectMetadataDialog', () => {
+describe('EditBookMetadataDialog', () => {
   // jsdom has neither. The dialog calls scrollIntoView once a book has finished opening, and
   // scrollBy to move the list for a wheel outside it.
   const scrollIntoView = vi.fn();
@@ -111,6 +111,15 @@ describe('EditProjectMetadataDialog', () => {
     vi.mocked(toast.error).mockClear();
     scrollIntoView.mockClear();
     scrollBy.mockClear();
+  });
+
+  it('is titled Edit Book Metadata, with its description under the book keys (#542)', async () => {
+    mockApi();
+    renderDialog();
+
+    expect(
+      await screen.findByRole('dialog', { name: 'editBookMetadata' })
+    ).toHaveAccessibleDescription('editBookMetadataDescription');
   });
 
   it('lists the books of the project collapsed', async () => {
@@ -203,7 +212,7 @@ describe('EditProjectMetadataDialog', () => {
 
     const list = bookList();
     expect(list).toContainElement(genesis);
-    expect(list).not.toContainElement(screen.getByRole('heading', { name: 'editProjectMetadata' }));
+    expect(list).not.toContainElement(screen.getByRole('heading', { name: 'editBookMetadata' }));
     expect(list).not.toContainElement(screen.getByRole('button', { name: 'Close' }));
     expect(list).not.toContainElement(screen.getByRole('button', { name: 'close' }));
   });
@@ -247,7 +256,7 @@ describe('EditProjectMetadataDialog', () => {
     const genesis = await bookTrigger('Genesis');
     const list = bookList();
 
-    fireEvent.wheel(screen.getByRole('heading', { name: 'editProjectMetadata' }), { deltaY: 100 });
+    fireEvent.wheel(screen.getByRole('heading', { name: 'editBookMetadata' }), { deltaY: 100 });
     // Firefox can report the wheel in lines, and a page step is the list's own height.
     fireEvent.wheel(screen.getByRole('button', { name: 'close' }), { deltaY: 3, deltaMode: 1 });
     Object.defineProperty(list, 'clientHeight', { configurable: true, value: 500 });
@@ -270,7 +279,7 @@ describe('EditProjectMetadataDialog', () => {
     Object.defineProperty(dialog, 'scrollHeight', { configurable: true, value: 234 });
 
     // Moving the list too would scroll two boxes for one turn of the wheel.
-    fireEvent.wheel(screen.getByRole('heading', { name: 'editProjectMetadata' }), { deltaY: 100 });
+    fireEvent.wheel(screen.getByRole('heading', { name: 'editBookMetadata' }), { deltaY: 100 });
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
@@ -411,7 +420,7 @@ describe('EditProjectMetadataDialog', () => {
 
     const onClose = vi.fn();
     const { user, rerender, unmount } = renderWithProviders(
-      <EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />
+      <EditBookMetadataDialog isOpen projectUnitId={7} onClose={onClose} />
     );
 
     await user.click(await bookTrigger('Genesis'));
@@ -420,12 +429,12 @@ describe('EditProjectMetadataDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // The wrapper drives `isOpen` from the URL, so the dialog is gone before the PATCH answers.
-    rerender(<EditProjectMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
+    rerender(<EditBookMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
     release?.();
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('must not contain pipes'));
 
     // Reopening still shows what the user typed: the failed edit was not thrown away.
-    rerender(<EditProjectMetadataDialog isOpen projectUnitId={7} onClose={onClose} />);
+    rerender(<EditBookMetadataDialog isOpen projectUnitId={7} onClose={onClose} />);
     await user.click(await bookTrigger('Genesis'));
     expect(screen.getByPlaceholderText('bookLongNamePlaceholder')).toHaveValue('a|b');
     unmount();
@@ -439,7 +448,7 @@ describe('EditProjectMetadataDialog', () => {
     await user.click(await bookTrigger('Genesis'));
     await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'Genesis');
 
-    rerender(<EditProjectMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
+    rerender(<EditBookMetadataDialog isOpen={false} projectUnitId={7} onClose={onClose} />);
 
     await waitFor(() => expect(patches).toHaveLength(1));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
@@ -492,7 +501,7 @@ describe('EditProjectMetadataDialog', () => {
     await user.clear(screen.getByPlaceholderText('bookLongNamePlaceholder'));
     await user.type(screen.getByPlaceholderText('bookLongNamePlaceholder'), 'Shared title');
 
-    rerender(<EditProjectMetadataDialog isOpen projectUnitId={8} onClose={onClose} />);
+    rerender(<EditBookMetadataDialog isOpen projectUnitId={8} onClose={onClose} />);
 
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({

@@ -10,7 +10,7 @@ import { useChapterAssignments } from '@/hooks/useChapterAssignment';
 import { getActiveRoleGrants, isManager, isProjectManager } from '@/lib/grant-utils';
 import { useAppStore } from '@/store/store';
 
-import { EditProjectMetadataDialog } from './EditProjectMetadataDialog';
+import { EditBookMetadataDialog } from './EditBookMetadataDialog';
 import { ExportProjectDialog } from './ExportProjectDialog';
 import { MilestoneDetailPage } from './MilestoneDetailPage';
 
@@ -171,7 +171,7 @@ export const MilestoneDetailWrapper: React.FC = () => {
         projectUnitId={projectUnitId}
         onClose={handleCloseExport}
       />
-      <EditProjectMetadataDialog
+      <EditBookMetadataDialog
         isOpen={isProjectMgr && modal === 'metadata'}
         projectUnitId={projectUnitId}
         onClose={handleCloseMetadata}

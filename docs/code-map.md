@@ -47,8 +47,9 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   (`components/UsfmMilestoneImportTab.tsx`, `hooks/useUsfmMilestoneFiles.ts` and
   `lib/usfm-import.ts`) that calls `POST /projects/:id/milestones/usfm-validation` and
   `POST /projects/:id/milestones/import`. The milestone page (`components/MilestoneDetailPage.tsx`) holds the chapter table, chapter
-  assignment (`components/AssignUsersDialog.tsx`), book metadata
-  (`components/EditProjectMetadataDialog.tsx`) and USFM export
+  assignment (`components/AssignUsersDialog.tsx`) and an overflow menu that opens book metadata
+  (`components/EditBookMetadataDialog.tsx`), Manage Books
+  (`components/ManageMilestoneBooksDialog.tsx`) and USFM export
   (`components/ExportProjectDialog.tsx`, a ZIP from `POST /project-units/:id/usfm`).
   `components/AssignProjectUsers.tsx` manages the project team. The feature calls `/projects`,
   `/projects/:id/...` (books, milestones, users, chapter assignments) and

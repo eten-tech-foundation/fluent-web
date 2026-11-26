@@ -347,49 +347,35 @@ export const MilestoneDetailPage: React.FC<MilestoneDetailPageProps> = ({
     <div className='mx-auto flex h-full min-w-[730px] flex-col'>
       <ViewPageHeader
         rightContent={
-          <div className='flex items-center gap-2'>
-            {isManager && (
-              <>
-                <Button
-                  className='border-primary text-primary hover flex items-center gap-2 border-2'
-                  disabled={isDisabled}
-                  size='sm'
-                  variant={'outline'}
-                  onClick={onEditMetadata}
-                >
-                  {t('editProjectMetadata')}
-                </Button>
-              </>
-            )}
-            <Button
-              className='border-primary text-primary hover flex items-center gap-2 border-2'
-              disabled={isDisabled}
-              size='sm'
-              variant={'outline'}
-              onClick={onExport}
-            >
-              {t('exportMilestone')}
-            </Button>
-            {isManager && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    aria-label={t('moreMilestoneActionsAriaLabel')}
-                    className='text-primary hover px-2'
-                    size='sm'
-                    variant='outline'
-                  >
-                    <EllipsisVertical className='h-4 w-4' />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align='end'>
+          // All the milestone actions live in this menu (#542). Managers of the project also get
+          // Edit Book Metadata and Manage Books; everyone who can open the page can export.
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label={t('moreMilestoneActionsAriaLabel')}
+                className='text-primary hover px-2'
+                size='sm'
+                variant='outline'
+              >
+                <EllipsisVertical className='h-4 w-4' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              {isManager && (
+                <>
+                  <DropdownMenuItem disabled={isDisabled} onSelect={onEditMetadata}>
+                    {t('editBookMetadata')}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setIsManageBooksOpen(true)}>
                     {t('manageBooks')}
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+                </>
+              )}
+              <DropdownMenuItem disabled={isDisabled} onSelect={onExport}>
+                {t('exportMilestone')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
         title={headerTitle}
         onBack={onBack}
