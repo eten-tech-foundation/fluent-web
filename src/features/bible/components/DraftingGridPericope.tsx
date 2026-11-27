@@ -726,9 +726,16 @@ export const DraftingGridPericope: React.FC<DraftingGridPericopeProps> = ({
                 <h4 className='text-base font-bold text-slate-800 select-none dark:text-slate-200'>
                   {heading}
                 </h4>
+                {/*
+                  The selected pericope paints no colour of its own, so it shows the page behind
+                  it, as the selected verse's box does in Verse View (#648). The others keep the
+                  box colour.
+                */}
                 <div
-                  className={`dark:bg-card w-full cursor-pointer space-y-1 rounded-[12px] border-2 bg-[#f0f4f9] p-5 transition-all ${
-                    isGroupActive ? 'border-primary' : 'dark:border-border border-[#cfd8e3]'
+                  className={`w-full cursor-pointer space-y-1 rounded-[12px] border-2 p-5 transition-all ${
+                    isGroupActive
+                      ? 'border-primary'
+                      : 'dark:bg-card dark:border-border border-[#cfd8e3] bg-[#f0f4f9]'
                   }`}
                   onClick={e => {
                     if (e.target === e.currentTarget) {
