@@ -172,6 +172,21 @@ export function isProjectManager(
 }
 
 /**
+ * True if the user gets the manager controls on a project's pages (Project and Milestone Detail):
+ * a manager of that project in the selected role, or a global SuperAdmin. A SuperAdmin acts as an
+ * Org Manager of every organization (#566), whatever role they have selected.
+ */
+export function canManageProject(
+  user: Pick<UserDetail, 'grants' | 'lastActiveOrgId' | 'activeRoleName'> | null | undefined,
+  projectId: number | null | undefined
+): boolean {
+  if (!projectId) return false;
+  if (isSuperAdmin(user?.grants)) return true;
+  const roleGrants = getActiveRoleGrants(user);
+  return isManager(roleGrants) && isProjectManager(roleGrants, projectId);
+}
+
+/**
  * True if the user is a Project Manager for the given projectId, excluding Organization Managers
  * (Org Manager, Org Owner) as required for the Manage Workflow dialog access.
  */

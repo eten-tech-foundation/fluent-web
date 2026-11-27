@@ -98,7 +98,10 @@ Where things live in `src/` and what each part calls. Setup and scripts are in t
   link) and `POST /verse-audio/:projectUnitId/:bibleTextId/resolve`
   (`hooks/useResolveConflict.ts`).
 - `src/features/organizations/`: the SuperAdmin organization pages and the Org Manager invite
-  (`GET|POST /organizations`, `POST /users/invite`).
+  (`GET|POST /organizations`, `GET /organizations/:orgId/users`, `POST /users/invite`). An
+  organization's page has a Members tab and a Projects tab, which lists its projects with the
+  Projects list's table (`components/ProjectsTable.tsx` in `src/features/projects/`) from
+  `GET /projects` and opens them in the project pages.
 - `src/features/users/`: the Users page for the active organization. It changes org-level roles
   with `PATCH /organizations/:orgId/users/:userId` and profiles with `PATCH /users/:id`.
 - `src/features/flags/`: runtime feature flags from `GET /config/features`, plus the `/debug`

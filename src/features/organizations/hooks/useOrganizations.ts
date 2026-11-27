@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { config } from '@/lib/config';
 import { Logger } from '@/lib/services/logger';
-import { type Organization, type OrganizationSummary, type User } from '@/lib/types';
+import { type Organization, type OrganizationSummary, type Project, type User } from '@/lib/types';
 
 export const ORG_NAME_CONFLICT_MESSAGE = 'An organization with this name already exists.';
 
@@ -27,6 +27,8 @@ const fetchOrganization = (orgId: number) =>
 const fetchOrganizationUsers = (orgId: number) =>
   fetchJson<User[]>(`/organizations/${orgId}/users`, 'Failed to fetch organization users');
 
+const fetchProjects = () => fetchJson<Project[]>('/projects', 'Failed to fetch projects');
+
 const createOrganization = async (name: string): Promise<Organization> => {
   const res = await fetch(`${config.api.url}/organizations`, {
     method: 'POST',
@@ -46,10 +48,11 @@ export const useOrganizations = (enabled: boolean = true) =>
     enabled,
   });
 
-export const useOrganization = (orgId: number) =>
+/** One organization's summary. Pass `undefined` to skip the request. */
+export const useOrganization = (orgId: number | undefined) =>
   useQuery<OrganizationSummary>({
     queryKey: ['organizations', orgId],
-    queryFn: () => fetchOrganization(orgId),
+    queryFn: () => fetchOrganization(Number(orgId)),
     enabled: Number.isFinite(orgId),
   });
 
@@ -57,6 +60,17 @@ export const useOrganizationUsers = (orgId: number) =>
   useQuery<User[]>({
     queryKey: ['organizationUsers', orgId],
     queryFn: () => fetchOrganizationUsers(orgId),
+    enabled: Number.isFinite(orgId),
+  });
+
+/**
+ * One organization's projects, for the Super Admin's organization page (#566). GET /projects
+ * returns every organization's projects to a global Super Admin, so this keeps the ones in `orgId`.
+ */
+export const useOrganizationProjects = (orgId: number) =>
+  useQuery<Project[]>({
+    queryKey: ['projects', 'organization', orgId],
+    queryFn: async () => (await fetchProjects()).filter(project => project.organization === orgId),
     enabled: Number.isFinite(orgId),
   });
 

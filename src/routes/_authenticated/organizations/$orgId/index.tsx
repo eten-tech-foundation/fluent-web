@@ -6,6 +6,8 @@ import { modalSchema } from '@/lib/modal-schema';
 
 const organizationDetailSearchSchema = z.object({
   modal: modalSchema.optional(),
+  // Members opens by default; Back from a project returns to `?tab=projects` (#566).
+  tab: z.enum(['members', 'projects']).optional(),
 });
 
 export const Route = createFileRoute('/_authenticated/organizations/$orgId/')({

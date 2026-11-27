@@ -23,19 +23,40 @@ check here never replaces one in the API.
 - Role checks look only at the grants for the role the user has selected (`userdetail.activeRoleName`),
   through `getActiveRoleGrants` in `src/lib/grant-utils.ts`. A user who is a Project Translator on
   one project and a Project Manager on another sees manager controls only while Project Manager is
-  selected.
+  selected. A global SuperAdmin is the exception on the Project and Milestone Detail pages (next
+  rules): their global grant has no organization, so no role of theirs is ever selected for it.
 - The Projects list (`/projects`, `ProjectsWrapper` in `src/features/projects/components/index.tsx`)
   opens for managers, Project Translators and Project Observers; anyone else is sent to `/`.
   Managers get `GET /projects`, narrowed to the projects a Project Manager manages; translators and
   observers get `GET /users/:id/projects` (`useProjectsByRole`). The menu item follows the same
   rule. Tests: `src/components/header/MainMenu.test.tsx` › "shows Projects item for a Project
   Translator" and "shows Projects item for a Project Observer". No test covers the redirect.
-- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the overflow menus, Assign
-  and the chapter checkboxes show only for a manager of that project (`isProjectManager`). Export
-  Milestone shows to anyone who can open the page. Tests:
+- On the Project and Milestone Detail pages, Add Milestone, Manage Users, the milestone's overflow
+  menu, Assign and the chapter checkboxes show only for a manager of that project or a global
+  SuperAdmin, who gets them on every organization's projects whatever role is selected, as an Org
+  Manager of that organization does (`canManageProject`, #566). Manage Workflow, in the project's
+  overflow menu, stays with Project Managers (`isProjectManagerOnly`), so neither an Org Manager nor
+  a SuperAdmin sees it. Export Milestone shows to anyone who can open the page. Tests:
+  `src/lib/grant-utils.test.ts` › "gives a global Super Admin the controls on any project with no
+  role selected (#566)"; `src/features/projects/components/ProjectDetailWrapper.test.tsx` › "gives
+  a Super Admin the Org Manager controls on the project";
+  `src/features/projects/components/MilestoneDetailWrapper.superAdmin.test.tsx` › "gives a Super
+  Admin the Org Manager controls: Assign and the chapter checkboxes";
   `src/features/projects/components/ChapterAssignmentsTable.test.tsx` › "hides row selection
-  checkboxes and select column when isManager is false, and keeps drafter/checker text". No test
-  covers the page-level controls.
+  checkboxes and select column when isManager is false, and keeps drafter/checker text".
+- A SuperAdmin reaches an organization's members and projects only from its page
+  (`/organizations/$orgId`), on the Members and Projects tabs; the main menu has no Projects item
+  for them. The Projects tab keeps the organization's projects out of `GET /projects`, which
+  returns every organization's projects to a global SuperAdmin (`useOrganizationProjects`). The tab
+  is in the URL (`?tab=projects`), and Back from a project takes a SuperAdmin there. The project
+  team (`AssignProjectUsers`) lists and invites the users of the project's organization, not the
+  active one, which a SuperAdmin doesn't have. Tests:
+  `src/features/organizations/components/OrganizationDetailWrapper.test.tsx` › "lists the
+  organization projects on the Projects tab with the /projects columns, and no Create Project, sort
+  or filter"; `src/features/projects/components/ProjectDetailWrapper.test.tsx` › "takes a Super
+  Admin back to the Projects tab of the project organization";
+  `src/features/projects/components/AssignProjectUser.test.tsx` › "offers only users of the project
+  organization" and "invites into the project organization and names it in the invitation".
 - Opening a chapter from Milestone Detail goes to the editable `/translation` route when the user
   is its drafter in Draft, its peer checker in Peer Check, or the chapter is past peer check;
   otherwise it goes to `/view` (`MilestoneDetailPage.tsx`). Past peer check, any project member

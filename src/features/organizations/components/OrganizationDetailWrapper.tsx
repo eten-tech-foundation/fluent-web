@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import {
   useOrganization,
+  useOrganizationProjects,
   useOrganizationUsers,
 } from '@/features/organizations/hooks/useOrganizations';
 import { useCreateUser, type InviteUserPayload } from '@/hooks/useUsers';
@@ -14,7 +15,7 @@ import { ROLES } from '@/lib/types';
 import { useAppStore } from '@/store/store';
 
 import { InviteOrgManagerModal, type InviteOrgManagerData } from './InviteOrgManagerModal';
-import { OrganizationDetailPage } from './OrganizationDetailPage';
+import { OrganizationDetailPage, type OrganizationTab } from './OrganizationDetailPage';
 
 const routeApi = getRouteApi('/_authenticated/organizations/$orgId/');
 
@@ -22,12 +23,18 @@ export const OrganizationDetailWrapper: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { orgId: orgIdParam } = routeApi.useParams();
-  const { modal } = routeApi.useSearch();
+  const { modal, tab } = routeApi.useSearch();
   const orgId = Number(orgIdParam);
+  const activeTab: OrganizationTab = tab === 'projects' ? 'projects' : 'members';
 
   const { userdetail } = useAppStore();
   const { data: organization, isLoading: orgLoading } = useOrganization(orgId);
   const { data: members = [], isLoading: membersLoading } = useOrganizationUsers(orgId);
+  const {
+    data: projects = [],
+    isLoading: projectsLoading,
+    isError: projectsError,
+  } = useOrganizationProjects(orgId);
   const createUserMutation = useCreateUser();
   const [inviteError, setInviteError] = useState<string | null>(null);
 
@@ -35,6 +42,20 @@ export const OrganizationDetailWrapper: React.FC = () => {
 
   const handleBack = () => {
     void navigate({ to: '/organizations', search: {} });
+  };
+
+  // The tab lives in the URL, so Back from a project (and the browser's back) lands on Projects.
+  const handleTabChange = (nextTab: OrganizationTab) => {
+    void navigate({
+      to: '/organizations/$orgId',
+      params: { orgId: orgIdParam },
+      search: nextTab === 'projects' ? { tab: 'projects' as const } : {},
+      replace: true,
+    });
+  };
+
+  const handleProjectSelect = (projectId: number) => {
+    void navigate({ to: '/projects/$projectId', params: { projectId: projectId.toString() } });
   };
 
   const handleOpenInvite = () => {
@@ -80,11 +101,17 @@ export const OrganizationDetailWrapper: React.FC = () => {
   return (
     <>
       <OrganizationDetailPage
+        activeTab={activeTab}
         loading={orgLoading || membersLoading}
         members={members}
         organization={organization}
+        projects={projects}
+        projectsError={projectsError}
+        projectsLoading={projectsLoading}
         onBack={handleBack}
         onInviteOrgManager={handleOpenInvite}
+        onProjectSelect={handleProjectSelect}
+        onTabChange={handleTabChange}
       />
 
       <InviteOrgManagerModal
