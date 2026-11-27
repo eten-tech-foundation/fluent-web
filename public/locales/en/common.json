@@ -221,6 +221,7 @@
     "outputLanguageLabel": "Assistant output language",
     "loading": "Loading…",
     "failure": {
+      "response_safety_limit": "The response stopped because it exceeded the safety size limit and may be incomplete. If this happens repeatedly, contact your deployment administrator.",
       "invalid_configuration": "Assistant configuration is invalid. Contact your administrator to check its language and service settings.",
       "invalid_request": "The request could not be accepted. Check your question, then reload the passage if the problem continues.",
       "unsupported_language": "This output language is unavailable. Select another output language.",

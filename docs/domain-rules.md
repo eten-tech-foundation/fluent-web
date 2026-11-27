@@ -356,3 +356,33 @@ The drafting page saves one verse at a time with `POST /translated-verses`
   `config.features` in `src/lib/config.ts`. Vite inlines them, so each deploy is its own build
   (`.github/workflows/deploy.yml`). Tests pin them off in `vite.config.ts`, and a suite that needs
   one turns it on through `config.features`, not through the env.
+
+## Retractable Assistant answers
+
+`briefing_replace` and `turn_replace` atomically replace only the current assistant answer
+with full `markdown` and its next signed sequence/receipt. An empty replacement retracts
+provisional output. Earlier exchanges, the question and the composer draft remain unchanged.
+Operation/attempt fencing and interruption preserve the exact visible signed snapshot. Typed
+questions and suggested actions may both interrupt the initial briefing as soon as an authorized
+signed snapshot exists, including while it streams. Submission pins that snapshot and fences later
+briefing replacements/completion; typed admission clears its draft, while suggested admission
+preserves the composer draft. Unsigned briefings cannot authorize either submission origin.
+Tests: `assistant.integrity.test.ts`, `assistant.turn.client.test.ts` and
+`assistant.conversation.test.ts`.
+
+The browser accepts answers up to the API's configurable emergency maximum of 32 MiB, with
+a 256 MiB normalized content-stream safeguard (excluding actor receipts and transport envelopes); there is no answer character cap. The API defaults to
+8 MiB current answer and 64 MiB retained normalized stream, including discarded text. Frame
+and duration limits remain independent. `response_safety_limit` preserves partial output and
+shows localized incomplete-answer and deployment-administrator guidance, separate from input
+or context-size errors.
+
+Assistant append byte accounting scans only deltas, correcting split surrogate pairs; replacement
+recomputes size once. Receipts are opaque in Web; API accepts legacy digests alongside new
+incremental signed snapshots. The shared emitted SSE-frame ceiling is 202,375,168 bytes:
+6 × the 32 MiB answer maximum for worst-case JSON escaping, plus 1 MiB for bounded metadata,
+receipts and the SSE envelope. It includes the terminating separator. The upstream BT frame
+ceiling (up to 8 MiB) is independent. HTTP JSON remains capped at 1 MiB. Fragment parsing scans
+only new chunks and assembles each complete frame once. Portable fixture `frame-v1.json` and
+`assistant.frame.test.ts` pin the contract; `assistant.work.test.ts` measures linear scanning for
+8 MiB briefing and follow-up streams without retaining all snapshots.

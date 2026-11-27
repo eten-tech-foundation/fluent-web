@@ -47,7 +47,7 @@ it('cancels discovery while reading the response body', async () => {
 });
 
 it('bounds response parsing and rejects oversized bodies', async () => {
-  vi.stubGlobal('fetch', async () => new Response(' '.repeat(TURN_LIMITS.frameBytes + 1)));
+  vi.stubGlobal('fetch', async () => new Response(' '.repeat(TURN_LIMITS.responseBytes + 1)));
   await expect(fetchAssistantLanguages(1, null)).rejects.toMatchObject({
     code: 'malformed_upstream_response',
   });

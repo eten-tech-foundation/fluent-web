@@ -1,0 +1,16 @@
+{
+  "maximumAnswerBytes": 33554432,
+  "jsonExpansion": 6,
+  "envelopeReserveBytes": 1048576,
+  "maximumFrameBytes": 202375168,
+  "event": {
+    "protocol": "fluent-turn-v1",
+    "type": "turn_replace",
+    "operationId": "operation",
+    "turnId": "turn",
+    "attemptId": "attempt",
+    "markdown": "\u0000\n漢😀",
+    "sequence": 2,
+    "receipt": "fixture-signed-snapshot"
+  }
+}
