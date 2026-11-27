@@ -1,4 +1,4 @@
-import { activeVerseRange } from './active-verse';
+import { activeVerseRangeAt } from './active-verse';
 import {
   BLOCK_SELECTOR,
   SCRIPTURE_MARKER_SELECTOR,
@@ -48,10 +48,28 @@ function lastWords(
  * between it and the next number, a point `activeVerseRange` gives to the next verse.
  */
 export function verseAtCaret(root: HTMLElement, selection: Selection | null): number | undefined {
-  const before = selection?.focusNode?.childNodes[selection.focusOffset - 1];
+  const focus = selection?.focusNode;
+  return focus ? verseAtPoint(root, focus, selection.focusOffset) : undefined;
+}
+
+/**
+ * The verse a selection starts in: where the caret was put down before a drag or Shift+arrow
+ * stretched it. For a plain caret it is `verseAtCaret`. Chapter View's active verse follows this
+ * end too, since Editorial's scripture reference plugin reads the selection's anchor.
+ */
+export function verseAtSelectionAnchor(
+  root: HTMLElement,
+  selection: Selection | null
+): number | undefined {
+  const anchor = selection?.anchorNode;
+  return anchor ? verseAtPoint(root, anchor, selection.anchorOffset) : undefined;
+}
+
+function verseAtPoint(root: HTMLElement, node: Node, offset: number): number | undefined {
+  const before = node.childNodes[offset - 1];
   if (before instanceof Element && before.matches(VERSE_MARKER_SELECTOR) && root.contains(before))
     return Number(before.getAttribute('data-number'));
-  const active = activeVerseRange(root, selection);
+  const active = activeVerseRangeAt(root, node, offset);
   return active ? Number(active.verse) : undefined;
 }
 

@@ -15,6 +15,19 @@ interface UseDraftingProps {
   onSave: (verse: number, payload: SavePayload) => Promise<void>;
 }
 
+export interface ActiveVerseChangeOptions {
+  /**
+   * Scroll the verse into its place on the page (the default). The pericope editor turns it off:
+   * it moves the active verse along with the caret, which is already where the translator looks.
+   */
+  scroll?: boolean;
+}
+
+export type ActiveVerseChangeHandler = (
+  verseNumber: number,
+  options?: ActiveVerseChangeOptions
+) => void;
+
 export const useDrafting = ({
   sourceVerses,
   targetVerses,
@@ -143,8 +156,8 @@ export const useDrafting = ({
     [readOnly, verses, debouncedSave, autoResizeTextarea, updateButtonPosition]
   );
 
-  const handleActiveVerseChange = useCallback(
-    (newVerseId: number) => {
+  const handleActiveVerseChange = useCallback<ActiveVerseChangeHandler>(
+    (newVerseId, { scroll = true } = {}) => {
       if (readOnly) return;
       // The edit being flushed may not have rendered yet: joining two lines in the editor changes
       // a verse and moves the cursor out of it in one update. `verses` here would still hold the
@@ -153,11 +166,20 @@ export const useDrafting = ({
         void flushSave(activeVerseId).catch(() => {});
       const exists = verses.some(v => v.verseNumber === newVerseId);
       if (!exists) {
-        setInitialContent(newVerseId, { content: '' });
-        setVerses(prev => [...prev, { verseNumber: newVerseId, content: '' }]);
+        // `verses` can be a render behind: the pericope editor reports caret moves from a document
+        // listener, which can run before an AI fill of this verse has rendered. That fill's
+        // pending text must not be reset, and the row is added only once.
+        if (!getSaveStatus(newVerseId).hasUnsavedChanges) {
+          setInitialContent(newVerseId, { content: '' });
+        }
+        setVerses(prev =>
+          prev.some(v => v.verseNumber === newVerseId)
+            ? prev
+            : [...prev, { verseNumber: newVerseId, content: '' }]
+        );
       }
       setActiveVerseId(newVerseId);
-      requestAnimationFrame(() => scrollVerseToTop(newVerseId));
+      if (scroll) requestAnimationFrame(() => scrollVerseToTop(newVerseId));
     },
     [readOnly, verses, activeVerseId, getSaveStatus, flushSave, setInitialContent, scrollVerseToTop]
   );

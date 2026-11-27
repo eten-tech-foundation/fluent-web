@@ -150,6 +150,83 @@ describe('PericopeRteGroup', () => {
     });
   });
 
+  describe('focus brought in with Tab (#624)', () => {
+    const tabInto = (verseNumber: number | undefined) =>
+      act(() =>
+        (editorProps.current as { onKeyboardFocus: (n?: number) => void }).onKeyboardFocus(
+          verseNumber
+        )
+      );
+
+    it('makes the pericope active, as a click does', () => {
+      // A keyboard user never clicks, so without this the resources stay on the pericope before.
+      renderGroup({ activeVerseId: 9 });
+
+      tabInto(2);
+
+      expect(handleActiveVerseChange).toHaveBeenCalledWith(2);
+    });
+
+    it('leaves the active pericope as it is', () => {
+      renderGroup({ activeVerseId: 1 });
+
+      tabInto(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the caret moving to another verse (#624)', () => {
+    const moveCaret = (verseNumber: number) =>
+      act(() =>
+        (editorProps.current as { onActiveVerseChange: (n: number) => void }).onActiveVerseChange(
+          verseNumber
+        )
+      );
+
+    it('makes that verse the active one without scrolling the page', () => {
+      // The resource panel follows the active verse; the caret is already where the translator looks.
+      renderGroup({ activeVerseId: 1 });
+
+      moveCaret(2);
+
+      expect(handleActiveVerseChange).toHaveBeenCalledWith(2, { scroll: false });
+    });
+
+    it('leaves the active verse alone while the caret stays in it', () => {
+      renderGroup({ activeVerseId: 2 });
+
+      moveCaret(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+
+    it('ignores a verse this pericope does not hold', () => {
+      renderGroup({ activeVerseId: 1 });
+
+      moveCaret(7);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+
+    it('leaves a pericope that is not the active one to the click (#479)', () => {
+      // A caret landing in another box doesn't make it active; the click does, and scrolls to it.
+      renderGroup({ activeVerseId: 9 });
+
+      moveCaret(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+
+    it('does nothing read-only', () => {
+      renderGroup({ activeVerseId: 1, readOnly: true });
+
+      moveCaret(2);
+
+      expect(handleActiveVerseChange).not.toHaveBeenCalled();
+    });
+  });
+
   it("hands Next Pericope's caret request to the editor", () => {
     // The editor of the pericope Next Pericope moved to takes the caret in its first verse (#479).
     const caretRequest = { verseNumber: 1 };

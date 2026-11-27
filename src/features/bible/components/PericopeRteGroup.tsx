@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import type { SuggestionStatus } from '@/features/bible/hooks/useAiSuggestions';
+import type { ActiveVerseChangeHandler } from '@/features/bible/hooks/useDrafting';
 import {
   canSetPericopeTitle,
   getPericopeTitle,
@@ -31,7 +32,7 @@ interface PericopeRteGroupProps {
   hasNextPericope: boolean;
   isTranslationComplete: boolean;
   handleTextChange: (verseNumber: number, text: string, markers?: VerseMarkers | null) => void;
-  handleActiveVerseChange: (verseNumber: number) => void;
+  handleActiveVerseChange: ActiveVerseChangeHandler;
   handleNextPericopeClick: () => Promise<void>;
   /** Next Pericope's request for the caret in the first verse it moved to (#479). */
   caretRequest?: VerseCaretRequest | null;
@@ -144,8 +145,9 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
 
   // A click in the text of a pericope that isn't the active one makes it active, as a click on its
   // source does (#479). It waits for the click rather than the focus: making a pericope active
-  // scrolls the page, which would move the words under a drag that is selecting them. Inside the
-  // active pericope a click changes nothing, so the page doesn't jump with every click.
+  // scrolls the page, which would move the words under a drag that is selecting them. Focus from
+  // the keyboard has no drag under it, so Tab into a pericope makes it active the same way (#624).
+  // Inside the active pericope a click changes nothing, so the page doesn't jump with every click.
   const handleVerseClick = useCallback(
     (verseNumber: number | undefined) => {
       if (readOnly || isGroupActive) return;
@@ -153,6 +155,18 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
       if (clicked) handleActiveVerseChange(clicked.verseNumber);
     },
     [readOnly, isGroupActive, groupVerses, handleActiveVerseChange]
+  );
+
+  // Inside the active pericope the active verse follows the caret, so the resource panel shows the
+  // verse being drafted (#624), as in Chapter View. The page stays where it is: the caret is
+  // already in view. A caret landing in another box is left to the click above.
+  const handleCaretVerseChange = useCallback(
+    (verseNumber: number) => {
+      if (readOnly || !isGroupActive || verseNumber === activeVerseId) return;
+      if (!groupVerses.some(gv => gv.verseNumber === verseNumber)) return;
+      handleActiveVerseChange(verseNumber, { scroll: false });
+    },
+    [readOnly, isGroupActive, activeVerseId, groupVerses, handleActiveVerseChange]
   );
 
   const isPericopeDrafted = groupVerses.every(gv =>
@@ -195,7 +209,8 @@ export const PericopeRteGroup: React.FC<PericopeRteGroupProps> = ({
         readOnly={readOnly}
         reservedHeadingSlots={reservedHeadingSlots}
         verses={editorVerses}
-        onActiveVerseChange={handleActiveVerseChange}
+        onActiveVerseChange={handleCaretVerseChange}
+        onKeyboardFocus={handleVerseClick}
         onVerseClick={handleVerseClick}
         onVersesChange={handleVersesChange}
       />
